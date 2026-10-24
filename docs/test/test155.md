@@ -2,8 +2,14 @@
 
 Date: 2026-10-24
 Execution type: Local template and focused regression validation
+Customer repository: Not applicable
+Commit: Pending PR commit
 AWS account: Template validation only
 AWS region: us-east-1
+
+## Resources created
+
+- None.
 
 ## Commands executed
 
@@ -19,3 +25,8 @@ resources already carrying both davdeploy ownership tags for the specific connec
 ## Teardown
 
 No resources were created or deleted during validation.
+
+## Final boundary
+
+This evidence validates a template-only least-privilege permission change. It does not authorise or
+execute customer infrastructure deletion.
