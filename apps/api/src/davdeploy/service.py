@@ -3346,6 +3346,25 @@ class ProductService:
                 )
                 self.db.add(plan_run)
                 self.db.flush()
+                image_identifier = ""
+                if not destroy_review:
+                    image_build = self.db.scalar(
+                        select(CloudExecutionRun)
+                        .where(
+                            CloudExecutionRun.organization_id == principal.organization_id,
+                            CloudExecutionRun.revision_id == revision.id,
+                            CloudExecutionRun.content_digest == revision.content_digest,
+                            CloudExecutionRun.mode == "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD",
+                            CloudExecutionRun.state == "IMAGE_BUILT_AWAITING_SERVICE_PLAN",
+                        )
+                        .order_by(CloudExecutionRun.created_at.desc())
+                        .limit(1)
+                    )
+                    image_identifier = str(
+                        ((image_build.outputs or {}).get("image_build") or {}).get("image_identifier")
+                        if image_build
+                        else ""
+                    )
                 execution_environment = {
                     "AWS_REGION": str(region or connection.region),
                     "EXPECTED_AWS_ACCOUNT_ID": str(connection.account_id),
@@ -3362,6 +3381,13 @@ class ProductService:
                     "DAVDEPLOY_EXECUTION_RESULT_S3_URI": f"s3://{runner_bucket}/davdeploy/customer/{connection.id}/runs/{plan_run.id}/result.json",
                     "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": revision.content_digest,
                 }
+                if image_identifier:
+                    execution_environment.update(
+                        {
+                            "DAVDEPLOY_CUSTOMER_IMAGE_IDENTIFIER": image_identifier,
+                            "DAVDEPLOY_ENABLE_CUSTOMER_SERVICE": "true",
+                        }
+                    )
                 if not execution_environment["TF_LOCK_TABLE"]:
                     stored.state = "BLOCKED_CLOUD_EXECUTION_RUNTIME_NOT_CONFIGURED"
                     stored.evidence = {**stored.evidence, "blockers": ["Customer execution lock table is not configured."]}
