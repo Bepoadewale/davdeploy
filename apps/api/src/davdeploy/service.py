@@ -3547,6 +3547,25 @@ class ProductService:
                     state = "BLOCKED_TERRAFORM_PLAN_ARTIFACT_REQUIRED"
         execution_environment: dict[str, str] = {}
         if connection and connection.execution_role_arn and connection.external_id_secret_ref:
+            image_build: CloudExecutionRun | None = None
+            if mode == "AUTHENTICATED_APP_RUNNER_APPLY":
+                image_build = self.db.scalar(
+                    select(CloudExecutionRun)
+                    .where(
+                        CloudExecutionRun.organization_id == principal.organization_id,
+                        CloudExecutionRun.revision_id == revision.id,
+                        CloudExecutionRun.content_digest == revision.content_digest,
+                        CloudExecutionRun.mode == "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD",
+                        CloudExecutionRun.state == "IMAGE_BUILT_AWAITING_SERVICE_PLAN",
+                    )
+                    .order_by(CloudExecutionRun.created_at.desc())
+                    .limit(1)
+                )
+            image_identifier = ""
+            if image_build:
+                image_identifier = str(
+                    ((image_build.outputs or {}).get("image_build") or {}).get("image_identifier") or ""
+                )
             execution_environment = {
                 "AWS_REGION": str(region or ""),
                 "EXPECTED_AWS_ACCOUNT_ID": str(account_id or ""),
@@ -3569,6 +3588,13 @@ class ProductService:
                 "DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256": str(real_plan_artifact.get("saved_plan_sha256") if mode in {"AUTHENTICATED_APP_RUNNER_APPLY", "AUTHENTICATED_APP_RUNNER_DESTROY"} else ""),
                 "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": revision.content_digest,
             }
+            if image_identifier:
+                execution_environment.update(
+                    {
+                        "DAVDEPLOY_CUSTOMER_IMAGE_IDENTIFIER": image_identifier,
+                        "DAVDEPLOY_ENABLE_CUSTOMER_SERVICE": "true",
+                    }
+                )
             required_runner_values = (
                 "AWS_REGION",
                 "EXPECTED_AWS_ACCOUNT_ID",
