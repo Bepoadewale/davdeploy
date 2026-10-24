@@ -152,13 +152,32 @@ Resources:
                   - ec2:DeleteTags
                   - ecr:TagResource
                   - ecr:UntagResource
-                  - logs:TagLogGroup
+                  - logs:TagResource
                   - logs:UntagLogGroup
                 Resource: "*"
                 Condition:
                   StringEquals:
                     aws:RequestTag/ManagedBy: davdeploy
                     aws:RequestTag/ConnectionId: !Ref ConnectionId
+              # Reconciliation tags resources which already proved their ownership.
+              # Terraform may update one tag at a time, so a request-tag condition
+              # would reject an otherwise bounded update to an existing resource.
+              - Sid: ReconcileTagsOnlyOnOwnedCustomerWorkloadResources
+                Effect: Allow
+                Action:
+                  - apprunner:TagResource
+                  - apprunner:UntagResource
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ecr:TagResource
+                  - ecr:UntagResource
+                  - logs:TagResource
+                  - logs:UntagLogGroup
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/ManagedBy: davdeploy
+                    aws:ResourceTag/ConnectionId: !Ref ConnectionId
               - Sid: ReconcileOnlyTaggedCustomerWorkloadResources
                 Effect: Allow
                 Action:

@@ -69,6 +69,8 @@ def test_customer_cloudformation_contract_keeps_execution_separate_from_discover
     assert "iam:PassRole" in execution
     assert "CreateBoundedCustomerWorkloadResources" in execution
     assert "TagNewCustomerWorkloadResources" in execution
+    assert "ReconcileTagsOnlyOnOwnedCustomerWorkloadResources" in execution
+    assert "logs:TagResource" in execution
     assert "ec2:ModifyVpcAttribute" in execution
     assert "ec2:RevokeSecurityGroupEgress" in execution
     assert "ecr:ListTagsForResource" in execution
