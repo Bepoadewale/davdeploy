@@ -15,6 +15,7 @@ from davdeploy.model_gateway import (
     NovaGatewayConfig,
     decode_structured_json,
     guarded_complete,
+    configured_model_gateway,
     guarded_generate_structured,
     model_input_digest,
 )
@@ -261,3 +262,12 @@ def test_explicit_fallback_preserves_fixture_identity():
     assert response.request.provider == "fixture"
     assert response.request.model == "deterministic-fixture"
     assert response.evidence[0].kind.value == "fixture"
+
+
+def test_configured_gateway_accepts_legacy_bedrock_nova_provider(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_MODEL_PROVIDER", "bedrock-nova")
+    configured_model_gateway.cache_clear()
+    try:
+        assert isinstance(configured_model_gateway(), BedrockNovaGateway)
+    finally:
+        configured_model_gateway.cache_clear()

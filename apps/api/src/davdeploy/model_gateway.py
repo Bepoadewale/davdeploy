@@ -435,7 +435,10 @@ def configured_model_gateway() -> ModelGateway:
         return DisabledModelGateway()
     if provider == "fixture":
         return DeterministicModelGateway()
-    if provider not in {"bedrock", "nova2", "nova-2-lite"}:
+    # ``bedrock-nova`` was emitted by an earlier hosted-runtime deployment.
+    # Keep it as a narrow compatibility alias rather than letting queued work
+    # fail before the worker can process it.
+    if provider not in {"bedrock", "bedrock-nova", "nova2", "nova-2-lite"}:
         raise ModelGatewayUnavailable(f"unsupported model provider {provider!r}")
     gateway: ModelGateway = BedrockNovaGateway()
     fallback = os.getenv("DAVDEPLOY_MODEL_FALLBACK", "disabled").lower()
