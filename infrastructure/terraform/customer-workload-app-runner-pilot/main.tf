@@ -9,6 +9,7 @@ data "aws_availability_zones" "available" {
 locals {
   azs                 = slice(data.aws_availability_zones.available.names, 0, 2)
   service_name        = var.service_name != "" ? var.service_name : "davdeploy-${var.connection_id}-workload"
+  app_runner_service_name = var.app_runner_service_name != "" ? var.app_runner_service_name : local.service_name
   ecr_repository_name = var.ecr_repository_name != "" ? var.ecr_repository_name : "davdeploy-${var.connection_id}-workload"
   tags = {
     Project               = "davdeploy"
@@ -109,7 +110,7 @@ resource "aws_cloudwatch_log_group" "customer_workload" {
 
 resource "aws_apprunner_service" "customer_workload" {
   count        = var.enable_service ? 1 : 0
-  service_name = local.service_name
+  service_name = local.app_runner_service_name
   tags         = local.tags
 
   source_configuration {
