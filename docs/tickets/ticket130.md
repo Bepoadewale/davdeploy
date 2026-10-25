@@ -96,7 +96,8 @@ ingestion, and direct health check all succeeded. A distinct reviewed destroy pl
 the workload and returned `DESTROYED_VERIFIED` / `confirmed_absent`; independent AWS reads verified
 the VPC/ECR absence and terminal deletion states.
 
-The only open acceptance item is external GitHub installation administration: installation
-`167128937` must be authorized by its owner to include the private pilot repository. This record
-does not claim that private-repository selection is complete.
+Private GitHub onboarding is also complete. Installation `167128937` now exposes
+`Bepoadewale/davdeploy-private-pilot` and `main` through the production GitHub-App API. Project
+`private-github-pilot` (`3e977ff8-3e88-4e37-a8d7-2c71d03fdaf0`) recorded bounded, read-only
+manifest analysis with `EXECUTED_READ_ONLY`.
 

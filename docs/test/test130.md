@@ -91,8 +91,10 @@ This section supersedes the historical progress notes above.
 - Independent AWS reads found the VPC and ECR repository absent and App Runner/NAT in terminal
   `DELETED` / `deleted` states. Customer connection roles were retained intentionally.
 
-Private GitHub onboarding is the only remaining external dependency: App `5159790`, installation
-`167128937` exists, but the private pilot repository has not been owner-authorized into that
-installation. Pricing/inventory provenance was refreshed, while the displayed estimate remains a
-documented fixture range rather than a live commercial quote.
+Private GitHub onboarding is complete: App `5159790`, installation `167128937`, discovered
+`Bepoadewale/davdeploy-private-pilot` and its `main` branch through the production API. Project
+`private-github-pilot` (`3e977ff8-3e88-4e37-a8d7-2c71d03fdaf0`) recorded bounded GitHub-App
+manifest analysis with `EXECUTED_READ_ONLY`; it did not read source code or secrets. Pricing/inventory
+provenance was refreshed, while the displayed estimate remains a documented fixture range rather
+than a live commercial quote.
 
