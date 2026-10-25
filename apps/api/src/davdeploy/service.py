@@ -94,6 +94,7 @@ from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
+from davdeploy.terraform_generation import NovaTerraformGenerator
 
 
 def plan_hash(payload: dict[str, Any]) -> str:
@@ -114,6 +115,7 @@ class ProductService:
         public_github: PublicGitHubRepositoryReader | None = None,
         cloud_execution: CloudExecutionAdapter | None = None,
         invitation_sender: InvitationEmailSender | None = None,
+        terraform_generator: NovaTerraformGenerator | None = None,
     ):
         self.db = db
         self.intent_provider = intent_provider or configured_intent_provider()
@@ -127,6 +129,7 @@ class ProductService:
         self.connection_secrets = connection_secrets or configured_connection_secret_store()
         self.cloud_execution = cloud_execution or configured_cloud_execution_adapter()
         self.invitation_sender = invitation_sender or configured_invitation_sender()
+        self.terraform_generator = terraform_generator or NovaTerraformGenerator()
 
     def _wake_worker(self, kind: str, job_id: str) -> None:
         """Send a non-sensitive wake-up after durable work has committed.
@@ -2703,7 +2706,7 @@ class ProductService:
     def create_terraform_plan_render_for_revision(
         self, principal: Principal, revision_id: str, provided_digest: str
     ) -> dict[str, Any]:
-        """Generate a plan-only App Runner Terraform contract.
+        """Generate a plan-only, revision-bound Terraform contract.
 
         This is a renderer, not an executor. It persists deterministic module
         inputs and file previews for human review and offline validation. It
@@ -2719,10 +2722,6 @@ class ProductService:
             raise ValueError("stale Terraform render request: approved digest changed")
         content = revision.content
         profile_name = str(content.get("summary", {}).get("selected_profile") or "")
-        if profile_name != "aws-app-runner":
-            raise ValueError(
-                "App Runner Terraform renderer only supports aws-app-runner approved plans"
-            )
         project = self._project(principal, infrastructure_plan.project_id)
         application = content.get("application_analysis") or {}
         target = content.get("target") or {}
@@ -2756,13 +2755,23 @@ class ProductService:
         )
         if existing:
             return self._terraform_plan_render_payload(existing)
-        render = self._app_runner_terraform_contract(
-            revision=revision,
-            infrastructure_plan=infrastructure_plan,
-            source_deployment=source_deployment,
-            repository_url=str(repository_url),
-            branch=str(branch),
-        )
+        if profile_name == "aws-app-runner":
+            render = self._app_runner_terraform_contract(
+                revision=revision,
+                infrastructure_plan=infrastructure_plan,
+                source_deployment=source_deployment,
+                repository_url=str(repository_url),
+                branch=str(branch),
+            )
+        else:
+            render = self._nova_terraform_contract(
+                principal=principal,
+                revision=revision,
+                infrastructure_plan=infrastructure_plan,
+                source_deployment=source_deployment,
+                repository_url=str(repository_url),
+                branch=str(branch),
+            )
         stored = TerraformPlanRender(
             organization_id=principal.organization_id,
             revision_id=revision.id,
@@ -2792,6 +2801,105 @@ class ProductService:
         )
         self.db.commit()
         return self._terraform_plan_render_payload(stored)
+
+    def _nova_terraform_contract(
+        self,
+        *,
+        principal: Principal,
+        revision: InfrastructurePlanRevision,
+        infrastructure_plan: InfrastructurePlan,
+        source_deployment: DeploymentPlan,
+        repository_url: str,
+        branch: str,
+    ) -> dict[str, Any]:
+        """Render a Nova resource graph without making it executable.
+
+        The generated JSON is deliberately stored only in the immutable render
+        record.  No apply path accepts this render until a future runner adds
+        provider-schema validation, policy evaluation and saved-plan binding.
+        """
+        target = revision.content.get("target") or {}
+        profile_name = str(revision.content.get("summary", {}).get("selected_profile") or "")
+        profile = execution_profile(profile_name)
+        tenant = TenantScope(
+            organization_id=principal.organization_id,
+            workspace_id=principal.organization_id,
+            project_id=infrastructure_plan.project_id,
+            actor_id=principal.subject,
+        )
+        generated = self.terraform_generator.generate(approved_plan=revision.content, tenant=tenant)
+        response = generated.response
+        self._record_model_usage(
+            principal,
+            {
+                "request_id": response.request.request_id,
+                "provider": response.request.provider,
+                "model": response.request.model,
+                "prompt_version": response.request.prompt_version,
+                "usage": response.usage.model_dump(mode="json") if response.usage else {},
+            },
+        )
+        resource_addresses = [
+            f"{resource.resource_type}.{resource.name}" for resource in generated.proposal.resources
+        ]
+        return {
+            "kind": "davdeploy.terraform.nova-generated-plan-only-render.v1",
+            "profile": profile.profile,
+            "delivery_kind": profile.delivery_kind,
+            "status": "PLAN_ONLY_NOT_APPLIED",
+            "generation": {
+                "provider": response.request.provider,
+                "model": response.request.model,
+                "prompt_version": response.request.prompt_version,
+                "input_digest": response.request.input_digest,
+                "resource_addresses": resource_addresses,
+                "assumptions": generated.proposal.assumptions,
+                "limitations": generated.proposal.limitations,
+            },
+            "execution_boundary": (
+                "Nova generated a typed resource graph from an approved revision. This record is "
+                "not provider-schema validation, a Terraform plan, apply, destroy, AWS API call, "
+                "GitHub write, Kubernetes action or production deployment."
+            ),
+            "terraform_root": "generated/revision-bound",
+            "module_path": "generated-by-nova-no-preexisting-module",
+            "commands": [
+                "terraform init -backend=false -input=false <reviewed-generated-root>",
+                "terraform validate <reviewed-generated-root>",
+            ],
+            "apply_command_available": False,
+            "module_inputs": {
+                "project_id": infrastructure_plan.project_id,
+                "revision_id": revision.id,
+                "source_deployment_plan_id": source_deployment.id,
+                "plan_digest": revision.content_digest,
+                "profile": profile_name,
+                "repository_url": repository_url,
+                "repository_branch": branch,
+                "aws_account_id": target.get("account_id") or "customer-account-selected-at-apply-time",
+                "aws_region": target.get("region"),
+                "tags": {
+                    "ManagedBy": "davdeploy",
+                    "davdeployPlanDigest": revision.content_digest,
+                    "davdeployRevisionId": revision.id,
+                },
+            },
+            "files": [
+                {
+                    "path": "main.tf.json",
+                    "purpose": "Nova-generated, typed AWS resource graph for review and offline validation.",
+                    "content": self.terraform_generator.terraform_json(generated.proposal),
+                },
+                {
+                    "path": "README.md",
+                    "purpose": "Human approval boundary.",
+                    "content": (
+                        "# davdeploy Nova-generated Terraform\n\n"
+                        "Generated from one approved revision. Validate and plan only; do not apply directly."
+                    ),
+                },
+            ],
+        }
 
     def _app_runner_terraform_contract(
         self,

@@ -81,6 +81,7 @@ class ModelPurpose(StrEnum):
     CLARIFICATION = "clarification"
     PLAN_EXPLANATION = "plan_explanation"
     EVIDENCE_SUMMARY = "evidence_summary"
+    TERRAFORM_GENERATION = "terraform_generation"
 
 
 class ModelRequest(ContractBase):
