@@ -322,6 +322,7 @@ def test_serverless_stack_authorizes_only_the_selected_nova_model_family():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert "foundation-model/amazon.nova-2-lite-v1:0" in terraform
     assert "inference-profile/${var.nova_model_id}" in terraform
+    assert 'DAVDEPLOY_ENABLE_NOVA_MODEL                  = "true"' in terraform
     assert "foundation-model/*" not in terraform
 
 
