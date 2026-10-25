@@ -432,6 +432,7 @@ locals {
     DAVDEPLOY_OIDC_AUDIENCE                      = aws_cognito_user_pool_client.frontend.id
     DAVDEPLOY_POLICY_FUNCTION_ARN                = aws_lambda_function.policy.arn
     DAVDEPLOY_MODEL_PROVIDER                     = "bedrock"
+    DAVDEPLOY_ENABLE_NOVA_MODEL                  = "true"
     DAVDEPLOY_BEDROCK_MODEL_ID                   = var.nova_model_id
     DAVDEPLOY_EXECUTOR_MODE                      = "embedded_fixture"
     DAVDEPLOY_EMAIL_PROVIDER                     = var.ses_identity_arn == "" ? "disabled" : "ses"
