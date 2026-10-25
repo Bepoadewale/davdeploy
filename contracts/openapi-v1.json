@@ -159,7 +159,7 @@
           },
           "mode": {
             "default": "GUARDED_CLOUD_EXECUTION",
-            "pattern": "^(GUARDED_CLOUD_EXECUTION|AUTHENTICATED_APP_RUNNER_APPLY|AUTHENTICATED_APP_RUNNER_DESTROY)$",
+            "pattern": "^(GUARDED_CLOUD_EXECUTION|AUTHENTICATED_APP_RUNNER_APPLY|AUTHENTICATED_APP_RUNNER_DESTROY|AUTHENTICATED_APP_RUNNER_IMAGE_BUILD)$",
             "title": "Mode",
             "type": "string"
           },
@@ -1937,6 +1937,53 @@
         "summary": "Execute Cloud Execution Run"
       }
     },
+    "/api/v1/cloud-execution-runs/{run_id}/reconcile-result": {
+      "post": {
+        "description": "Replay a decrypt/read failure for a completed immutable runner result.",
+        "operationId": "reconcile_cloud_execution_run_result_api_v1_cloud_execution_runs__run_id__reconcile_result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Cloud Execution Run Result"
+      }
+    },
     "/api/v1/customer-plan-revisions/{revision_id}": {
       "get": {
         "operationId": "get_customer_plan_revision_api_v1_customer_plan_revisions__revision_id__get",
@@ -2093,6 +2140,62 @@
           }
         },
         "summary": "Create Customer Plan Cloud Preflight"
+      }
+    },
+    "/api/v1/customer-plan-revisions/{revision_id}/customer-image-builds": {
+      "post": {
+        "operationId": "create_customer_image_build_api_v1_customer_plan_revisions__revision_id__customer_image_builds_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudExecutionRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Customer Image Build"
       }
     },
     "/api/v1/customer-plan-revisions/{revision_id}/decisions": {

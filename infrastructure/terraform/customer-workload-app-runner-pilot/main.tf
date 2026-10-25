@@ -7,12 +7,13 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs                 = slice(data.aws_availability_zones.available.names, 0, 2)
-  service_name        = var.service_name != "" ? var.service_name : "davdeploy-${var.connection_id}-workload"
-  ecr_repository_name = var.ecr_repository_name != "" ? var.ecr_repository_name : "davdeploy-${var.connection_id}-workload"
+  azs                     = slice(data.aws_availability_zones.available.names, 0, 2)
+  service_name            = var.service_name != "" ? var.service_name : "davdeploy-${var.connection_id}-workload"
+  app_runner_service_name = var.app_runner_service_name != "" ? var.app_runner_service_name : local.service_name
+  ecr_repository_name     = var.ecr_repository_name != "" ? var.ecr_repository_name : "davdeploy-${var.connection_id}-workload"
   tags = {
     Project               = "davdeploy"
-    ManagedBy             = "terraform"
+    ManagedBy             = "davdeploy"
     Scope                 = var.deployment_scope
     Placement             = "customer-sandbox"
     AccountBoundary       = "same-account-pilot"
@@ -70,12 +71,75 @@ resource "aws_subnet" "customer_private" {
   tags = merge(local.tags, { Name = "davdeploy-customer-sandbox-private-${count.index + 1}" })
 }
 
+resource "aws_internet_gateway" "customer_sandbox" {
+  vpc_id = aws_vpc.customer_sandbox.id
+  tags   = merge(local.tags, { Name = "davdeploy-customer-sandbox-igw" })
+}
+
+resource "aws_subnet" "customer_nat" {
+  vpc_id                  = aws_vpc.customer_sandbox.id
+  cidr_block              = cidrsubnet(var.customer_vpc_cidr, 8, 20)
+  availability_zone       = local.azs[0]
+  map_public_ip_on_launch = true
+  tags                    = merge(local.tags, { Name = "davdeploy-customer-sandbox-nat" })
+}
+
+resource "aws_route_table" "customer_public" {
+  vpc_id = aws_vpc.customer_sandbox.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.customer_sandbox.id
+  }
+  tags = merge(local.tags, { Name = "davdeploy-customer-sandbox-public" })
+}
+
+resource "aws_route_table_association" "customer_nat" {
+  subnet_id      = aws_subnet.customer_nat.id
+  route_table_id = aws_route_table.customer_public.id
+}
+
+resource "aws_eip" "customer_nat" {
+  domain = "vpc"
+  tags   = merge(local.tags, { Name = "davdeploy-customer-sandbox-nat" })
+}
+
+resource "aws_nat_gateway" "customer_sandbox" {
+  allocation_id = aws_eip.customer_nat.id
+  subnet_id     = aws_subnet.customer_nat.id
+  tags          = merge(local.tags, { Name = "davdeploy-customer-sandbox-nat" })
+  depends_on    = [aws_internet_gateway.customer_sandbox]
+}
+
+resource "aws_route_table" "customer_private" {
+  vpc_id = aws_vpc.customer_sandbox.id
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.customer_sandbox.id
+  }
+  tags = merge(local.tags, { Name = "davdeploy-customer-sandbox-private" })
+}
+
+resource "aws_route_table_association" "customer_private" {
+  count          = length(aws_subnet.customer_private)
+  subnet_id      = aws_subnet.customer_private[count.index].id
+  route_table_id = aws_route_table.customer_private.id
+}
+
 resource "aws_security_group" "customer_runtime" {
   name        = "davdeploy-customer-sandbox-runtime"
   description = "No-default-egress boundary for the customer sandbox App Runner workload."
   vpc_id      = aws_vpc.customer_sandbox.id
 
   tags = merge(local.tags, { Name = "davdeploy-customer-sandbox-runtime" })
+}
+
+resource "aws_vpc_security_group_egress_rule" "customer_runtime_https" {
+  security_group_id = aws_security_group.customer_runtime.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "tcp"
+  from_port         = 443
+  to_port           = 443
+  description       = "HTTPS-only egress through the customer sandbox NAT gateway."
 }
 
 resource "aws_apprunner_vpc_connector" "customer_sandbox" {
@@ -109,7 +173,7 @@ resource "aws_cloudwatch_log_group" "customer_workload" {
 
 resource "aws_apprunner_service" "customer_workload" {
   count        = var.enable_service ? 1 : 0
-  service_name = local.service_name
+  service_name = local.app_runner_service_name
   tags         = local.tags
 
   source_configuration {

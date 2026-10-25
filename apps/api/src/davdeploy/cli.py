@@ -103,6 +103,13 @@ def _parser() -> argparse.ArgumentParser:
     cloud_run.add_argument("--confirmation", required=True)
     cloud_run.add_argument("--destroy", action="store_true")
 
+    image_build = subparsers.add_parser("build-customer-image")
+    image_build.add_argument("--revision-id", required=True)
+    image_build.add_argument("--content-digest", required=True)
+    image_build.add_argument("--expected-account-id")
+    image_build.add_argument("--region", required=True)
+    image_build.add_argument("--confirmation", required=True)
+
     queue_cloud_run = subparsers.add_parser("queue-customer-cloud-run")
     queue_cloud_run.add_argument("--run-id", required=True)
     queue_cloud_run.add_argument("--content-digest", required=True)
@@ -110,6 +117,9 @@ def _parser() -> argparse.ArgumentParser:
 
     cloud_evidence = subparsers.add_parser("get-customer-cloud-run-evidence")
     cloud_evidence.add_argument("--run-id", required=True)
+
+    reconcile_cloud_run = subparsers.add_parser("reconcile-customer-cloud-run-result")
+    reconcile_cloud_run.add_argument("--run-id", required=True)
 
     customer_queue = subparsers.add_parser("list-customer-reviews")
     customer_queue.add_argument("--state")
@@ -224,6 +234,17 @@ def run(
                 "confirmation": args.confirmation,
             },
         )
+    if args.command == "build-customer-image":
+        return client.request(
+            "POST",
+            f"/api/v1/customer-plan-revisions/{args.revision_id}/customer-image-builds",
+            {
+                "content_digest": args.content_digest,
+                "expected_account_id": args.expected_account_id,
+                "expected_region": args.region,
+                "confirmation": args.confirmation,
+            },
+        )
     if args.command == "queue-customer-cloud-run":
         return client.request(
             "POST",
@@ -232,6 +253,8 @@ def run(
         )
     if args.command == "get-customer-cloud-run-evidence":
         return client.request("GET", f"/api/v1/cloud-execution-runs/{args.run_id}/evidence")
+    if args.command == "reconcile-customer-cloud-run-result":
+        return client.request("POST", f"/api/v1/cloud-execution-runs/{args.run_id}/reconcile-result")
     if args.command == "list-customer-reviews":
         suffix = f"?state={args.state}" if args.state else ""
         return client.request("GET", f"/api/v1/admin/customer-plan-revisions{suffix}")

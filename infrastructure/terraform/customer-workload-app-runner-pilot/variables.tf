@@ -39,17 +39,6 @@ variable "app_runner_runtime_role_arn" {
   description = "Customer-created App Runner runtime role from the connection stack."
 }
 
-variable "customer_execution_role_arn" {
-  type        = string
-  description = "Customer-created bounded execution role assumed only by Terraform's AWS provider."
-}
-
-variable "customer_execution_external_id" {
-  type        = string
-  description = "Control-plane-held ExternalId for the bounded customer execution role."
-  sensitive   = true
-}
-
 variable "customer_vpc_cidr" {
   type        = string
   description = "Dedicated same-account customer-sandbox VPC CIDR."
@@ -86,7 +75,13 @@ variable "image_identifier" {
 
 variable "service_name" {
   type        = string
-  description = "App Runner service name."
+  description = "Retained customer foundation/log-group name."
+  default     = ""
+}
+
+variable "app_runner_service_name" {
+  type        = string
+  description = "App Runner service name, which must be at most 40 characters."
   default     = ""
 }
 

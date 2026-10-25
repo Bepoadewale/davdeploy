@@ -120,22 +120,27 @@ jobs:
           set -euo pipefail
           migration_function="$(terraform output -raw migration_function_name)"
           test -n "${migration_function}" || { echo "Terraform returned no migration function" >&2; exit 1; }
-          invoke_result="$(aws lambda invoke \
-            --function-name "${migration_function}" \
-            --cli-binary-format raw-in-base64-out \
-            --payload '{}' \
-            migration-response.json)"
-          test -z "$(jq -r '.FunctionError // empty' <<<"${invoke_result}")" || {
-            echo "Migration Lambda reported a function error" >&2
-            jq . migration-response.json >&2
-            exit 1
-          }
-          jq -e '.status == "migrations-complete"' migration-response.json >/dev/null || {
-            echo "Migration Lambda did not confirm completion" >&2
-            jq . migration-response.json >&2
-            exit 1
-          }
-          echo "Database migrations completed successfully"
+          for attempt in 1 2 3 4 5 6; do
+            invoke_result="$(aws lambda invoke \
+              --function-name "${migration_function}" \
+              --cli-binary-format raw-in-base64-out \
+              --payload '{}' \
+              migration-response.json)"
+            if test -z "$(jq -r '.FunctionError // empty' <<<"${invoke_result}")" \
+              && jq -e '.status == "migrations-complete"' migration-response.json >/dev/null; then
+              echo "Database migrations completed successfully"
+              exit 0
+            fi
+
+            if [ "${attempt}" -eq 6 ]; then
+              echo "Migration Lambda did not confirm completion after bounded retry" >&2
+              jq . migration-response.json >&2
+              exit 1
+            fi
+
+            echo "Migration attempt ${attempt} did not complete; waiting for a possible Aurora resume" >&2
+            sleep 10
+          done
 
       - name: Record result
         if: always()

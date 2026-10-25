@@ -256,6 +256,17 @@ def test_serverless_stack_delivers_minimal_worker_wakeups_through_sqs():
     assert '"sqs:SendMessage"' in terraform
 
 
+def test_serverless_stack_allows_worker_to_decrypt_but_not_write_customer_results():
+    terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    api_policy = terraform.split('resource "aws_iam_role_policy" "api"', 1)[1].split(
+        'resource "aws_iam_role" "customer_executor"', 1
+    )[0]
+    assert 'Action   = ["kms:Decrypt"]' in api_policy
+    assert "Resource = var.customer_execution_kms_key_arns" in api_policy
+    assert "kms:Encrypt" not in api_policy
+    assert "kms:GenerateDataKey" not in api_policy
+
+
 def test_serverless_stack_scopes_invitation_email_to_the_verified_ses_identity():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert 'Action   = ["ses:SendEmail"]' in terraform

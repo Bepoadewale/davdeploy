@@ -160,6 +160,19 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "build_customer_image",
+        "description": "Build and push exactly one commit pinned from the repository already selected by an approved plan. This cannot create or update an App Runner service.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["revision_id", "content_digest", "region", "confirmation"],
+            "properties": {
+                "revision_id": {"type": "string"}, "content_digest": {"type": "string"},
+                "expected_account_id": {"type": "string"}, "region": {"type": "string"},
+                "confirmation": {"type": "string", "description": "Must be BUILD_CUSTOMER_IMAGE."},
+            },
+        },
+    },
+    {
         "name": "queue_customer_cloud_run",
         "description": "Queue an already-ready exact cloud execution request. The API independently verifies role, digest, policy, approval, and confirmation.",
         "inputSchema": {
@@ -171,6 +184,11 @@ TOOL_DEFINITIONS = [
     {
         "name": "get_customer_cloud_run_evidence",
         "description": "Read tenant-scoped execution evidence, including observed outputs and destruction proof when available.",
+        "inputSchema": {"type": "object", "required": ["run_id"], "properties": {"run_id": {"type": "string"}}},
+    },
+    {
+        "name": "reconcile_customer_cloud_run_result",
+        "description": "Replay only an administrator-authorized, completed runner result whose encrypted artifact could not previously be read. It never reruns Terraform.",
         "inputSchema": {"type": "object", "required": ["run_id"], "properties": {"run_id": {"type": "string"}}},
     },
     {
@@ -342,6 +360,17 @@ class davdeployMcp:
                     "confirmation": arguments.get("confirmation"),
                 },
             )
+        if name == "build_customer_image":
+            return self.client.request(
+                "POST",
+                f"/api/v1/customer-plan-revisions/{arguments['revision_id']}/customer-image-builds",
+                {
+                    "content_digest": arguments["content_digest"],
+                    "expected_account_id": arguments.get("expected_account_id"),
+                    "expected_region": arguments["region"],
+                    "confirmation": arguments["confirmation"],
+                },
+            )
         if name == "queue_customer_cloud_run":
             return self.client.request(
                 "POST",
@@ -350,6 +379,8 @@ class davdeployMcp:
             )
         if name == "get_customer_cloud_run_evidence":
             return self.client.request("GET", f"/api/v1/cloud-execution-runs/{arguments['run_id']}/evidence")
+        if name == "reconcile_customer_cloud_run_result":
+            return self.client.request("POST", f"/api/v1/cloud-execution-runs/{arguments['run_id']}/reconcile-result")
         if name == "execute_approved_plan":
             return self.client.request(
                 "POST", f"/api/v1/deployment-plans/{arguments['plan_id']}/execute"

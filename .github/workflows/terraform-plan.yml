@@ -38,6 +38,10 @@ jobs:
       TF_VAR_customer_execution_lock_table: ${{ vars.TF_STATE_LOCK_TABLE }}
       TF_VAR_customer_execution_kms_key_arns: '["${{ vars.TF_RELEASE_KMS_KEY_ARN }}", "${{ vars.TF_PLAN_KMS_KEY_ARN }}"]'
       TF_VAR_enable_customer_cloud_execution: ${{ vars.ENABLE_CUSTOMER_CLOUD_EXECUTION || 'false' }}
+      TF_VAR_enable_github_app_read_only: ${{ vars.ENABLE_GITHUB_APP_READ_ONLY || 'false' }}
+      TF_VAR_github_app_id: ${{ vars.DAVDEPLOY_GITHUB_APP_ID || '' }}
+      TF_VAR_github_app_installation_id: ${{ vars.DAVDEPLOY_GITHUB_APP_INSTALLATION_ID || '' }}
+      TF_VAR_github_app_credential_secret_arn: ${{ vars.DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN || '' }}
       TF_VAR_aws_connection_template_url: ${{ vars.AWS_CONNECTION_TEMPLATE_URL }}
       TF_VAR_cognito_domain_prefix: ${{ vars.COGNITO_DOMAIN_PREFIX }}
       TF_VAR_google_identity_provider_enabled: ${{ vars.GOOGLE_IDENTITY_PROVIDER_ENABLED || 'false' }}

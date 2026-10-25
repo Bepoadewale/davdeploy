@@ -379,10 +379,20 @@ class GitHubAppReadOnlyConnection:
     api_url = "https://api.github.com"
     execution = "EXECUTED_READ_ONLY"
 
-    def __init__(self, app_id: str, installation_id: str, private_key_path: str):
+    def __init__(
+        self,
+        app_id: str,
+        installation_id: str,
+        private_key_path: str | None = None,
+        *,
+        private_key: str | None = None,
+    ):
+        if not private_key_path and not private_key:
+            raise ValueError("GitHub App private key material is required")
         self.app_id = app_id
         self.installation_id = installation_id
-        self.private_key_path = Path(private_key_path)
+        self.private_key_path = Path(private_key_path) if private_key_path else None
+        self._private_key = private_key
 
     def _app_jwt(self) -> str:
         now = datetime.now(UTC)
@@ -392,7 +402,8 @@ class GitHubAppReadOnlyConnection:
                 "exp": now + timedelta(minutes=9),
                 "iss": self.app_id,
             },
-            self.private_key_path.read_text(),
+            self._private_key
+            or (self.private_key_path.read_text() if self.private_key_path else ""),
             algorithm="RS256",
         )
 
@@ -755,18 +766,47 @@ class GitHubAppReadOnlyConnection:
         raise PermissionError("live webhook processing is not enabled in read-only mode")
 
 
+def _github_app_private_key_from_secret(secret_arn: str) -> str:
+    """Read one configured GitHub App key without logging or persisting it."""
+    try:
+        value = str(
+            boto3.client("secretsmanager").get_secret_value(SecretId=secret_arn)[
+                "SecretString"
+            ]
+        )
+    except (BotoCoreError, ClientError, KeyError) as error:
+        raise RuntimeError("configured GitHub App private key is unavailable") from error
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return value
+    if isinstance(payload, dict) and isinstance(payload.get("private-key.pem"), str):
+        return payload["private-key.pem"]
+    raise RuntimeError("configured GitHub App secret does not contain private-key.pem")
+
+
 def configured_github_connection() -> GitHubConnection:
     """Use live GitHub only after an explicit operator opt-in and complete key configuration."""
     enabled = os.getenv("DAVDEPLOY_GITHUB_APP_READ_ONLY", "false").lower() == "true"
     app_id = os.getenv("DAVDEPLOY_GITHUB_APP_ID")
     installation_id = os.getenv("DAVDEPLOY_GITHUB_APP_INSTALLATION_ID")
     key_path = os.getenv("DAVDEPLOY_GITHUB_APP_PRIVATE_KEY_PATH")
+    key_secret_arn = os.getenv("DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN")
     if not enabled:
         return FixtureGitHubConnection()
-    if not all([app_id, installation_id, key_path]):
+    if not all([app_id, installation_id]) or not (key_path or key_secret_arn):
         raise RuntimeError(
-            "live GitHub App mode requires app ID, installation ID, and private-key path"
+            "live GitHub App mode requires app ID, installation ID, and private-key configuration"
         )
+    if key_path and key_secret_arn:
+        raise RuntimeError("configure either a GitHub App private-key path or secret ARN, not both")
+    if key_secret_arn:
+        return GitHubAppReadOnlyConnection(
+            app_id,
+            installation_id,
+            private_key=_github_app_private_key_from_secret(key_secret_arn),
+        )
+    assert key_path is not None
     if not Path(key_path).is_file():
         raise RuntimeError("configured GitHub App private key is unavailable")
     return GitHubAppReadOnlyConnection(app_id, installation_id, key_path)

@@ -57,6 +57,39 @@ variable "enable_customer_cloud_execution" {
   default     = false
 }
 
+variable "enable_github_app_read_only" {
+  type        = bool
+  description = "Explicitly enable the configured GitHub App for read-only private repository onboarding."
+  default     = false
+}
+
+variable "github_app_id" {
+  type        = string
+  description = "Non-secret GitHub App ID used only when read-only App onboarding is enabled."
+  default     = ""
+}
+
+variable "github_app_installation_id" {
+  type        = string
+  description = "Non-secret selected GitHub App installation ID used only when read-only App onboarding is enabled."
+  default     = ""
+}
+
+variable "github_app_credential_secret_arn" {
+  type        = string
+  description = "Dedicated Secrets Manager ARN holding a JSON private-key.pem value; never place the key in Terraform variables or state."
+  default     = ""
+
+  validation {
+    condition = !var.enable_github_app_read_only || alltrue([
+      var.github_app_id != "",
+      var.github_app_installation_id != "",
+      var.github_app_credential_secret_arn != "",
+    ])
+    error_message = "Enabled GitHub App onboarding requires the App ID, installation ID, and a dedicated private-key secret ARN."
+  }
+}
+
 variable "aws_connection_template_url" {
   type        = string
   description = "Immutable public S3 HTTPS URL for the reviewed customer AWS connection CloudFormation template. Supplied only by the protected Terraform-plan environment."

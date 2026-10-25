@@ -900,6 +900,27 @@ def create_customer_plan_cloud_execution_run(
         translate(error)
 
 
+@app.post("/api/v1/customer-plan-revisions/{revision_id}/customer-image-builds")
+def create_customer_image_build(
+    revision_id: str,
+    request: CloudExecutionRunRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    REQUESTS.labels("cloud_execution.customer_image_build").inc()
+    try:
+        return service.create_customer_image_build_for_revision(
+            principal,
+            revision_id,
+            content_digest=request.content_digest,
+            expected_account_id=request.expected_account_id,
+            expected_region=request.expected_region,
+            confirmation=request.confirmation,
+        )
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
 @app.get("/api/v1/cloud-execution-runs")
 def list_cloud_execution_runs(
     principal: Principal = Depends(verify_token),
@@ -927,6 +948,20 @@ def execute_cloud_execution_run(
             content_digest=request.content_digest,
             confirmation=request.confirmation,
         )
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/cloud-execution-runs/{run_id}/reconcile-result")
+def reconcile_cloud_execution_run_result(
+    run_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Replay a decrypt/read failure for a completed immutable runner result."""
+    REQUESTS.labels("cloud_execution.result_reconcile").inc()
+    try:
+        return service.reconcile_cloud_execution_run_result(principal, run_id)
     except (PermissionError, ValueError, KeyError) as error:
         translate(error)
 

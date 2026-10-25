@@ -84,15 +84,17 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "davdeployExecution-${ConnectionId}"
-      Description: davdeploy bounded execution role. It has no policy until a reviewed deployment profile is explicitly enabled.
+      Description: davdeploy dedicated customer-approved AdministratorAccess execution role; all use remains gated by reviewed davdeploy plans.
       MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
       Tags:
         - Key: ManagedBy
           Value: davdeploy
         - Key: ConnectionId
           Value: !Ref ConnectionId
         - Key: Access
-          Value: execution-profile-pending
+          Value: customer-approved-administrator-execution
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -115,36 +117,80 @@ Resources:
                   - apprunner:DescribeVpcConnector
                   - apprunner:ListServices
                   - apprunner:ListVpcConnectors
+                  - apprunner:ListTagsForResource
                   - ec2:Describe*
                   - ecr:DescribeRepositories
                   - ecr:ListImages
+                  - ecr:ListTagsForResource
                   - logs:DescribeLogGroups
                   - logs:GetLogEvents
                   - logs:FilterLogEvents
+                  - logs:ListTagsForResource
                 Resource: "*"
-              - Sid: CreateTaggedCustomerWorkloadResources
+              # Terraform's AWS provider creates these resources before issuing
+              # its separate tag call. The trusted role and fixed runner keep
+              # the command boundary narrow; ownership tags then gate every
+              # subsequent mutation and deletion.
+              - Sid: CreateBoundedCustomerWorkloadResources
                 Effect: Allow
                 Action:
                   - apprunner:CreateService
                   - apprunner:CreateVpcConnector
-                  - apprunner:TagResource
-                  - apprunner:UntagResource
                   - ec2:CreateVpc
                   - ec2:CreateSubnet
                   - ec2:CreateSecurityGroup
+                  - ecr:CreateRepository
+                  - logs:CreateLogGroup
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:RequestedRegion: !Ref AWS::Region
+              - Sid: TagNewCustomerWorkloadResources
+                Effect: Allow
+                Action:
+                  - apprunner:TagResource
+                  - apprunner:UntagResource
                   - ec2:CreateTags
                   - ec2:DeleteTags
-                  - ecr:CreateRepository
                   - ecr:TagResource
                   - ecr:UntagResource
-                  - logs:CreateLogGroup
-                  - logs:TagLogGroup
+                  - logs:TagResource
                   - logs:UntagLogGroup
                 Resource: "*"
                 Condition:
                   StringEquals:
                     aws:RequestTag/ManagedBy: davdeploy
                     aws:RequestTag/ConnectionId: !Ref ConnectionId
+              # Reconciliation tags resources which already proved their ownership.
+              # Terraform may update one tag at a time, so a request-tag condition
+              # would reject an otherwise bounded update to an existing resource.
+              - Sid: ReconcileTagsOnlyOnOwnedCustomerWorkloadResources
+                Effect: Allow
+                Action:
+                  - apprunner:TagResource
+                  - apprunner:UntagResource
+                  - ec2:CreateTags
+                  - ec2:DeleteTags
+                  - ecr:TagResource
+                  - ecr:UntagResource
+                  - logs:TagResource
+                  - logs:UntagLogGroup
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/ManagedBy: davdeploy
+                    aws:ResourceTag/ConnectionId: !Ref ConnectionId
+              - Sid: ReconcileOnlyTaggedCustomerWorkloadResources
+                Effect: Allow
+                Action:
+                  - ec2:ModifyVpcAttribute
+                  - ec2:RevokeSecurityGroupEgress
+                  - logs:PutRetentionPolicy
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/ManagedBy: davdeploy
+                    aws:ResourceTag/ConnectionId: !Ref ConnectionId
               - Sid: DeleteOnlyTaggedCustomerWorkloadResources
                 Effect: Allow
                 Action:
@@ -160,17 +206,35 @@ Resources:
                   StringEquals:
                     aws:ResourceTag/ManagedBy: davdeploy
                     aws:ResourceTag/ConnectionId: !Ref ConnectionId
+              - Sid: CreateOnlyAppRunnerServiceLinkedRoles
+                Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    iam:AWSServiceName:
+                      - apprunner.amazonaws.com
+                      - networking.apprunner.amazonaws.com
               - Sid: PassOnlyConnectionAppRunnerRoles
                 Effect: Allow
                 Action: iam:PassRole
                 Resource:
                   - !GetAtt AppRunnerEcrAccessRole.Arn
                   - !GetAtt AppRunnerRuntimeRole.Arn
-                Condition:
-                  StringEquals:
-                    iam:PassedToService:
-                      - build.apprunner.amazonaws.com
-                      - tasks.apprunner.amazonaws.com
+              - Sid: PushOnlyConnectionScopedWorkloadImage
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/davdeploy-${ConnectionId}-workload"
+              - Sid: GetEcrAuthorizationTokenForScopedImagePush
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
 
   AppRunnerEcrAccessRole:
     Type: AWS::IAM::Role

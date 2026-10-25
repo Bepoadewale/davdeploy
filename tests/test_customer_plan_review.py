@@ -79,6 +79,8 @@ def test_simple_fastapi_customer_review_selects_one_non_eks_aws_plan_with_monito
     assert content["observability"]["metrics_backend"].startswith("Prometheus")
     assert content["observability"]["dashboard"] == "Amazon Managed Grafana"
     assert any(item["category"] == "monitoring" for item in content["cost_estimate"]["components"])
+    assert content["inventory_snapshot"]["pricing_evidence"] == {}
+    assert content["evidence"]["pricing"] == {}
     assert content["deployment_strategy"]["boundary"].startswith("Submission and approval")
     assert service.create_customer_plan_review(founder(), deployment.id).id == review.id
 

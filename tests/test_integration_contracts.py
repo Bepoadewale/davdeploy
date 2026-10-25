@@ -9,6 +9,7 @@ from davdeploy.integrations import (
     FixtureGitHubConnection,
     GitHubAppReadOnlyConnection,
     PublicGitHubRepositoryReader,
+    configured_github_connection,
 )
 
 
@@ -41,6 +42,40 @@ def test_live_github_adapter_parses_repository_and_refuses_writes():
         assert "disabled" in str(error)
     else:
         raise AssertionError("read-only GitHub App adapter allowed a write")
+
+
+def test_configured_github_connection_reads_private_key_from_secret(monkeypatch):
+    class SecretsManager:
+        def get_secret_value(self, *, SecretId):
+            assert SecretId == "arn:aws:secretsmanager:us-east-1:123456789012:secret:davdeploy/github-app"
+            return {"SecretString": json.dumps({"private-key.pem": "private-key"})}
+
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_READ_ONLY", "true")
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_ID", "5159790")
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_INSTALLATION_ID", "167128937")
+    monkeypatch.setenv(
+        "DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN",
+        "arn:aws:secretsmanager:us-east-1:123456789012:secret:davdeploy/github-app",
+    )
+    monkeypatch.delenv("DAVDEPLOY_GITHUB_APP_PRIVATE_KEY_PATH", raising=False)
+    monkeypatch.setattr("davdeploy.integrations.boto3.client", lambda service: SecretsManager())
+
+    connection = configured_github_connection()
+
+    assert isinstance(connection, GitHubAppReadOnlyConnection)
+    assert connection.private_key_path is None
+    assert connection._private_key == "private-key"
+
+
+def test_configured_github_connection_rejects_ambiguous_private_key_sources(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_READ_ONLY", "true")
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_ID", "5159790")
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_INSTALLATION_ID", "167128937")
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_PRIVATE_KEY_PATH", "/private/key.pem")
+    monkeypatch.setenv("DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN", "arn:example")
+
+    with pytest.raises(RuntimeError, match="either"):
+        configured_github_connection()
 
 
 def test_public_github_reader_accepts_only_canonical_public_repositories(monkeypatch):
