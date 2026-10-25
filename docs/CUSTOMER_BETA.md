@@ -52,3 +52,11 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 - Keep CORS limited to `https://davdeploy.tech`.
 - Keep customer cloud credentials and GitHub App credentials server-side and short-lived.
 - Do not treat fixture planning, local dry runs, or plan-only Terraform review as deployment proof.
+
+## Invitation-delivery cost boundary
+
+The `davdeploy.tech` Cloudflare zone is on the Free plan. Cloudflare Pages and Email Routing do not
+provide transactional sending, so Email Routing cannot deliver workspace invitations. The deployed
+API currently has `DAVDEPLOY_EMAIL_PROVIDER=disabled`; enabling its SES sender would introduce AWS
+email usage charges after any applicable allowance. Do not enable SES or change DNS/email routing
+for this purpose without a separate owner-approved cost decision.

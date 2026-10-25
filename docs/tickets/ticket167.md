@@ -25,5 +25,6 @@ runtime inventory, Cloudflare Pages configuration, Cognito configuration, and AP
 
 ## Follow-up
 
-Configure tested invitation delivery, run a controlled browser acceptance journey, and separately
-enable any customer execution capability only through its own approved delivery plan.
+Configure tested invitation delivery after an owner-approved email cost decision, run a controlled
+browser acceptance journey, and separately enable any customer execution capability only through
+its own approved delivery plan.
