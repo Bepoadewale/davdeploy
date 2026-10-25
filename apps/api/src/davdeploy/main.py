@@ -823,7 +823,7 @@ def create_customer_plan_terraform_render(
         return service.create_terraform_plan_render_for_revision(
             principal, revision_id, request.content_digest
         )
-    except (PermissionError, ValueError, KeyError) as error:
+    except (PermissionError, ValueError, KeyError, ModelGatewayUnavailable) as error:
         translate(error)
 
 
