@@ -23,6 +23,7 @@ require DAVDEPLOY_EXECUTION_RESULT_S3_URI
 
 connection_id="${DAVDEPLOY_CUSTOMER_CONNECTION_ID}"
 service_name="${DAVDEPLOY_CUSTOMER_SERVICE_NAME:-davdeploy-${connection_id}-workload}"
+app_runner_service_name="${DAVDEPLOY_CUSTOMER_APP_RUNNER_SERVICE_NAME:-${service_name}}"
 repository_name="${DAVDEPLOY_CUSTOMER_ECR_REPOSITORY_NAME:-davdeploy-${connection_id}-workload}"
 deployment_scope="${DAVDEPLOY_CUSTOMER_DEPLOYMENT_SCOPE:-customer-sandbox}"
 customer_vpc_cidr="${DAVDEPLOY_CUSTOMER_VPC_CIDR:-10.84.0.0/16}"
@@ -98,6 +99,7 @@ tf_vars=(
   "-var=customer_vpc_cidr=${customer_vpc_cidr}"
   "-var=platform_vpc_cidr=${platform_vpc_cidr}"
   "-var=service_name=${service_name}"
+  "-var=app_runner_service_name=${app_runner_service_name}"
   "-var=ecr_repository_name=${repository_name}"
   "-var=source_repository=${source_repository}"
   "-var=source_commit=${source_commit}"

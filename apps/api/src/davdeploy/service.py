@@ -3380,7 +3380,7 @@ class ProductService:
                     "DAVDEPLOY_EXECUTION_RUN_ID": plan_run.id,
                     "DAVDEPLOY_EXECUTION_RESULT_S3_URI": f"s3://{runner_bucket}/davdeploy/customer/{connection.id}/runs/{plan_run.id}/result.json",
                     "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": revision.content_digest,
-                    "DAVDEPLOY_CUSTOMER_SERVICE_NAME": f"davdeploy-{connection.id[:8]}-workload",
+                    "DAVDEPLOY_CUSTOMER_APP_RUNNER_SERVICE_NAME": f"davdeploy-{connection.id[:8]}-workload",
                 }
                 if image_identifier:
                     execution_environment.update(
@@ -3614,7 +3614,7 @@ class ProductService:
                 "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI": str(real_plan_artifact.get("saved_plan_s3_uri") if mode in {"AUTHENTICATED_APP_RUNNER_APPLY", "AUTHENTICATED_APP_RUNNER_DESTROY"} else ""),
                 "DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256": str(real_plan_artifact.get("saved_plan_sha256") if mode in {"AUTHENTICATED_APP_RUNNER_APPLY", "AUTHENTICATED_APP_RUNNER_DESTROY"} else ""),
                 "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": revision.content_digest,
-                "DAVDEPLOY_CUSTOMER_SERVICE_NAME": f"davdeploy-{connection.id[:8]}-workload",
+                "DAVDEPLOY_CUSTOMER_APP_RUNNER_SERVICE_NAME": f"davdeploy-{connection.id[:8]}-workload",
             }
             if image_identifier:
                 execution_environment.update(

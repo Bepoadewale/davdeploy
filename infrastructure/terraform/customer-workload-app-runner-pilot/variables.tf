@@ -75,7 +75,13 @@ variable "image_identifier" {
 
 variable "service_name" {
   type        = string
-  description = "App Runner service name."
+  description = "Retained customer foundation/log-group name."
+  default     = ""
+}
+
+variable "app_runner_service_name" {
+  type        = string
+  description = "App Runner service name, which must be at most 40 characters."
   default     = ""
 }
 

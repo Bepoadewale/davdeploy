@@ -84,15 +84,17 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "davdeployExecution-${ConnectionId}"
-      Description: davdeploy bounded execution role. It has no policy until a reviewed deployment profile is explicitly enabled.
+      Description: davdeploy dedicated customer-approved AdministratorAccess execution role; all use remains gated by reviewed davdeploy plans.
       MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
       Tags:
         - Key: ManagedBy
           Value: davdeploy
         - Key: ConnectionId
           Value: !Ref ConnectionId
         - Key: Access
-          Value: execution-profile-pending
+          Value: customer-approved-administrator-execution
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
