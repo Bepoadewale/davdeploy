@@ -222,6 +222,7 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PassedToService:
+                      - apprunner.amazonaws.com
                       - build.apprunner.amazonaws.com
                       - tasks.apprunner.amazonaws.com
               - Sid: PushOnlyConnectionScopedWorkloadImage
