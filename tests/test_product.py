@@ -139,7 +139,7 @@ class LocalExecutor:
         )
 
 
-def make_service(intent_provider=None, invitation_sender=None):
+def make_service(intent_provider=None, invitation_sender=None, terraform_generator=None):
     engine = make_engine("sqlite+pysqlite:///:memory:")
     run_migrations(engine)
     db = sessionmaker(bind=engine, expire_on_commit=False)()
@@ -149,6 +149,7 @@ def make_service(intent_provider=None, invitation_sender=None):
         executor=LocalExecutor(),
         intent_provider=intent_provider,
         invitation_sender=invitation_sender,
+        terraform_generator=terraform_generator,
     )
     service.seed_local_identity()
     return service, db

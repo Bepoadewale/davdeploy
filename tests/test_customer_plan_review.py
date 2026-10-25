@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from davdeploy.contracts import ModelResponse, ModelUsage
 from davdeploy.domain import (
     InfrastructurePlanDecision,
     InfrastructurePlanState,
@@ -12,6 +13,7 @@ from davdeploy.models import (
     GitHubAppInstallationState,
     RepositoryConnection,
 )
+from davdeploy.terraform_generation import NovaTerraformGenerator
 from sqlalchemy import select
 from test_product import complete_prompt, founder, make_service, operator
 
@@ -31,6 +33,41 @@ class LivePublishingGitHubFixture:
             required_checks=("davdeploy/desired-state-review",),
             status="EXECUTED_GITHUB_PR_CREATED",
         )
+
+
+class StaticTerraformGateway:
+    provider = "bedrock"
+
+    def complete(self, request, document):
+        raise AssertionError("structured output is required")
+
+    def generate_structured(self, request, document, output_schema=None):
+        return ModelResponse(
+            request=request,
+            output={
+                "resources": [
+                    {
+                        "resource_type": "aws_eks_cluster",
+                        "name": "workload",
+                        "arguments": {
+                            "name": "customer-workload",
+                            "role_arn": "${var.cluster_role_arn}",
+                            "tags": {"ManagedBy": "davdeploy"},
+                        },
+                        "rationale": "The approved architecture requires Kubernetes scheduling.",
+                    }
+                ],
+                "assumptions": ["Reviewed inputs provide the IAM role ARN."],
+                "limitations": ["Plan-only generated graph."],
+            },
+            usage=ModelUsage(input_tokens=10, output_tokens=10, latency_ms=1),
+        )
+
+    def estimate_cost(self, request):
+        return 0.0
+
+    def validate_output(self, output):
+        return True
 
 
 def test_simple_fastapi_customer_review_selects_one_non_eks_aws_plan_with_monitoring():
@@ -475,18 +512,24 @@ def test_app_runner_terraform_contract_embeds_exact_approved_hash_and_tags():
     assert approved.content_digest in str(files)
 
 
-def test_eks_plan_does_not_use_app_runner_terraform_renderer():
-    service, _ = make_service()
+def test_eks_plan_uses_nova_generated_plan_only_renderer_not_an_app_runner_module():
+    service, _ = make_service(
+        terraform_generator=NovaTerraformGenerator(gateway=StaticTerraformGateway())
+    )
     approved = approved_customer_review(
         service,
         "Deploy this multi-service AI inference API in AWS. GPU acceleration is required. Kubernetes is required for GPU scheduling, isolation and controlled rollouts. Support 20 requests per second and peak at 100 requests per second. Keep monthly infrastructure under $1500. Create staging and production.",
     )
 
     assert approved.content["summary"]["selected_profile"] == "aws-eks-governed"
-    with pytest.raises(ValueError, match="only supports aws-app-runner"):
-        service.create_terraform_plan_render_for_revision(
-            founder(), approved.id, approved.content_digest
-        )
+    render = service.create_terraform_plan_render_for_revision(
+        founder(), approved.id, approved.content_digest
+    )
+    assert render["profile"] == "aws-eks-governed"
+    assert render["render"]["kind"] == "davdeploy.terraform.nova-generated-plan-only-render.v1"
+    assert render["render"]["module_path"] == "generated-by-nova-no-preexisting-module"
+    assert render["render"]["apply_command_available"] is False
+    assert render["render"]["generation"]["resource_addresses"] == ["aws_eks_cluster.workload"]
 
 
 def test_terraform_renderer_fails_closed_for_stale_digest_and_unapproved_revision():
