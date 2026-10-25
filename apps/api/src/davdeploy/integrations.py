@@ -6,10 +6,11 @@ import hashlib
 import hmac
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import ClassVar, Protocol
 from urllib.parse import urlparse
 
 import boto3
@@ -859,6 +860,10 @@ class StsAwsDiscovery:
     already be the configured davdeploy control-plane identity.
     """
 
+    _pricing_evidence_cache: ClassVar[
+        dict[tuple[str, str], tuple[float, dict[str, object]]]
+    ] = {}
+
     def __init__(self, session: object | None = None):
         self.session = session or boto3.Session()
 
@@ -881,7 +886,7 @@ class StsAwsDiscovery:
         account = customer.client("sts").get_caller_identity()["Account"]
         resources = [f"aws-account:{account}"]
         resources.extend(self._inventory(customer, region))
-        pricing_evidence = self._pricing_evidence(customer, region)
+        pricing_evidence = self._pricing_evidence(customer, region, account)
         return CloudInventorySnapshot(
             provider="aws",
             region=region,
@@ -893,7 +898,18 @@ class StsAwsDiscovery:
         )
 
     @staticmethod
-    def _pricing_evidence(customer: object, region: str) -> dict[str, object]:
+    def _pricing_cache_ttl_seconds() -> int:
+        """Bound Cost Explorer calls; the API charges per request."""
+        try:
+            configured = int(os.getenv("DAVDEPLOY_PRICING_EVIDENCE_CACHE_SECONDS", "3600"))
+        except ValueError:
+            configured = 3600
+        return max(60, min(configured, 86_400))
+
+    @classmethod
+    def _pricing_evidence(
+        cls, customer: object, region: str, account_id: str = "unknown"
+    ) -> dict[str, object]:
         """Collect bounded pricing evidence without reading workload data.
 
         Cost Explorer is customer-account evidence. The AWS Pricing API is a
@@ -902,10 +918,18 @@ class StsAwsDiscovery:
         with fixture pricing.
         """
         captured_at = datetime.now(UTC)
+        cache_key = (account_id, region)
+        ttl_seconds = cls._pricing_cache_ttl_seconds()
+        cached = cls._pricing_evidence_cache.get(cache_key)
+        if cached and cached[0] > time.monotonic():
+            evidence = json.loads(json.dumps(cached[1]))
+            evidence["cache"] = {"state": "HIT", "ttl_seconds": ttl_seconds}
+            return evidence
         evidence: dict[str, object] = {
             "kind": "aws_pricing_evidence.v1",
             "captured_at": captured_at.isoformat(),
             "region": region,
+            "cache": {"state": "MISS", "ttl_seconds": ttl_seconds},
             "catalog": {"state": "NOT_QUERIED"},
             "cost_explorer": {"state": "NOT_QUERIED"},
             "limitations": [],
@@ -957,6 +981,10 @@ class StsAwsDiscovery:
             cast_limitations = evidence["limitations"]
             assert isinstance(cast_limitations, list)
             cast_limitations.append("AWS Cost Explorer was unavailable to the customer discovery role.")
+        cls._pricing_evidence_cache[cache_key] = (
+            time.monotonic() + ttl_seconds,
+            json.loads(json.dumps(evidence)),
+        )
         return evidence
 
     @staticmethod
