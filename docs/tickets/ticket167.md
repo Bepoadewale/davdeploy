@@ -1,6 +1,7 @@
 # ticket167 — Define customer beta readiness boundary
 
 PR: [#167](https://github.com/Bepoadewale/davdeploy/pull/167)
+Branch: `docs/customer-beta-readiness`
 
 ## Goal
 
