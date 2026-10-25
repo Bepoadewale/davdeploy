@@ -219,12 +219,6 @@ Resources:
                 Resource:
                   - !GetAtt AppRunnerEcrAccessRole.Arn
                   - !GetAtt AppRunnerRuntimeRole.Arn
-                Condition:
-                  StringEquals:
-                    iam:PassedToService:
-                      - apprunner.amazonaws.com
-                      - build.apprunner.amazonaws.com
-                      - tasks.apprunner.amazonaws.com
               - Sid: PushOnlyConnectionScopedWorkloadImage
                 Effect: Allow
                 Action:
