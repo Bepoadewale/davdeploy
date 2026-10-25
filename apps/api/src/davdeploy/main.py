@@ -458,7 +458,7 @@ def create_project(
             str(request.repository_url) if request.repository_url else None,
             request.repository_branch,
         )
-    except (PermissionError, ValueError, KeyError) as error:
+    except (PermissionError, ValueError, KeyError, ModelGatewayUnavailable) as error:
         translate(error)
     return {
         "id": project.id,

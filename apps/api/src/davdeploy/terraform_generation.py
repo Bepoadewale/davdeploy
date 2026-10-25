@@ -86,7 +86,7 @@ class NovaTerraformGenerator:
         gateway: ModelGateway | None = None,
         model_id: str = NOVA_2_LITE_MODEL_ID,
         max_output_tokens: int = 6_000,
-        timeout_seconds: int = 90,
+        timeout_seconds: int = 60,
         data_policy: str = "bedrock-no-training",
     ):
         self.gateway = gateway or configured_model_gateway()
