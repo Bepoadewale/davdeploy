@@ -33,13 +33,21 @@ def test_platform_and_customer_use_explicit_non_overlapping_placements():
     assert "SAME_ACCOUNT_PILOT_NOT_CROSS_ACCOUNT" in CUSTOMER_OUTPUTS
 
 
-def test_customer_sandbox_has_a_dedicated_low_cost_vpc_boundary():
+def test_customer_sandbox_has_a_dedicated_private_vpc_boundary_with_https_egress():
     assert 'resource "aws_vpc" "customer_sandbox"' in CUSTOMER_MAIN
     assert 'resource "aws_subnet" "customer_private"' in CUSTOMER_MAIN
     assert 'resource "aws_apprunner_vpc_connector" "customer_sandbox"' in CUSTOMER_MAIN
     assert 'egress_type       = "VPC"' in CUSTOMER_MAIN
-    assert 'resource "aws_nat_gateway"' not in CUSTOMER_MAIN
-    assert 'resource "aws_internet_gateway"' not in CUSTOMER_MAIN
+    # App Runner's VPC connector needs controlled outbound access while it pulls
+    # the workload image and reaches HTTPS dependencies.  The workload remains
+    # in private subnets; only the dedicated NAT subnet is public.
+    assert 'resource "aws_nat_gateway" "customer_sandbox"' in CUSTOMER_MAIN
+    assert 'resource "aws_internet_gateway" "customer_sandbox"' in CUSTOMER_MAIN
+    assert 'resource "aws_route_table" "customer_private"' in CUSTOMER_MAIN
+    assert 'nat_gateway_id = aws_nat_gateway.customer_sandbox.id' in CUSTOMER_MAIN
+    assert 'resource "aws_vpc_security_group_egress_rule" "customer_runtime_https"' in CUSTOMER_MAIN
+    assert 'from_port         = 443' in CUSTOMER_MAIN
+    assert 'to_port           = 443' in CUSTOMER_MAIN
     assert "davdeploy-${var.connection_id}-workload" in CUSTOMER_MAIN
     assert "app_runner_ecr_access_role_arn" in CUSTOMER_MAIN
     assert "app_runner_runtime_role_arn" in CUSTOMER_MAIN
