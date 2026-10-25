@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from davdeploy.contracts import ModelResponse, ModelUsage, TenantScope
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.terraform_generation import NovaTerraformGenerator
