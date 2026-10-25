@@ -88,3 +88,15 @@ recorded in `docs/test/test130.md`. Deploy the GitHub App runtime configuration,
 private-repository plan and execute the remaining service and destruction stages with fresh
 evidence.
 
+## Final status — 2026-10-25
+
+The cloud lifecycle is complete. The customer-specific `AdministratorAccess` execution role,
+external-ID broker trust, reviewed saved apply plan, real image delivery, service apply, output
+ingestion, and direct health check all succeeded. A distinct reviewed destroy plan then destroyed
+the workload and returned `DESTROYED_VERIFIED` / `confirmed_absent`; independent AWS reads verified
+the VPC/ECR absence and terminal deletion states.
+
+The only open acceptance item is external GitHub installation administration: installation
+`167128937` must be authorized by its owner to include the private pilot repository. This record
+does not claim that private-repository selection is complete.
+

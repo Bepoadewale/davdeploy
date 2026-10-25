@@ -71,3 +71,28 @@ fresh plan with current pricing provenance is required before service apply. No 
 repository discovery, service apply, or destroy is made until those controls are live and
 validated.
 
+## Final lifecycle evidence — 2026-10-25
+
+This section supersedes the historical progress notes above.
+
+- Approved revision: `91ee8d55-834f-47fb-a090-bb17a42daf9d`; immutable digest:
+  `1f99bb927ac151d9e018fd613470c71535dc95357745c1cac6ac15962b837fcd`.
+- Authenticated saved apply-plan review: `584f8393-7988-4a29-a394-f733e26423e7`; runner
+  `9d9420b2-bbdf-4bdf-bd34-29fabe09d53d` succeeded.
+- Authenticated apply: `2431209c-4912-4ea0-85a0-cf750d49148a`; CodeBuild succeeded and ingested
+  real service, ECR, VPC, subnet, connector, and runtime-role outputs.
+- The corrected private egress design added a NAT subnet/gateway, internet gateway, routes, and
+  HTTPS-only outbound security-group rule. The App Runner workload remained in private subnets.
+- App Runner reached `RUNNING`; direct HTTPS `GET /healthz` returned `{"status":"ok"}`.
+- Separate saved destroy-plan review: `66dcb7b7-02de-4aad-bf62-4acd2334e0f9`; runner
+  `ede81547-afc3-44b0-95c6-4e63189a4ef3` succeeded.
+- Governed destroy: `74dbf1c3-7377-475b-9e1d-69bbd15efd29`; CodeBuild succeeded and recorded
+  `DESTROYED_VERIFIED` / `confirmed_absent`.
+- Independent AWS reads found the VPC and ECR repository absent and App Runner/NAT in terminal
+  `DELETED` / `deleted` states. Customer connection roles were retained intentionally.
+
+Private GitHub onboarding is the only remaining external dependency: App `5159790`, installation
+`167128937` exists, but the private pilot repository has not been owner-authorized into that
+installation. Pricing/inventory provenance was refreshed, while the displayed estimate remains a
+documented fixture range rather than a live commercial quote.
+
