@@ -1,6 +1,7 @@
 # ticket166 — Restore hosted worker Bedrock Nova compatibility
 
 PR: [#166](https://github.com/Bepoadewale/davdeploy/pull/166)
+Branch: `fix/worker-bedrock-nova-provider`
 
 ## Goal
 
