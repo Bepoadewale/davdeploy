@@ -90,6 +90,7 @@ def test_customer_cloudformation_contract_keeps_execution_separate_from_discover
 
 
 def test_live_pricing_evidence_labels_catalog_and_cost_explorer_failures():
+    StsAwsDiscovery._pricing_evidence_cache.clear()
     class UnavailableClient:
         def get_products(self, **_kwargs):
             from botocore.exceptions import ClientError
@@ -111,3 +112,35 @@ def test_live_pricing_evidence_labels_catalog_and_cost_explorer_failures():
     assert evidence["catalog"]["state"] == "UNAVAILABLE"
     assert evidence["cost_explorer"]["state"] == "UNAVAILABLE"
     assert len(evidence["limitations"]) == 2
+
+
+def test_live_pricing_evidence_caches_cost_explorer_calls_per_customer_account(monkeypatch):
+    StsAwsDiscovery._pricing_evidence_cache.clear()
+    monkeypatch.setenv("DAVDEPLOY_PRICING_EVIDENCE_CACHE_SECONDS", "3600")
+
+    class Customer:
+        def __init__(self):
+            self.cost_explorer_calls = 0
+
+        def client(self, name, region_name):
+            assert region_name == "us-east-1"
+            if name == "pricing":
+                return self
+            assert name == "ce"
+            return self
+
+        def get_products(self, **_kwargs):
+            return {"PriceList": ["catalog-result"]}
+
+        def get_cost_and_usage(self, **_kwargs):
+            self.cost_explorer_calls += 1
+            return {"ResultsByTime": [{"Total": {"UnblendedCost": {"Amount": "1.23"}}}]}
+
+    customer = Customer()
+    first = StsAwsDiscovery._pricing_evidence(customer, "us-east-1", "123456789012")
+    second = StsAwsDiscovery._pricing_evidence(customer, "us-east-1", "123456789012")
+
+    assert customer.cost_explorer_calls == 1
+    assert first["cache"]["state"] == "MISS"
+    assert second["cache"]["state"] == "HIT"
+    assert second["cost_explorer"]["daily_unblended_cost_usd"] == ["1.23"]
