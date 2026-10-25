@@ -7,10 +7,10 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs                 = slice(data.aws_availability_zones.available.names, 0, 2)
-  service_name        = var.service_name != "" ? var.service_name : "davdeploy-${var.connection_id}-workload"
+  azs                     = slice(data.aws_availability_zones.available.names, 0, 2)
+  service_name            = var.service_name != "" ? var.service_name : "davdeploy-${var.connection_id}-workload"
   app_runner_service_name = var.app_runner_service_name != "" ? var.app_runner_service_name : local.service_name
-  ecr_repository_name = var.ecr_repository_name != "" ? var.ecr_repository_name : "davdeploy-${var.connection_id}-workload"
+  ecr_repository_name     = var.ecr_repository_name != "" ? var.ecr_repository_name : "davdeploy-${var.connection_id}-workload"
   tags = {
     Project               = "davdeploy"
     ManagedBy             = "davdeploy"
