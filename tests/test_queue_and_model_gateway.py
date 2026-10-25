@@ -13,9 +13,9 @@ from davdeploy.model_gateway import (
     ModelCallPolicy,
     ModelGatewayUnavailable,
     NovaGatewayConfig,
+    configured_model_gateway,
     decode_structured_json,
     guarded_complete,
-    configured_model_gateway,
     guarded_generate_structured,
     model_input_digest,
 )
