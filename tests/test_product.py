@@ -167,7 +167,22 @@ def test_verified_identity_can_create_a_personal_workspace():
         "Acme",
     )
     assert profile["user"]["role"] == "administrator"
-    assert profile["workspace"]["name"].startswith("Acme")
+    assert profile["workspace"]["name"] == "Acme"
+
+
+def test_duplicate_workspace_name_uses_a_small_stable_disambiguator():
+    service, _ = make_service()
+    service.onboard_identity(
+        IdentityClaims("cognito-first", "first@example.com", True),
+        "Acme",
+    )
+
+    profile = service.onboard_identity(
+        IdentityClaims("cognito-second-12345678", "second@example.com", True),
+        "Acme",
+    )
+
+    assert profile["workspace"]["name"] == "Acme (12345678)"
 
 
 def test_unverified_identity_cannot_create_a_workspace():

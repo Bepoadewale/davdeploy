@@ -208,7 +208,17 @@ class ProductService:
             role = invitation.role
             invitation.state = "ACCEPTED"
         else:
-            organization = Organization(name=f"{workspace_name.strip()} {identity.subject[-8:]}")
+            requested_name = workspace_name.strip()
+            name_in_use = self.db.scalar(
+                select(Organization.id).where(Organization.name == requested_name)
+            )
+            organization = Organization(
+                name=(
+                    requested_name
+                    if name_in_use is None
+                    else f"{requested_name} ({identity.subject[-8:]})"
+                )
+            )
             self.db.add(organization)
             self.db.flush()
             organization_id = organization.id
