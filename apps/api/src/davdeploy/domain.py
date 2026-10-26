@@ -248,7 +248,11 @@ class IntentRequest(BaseModel):
 
 
 class ProjectRequest(BaseModel):
-    name: str = Field(pattern=r"^[a-z][a-z0-9-]{2,40}$")
+    name: str = Field(
+        min_length=3,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9 .,'()&-]{2,79}$",
+    )
     repository_url: HttpUrl | None = None
     repository_branch: str | None = Field(default=None, pattern=r"^[A-Za-z0-9._/-]{1,255}$")
 
