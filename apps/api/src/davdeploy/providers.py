@@ -32,8 +32,8 @@ class ProviderConfiguration:
         errors: list[str] = []
         if self.identity not in {"local", "google_workspace", "cognito"}:
             errors.append("DAVDEPLOY_IDENTITY_PROVIDER must be local, google_workspace, or cognito")
-        if self.email not in {"disabled", "gmail_api", "ses"}:
-            errors.append("DAVDEPLOY_EMAIL_PROVIDER must be disabled, gmail_api, or ses")
+        if self.email not in {"disabled", "gmail_api", "resend", "ses"}:
+            errors.append("DAVDEPLOY_EMAIL_PROVIDER must be disabled, gmail_api, resend, or ses")
         if self.billing not in {"manual", "stripe"}:
             errors.append("DAVDEPLOY_BILLING_PROVIDER must be manual or stripe")
         if self.analytics not in {"local", "posthog"}:
