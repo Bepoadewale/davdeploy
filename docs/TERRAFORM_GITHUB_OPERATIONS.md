@@ -56,8 +56,8 @@ Optional `terraform-plan` environment secrets:
 
 - `BUDGET_NOTIFICATION_EMAIL`; keep the notification address encrypted rather than exposing it as
   a public repository or environment variable
-- `SES_IDENTITY_ARN`; ARN of the verified Amazon SES email or domain identity used for invitations
-- `SES_FROM_ADDRESS`; verified sender address covered by `SES_IDENTITY_ARN`
+- `SES_IDENTITY_ARN`; optional ARN of a verified Amazon SES identity for a future Cognito email path
+- `SES_FROM_ADDRESS`; optional sender address covered by `SES_IDENTITY_ARN`
 
 Workspace invitation delivery is enabled when `RESEND_INVITATION_PARAMETER_NAME` identifies the
 verified Resend sending key. The API role retrieves the value at runtime; the application never

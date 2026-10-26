@@ -66,3 +66,6 @@ See the [documentation map](docs/README.md), [minimum-necessary infrastructure](
 davdeploy is private commercial product work. The public portfolio repositories remain independent technical evidence and are not copied wholesale into this product.
 
 See the [current-state audit](docs/product/CURRENT_STATE_AUDIT.md), [product flow](docs/product/PRODUCT_FLOW.md), [approval architecture](docs/architecture/PLAN_APPROVAL_ARCHITECTURE.md), [plan lifecycle](docs/architecture/PLAN_LIFECYCLE.md), and [two-user demo](docs/DEMO.md).
+
+For the active outbound/inbound mail boundary, alias registry, rotation procedure and provider
+change process, see [email operations](docs/EMAIL_OPERATIONS.md).

@@ -59,7 +59,9 @@
 - [x] Plan-only App Runner Terraform renderer for approved customer-plan revisions, including digest-bound module inputs, UI preview, offline validation and fail-closed tests. No apply path exists.
 - [x] Local cloud-readiness guardrails and operator UX: expected account, allowed regions, required tags, budget ceiling, reviewed PR state, runtime identity, dry-run-only mode and blocked/ready preflight evidence. No cloud action exists.
 - [x] Terraform plan-only review gate for approved App Runner revisions: admin-only, exact digest, rendered contract, ready preflight, account/region checks, authenticated-mode `ALLOW_CLOUD_PLAN=true` gate and no apply path.
-- [x] Hosted RDS/PostgreSQL persistence contract: API rejects hosted SQLite, can resolve AWS-managed RDS credentials from Secrets Manager, and Terraform can create private encrypted RDS with backups/deletion protection and App Runner VPC connector. Not applied yet.
+- [x] Hosted Aurora/PostgreSQL persistence: API rejects hosted SQLite and uses AWS-managed RDS
+  credentials through Data API. The private encrypted Aurora cluster, backups, deletion protection
+  and release migration path are applied; restore/load/recovery drills remain follow-up evidence.
 - [x] Hosted identity guardrails: JWKS/OIDC is required in hosted mode, local fixture login is disabled, and external subjects bind to server-side workspace membership rather than caller-selected organization/role claims.
 - [x] Durable guarded App Runner execution queue/worker with exact-digest, administrator, account/region, apply/runtime/confirmation gates and a disabled-by-default profile adapter.
 - [x] First-class deployment outputs and observed resource inventory for local dry-run environments, including customer-visible URLs/ARNs/log/dashboard references and destroyed-state history.

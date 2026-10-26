@@ -1,7 +1,12 @@
 # Current-state audit
 
 **Review date:** 2026-10-14  
-**Scope:** read-only review of the merged davdeploy repository at commit `d118210` (PR #49 branch state). No application code or AWS resources were changed by this review.
+**Scope:** historical read-only review of the merged davdeploy repository at commit `d118210` (PR #49 branch state). No application code or AWS resources were changed by this review.
+
+> Historical snapshot: this audit predates the deployed Aurora serverless control plane, canonical
+> `davdeploy.tech` origin, and active Resend invitation sender. For current operating status, use
+> the root README, `PROJECT_STATUS.md`, [hosted persistence](../architecture/hosted-persistence.md),
+> and [email operations](../EMAIL_OPERATIONS.md).
 
 ## Executive finding
 

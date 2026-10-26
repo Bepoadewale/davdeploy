@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted for preparation. Activation requires separate reviewed configuration
-after provider accounts, domains, and legal material exist.
+Accepted. The Resend/Cloudflare email portion was activated through reviewed configuration; legal
+and broader private-beta gates remain separate.
 
 ## Context
 
@@ -46,12 +46,11 @@ regional deployment.
 
 ### 4. Transactional email progression
 
-Use a dedicated verified Workspace sender for invite-only beta notifications
-when needed. Move automated transactional mail to Amazon SES only after sender
-domain verification, bounce/complaint handling, template review, and budget
-alerts are in place. Email is not used as an authorization channel: invitation
-acceptance always requires an authenticated identity and server-side membership
-validation.
+Use Resend for transactional invitations from the verified product domain and Cloudflare Email
+Routing for inbound operational aliases. The sending key is runtime-only Parameter Store material.
+Amazon SES remains an optional future Cognito delivery path, not the active invitation sender.
+Email is not used as an authorization channel: invitation acceptance always requires an
+authenticated identity and server-side membership validation.
 
 ### 5. Commercial policy
 
@@ -85,7 +84,8 @@ implemented and verified.
 3. Create the Cognito User Pool and app client only when customer sign-in is
    ready; configure issuer, audience, and JWKS settings through secret-managed
    deployment configuration.
-4. Verify the sender domain before enabling Gmail API or SES delivery.
+4. Keep the sender domain verified, the forwarding destinations explicitly verified, and the
+   product sender changes behind a reviewed deployment.
 5. Complete legal review before opening public sign-up or uploading customer
    repository/cloud evidence.
 6. Run `make validate-environment` and a two-tenant authorization proof before
