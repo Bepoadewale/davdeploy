@@ -48,7 +48,9 @@ regional deployment.
 
 Use Resend for transactional invitations from the verified product domain and Cloudflare Email
 Routing for inbound operational aliases. The sending key is runtime-only Parameter Store material.
-Amazon SES remains an optional future Cognito delivery path, not the active invitation sender.
+Amazon SES is configured for Cognito account and authentication mail, while Resend remains the
+active invitation sender. SES production access is pending AWS approval; sandbox delivery is limited
+to verified recipients.
 Email is not used as an authorization channel: invitation acceptance always requires an
 authenticated identity and server-side membership validation.
 
