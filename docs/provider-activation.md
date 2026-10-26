@@ -13,9 +13,10 @@ in `.env.example` intentionally keep all external adapters disabled.
    chosen control-plane region, then set its issuer, JWKS URL and app-client
    audience through the generic OIDC variables. davdeploy will still map
    verified subjects to server-side workspace membership.
-3. **Gmail API — small private beta notifications.** Use a dedicated verified
-   Workspace sender. Move transactional notifications to SES when delivery
-   volume, reputation, or tenant segregation needs justify it.
+3. **Resend — active transactional invitations.** The verified `davdeploy.tech` domain sends
+   workspace invitations through a runtime-only SSM key. Cloudflare Email Routing receives and
+   forwards operational aliases separately. Follow [email operations](EMAIL_OPERATIONS.md) for
+   alias, rotation, and provider-change controls.
 4. **Manual beta entitlements — no cards.** Keep `DAVDEPLOY_BILLING_PROVIDER=manual`
    until paid plans exist. Stripe is the intended later webhook source; its
    events must update the local entitlement records, never bypass them.

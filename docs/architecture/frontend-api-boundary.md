@@ -39,13 +39,9 @@ Terraform state, model-provider secrets or execution-runner authority.
 
 ## Deployment order
 
-1. Deploy or identify the backend HTTPS API and production OIDC provider.
-2. Configure the frontend build with the public API URL and browser-safe OIDC
-   identifiers.
-3. Let Cloudflare Pages assign the production `pages.dev` hostname.
-4. Add that exact origin to backend CORS and exact callback/logout URLs to OIDC.
-5. Smoke-test login, `/api/v1/me`, plan creation, review permissions and logout.
-
-The circular origin dependency is handled by initially deploying the static
-site without claiming live integration, then configuring the assigned origin
-before authenticated smoke testing.
+1. Keep `https://davdeploy.tech` as the canonical Cloudflare Pages origin.
+2. Configure its build with the public API URL and browser-safe Cognito/OIDC identifiers.
+3. Keep that exact origin in backend CORS and Cognito callback/logout URLs.
+4. Keep the technical `pages.dev` hostname outside those authenticated allowlists.
+5. Record a controlled browser journey covering login, `/api/v1/me`, invitation acceptance, plan
+   creation, review permissions, and logout before broad beta use.

@@ -19,8 +19,8 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
    active for workspace invitations from `notify@davdeploy.tech`; replies route to
    `support@davdeploy.tech`. Before each beta cohort, run one controlled invitation delivery and
    acceptance check with the intended inbox.
-3. A controlled browser journey has been recorded on `https://davdeploy.tech`: invitation,
-   account creation/sign-in, workspace resolution, plan creation, approval, and sign-out.
+3. Run and record a controlled browser journey on `https://davdeploy.tech`: invitation, account
+   creation/sign-in, workspace resolution, plan creation, approval, and sign-out.
 4. The customer's GitHub App installation is explicitly approved and limited to its selected
    repositories. The App currently supports read-only analysis; it does not merge or deploy code.
 5. The customer has reviewed the AWS connection CloudFormation template and understands that

@@ -1,6 +1,8 @@
 # Hosted control-plane persistence
 
-Status: serverless contract implemented and statically validated; not yet applied in AWS.
+Status: deployed and operating in the hosted serverless control plane. Aurora PostgreSQL is private,
+encrypted, available, and reached through the RDS Data API; backups and deletion protection are
+configured. This status does not prove restore, load, or disaster-recovery drills.
 
 The historical App Runner runtime proved customer-AWS discovery with ephemeral SQLite. A commercial control plane requires durable PostgreSQL. The selected early hosted design is Aurora PostgreSQL Serverless v2 through RDS Data API.
 
@@ -41,4 +43,6 @@ API cold starts do not run schema migrations. An explicit migration Lambda runs 
 
 ## Validation
 
-Unit tests verify Data API configuration and engine arguments. Terraform init and validate verify the serverless infrastructure shape. These checks do not prove live Aurora connectivity, schema migration, backup restore, concurrency or production latency.
+Unit tests verify Data API configuration and engine arguments. The protected Terraform plan/apply
+workflow deployed the control plane and its migration Lambda confirmed migrations. These checks do
+not prove backup restore, concurrency, production load, or recovery timing.
