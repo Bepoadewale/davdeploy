@@ -59,10 +59,10 @@ Optional `terraform-plan` environment secrets:
 - `SES_IDENTITY_ARN`; ARN of the verified Amazon SES email or domain identity used for invitations
 - `SES_FROM_ADDRESS`; verified sender address covered by `SES_IDENTITY_ARN`
 
-Workspace invitation delivery remains disabled when the two SES secrets are absent. Before setting
-them, verify the sender identity in the same AWS region as the control plane. Amazon SES accounts in
-the sandbox can send only to verified recipients, so delivery to arbitrary customer addresses also
-requires production sending access. The application never exposes either value in the browser.
+Workspace invitation delivery is enabled when `RESEND_INVITATION_PARAMETER_NAME` identifies the
+verified Resend sending key. The API role retrieves the value at runtime; the application never
+exposes it in the browser. The SES secrets remain optional for a future Cognito email path and do
+not control the active invitation sender.
 
 The state, plan, and release buckets must already exist. Enable versioning on the release bucket.
 Keep both plan and state buckets private. The plan bucket holds sensitive saved plans and must use

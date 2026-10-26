@@ -2,9 +2,9 @@
 
 ## Target architecture
 
-The early hosted control plane uses API Gateway HTTP API, Python Lambda, Aurora PostgreSQL Serverless v2 through RDS Data API, Cognito, SES, SQS, an isolated policy Lambda, and Amazon Nova 2 Lite. Lambda is not attached to the database VPC. The database subnets have no Internet Gateway or NAT Gateway.
+The hosted control plane uses API Gateway HTTP API, Python Lambda, Aurora PostgreSQL Serverless v2 through RDS Data API, Cognito, SQS, an isolated policy Lambda, Amazon Nova 2 Lite, and Resend for workspace invitations. Lambda is not attached to the database VPC. The database subnets have no Internet Gateway or NAT Gateway.
 
-This is an implementation contract, not evidence of a live deployment. `terraform apply` is deliberately outside routine tests and this migration PR.
+This is the production deployment contract. Manual Terraform plan/apply remains deliberately outside routine tests and requires the protected GitHub environments.
 
 ## Release sequence
 
@@ -18,7 +18,7 @@ This is an implementation contract, not evidence of a live deployment. `terrafor
 7. Configure Google federation using the operator's local secret source. Do not pass the Google client secret through Terraform because it would be retained in Terraform state.
 8. Set `google_identity_provider_enabled = true`, plan, and apply the Cognito app-client update.
 9. Set the frontend's public Cognito and API variables in Cloudflare Pages and redeploy static assets.
-10. Run live Google, email OTP, tenant onboarding, authorization denial, API, worker retry, policy failure, backup, restore, and teardown smoke tests.
+10. Run live Google, email OTP, invitation acceptance, tenant onboarding, authorization denial, API, worker retry, policy failure, backup, restore, and teardown smoke tests.
 
 ## Google identity provider
 
@@ -29,6 +29,13 @@ The pre-sign-up Lambda links Google to an existing native Cognito account only w
 ## Email OTP
 
 Cognito choice-based `USER_AUTH` and `EMAIL_OTP` require an eligible Cognito feature plan. Production delivery should use a verified SES identity and a non-sandbox SES account. Cognito default email delivery is suitable only for bounded setup testing and has low service limits.
+
+## Workspace invitations
+
+The deployed API uses Resend for workspace invitations, from `DavDeploy <notify@davdeploy.tech>`
+with `support@davdeploy.tech` as Reply-To. The verified sending key is held as a Standard SSM
+SecureString and is fetched only by the API role at runtime. Cloudflare Email Routing handles
+inbound forwarding separately; it is not a transactional email provider.
 
 ## Required frontend values
 

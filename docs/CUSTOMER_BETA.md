@@ -15,9 +15,10 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 
 1. The worker DLQ alarm is investigated and clear. Do not replay or remove messages without a
    separately approved incident decision.
-2. A customer has an administrator invitation path. The deployed invitation sender is currently
-   disabled; configure a verified SES sender and production sending access before claiming email
-   invitations are delivered.
+2. A customer has an administrator invitation path. The deployed Resend sender is verified and
+   active for workspace invitations from `notify@davdeploy.tech`; replies route to
+   `support@davdeploy.tech`. Before each beta cohort, run one controlled invitation delivery and
+   acceptance check with the intended inbox.
 3. A controlled browser journey has been recorded on `https://davdeploy.tech`: invitation,
    account creation/sign-in, workspace resolution, plan creation, approval, and sign-out.
 4. The customer's GitHub App installation is explicitly approved and limited to its selected
@@ -29,7 +30,8 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 
 1. Create the customer organisation and its first workspace administrator through the supported
    operator path.
-2. Send a time-limited workspace invitation only after email delivery is configured and tested.
+2. Send a time-limited workspace invitation through the active Resend sender and record the
+   delivery/acceptance result.
 3. Confirm the user can sign in at the canonical domain `https://davdeploy.tech`. The
    `davdeploy-frontend.pages.dev` hostname is not an authenticated application origin.
 4. Guide the customer through GitHub App installation/repository selection and AWS discovery-role
@@ -55,8 +57,9 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 
 ## Invitation-delivery cost boundary
 
-The `davdeploy.tech` Cloudflare zone is on the Free plan. Cloudflare Pages and Email Routing do not
-provide transactional sending, so Email Routing cannot deliver workspace invitations. The deployed
-API currently has `DAVDEPLOY_EMAIL_PROVIDER=disabled`; enabling its SES sender would introduce AWS
-email usage charges after any applicable allowance. Do not enable SES or change DNS/email routing
-for this purpose without a separate owner-approved cost decision.
+The `davdeploy.tech` Cloudflare zone is on the Free plan. Cloudflare Email Routing forwards inbound
+operational aliases but does not send transactional email. Resend provides the active sender for
+workspace invitations; the verified domain sends from `notify@davdeploy.tech` and uses
+`support@davdeploy.tech` as Reply-To. The sending key is held in a Standard AWS SSM SecureString,
+which is free at the configured tier and is not stored in Terraform state. Resend plan limits still
+apply, so delivery volume and provider limits must be reviewed before any broad launch.
