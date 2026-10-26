@@ -47,6 +47,7 @@ jobs:
       TF_VAR_google_identity_provider_enabled: ${{ vars.GOOGLE_IDENTITY_PROVIDER_ENABLED || 'false' }}
       TF_VAR_ses_identity_arn: ${{ secrets.SES_IDENTITY_ARN }}
       TF_VAR_ses_from_address: ${{ secrets.SES_FROM_ADDRESS }}
+      TF_VAR_resend_invitation_parameter_name: ${{ vars.RESEND_INVITATION_PARAMETER_NAME || '' }}
       TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
 
     steps:

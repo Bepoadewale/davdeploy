@@ -118,6 +118,12 @@ variable "ses_from_address" {
   default     = ""
 }
 
+variable "resend_invitation_parameter_name" {
+  type        = string
+  description = "Optional Standard SSM SecureString name containing the Resend invitation API key. The secret value is never a Terraform input."
+  default     = ""
+}
+
 variable "database_name" {
   type        = string
   description = "Aurora PostgreSQL database name."
