@@ -26,6 +26,40 @@ a Terraform value, or placed in a Lambda environment variable.
 
 The Cloudflare catch-all rule is disabled. New aliases must be explicitly added and tested.
 
+## Gmail sender identities
+
+`bepoadewale1@gmail.com` is configured to send through Resend SMTP as:
+
+- `Adewale Ayeni-Bepo <bepoadewale@davdeploy.tech>`
+- `DavDeploy Support <support@davdeploy.tech>`
+- `DavDeploy Notifications <notify@davdeploy.tech>`
+
+All three were verified in Gmail and manually sent successfully. Keep the personal Gmail address as
+the Gmail default rather than making an operational alias default. Gmail is set to reply from the
+same address to which a message was sent and to show only the selected sender address, not
+`bepoadewale1@gmail.com` as a `sent by` identity.
+
+To add or repair a Gmail sender identity, use Gmail **Settings → Accounts and Import → Send mail
+as → Add another email address**. Enter the intended display name and `@davdeploy.tech` alias,
+leave **Treat as an alias** enabled, and use:
+
+| Setting | Value |
+| --- | --- |
+| SMTP server | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | a Resend sending-only API key |
+| Security | SSL |
+
+Gmail sends a confirmation code to the alias; Cloudflare forwards it to the destination inbox. For
+`notify@davdeploy.tech`, set Reply-To to `support@davdeploy.tech`; leave Reply-To blank for founder
+and support correspondence. In Gmail, select the identity with the Compose **From** menu.
+
+Use a dedicated Gmail-specific sending-only Resend key when it can be created and rotate the
+existing Gmail SMTP credential at all three Gmail identities before revoking its old key. The
+product's runtime invitation key must continue to be available from its SSM parameter until the
+hosted invitation test passes.
+
 ## Add an alias safely
 
 1. Decide the alias, receiving inbox, owner, purpose, and reply behavior. Do not use a catch-all.
@@ -65,10 +99,12 @@ record the full journey. Delivery confirmation alone does not prove workspace on
 ### Rotate the Resend key
 
 1. Create a replacement sending-only key in Resend.
-2. Update the existing SSM parameter value with `aws ssm put-parameter --overwrite`; never place
+2. If Gmail identities use that key, update all three Gmail SMTP identities first and confirm a
+   direct send from each.
+3. Update the existing SSM parameter value with `aws ssm put-parameter --overwrite`; never place
    the key in GitHub variables, Terraform variables, source, tickets, or logs.
-3. Revoke the old Resend key only after a direct send and a hosted invitation test succeed.
-4. Record the rotation date and affected operator in the private operations record; do not record
+4. Revoke the old Resend key only after a direct send and a hosted invitation test succeed.
+5. Record the rotation date and affected operator in the private operations record; do not record
    the key value.
 
 ### Use another outbound provider
