@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from davdeploy.db import _add_columns_if_missing, run_migrations
-from davdeploy.invitation_email import SesInvitationEmailSender
+from davdeploy.invitation_email import ResendInvitationEmailSender, SesInvitationEmailSender
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -67,6 +67,49 @@ def test_ses_invitation_sender_uses_one_bounded_transactional_message():
     text = request["Content"]["Simple"]["Body"]["Text"]["Data"]
     assert "https://davdeploy.example/login?invite=safe-token" in text
     assert delivery.message_id == "ses-message-1"
+
+
+def test_resend_invitation_sender_uses_a_bounded_transactional_message():
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"id": "resend-message-1"}
+
+    class Client:
+        def __init__(self):
+            self.requests = []
+
+        def post(self, url, **request):
+            self.requests.append((url, request))
+            return Response()
+
+    client = Client()
+    sender = ResendInvitationEmailSender(
+        api_key="resend-secret",
+        from_address="DavDeploy <notify@davdeploy.tech>",
+        reply_to_address="support@davdeploy.tech",
+        frontend_origin="https://davdeploy.tech",
+        client=client,
+    )
+
+    delivery = sender.send(
+        email="invitee@example.com",
+        role="developer",
+        token="safe-token",
+        workspace_name="Example workspace",
+        expires_at=datetime.now(UTC) + timedelta(days=7),
+    )
+
+    url, request = client.requests[0]
+    assert url == "https://api.resend.com/emails"
+    assert request["headers"] == {"Authorization": "Bearer resend-secret"}
+    assert request["json"]["from"] == "DavDeploy <notify@davdeploy.tech>"
+    assert request["json"]["reply_to"] == "support@davdeploy.tech"
+    assert request["json"]["to"] == ["invitee@example.com"]
+    assert "https://davdeploy.tech/login?invite=safe-token" in request["json"]["text"]
+    assert delivery.message_id == "resend-message-1"
 
 
 def test_fresh_schema_records_current_invitation_migration():
