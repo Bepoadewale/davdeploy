@@ -38,6 +38,9 @@ Required environment variables:
 - `TF_RELEASE_KMS_KEY_ARN` for `terraform-plan`
 - `FRONTEND_ORIGIN` for `terraform-plan`
 - `AWS_CONNECTION_TEMPLATE_URL` for `terraform-plan`: the immutable public S3 URL emitted by the separately reviewed `connection-template-host` Terraform root. This is public template metadata, not a secret. Do not use a raw GitHub URL because CloudFormation does not accept it as `TemplateURL`.
+- `RESEND_INVITATION_PARAMETER_NAME` for `terraform-plan`: the non-secret name of the exact
+  Standard SSM SecureString that the hosted API role may read for Resend invitation delivery.
+  Never store its value in GitHub; the value remains in Parameter Store.
 - `COGNITO_DOMAIN_PREFIX` for `terraform-plan`; this is the single globally unique production
   Cognito domain prefix
 

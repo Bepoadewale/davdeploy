@@ -6,11 +6,13 @@ import html
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 from typing import Protocol
 from urllib.parse import urlencode
 
 import boto3
 import httpx
+from botocore.exceptions import BotoCoreError, ClientError
 
 
 class InvitationDeliveryUnavailable(RuntimeError):
@@ -202,12 +204,37 @@ class ResendInvitationEmailSender:
         return InvitationDelivery("resend", message_id, self.execution)
 
 
+@lru_cache(maxsize=1)
+def _resend_api_key_from_environment() -> str:
+    """Return the direct key or one held in the runtime's SSM parameter.
+
+    The hosted runtime uses the second path so Terraform never receives or
+    persists the Resend credential. A local direct environment key remains
+    useful for controlled development and tests.
+    """
+
+    direct_key = os.getenv("DAVDEPLOY_RESEND_API_KEY", "")
+    if direct_key:
+        return direct_key
+    parameter_name = os.getenv("DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER", "")
+    if not parameter_name:
+        return ""
+    try:
+        response = boto3.client(
+            "ssm", region_name=os.getenv("AWS_REGION", "us-east-1")
+        ).get_parameter(Name=parameter_name, WithDecryption=True)
+    except (BotoCoreError, ClientError):
+        return ""
+    value = response.get("Parameter", {}).get("Value", "")
+    return value if isinstance(value, str) else ""
+
+
 def configured_invitation_sender() -> InvitationEmailSender:
     if os.getenv("DAVDEPLOY_HOSTED_MODE", "false").lower() != "true":
         return FixtureInvitationEmailSender()
     provider = os.getenv("DAVDEPLOY_EMAIL_PROVIDER", "disabled")
     if provider == "resend":
-        api_key = os.getenv("DAVDEPLOY_RESEND_API_KEY", "")
+        api_key = _resend_api_key_from_environment()
         from_address = os.getenv("DAVDEPLOY_RESEND_FROM_ADDRESS", "")
         reply_to_address = os.getenv("DAVDEPLOY_RESEND_REPLY_TO_ADDRESS", from_address)
         frontend_origin = os.getenv("DAVDEPLOY_FRONTEND_ORIGIN", "")

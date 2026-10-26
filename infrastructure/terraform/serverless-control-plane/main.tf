@@ -226,6 +226,11 @@ resource "aws_iam_role_policy" "api" {
         Effect   = "Allow"
         Action   = ["ses:SendEmail"]
         Resource = var.ses_identity_arn
+      }],
+      var.resend_invitation_parameter_name == "" ? [] : [{
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.resend_invitation_parameter_name}"
       }]
     )
   })
@@ -435,8 +440,11 @@ locals {
     DAVDEPLOY_ENABLE_NOVA_MODEL                  = "true"
     DAVDEPLOY_BEDROCK_MODEL_ID                   = var.nova_model_id
     DAVDEPLOY_EXECUTOR_MODE                      = "embedded_fixture"
-    DAVDEPLOY_EMAIL_PROVIDER                     = var.ses_identity_arn == "" ? "disabled" : "ses"
+    DAVDEPLOY_EMAIL_PROVIDER                     = var.resend_invitation_parameter_name != "" ? "resend" : (var.ses_identity_arn == "" ? "disabled" : "ses")
     DAVDEPLOY_SES_FROM_ADDRESS                   = var.ses_from_address
+    DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER       = var.resend_invitation_parameter_name
+    DAVDEPLOY_RESEND_FROM_ADDRESS                = var.resend_invitation_parameter_name == "" ? "" : "DavDeploy <notify@davdeploy.tech>"
+    DAVDEPLOY_RESEND_REPLY_TO_ADDRESS            = var.resend_invitation_parameter_name == "" ? "" : "support@davdeploy.tech"
     DAVDEPLOY_FRONTEND_ORIGIN                    = var.frontend_origin
     DAVDEPLOY_CONNECTION_SECRET_BACKEND          = "aws_secrets_manager"
     DAVDEPLOY_CONNECTION_SECRET_PREFIX           = "davdeploy/customer-connections"

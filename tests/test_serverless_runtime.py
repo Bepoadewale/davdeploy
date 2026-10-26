@@ -267,11 +267,18 @@ def test_serverless_stack_allows_worker_to_decrypt_but_not_write_customer_result
     assert "kms:GenerateDataKey" not in api_policy
 
 
-def test_serverless_stack_scopes_invitation_email_to_the_verified_ses_identity():
+def test_serverless_stack_scopes_invitation_email_to_the_verified_sender_or_resend_parameter():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert 'Action   = ["ses:SendEmail"]' in terraform
     assert "Resource = var.ses_identity_arn" in terraform
-    assert 'DAVDEPLOY_EMAIL_PROVIDER=var.ses_identity_arn==""?"disabled":"ses"' in terraform.replace(" ", "")
+    assert 'Action   = ["ssm:GetParameter"]' in terraform
+    assert "parameter${var.resend_invitation_parameter_name}" in terraform
+    assert (
+        'DAVDEPLOY_EMAIL_PROVIDER=var.resend_invitation_parameter_name!='
+        '""?"resend":(var.ses_identity_arn==""?"disabled":"ses")'
+        in terraform.replace(" ", "")
+    )
+    assert "DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER" in terraform
     assert "DAVDEPLOY_FRONTEND_ORIGIN" in terraform
 
 

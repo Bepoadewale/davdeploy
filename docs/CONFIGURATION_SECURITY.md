@@ -30,6 +30,9 @@ The current encrypted environment values are:
 
 - `BUDGET_NOTIFICATION_EMAIL`, stored as a `terraform-plan` environment secret.
 - `SES_IDENTITY_ARN` and `SES_FROM_ADDRESS`, stored as `terraform-plan` environment secrets.
+- `RESEND_INVITATION_PARAMETER_NAME`, stored as a `terraform-plan` environment variable. This is
+  only the name of a Standard SSM SecureString; the Resend value itself is read by the hosted
+  Lambda runtime and is never a GitHub variable, secret, Terraform input, or Lambda environment value.
 
 Workspace invitation delivery requires both SES secrets. The identity must be verified in the same
 AWS region as the control plane. The Lambda role receives only `ses:SendEmail` on that identity.

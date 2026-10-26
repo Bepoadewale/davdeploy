@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from davdeploy import invitation_email
 from davdeploy.db import _add_columns_if_missing, run_migrations
-from davdeploy.invitation_email import ResendInvitationEmailSender, SesInvitationEmailSender
+from davdeploy.invitation_email import (
+    ResendInvitationEmailSender,
+    SesInvitationEmailSender,
+    configured_invitation_sender,
+)
 from sqlalchemy import create_engine, inspect, text
 
 
@@ -110,6 +115,29 @@ def test_resend_invitation_sender_uses_a_bounded_transactional_message():
     assert request["json"]["to"] == ["invitee@example.com"]
     assert "https://davdeploy.tech/login?invite=safe-token" in request["json"]["text"]
     assert delivery.message_id == "resend-message-1"
+
+
+def test_hosted_resend_sender_reads_the_key_from_ssm(monkeypatch):
+    class SsmClient:
+        def get_parameter(self, **request):
+            assert request == {"Name": "/davdeploy/runtime/resend-invitation-api-key", "WithDecryption": True}
+            return {"Parameter": {"Value": "resend-from-ssm"}}
+
+    invitation_email._resend_api_key_from_environment.cache_clear()
+    monkeypatch.delenv("DAVDEPLOY_RESEND_API_KEY", raising=False)
+    monkeypatch.setenv("DAVDEPLOY_HOSTED_MODE", "true")
+    monkeypatch.setenv("DAVDEPLOY_EMAIL_PROVIDER", "resend")
+    monkeypatch.setenv("DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER", "/davdeploy/runtime/resend-invitation-api-key")
+    monkeypatch.setenv("DAVDEPLOY_RESEND_FROM_ADDRESS", "DavDeploy <notify@davdeploy.tech>")
+    monkeypatch.setenv("DAVDEPLOY_RESEND_REPLY_TO_ADDRESS", "support@davdeploy.tech")
+    monkeypatch.setenv("DAVDEPLOY_FRONTEND_ORIGIN", "https://davdeploy.tech")
+    monkeypatch.setattr(invitation_email.boto3, "client", lambda *_args, **_kwargs: SsmClient())
+
+    sender = configured_invitation_sender()
+
+    assert isinstance(sender, ResendInvitationEmailSender)
+    assert sender.api_key == "resend-from-ssm"
+    invitation_email._resend_api_key_from_environment.cache_clear()
 
 
 def test_fresh_schema_records_current_invitation_migration():
