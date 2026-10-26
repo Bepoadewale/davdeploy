@@ -34,10 +34,11 @@ The current encrypted environment values are:
   only the name of a Standard SSM SecureString; the Resend value itself is read by the hosted
   Lambda runtime and is never a GitHub variable, secret, Terraform input, or Lambda environment value.
 
-Workspace invitation delivery requires both SES secrets. The identity must be verified in the same
-AWS region as the control plane. The Lambda role receives only `ses:SendEmail` on that identity.
-The backend stores token digests, never raw invitation tokens, and hosted API responses never expose
-invitation links.
+Hosted workspace invitation delivery uses the verified Resend domain. The API role receives only
+`ssm:GetParameter` on the exact configured parameter, retrieves it with decryption at runtime, and
+does not receive the key as a Lambda environment variable. SES settings remain optional for a future
+Cognito delivery path; they are not the invitation sender. The backend stores token digests, never
+raw invitation tokens, and hosted API responses never expose invitation links.
 
 Future passwords, tokens, private keys, webhook secrets, client secrets, and long-lived
 credentials must use GitHub Secrets or an external secret manager. AWS workflows continue to use
