@@ -1,6 +1,17 @@
 # test178 — Customer project names
 
-## Commands
+Date: 2026-10-26
+Execution type: local API contract regression validation
+Customer repository: none
+Commit: pending PR merge
+AWS account: none
+AWS region: none
+
+## Resources created
+
+None.
+
+## Commands executed
 
 `make openapi-update`
 
@@ -8,14 +19,15 @@
 
 `make verify`
 
-## Result
+## Observed result
 
 Passed. The focused contract test passed (2 tests). Full backend verification passed: configuration boundary, Ruff lint, 295 tests, OpenAPI snapshot check, and Docker Compose configuration validation.
 
-## Boundary
+## Teardown
+
+No resources, accounts, workloads, or credentials were created or changed.
+
+## Final boundary
 
 Local API contract validation only. No customer workload, credentials, or cloud resource is created or changed.
 
-## Limitations
-
-The frontend and hosted API deployment are verified separately in their coordinated pull requests.
