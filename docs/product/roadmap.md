@@ -16,4 +16,5 @@ remaining release evidence is a controlled browser journey covering invitation c
 delivery, acceptance, Cognito sign-in, workspace resolution, plan creation, approval, and sign-out.
 See [email operations](../EMAIL_OPERATIONS.md) for the active configuration, rotation process and
 provider-change requirements. Cognito OTP delivery remains a separate concern and may use its
-optional SES configuration later; it is not the workspace-invitation sender.
+configured SES identity; it is not the workspace-invitation sender. SES production access and a
+controlled OTP browser journey remain release evidence.

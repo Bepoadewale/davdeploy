@@ -28,7 +28,11 @@ The pre-sign-up Lambda links Google to an existing native Cognito account only w
 
 ## Email OTP
 
-Cognito choice-based `USER_AUTH` and `EMAIL_OTP` require an eligible Cognito feature plan. Production delivery should use a verified SES identity and a non-sandbox SES account. Cognito default email delivery is suitable only for bounded setup testing and has low service limits.
+Cognito choice-based `USER_AUTH` and `EMAIL_OTP` require an eligible Cognito feature plan and
+Amazon SES delivery. Cognito is configured with the verified `davdeploy.tech` SES identity and
+`notify@davdeploy.tech` sender. The SES account remains sandboxed until AWS approves the submitted
+transactional-production request; until then, OTP delivery is limited to verified SES recipients.
+Resend remains the separate workspace-invitation sender.
 
 ## Workspace invitations
 

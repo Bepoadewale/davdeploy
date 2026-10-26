@@ -83,7 +83,7 @@ hosted invitation test passes.
 The deployed invitation path is intentionally narrower than ordinary correspondence:
 
 - Terraform chooses Resend when `resend_invitation_parameter_name` is non-empty; otherwise it can
-  use the existing optional SES adapter or remain disabled.
+  use the existing SES fallback adapter or remain disabled.
 - The protected `terraform-plan` environment supplies only
   `RESEND_INVITATION_PARAMETER_NAME=/davdeploy/runtime/resend-invitation-api-key`.
 - The Lambda API role has `ssm:GetParameter` for that exact ARN and no wildcard Parameter Store
@@ -93,6 +93,18 @@ The deployed invitation path is intentionally narrower than ordinary corresponde
 
 Before a new beta cohort, create a controlled workspace invitation, accept it in a browser, and
 record the full journey. Delivery confirmation alone does not prove workspace onboarding.
+
+## Cognito account and authentication mail
+
+Cognito uses Amazon SES with the verified `davdeploy.tech` identity and the bare sender address
+`notify@davdeploy.tech`. This path sends confirmation, recovery, and email OTP messages; it is
+separate from the Resend invitation adapter above. Cognito requires a bare address for Reply-To, so
+do not place a display name in `SES_FROM_ADDRESS`.
+
+The account is currently in the SES sandbox pending AWS approval of the transactional-production
+request. While sandboxed, test only with individually verified SES recipient addresses. After AWS
+approves production access, re-run the controlled browser sign-up and email-OTP journey, checking
+Inbox and Spam, and record the result in a test evidence file.
 
 ## Rotate or change provider
 
@@ -111,9 +123,9 @@ record the full journey. Delivery confirmation alone does not prove workspace on
 
 Keep Cloudflare Email Routing unchanged unless inbound routing is also changing. Add a bounded
 backend adapter, tests, provider validation, least-privilege runtime secret access, and a reviewed
-Terraform selector. The existing SES adapter is an example, but it is not active. A provider change
-requires a protected plan/apply and a controlled direct-send, inbound-reply, and product-invitation
-test before production use.
+Terraform selector. Cognito SES is already configured, but is intentionally separate from product
+invitations. A provider change requires a protected plan/apply and a controlled direct-send,
+inbound-reply, and product-invitation test before production use.
 
 ## Troubleshooting
 

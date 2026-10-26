@@ -56,13 +56,13 @@ Optional `terraform-plan` environment secrets:
 
 - `BUDGET_NOTIFICATION_EMAIL`; keep the notification address encrypted rather than exposing it as
   a public repository or environment variable
-- `SES_IDENTITY_ARN`; optional ARN of a verified Amazon SES identity for a future Cognito email path
-- `SES_FROM_ADDRESS`; optional sender address covered by `SES_IDENTITY_ARN`
+- `SES_IDENTITY_ARN`; ARN of the verified `davdeploy.tech` Amazon SES identity used by Cognito
+- `SES_FROM_ADDRESS`; bare verified sender address used for both Cognito From and Reply-To
 
 Workspace invitation delivery is enabled when `RESEND_INVITATION_PARAMETER_NAME` identifies the
 verified Resend sending key. The API role retrieves the value at runtime; the application never
-exposes it in the browser. The SES secrets remain optional for a future Cognito email path and do
-not control the active invitation sender.
+exposes it in the browser. SES controls Cognito account and authentication mail only; it does not
+control the active Resend invitation sender.
 
 The state, plan, and release buckets must already exist. Enable versioning on the release bucket.
 Keep both plan and state buckets private. The plan bucket holds sensitive saved plans and must use
