@@ -562,4 +562,15 @@ data "aws_iam_policy_document" "apply_control_plane" {
       values   = ["rds.amazonaws.com"]
     }
   }
+  statement {
+    sid       = "CognitoEmailServiceRole"
+    effect    = "Allow"
+    actions   = ["iam:CreateServiceLinkedRole"]
+    resources = ["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/email.cognito-idp.amazonaws.com/AWSServiceRoleForAmazonCognitoIdpEmailService"]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["email.cognito-idp.amazonaws.com"]
+    }
+  }
 }

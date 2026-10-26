@@ -7,6 +7,10 @@ and apply workflows:
 - dedicated KMS keys;
 - separate GitHub OIDC roles for planning and applying.
 
+The apply role can create only the AWS service-linked roles required by the managed RDS and
+Cognito-email integrations. It cannot create general-purpose IAM roles outside the named
+DavDeploy runtime roles.
+
 It adopts the existing davdeploy state bucket, lock table, and GitHub OIDC provider as data
 sources. It does not create or apply the serverless control plane.
 
