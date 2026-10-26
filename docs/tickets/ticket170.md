@@ -1,6 +1,7 @@
 # ticket170 — Add a Resend invitation delivery adapter
 
-PR: pending
+PR: [#170](https://github.com/Bepoadewale/davdeploy/pull/170)
+Branch: `feat/resend-invitation-delivery`
 
 ## Problem / goal
 
