@@ -23,6 +23,7 @@ from davdeploy.domain import (
     ApiCredentialRequest,
     ApprovalRequest,
     AwsConnectionVerificationRequest,
+    AwsExistingRoleRequest,
     AwsQuickCreateRequest,
     CloudConnectionRequest,
     CloudExecutionExecuteRequest,
@@ -632,6 +633,21 @@ def create_aws_quick_create_setup(
             principal, connection_id, request.account_id, request.access_mode
         )
     except (PermissionError, ValueError, KeyError, RuntimeError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/cloud-connections/{connection_id}/aws-existing-role")
+def attach_existing_aws_roles(
+    connection_id: str,
+    request: AwsExistingRoleRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.aws_existing_role_setup(
+            principal, connection_id, request.account_id, request.discovery_role_arn, request.execution_role_arn
+        )
+    except (PermissionError, ValueError) as error:
         translate(error)
 
 
