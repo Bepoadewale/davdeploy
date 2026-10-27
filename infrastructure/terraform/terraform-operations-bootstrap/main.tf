@@ -391,6 +391,43 @@ resource "aws_iam_role_policy" "apply_control_plane" {
 
 data "aws_iam_policy_document" "apply_control_plane" {
   statement {
+    sid       = "CreateDavDeployCognitoEmailKey"
+    effect    = "Allow"
+    actions   = ["kms:CreateKey"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Product"
+      values   = ["davdeploy"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/ManagedBy"
+      values   = ["Terraform"]
+    }
+  }
+  statement {
+    sid    = "ManageDavDeployCognitoEmailKey"
+    effect = "Allow"
+    actions = [
+      "kms:DescribeKey", "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:ListResourceTags",
+      "kms:TagResource", "kms:UntagResource", "kms:EnableKeyRotation", "kms:DisableKeyRotation",
+      "kms:ScheduleKeyDeletion", "kms:CancelKeyDeletion", "kms:CreateGrant", "kms:RevokeGrant"
+    ]
+    resources = ["arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:key/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Product"
+      values   = ["davdeploy"]
+    }
+  }
+  statement {
+    sid       = "ManageDavDeployCognitoEmailAlias"
+    effect    = "Allow"
+    actions   = ["kms:CreateAlias", "kms:DeleteAlias"]
+    resources = ["arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:alias/davdeploy-*"]
+  }
+  statement {
     sid    = "CustomerExecutorCreate"
     effect = "Allow"
     actions = [
