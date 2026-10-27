@@ -1835,7 +1835,7 @@ class ProductService:
                 "Review the read-only discovery IAM role, then acknowledge IAM resource creation.",
                 "Create the stack, then return to davdeploy to verify the connection.",
             ],
-            "boundary": "This action only creates a setup link. The stack creates one read-only discovery role and no workload or execution resource.",
+            "boundary": "This action only creates a setup link and does not create customer AWS resources. The stack creates one read-only discovery role and no workload or execution resource.",
         }
 
     def queue_aws_connection_verification(
