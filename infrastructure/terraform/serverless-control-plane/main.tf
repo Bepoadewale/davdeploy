@@ -108,6 +108,12 @@ resource "aws_cognito_user_pool" "identity" {
 
   lambda_config {
     pre_sign_up = aws_lambda_function.cognito_link.arn
+    kms_key_id  = aws_kms_key.cognito_email.arn
+
+    custom_email_sender {
+      lambda_arn     = aws_lambda_function.cognito_email_sender.arn
+      lambda_version = "V1_0"
+    }
   }
 
   deletion_protection = "ACTIVE"
@@ -353,6 +359,51 @@ resource "aws_iam_role" "cognito_link" {
   tags = local.common_tags
 }
 
+resource "aws_kms_key" "cognito_email" {
+  description             = "DavDeploy Cognito custom-email sender code encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+  tags                    = local.common_tags
+}
+
+resource "aws_kms_alias" "cognito_email" {
+  name          = "alias/${local.name}-cognito-email"
+  target_key_id = aws_kms_key.cognito_email.key_id
+}
+
+resource "aws_iam_role" "cognito_email_sender" {
+  name = "${local.name}-cognito-email-sender"
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "cognito_email_sender_logs" {
+  role       = aws_iam_role.cognito_email_sender.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "cognito_email_sender" {
+  name = "send-cognito-email-through-resend"
+  role = aws_iam_role.cognito_email_sender.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat([
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = aws_kms_key.cognito_email.arn
+      }
+      ], var.resend_invitation_parameter_name == "" ? [] : [{
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.resend_invitation_parameter_name}"
+    }])
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "cognito_link_logs" {
   role       = aws_iam_role.cognito_link.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
@@ -372,7 +423,7 @@ resource "aws_iam_role_policy" "cognito_link" {
 }
 
 locals {
-  lambda_log_groups = toset(["api", "cognito-link", "migrate", "policy", "worker"])
+  lambda_log_groups = toset(["api", "cognito-email-sender", "cognito-link", "migrate", "policy", "worker"])
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
@@ -414,6 +465,36 @@ resource "aws_lambda_function" "cognito_link" {
   memory_size       = 256
   tags              = local.common_tags
   depends_on        = [aws_cloudwatch_log_group.lambda]
+}
+
+resource "aws_lambda_function" "cognito_email_sender" {
+  function_name     = "${local.name}-cognito-email-sender"
+  role              = aws_iam_role.cognito_email_sender.arn
+  runtime           = "python3.12"
+  handler           = "davdeploy.lambda_cognito_email_sender.handler"
+  s3_bucket         = var.artifact_bucket
+  s3_key            = var.artifact_key
+  s3_object_version = var.artifact_object_version
+  timeout           = 15
+  memory_size       = 256
+  environment {
+    variables = {
+      DAVDEPLOY_COGNITO_EMAIL_KMS_KEY_ARN    = aws_kms_key.cognito_email.arn
+      DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER = var.resend_invitation_parameter_name
+      DAVDEPLOY_RESEND_FROM_ADDRESS          = "DavDeploy <notify@davdeploy.tech>"
+      DAVDEPLOY_RESEND_REPLY_TO_ADDRESS      = "support@davdeploy.tech"
+    }
+  }
+  tags       = local.common_tags
+  depends_on = [aws_cloudwatch_log_group.lambda]
+}
+
+resource "aws_lambda_permission" "cognito_email_sender" {
+  statement_id  = "AllowCognitoEmailSender"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cognito_email_sender.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.identity.arn
 }
 
 resource "aws_lambda_permission" "cognito_link" {
