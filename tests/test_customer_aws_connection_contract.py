@@ -27,19 +27,17 @@ def test_customer_connection_apply_and_destroy_require_explicit_confirmation():
     assert "davdeploy/customer-connections/${CUSTOMER_CONNECTION_ID}.tfstate" in script
 
 
-def test_quick_create_template_uses_external_id_trust_and_separate_bounded_execution_role():
+def test_quick_create_template_is_read_only_discovery_only():
     template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
     assert "AWS::IAM::Role" in template
     assert "sts:ExternalId" in template
     assert "secretsmanager:DescribeSecret" in template
     assert "secretsmanager:GetSecretValue" not in template
     assert "s3:GetObject" not in template
-    assert "ExecutionRole" in template
-    assert "AppRunnerEcrAccessRole" in template
-    assert "AppRunnerRuntimeRole" in template
-    assert "iam:PassRole" in template
-    assert "aws:RequestTag/ConnectionId" in template
-    assert "aws:ResourceTag/ConnectionId" in template
+    assert "ExecutionRole" not in template
+    assert "AppRunner" not in template
+    assert "AdministratorAccess" not in template
+    assert "iam:PassRole" not in template
     assert "GetSecretValue" not in template
 
 

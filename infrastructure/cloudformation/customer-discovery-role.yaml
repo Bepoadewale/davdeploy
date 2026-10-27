@@ -1,22 +1,14 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: davdeploy AWS connection roles. Creates no workload resources.
-
+Description: davdeploy read-only AWS discovery connection. Creates no workload or execution resources.
 Parameters:
   davdeployDiscoveryBrokerRoleArn:
     Type: String
-    Description: davdeploy read-only discovery worker role allowed to assume the customer discovery role.
-  davdeployExecutionBrokerRoleArn:
-    Type: String
-    Description: davdeploy isolated execution-runner role allowed to assume the bounded customer execution role.
   ExternalId:
     Type: String
     NoEcho: true
-    Description: Unique davdeploy connection value for this customer account.
   ConnectionId:
     Type: String
     AllowedPattern: "[A-Za-z0-9-]{8,40}"
-    Description: Non-secret davdeploy connection identifier.
-
 Resources:
   DiscoveryRole:
     Type: AWS::IAM::Role
@@ -46,8 +38,7 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: DiscoverInfrastructureMetadata
-                Effect: Allow
+              - Effect: Allow
                 Action:
                   - apprunner:DescribeService
                   - apprunner:ListServices
@@ -79,201 +70,9 @@ Resources:
                   - secretsmanager:ListSecrets
                   - tag:GetResources
                 Resource: "*"
-
-  ExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "davdeployExecution-${ConnectionId}"
-      Description: davdeploy dedicated customer-approved AdministratorAccess execution role; all use remains gated by reviewed davdeploy plans.
-      MaxSessionDuration: 3600
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AdministratorAccess
-      Tags:
-        - Key: ManagedBy
-          Value: davdeploy
-        - Key: ConnectionId
-          Value: !Ref ConnectionId
-        - Key: Access
-          Value: customer-approved-administrator-execution
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: !Ref davdeployExecutionBrokerRoleArn
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                sts:ExternalId: !Ref ExternalId
-      Policies:
-        - PolicyName: davdeployBoundedAppRunnerExecution
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: ReadOnlyVerification
-                Effect: Allow
-                Action:
-                  - apprunner:DescribeService
-                  - apprunner:DescribeVpcConnector
-                  - apprunner:ListServices
-                  - apprunner:ListVpcConnectors
-                  - apprunner:ListTagsForResource
-                  - ec2:Describe*
-                  - ecr:DescribeRepositories
-                  - ecr:ListImages
-                  - ecr:ListTagsForResource
-                  - logs:DescribeLogGroups
-                  - logs:GetLogEvents
-                  - logs:FilterLogEvents
-                  - logs:ListTagsForResource
-                Resource: "*"
-              # Terraform's AWS provider creates these resources before issuing
-              # its separate tag call. The trusted role and fixed runner keep
-              # the command boundary narrow; ownership tags then gate every
-              # subsequent mutation and deletion.
-              - Sid: CreateBoundedCustomerWorkloadResources
-                Effect: Allow
-                Action:
-                  - apprunner:CreateService
-                  - apprunner:CreateVpcConnector
-                  - ec2:CreateVpc
-                  - ec2:CreateSubnet
-                  - ec2:CreateSecurityGroup
-                  - ecr:CreateRepository
-                  - logs:CreateLogGroup
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    aws:RequestedRegion: !Ref AWS::Region
-              - Sid: TagNewCustomerWorkloadResources
-                Effect: Allow
-                Action:
-                  - apprunner:TagResource
-                  - apprunner:UntagResource
-                  - ec2:CreateTags
-                  - ec2:DeleteTags
-                  - ecr:TagResource
-                  - ecr:UntagResource
-                  - logs:TagResource
-                  - logs:UntagLogGroup
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    aws:RequestTag/ManagedBy: davdeploy
-                    aws:RequestTag/ConnectionId: !Ref ConnectionId
-              # Reconciliation tags resources which already proved their ownership.
-              # Terraform may update one tag at a time, so a request-tag condition
-              # would reject an otherwise bounded update to an existing resource.
-              - Sid: ReconcileTagsOnlyOnOwnedCustomerWorkloadResources
-                Effect: Allow
-                Action:
-                  - apprunner:TagResource
-                  - apprunner:UntagResource
-                  - ec2:CreateTags
-                  - ec2:DeleteTags
-                  - ecr:TagResource
-                  - ecr:UntagResource
-                  - logs:TagResource
-                  - logs:UntagLogGroup
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/ManagedBy: davdeploy
-                    aws:ResourceTag/ConnectionId: !Ref ConnectionId
-              - Sid: ReconcileOnlyTaggedCustomerWorkloadResources
-                Effect: Allow
-                Action:
-                  - ec2:ModifyVpcAttribute
-                  - ec2:RevokeSecurityGroupEgress
-                  - logs:PutRetentionPolicy
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/ManagedBy: davdeploy
-                    aws:ResourceTag/ConnectionId: !Ref ConnectionId
-              - Sid: DeleteOnlyTaggedCustomerWorkloadResources
-                Effect: Allow
-                Action:
-                  - apprunner:DeleteService
-                  - apprunner:DeleteVpcConnector
-                  - ec2:DeleteVpc
-                  - ec2:DeleteSubnet
-                  - ec2:DeleteSecurityGroup
-                  - ecr:DeleteRepository
-                  - logs:DeleteLogGroup
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/ManagedBy: davdeploy
-                    aws:ResourceTag/ConnectionId: !Ref ConnectionId
-              - Sid: CreateOnlyAppRunnerServiceLinkedRoles
-                Effect: Allow
-                Action: iam:CreateServiceLinkedRole
-                Resource: "*"
-                Condition:
-                  StringEquals:
-                    iam:AWSServiceName:
-                      - apprunner.amazonaws.com
-                      - networking.apprunner.amazonaws.com
-              - Sid: PassOnlyConnectionAppRunnerRoles
-                Effect: Allow
-                Action: iam:PassRole
-                Resource:
-                  - !GetAtt AppRunnerEcrAccessRole.Arn
-                  - !GetAtt AppRunnerRuntimeRole.Arn
-              - Sid: PushOnlyConnectionScopedWorkloadImage
-                Effect: Allow
-                Action:
-                  - ecr:BatchCheckLayerAvailability
-                  - ecr:BatchGetImage
-                  - ecr:CompleteLayerUpload
-                  - ecr:InitiateLayerUpload
-                  - ecr:PutImage
-                  - ecr:UploadLayerPart
-                Resource: !Sub "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/davdeploy-${ConnectionId}-workload"
-              - Sid: GetEcrAuthorizationTokenForScopedImagePush
-                Effect: Allow
-                Action: ecr:GetAuthorizationToken
-                Resource: "*"
-
-  AppRunnerEcrAccessRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "davdeployAppRunnerEcr-${ConnectionId}"
-      Description: Customer-owned App Runner ECR access role for the bounded DavDeploy workload profile.
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: build.apprunner.amazonaws.com
-            Action: sts:AssumeRole
-
-  AppRunnerRuntimeRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub "davdeployAppRunnerRuntime-${ConnectionId}"
-      Description: Customer-owned minimal App Runner runtime role for the bounded DavDeploy workload profile.
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: tasks.apprunner.amazonaws.com
-            Action: sts:AssumeRole
-
 Outputs:
   DiscoveryRoleArn:
-    Description: Provide this output to davdeploy only if automatic verification is unavailable.
+    Description: Read-only role used by davdeploy after connection verification.
     Value: !GetAtt DiscoveryRole.Arn
-  ExecutionRoleArn:
-    Description: Bounded execution role. No permission policy is attached by this connection stack.
-    Value: !GetAtt ExecutionRole.Arn
-  AppRunnerEcrAccessRoleArn:
-    Value: !GetAtt AppRunnerEcrAccessRole.Arn
-  AppRunnerRuntimeRoleArn:
-    Value: !GetAtt AppRunnerRuntimeRole.Arn
   ConnectionId:
     Value: !Ref ConnectionId
