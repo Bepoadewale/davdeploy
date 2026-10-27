@@ -422,10 +422,18 @@ data "aws_iam_policy_document" "apply_control_plane" {
     }
   }
   statement {
-    sid       = "ManageDavDeployCognitoEmailAlias"
-    effect    = "Allow"
-    actions   = ["kms:CreateAlias", "kms:DeleteAlias"]
-    resources = ["arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:alias/davdeploy-*"]
+    sid     = "ManageDavDeployCognitoEmailAlias"
+    effect  = "Allow"
+    actions = ["kms:CreateAlias", "kms:DeleteAlias"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:alias/davdeploy-*",
+      "arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:key/*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Product"
+      values   = ["davdeploy"]
+    }
   }
   statement {
     sid    = "CustomerExecutorCreate"
