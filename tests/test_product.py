@@ -539,6 +539,47 @@ def test_aws_quick_create_and_server_side_sts_verification_store_no_credentials(
     assert "AccessKeyId" not in str(stored.snapshot)
 
 
+def test_aws_verification_proves_an_optional_execution_role_belongs_to_the_customer(monkeypatch):
+    class VerifiedRoles:
+        def verify(self, _connection_id, _role_arn, _external_id, region):
+            return CloudInventorySnapshot(
+                region=region,
+                approved_regions=[region],
+                approved_resources=["aws-account:123456789012"],
+                discovered_at=datetime.now(UTC),
+                provenance="live-read-only-sts-discovery",
+            )
+
+        def verify_execution_role(self, _connection_id, role_arn, _external_id, _region):
+            assert role_arn == "arn:aws:iam::123456789012:role/davdeployExecution-customer"
+            return "123456789012"
+
+    monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    setup = service.aws_existing_role_setup(
+        founder(),
+        connection.id,
+        "123456789012",
+        "arn:aws:iam::123456789012:role/davdeployDiscovery-customer",
+        "arn:aws:iam::123456789012:role/davdeployExecution-customer",
+    )
+    assert setup["deployment_permission"] == "pending verification"
+
+    service.verify_aws_connection(founder(), connection.id, "us-east-1", VerifiedRoles())
+
+    assert service.db.get(type(connection), connection.id).setup_state == "VERIFIED"
+    audit = next(
+        event
+        for event in reversed(service.audits(founder()))
+        if event.action == "cloud_connection.aws_verified"
+    )
+    assert audit.action == "cloud_connection.aws_verified"
+    assert audit.detail["execution_role_verified"] is True
+
+
 def test_aws_verification_is_durable_and_tenant_scoped(monkeypatch):
     monkeypatch.setenv("DAVDEPLOY_CONTROL_PLANE_ROLE_ARN", "arn:aws:iam::111122223333:role/runtime")
     monkeypatch.setenv(
