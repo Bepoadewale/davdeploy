@@ -366,11 +366,6 @@ resource "aws_kms_key" "cognito_email" {
   tags                    = local.common_tags
 }
 
-resource "aws_kms_alias" "cognito_email" {
-  name          = "alias/${local.name}-cognito-email"
-  target_key_id = aws_kms_key.cognito_email.key_id
-}
-
 resource "aws_iam_role" "cognito_email_sender" {
   name = "${local.name}-cognito-email-sender"
   assume_role_policy = jsonencode({
