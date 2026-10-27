@@ -9,7 +9,7 @@ def test_project_request_accepts_a_customer_facing_name() -> None:
 
 
 def test_project_request_rejects_unsafe_or_blank_names() -> None:
-    for name in ("  French Pattern Cramming", "French Pattern Cramming!", "a", "a" * 81):
+    for name in ("  French Pattern Cramming", "French Pattern Cramming!", "a", "a" * 65):
         try:
             ProjectRequest(name=name)
         except ValidationError:
