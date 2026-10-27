@@ -656,7 +656,7 @@ def test_aws_quick_create_setup_is_tenant_scoped_and_never_applies(monkeypatch):
     saved = service.db.get(type(connection), connection.id)
     assert saved.external_id is None
     assert saved.external_id_secret_ref
-    assert "does not create customer AWS resources" in setup["boundary"]
+    assert "only creates a setup link" in setup["boundary"]
 
 
 def test_live_inventory_snapshot_is_durable_and_tenant_scoped():
