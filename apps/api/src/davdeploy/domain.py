@@ -266,6 +266,7 @@ class CloudConnectionRequest(BaseModel):
 class AwsQuickCreateRequest(BaseModel):
     account_id: str = Field(pattern=r"^[0-9]{12}$")
     access_mode: str = Field(default="discovery", pattern=r"^(discovery|administrator-pilot)$")
+    acknowledge_administrator_access: bool = False
 
 
 class AwsExistingRoleRequest(BaseModel):

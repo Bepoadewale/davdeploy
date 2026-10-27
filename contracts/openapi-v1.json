@@ -95,6 +95,11 @@
             "pattern": "^[0-9]{12}$",
             "title": "Account Id",
             "type": "string"
+          },
+          "acknowledge_administrator_access": {
+            "default": false,
+            "title": "Acknowledge Administrator Access",
+            "type": "boolean"
           }
         },
         "required": [

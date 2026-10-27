@@ -4,7 +4,7 @@ import json
 
 from davdeploy.db import make_engine, run_migrations
 from davdeploy.integrations import RepositoryAnalysis, RepositoryMetadata
-from davdeploy.main import app, product_service
+from davdeploy.main import app, product_service, verify_token
 from davdeploy.models import GitHubWebhookDelivery
 from davdeploy.policy import PolicyClient
 from davdeploy.security import LOCAL_USERS, Principal
@@ -17,6 +17,27 @@ from test_product import LocalExecutor, founder, make_service
 def other_tenant() -> Principal:
     subject, organization_id, role = LOCAL_USERS["other-tenant"]
     return Principal(subject, organization_id, role)
+
+
+def test_administrator_pilot_quick_create_requires_explicit_acknowledgement():
+    class QuickCreateService:
+        def aws_quick_create_setup(self, *_args):
+            raise AssertionError("service must not be called without acknowledgement")
+
+    app.dependency_overrides[product_service] = lambda: QuickCreateService()
+    app.dependency_overrides[verify_token] = founder
+    try:
+        response = TestClient(app).post(
+            "/api/v1/cloud-connections/connection-1/aws-quick-create",
+            json={"account_id": "123456789012", "access_mode": "administrator-pilot"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "acknowledge administrator access before enabling the deployment pilot"
+    }
 
 
 def test_fixture_github_connection_lists_only_authorized_repositories_and_branches():

@@ -1932,7 +1932,8 @@ class ProductService:
         if os.getenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "false").lower() != "true":
             raise RuntimeError("live AWS discovery is not enabled for this control-plane process")
         external_id = self.connection_secrets.get_external_id(connection.external_id_secret_ref)
-        snapshot = (discovery or StsAwsDiscovery()).verify(
+        discovery = discovery or StsAwsDiscovery()
+        snapshot = discovery.verify(
             connection.id, connection.discovery_role_arn, external_id, region
         )
         discovered_account = next(
@@ -1945,6 +1946,14 @@ class ProductService:
         )
         if discovered_account != connection.account_id:
             raise PermissionError("assumed AWS role belongs to a different account")
+        execution_verified = False
+        if connection.execution_role_arn:
+            execution_account = discovery.verify_execution_role(
+                connection.id, connection.execution_role_arn, external_id, region
+            )
+            if execution_account != connection.account_id:
+                raise PermissionError("assumed execution role belongs to a different account")
+            execution_verified = True
         connection.setup_state = "VERIFIED"
         self.audit(
             principal,
@@ -1955,6 +1964,7 @@ class ProductService:
                 "account_id": connection.account_id,
                 "region": region,
                 "provenance": snapshot.provenance,
+                "execution_role_verified": execution_verified,
             },
         )
         self.db.commit()

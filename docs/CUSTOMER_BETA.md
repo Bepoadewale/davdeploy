@@ -24,7 +24,9 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 4. The customer's GitHub App installation is explicitly approved and limited to its selected
    repositories. The App currently supports read-only analysis; it does not merge or deploy code.
 5. The customer has reviewed the AWS connection CloudFormation template and understands that
-   discovery is read-only and execution is not yet enabled.
+   discovery is read-only by default. An explicitly acknowledged administrator-pilot setup can
+   create a separate execution role, but product execution remains gated and is not a general
+   customer deployment promise.
 
 ## Operator-led beta workflow
 
