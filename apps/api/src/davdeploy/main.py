@@ -628,7 +628,9 @@ def create_aws_quick_create_setup(
 ):
     REQUESTS.labels("cloud_connections.aws_quick_create").inc()
     try:
-        return service.aws_quick_create_setup(principal, connection_id, request.account_id)
+        return service.aws_quick_create_setup(
+            principal, connection_id, request.account_id, request.access_mode
+        )
     except (PermissionError, ValueError, KeyError, RuntimeError) as error:
         translate(error)
 

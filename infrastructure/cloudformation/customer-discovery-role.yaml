@@ -1,14 +1,22 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: davdeploy read-only AWS discovery connection. Creates no workload or execution resources.
+Description: davdeploy AWS connection. Discovery is read-only; pilot execution is explicit and separate.
 Parameters:
   davdeployDiscoveryBrokerRoleArn:
     Type: String
+  davdeployExecutionBrokerRoleArn:
+    Type: String
+  AccessMode:
+    Type: String
+    Default: discovery
+    AllowedValues: [discovery, administrator-pilot]
   ExternalId:
     Type: String
     NoEcho: true
   ConnectionId:
     Type: String
     AllowedPattern: "[A-Za-z0-9-]{8,40}"
+Conditions:
+  CreateAdministratorPilotRole: !Equals [!Ref AccessMode, administrator-pilot]
 Resources:
   DiscoveryRole:
     Type: AWS::IAM::Role
@@ -70,9 +78,39 @@ Resources:
                   - secretsmanager:ListSecrets
                   - tag:GetResources
                 Resource: "*"
+  ExecutionRole:
+    Condition: CreateAdministratorPilotRole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "davdeployExecution-${ConnectionId}"
+      Description: DavDeploy administrator execution pilot. Can change resources in this account after product approval.
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Tags:
+        - Key: ManagedBy
+          Value: davdeploy
+        - Key: ConnectionId
+          Value: !Ref ConnectionId
+        - Key: Access
+          Value: administrator-pilot
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref davdeployExecutionBrokerRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
 Outputs:
   DiscoveryRoleArn:
     Description: Read-only role used by davdeploy after connection verification.
     Value: !GetAtt DiscoveryRole.Arn
   ConnectionId:
     Value: !Ref ConnectionId
+  ExecutionRoleArn:
+    Condition: CreateAdministratorPilotRole
+    Description: Administrator pilot role. It can modify AWS resources when assumed by DavDeploy's execution broker.
+    Value: !GetAtt ExecutionRole.Arn

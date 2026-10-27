@@ -53,6 +53,12 @@
       },
       "AwsQuickCreateRequest": {
         "properties": {
+          "access_mode": {
+            "default": "discovery",
+            "pattern": "^(discovery|administrator-pilot)$",
+            "title": "Access Mode",
+            "type": "string"
+          },
           "account_id": {
             "pattern": "^[0-9]{12}$",
             "title": "Account Id",

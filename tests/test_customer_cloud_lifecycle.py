@@ -55,16 +55,18 @@ def test_unverified_customer_connection_cannot_be_used_for_planning():
         service._planning_inventory(founder(), connection.id, "us-east-1")
 
 
-def test_customer_cloudformation_contract_is_discovery_only():
+def test_customer_cloudformation_contract_keeps_administrator_pilot_opt_in():
     template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text(
         encoding="utf-8"
     )
 
     assert "davdeployDiscovery-${ConnectionId}" in template
     assert "davdeployDiscoveryBrokerRoleArn" in template
-    assert "ExecutionRole" not in template
+    assert "AccessMode" in template
+    assert "CreateAdministratorPilotRole" in template
+    assert "ExecutionRole" in template
     assert "AppRunner" not in template
-    assert "AdministratorAccess" not in template
+    assert "AdministratorAccess" in template
     assert "sts:ExternalId" in template
 
 
