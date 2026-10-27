@@ -1781,23 +1781,19 @@ class ProductService:
         """Generate a one-click AWS Console setup; it does not create AWS resources itself."""
         connection = self._cloud_connection(principal, connection_id)
         discovery_broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
-        execution_broker_role_arn = os.getenv("DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN")
         # Compatibility is intentionally temporary for pre-split hosted configurations.
         legacy_broker_role_arn = os.getenv("DAVDEPLOY_CONTROL_PLANE_ROLE_ARN")
         discovery_broker_role_arn = discovery_broker_role_arn or legacy_broker_role_arn
-        execution_broker_role_arn = execution_broker_role_arn or legacy_broker_role_arn
         template_url = os.getenv("DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL")
-        if not discovery_broker_role_arn or not execution_broker_role_arn or not template_url:
+        if not discovery_broker_role_arn or not template_url:
             raise RuntimeError(
-                "AWS customer connection setup is not configured with broker roles and a hosted template"
+                "AWS customer connection setup is not configured with a discovery broker role and hosted template"
             )
         external_id = secrets.token_urlsafe(32)
         stack_name = f"davdeploy-Discovery-{connection.id[:8]}"
         discovery_role_arn = f"arn:aws:iam::{account_id}:role/davdeployDiscovery-{connection.id}"
-        execution_role_arn = f"arn:aws:iam::{account_id}:role/davdeployExecution-{connection.id}"
         parameters = {
             "davdeployDiscoveryBrokerRoleArn": discovery_broker_role_arn,
-            "davdeployExecutionBrokerRoleArn": execution_broker_role_arn,
             "ExternalId": external_id,
             "ConnectionId": connection.id,
         }
@@ -1809,7 +1805,7 @@ class ProductService:
         )
         connection.account_id = account_id
         connection.discovery_role_arn = discovery_role_arn
-        connection.execution_role_arn = execution_role_arn
+        connection.execution_role_arn = None
         connection.external_id_secret_ref = self.connection_secrets.put_external_id(
             principal.organization_id, connection.id, external_id
         )
@@ -1836,10 +1832,10 @@ class ProductService:
             "quick_create_url": quick_create_url,
             "customer_steps": [
                 "Open the AWS Quick Create link.",
-                "Review the separate read-only discovery and bounded execution IAM roles, then acknowledge IAM resource creation.",
+                "Review the read-only discovery IAM role, then acknowledge IAM resource creation.",
                 "Create the stack, then return to davdeploy to verify the connection.",
             ],
-            "boundary": "This action only creates a setup link and does not create customer AWS resources. The execution role has no reusable credentials and is separate from discovery. davdeploy does not create a workload until an exact approved plan is applied.",
+            "boundary": "This action only creates a setup link and does not create customer AWS resources. The stack creates one read-only discovery role and no workload or execution resource.",
         }
 
     def queue_aws_connection_verification(

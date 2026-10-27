@@ -60,14 +60,14 @@ def test_customer_sandbox_has_a_dedicated_private_vpc_boundary_with_https_egress
     assert 'Name=tag:ConnectionId,Values=${connection_id}' in CUSTOMER_SCRIPT
 
 
-def test_customer_workload_tags_match_the_bounded_connection_role_contract():
+def test_customer_template_has_no_workload_execution_contract():
     template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text(
         encoding="utf-8"
     )
     assert 'ManagedBy             = "davdeploy"' in CUSTOMER_MAIN
-    assert "aws:RequestTag/ManagedBy: davdeploy" in template
-    assert "aws:RequestTag/ConnectionId: !Ref ConnectionId" in template
-    assert "networking.apprunner.amazonaws.com" in template
+    assert "aws:RequestTag/ManagedBy: davdeploy" not in template
+    assert "AppRunner" not in template
+    assert "AdministratorAccess" not in template
 
 
 def test_state_and_teardown_are_scope_specific_and_account_guarded():
