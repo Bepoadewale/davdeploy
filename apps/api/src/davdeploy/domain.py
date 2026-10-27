@@ -268,6 +268,12 @@ class AwsQuickCreateRequest(BaseModel):
     access_mode: str = Field(default="discovery", pattern=r"^(discovery|administrator-pilot)$")
 
 
+class AwsExistingRoleRequest(BaseModel):
+    account_id: str = Field(pattern=r"^[0-9]{12}$")
+    discovery_role_arn: str = Field(pattern=r"^arn:aws:iam::[0-9]{12}:role/.+$")
+    execution_role_arn: str | None = Field(default=None, pattern=r"^arn:aws:iam::[0-9]{12}:role/.+$")
+
+
 class AwsConnectionVerificationRequest(BaseModel):
     region: str = Field(default="us-east-1", pattern=r"^[a-z]{2}-[a-z]+-\d$")
 

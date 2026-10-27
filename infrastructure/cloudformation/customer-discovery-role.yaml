@@ -104,6 +104,30 @@ Resources:
             Condition:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
+  AppRunnerEcrAccessRole:
+    Condition: CreateAdministratorPilotRole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "davdeployAppRunnerEcr-${ConnectionId}"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: build.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+  AppRunnerRuntimeRole:
+    Condition: CreateAdministratorPilotRole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "davdeployAppRunnerRuntime-${ConnectionId}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: tasks.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
 Outputs:
   DiscoveryRoleArn:
     Description: Read-only role used by davdeploy after connection verification.

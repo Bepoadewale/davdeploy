@@ -66,7 +66,7 @@ def test_customer_template_keeps_execution_to_explicit_administrator_pilot():
     )
     assert 'ManagedBy             = "davdeploy"' in CUSTOMER_MAIN
     assert "aws:RequestTag/ManagedBy: davdeploy" not in template
-    assert "AppRunner" not in template
+    assert "AppRunnerEcrAccessRole" in template
     assert "AccessMode" in template
     assert "AdministratorAccess" in template
 

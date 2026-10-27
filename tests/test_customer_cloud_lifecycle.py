@@ -65,7 +65,7 @@ def test_customer_cloudformation_contract_keeps_administrator_pilot_opt_in():
     assert "AccessMode" in template
     assert "CreateAdministratorPilotRole" in template
     assert "ExecutionRole" in template
-    assert "AppRunner" not in template
+    assert "AppRunnerEcrAccessRole" in template
     assert "AdministratorAccess" in template
     assert "sts:ExternalId" in template
 

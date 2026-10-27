@@ -51,6 +51,38 @@
         "title": "AwsConnectionVerificationRequest",
         "type": "object"
       },
+      "AwsExistingRoleRequest": {
+        "properties": {
+          "account_id": {
+            "pattern": "^[0-9]{12}$",
+            "title": "Account Id",
+            "type": "string"
+          },
+          "discovery_role_arn": {
+            "pattern": "^arn:aws:iam::[0-9]{12}:role/.+$",
+            "title": "Discovery Role Arn",
+            "type": "string"
+          },
+          "execution_role_arn": {
+            "anyOf": [
+              {
+                "pattern": "^arn:aws:iam::[0-9]{12}:role/.+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Role Arn"
+          }
+        },
+        "required": [
+          "account_id",
+          "discovery_role_arn"
+        ],
+        "title": "AwsExistingRoleRequest",
+        "type": "object"
+      },
       "AwsQuickCreateRequest": {
         "properties": {
           "access_mode": {
@@ -1491,6 +1523,62 @@
           }
         },
         "summary": "Get Cloud Connection"
+      }
+    },
+    "/api/v1/cloud-connections/{connection_id}/aws-existing-role": {
+      "post": {
+        "operationId": "attach_existing_aws_roles_api_v1_cloud_connections__connection_id__aws_existing_role_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AwsExistingRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Existing Aws Roles"
       }
     },
     "/api/v1/cloud-connections/{connection_id}/aws-quick-create": {

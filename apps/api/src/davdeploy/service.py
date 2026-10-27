@@ -1845,6 +1845,26 @@ class ProductService:
             "boundary": "This action only creates a setup link. Discovery is read-only; administrator-pilot creates a separate execution role that can modify customer AWS resources after product approval.",
         }
 
+    def aws_existing_role_setup(
+        self, principal: Principal, connection_id: str, account_id: str, discovery_role_arn: str,
+        execution_role_arn: str | None = None,
+    ) -> dict[str, object]:
+        """Attach customer-managed roles; verification later proves the trust and permissions."""
+        connection = self._cloud_connection(principal, connection_id)
+        prefix = f"arn:aws:iam::{account_id}:role/"
+        if not discovery_role_arn.startswith(prefix) or (execution_role_arn and not execution_role_arn.startswith(prefix)):
+            raise ValueError("role ARN must belong to the selected AWS account")
+        external_id = secrets.token_urlsafe(32)
+        connection.account_id = account_id
+        connection.discovery_role_arn = discovery_role_arn
+        connection.execution_role_arn = execution_role_arn
+        connection.external_id_secret_ref = self.connection_secrets.put_external_id(principal.organization_id, connection.id, external_id)
+        connection.external_id = None
+        connection.setup_state = "EXISTING_ROLE_CONFIGURED"
+        self.audit(principal, "cloud_connection.aws_existing_role_attached", "cloud_connection", connection.id, {"account_id": account_id, "execution_role_configured": bool(execution_role_arn)})
+        self.db.commit()
+        return {"connection_id": connection.id, "external_id": external_id, "verification_required": True, "deployment_permission": "pending verification" if execution_role_arn else "not granted"}
+
     def queue_aws_connection_verification(
         self, principal: Principal, connection_id: str, region: str
     ) -> CloudDiscoveryJob:
