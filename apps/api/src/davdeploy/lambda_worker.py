@@ -27,7 +27,12 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
         with SessionLocal() as db:
             service = ProductService(db)
             body = record.get("body") if isinstance(record, dict) else None
-            message = json.loads(body) if isinstance(body, str) else {}
+            try:
+                message = json.loads(body) if isinstance(body, str) else {}
+            except json.JSONDecodeError:
+                # A malformed wake-up carries no actionable build identifier. Do not let it
+                # repeatedly redrive an otherwise healthy durable worker backlog.
+                message = {}
             build_id = ((message.get("detail") or {}).get("build-id")) if isinstance(message, dict) else None
             if build_id and service.reconcile_cloud_execution_build(str(build_id)):
                 processed_events += 1

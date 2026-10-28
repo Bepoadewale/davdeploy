@@ -61,3 +61,28 @@ def test_worker_wakeup_clamps_an_invalid_or_excessive_drain_limit(monkeypatch):
 
     assert result == {"records": 0, "processed": 0, "processed_jobs": 0}
     assert calls == ["claim"]
+
+
+def test_worker_ignores_a_malformed_wakeup_without_redriving_the_batch(monkeypatch):
+    class Service:
+        def __init__(self, _db):
+            pass
+
+        def reconcile_cloud_execution_build(self, _build_id):
+            raise AssertionError("malformed input has no build id")
+
+        def run_next_discovery_job(self):
+            return False
+
+        def run_next_cloud_execution(self):
+            return False
+
+        def run_next_job(self):
+            return False
+
+    monkeypatch.setattr(lambda_worker, "SessionLocal", lambda: nullcontext(object()))
+    monkeypatch.setattr(lambda_worker, "ProductService", Service)
+
+    result = lambda_worker.handler({"Records": [{"body": "not-json"}]}, None)
+
+    assert result == {"records": 1, "processed": 0, "processed_jobs": 0}
