@@ -28,11 +28,12 @@ The pre-sign-up Lambda links Google to an existing native Cognito account only w
 
 ## Email OTP
 
-Cognito choice-based `USER_AUTH` and `EMAIL_OTP` require an eligible Cognito feature plan and
-Amazon SES delivery. Cognito is configured with the verified `davdeploy.tech` SES identity and
-`notify@davdeploy.tech` sender. The SES account remains sandboxed until AWS approves the submitted
-transactional-production request; until then, OTP delivery is limited to verified SES recipients.
-Resend remains the separate workspace-invitation sender.
+Cognito choice-based `USER_AUTH` and `EMAIL_OTP` use the deployed Cognito custom-email sender.
+It decrypts Cognito's one-time code with the dedicated KMS key and sends through Resend from
+`notify@davdeploy.tech`, with replies directed to `support@davdeploy.tech`. Amazon SES remains
+configured on the user pool as a fallback, but current Cognito code delivery does not depend on SES
+production access or recipient verification. Workspace invitations use a separate Resend adapter.
+See [email operations](EMAIL_OPERATIONS.md) for the active delivery and rotation boundary.
 
 ## Workspace invitations
 

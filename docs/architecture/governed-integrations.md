@@ -8,7 +8,7 @@ The production design uses a GitHub App installation, not a personal access toke
 
 The local fixture returns repository metadata, validates only a fixture signature, and creates a `fixture-pr://` reference. It cannot contact or write to GitHub.
 
-The local webhook receiver is now implemented as a product contract. It accepts signed fixture events, persists the installation state, records deduplicated delivery IDs, rejects invalid signatures, and exposes revoked, missing-permission, repository-access-change and branch-update states in the UI. This proves the state machine locally. It is not evidence that GitHub has delivered a public webhook to davdeploy.
+The local webhook receiver is now implemented as a product contract. It accepts signed fixture events, persists the installation state, records deduplicated delivery IDs, rejects invalid signatures, requires GitHub event/delivery metadata, bounds request bodies to 1 MiB, and exposes revoked, missing-permission, repository-access-change and branch-update states in the UI. This proves the state machine locally. It is not evidence that GitHub has delivered a public webhook to davdeploy.
 
 Approved customer-plan revisions can also create a desired-state PR publication. The package records the approved digest, repository, branch, selected AWS profile, required checks, profile-specific delivery contract and the explicit rule that davdeploy never merges customer code or desired state.
 

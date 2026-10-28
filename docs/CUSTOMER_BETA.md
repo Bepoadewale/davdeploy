@@ -13,8 +13,10 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 
 ## Entry criteria before inviting a customer
 
-1. The worker DLQ alarm is investigated and clear. Do not replay or remove messages without a
-   separately approved incident decision.
+1. The worker DLQ alarm is investigated and clear. The 2026-10-28 read-only check found zero
+   visible or in-flight messages, normal worker/DLQ alarms, and the corrected `bedrock` provider
+   configuration. Preserve this result in the operations record; do not replay or remove messages
+   without a separately approved incident decision.
 2. A customer has an administrator invitation path. The deployed Resend sender is verified and
    active for workspace invitations from `notify@davdeploy.tech`; replies route to
    `support@davdeploy.tech`. Before each beta cohort, run one controlled invitation delivery and
@@ -56,6 +58,9 @@ evidence. Individual workflow claims remain limited to their recorded evidence.
 - Keep CORS limited to `https://davdeploy.tech`.
 - Keep customer cloud credentials and GitHub App credentials server-side and short-lived.
 - Do not treat fixture planning, local dry runs, or plan-only Terraform review as deployment proof.
+
+See [operations readiness](OPERATIONS_READINESS.md) for the current DLQ assessment and the
+incident, recovery, and support handoff procedures.
 
 ## Invitation-delivery cost boundary
 
