@@ -1,6 +1,6 @@
 # ticket190 — Beta readiness operations and GitHub webhook hardening
 
-PR: pending
+PR: [#190 — Beta readiness operations and webhook hardening](https://github.com/Bepoadewale/davdeploy/pull/190)
 Branch: `chore/beta-readiness-hardening`
 
 ## Problem / goal
