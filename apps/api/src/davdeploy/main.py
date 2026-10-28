@@ -89,6 +89,7 @@ configure_tracing()
 FastAPIInstrumentor.instrument_app(app)
 API_CONTRACT_VERSION = "v1"
 RATE_LIMIT = SlidingWindowRateLimiter(int(os.getenv("DAVDEPLOY_RATE_LIMIT_PER_MINUTE", "0")))
+GITHUB_WEBHOOK_MAX_BODY_BYTES = 1_000_000
 
 
 def parse_frontend_origins(value: str | None) -> list[str]:
@@ -491,6 +492,8 @@ async def github_webhook(
     signature = request.headers.get("X-Hub-Signature-256", "")
     body = await request.body()
     try:
+        if len(body) > GITHUB_WEBHOOK_MAX_BODY_BYTES:
+            raise ValueError("GitHub webhook payload is too large")
         return service.receive_github_webhook(
             event=event,
             delivery_id=delivery_id,

@@ -19,6 +19,7 @@ The verified Resend domain and runtime-only SSM key now enable workspace invitat
 remaining release evidence is a controlled browser journey covering invitation creation, external
 delivery, acceptance, Cognito sign-in, workspace resolution, plan creation, approval, and sign-out.
 See [email operations](../EMAIL_OPERATIONS.md) for the active configuration, rotation process and
-provider-change requirements. Cognito OTP delivery remains a separate concern and may use its
-configured SES identity; it is not the workspace-invitation sender. SES production access and a
-controlled OTP browser journey remain release evidence.
+provider-change requirements. Cognito OTP delivery is a separate Resend custom-sender path with
+its own KMS and Lambda boundary; it is not the workspace-invitation sender. A controlled OTP
+browser journey remains release evidence. SES remains a fallback configuration, not the active
+customer-code delivery path.

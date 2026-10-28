@@ -308,3 +308,37 @@ def test_github_webhook_endpoint_records_signed_fixture_delivery(tmp_path):
         service.github_connection_status(founder())["installation_states"][0]["state"]
         == "CONNECTED"
     )
+
+
+def test_github_webhook_endpoint_rejects_missing_delivery_metadata_and_oversized_payload(tmp_path):
+    engine = make_engine(f"sqlite+pysqlite:///{tmp_path / 'webhook-boundary.db'}")
+    run_migrations(engine)
+    db = sessionmaker(bind=engine, expire_on_commit=False)()
+    service = ProductService(db, policy=PolicyClient(fixture=True), executor=LocalExecutor())
+    service.seed_local_identity()
+    app.dependency_overrides[product_service] = lambda: service
+    try:
+        missing_delivery = TestClient(app).post(
+            "/api/v1/github/webhooks",
+            headers={
+                "X-GitHub-Event": "installation",
+                "X-Hub-Signature-256": "fixture-sha256=valid",
+            },
+            json={"davdeploy": {"organization_id": founder().organization_id}},
+        )
+        oversized = TestClient(app).post(
+            "/api/v1/github/webhooks",
+            headers={
+                "X-GitHub-Event": "installation",
+                "X-GitHub-Delivery": "delivery-oversized",
+                "X-Hub-Signature-256": "fixture-sha256=valid",
+            },
+            content=b"x" * 1_000_001,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert missing_delivery.status_code == 409
+    assert missing_delivery.json() == {"detail": "GitHub event and delivery ID are required"}
+    assert oversized.status_code == 409
+    assert oversized.json() == {"detail": "GitHub webhook payload is too large"}

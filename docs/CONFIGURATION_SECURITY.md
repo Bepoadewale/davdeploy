@@ -32,13 +32,15 @@ The current encrypted environment values are:
 - `SES_IDENTITY_ARN` and `SES_FROM_ADDRESS`, stored as `terraform-plan` environment secrets.
 - `RESEND_INVITATION_PARAMETER_NAME`, stored as a `terraform-plan` environment variable. This is
   only the name of a Standard SSM SecureString; the Resend value itself is read by the hosted
-  Lambda runtime and is never a GitHub variable, secret, Terraform input, or Lambda environment value.
+  Lambda runtime and Cognito custom-email sender at runtime. It is never a GitHub variable,
+  secret, Terraform input, or Lambda environment value.
 
-Hosted workspace invitation delivery uses the verified Resend domain. The API role receives only
-`ssm:GetParameter` on the exact configured parameter, retrieves it with decryption at runtime, and
-does not receive the key as a Lambda environment variable. SES settings configure Cognito account
-and authentication mail; they are not the invitation sender. The backend stores token digests,
-never raw invitation tokens, and hosted API responses never expose invitation links.
+Hosted workspace invitation delivery and Cognito custom-email delivery use the verified Resend
+domain. Each runtime role receives only its exact Parameter Store and KMS grants, retrieves the
+key with decryption at runtime, and does not receive it as a Lambda environment variable. SES is a
+fallback Cognito configuration; it is not the active invitation or one-time-code sender. The backend
+stores token digests, never raw invitation tokens, and hosted API responses never expose invitation
+links.
 
 Future passwords, tokens, private keys, webhook secrets, client secrets, and long-lived
 credentials must use GitHub Secrets or an external secret manager. AWS workflows continue to use

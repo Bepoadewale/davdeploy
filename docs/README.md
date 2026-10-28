@@ -12,6 +12,9 @@ Start with the [current-state audit](product/CURRENT_STATE_AUDIT.md), [frontend/
 The active Resend/Cloudflare setup, aliases, secret boundary, testing and provider-change process
 are in [email operations](EMAIL_OPERATIONS.md).
 
+The current hosted-control-plane DLQ assessment, incident procedure, recovery-drill boundary, and
+customer support handoff are in [operations readiness](OPERATIONS_READINESS.md).
+
 - `product/`: current customer, product, packaging and roadmap material.
 - `architecture/`, `security/`, cloud/reliability/GitOps pages: current technical contracts.
 - `strategy/`: preserved historical strategy and commercial thinking. It is private and not public-repository material.

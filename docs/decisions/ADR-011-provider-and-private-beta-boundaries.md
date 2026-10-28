@@ -46,11 +46,11 @@ regional deployment.
 
 ### 4. Transactional email progression
 
-Use Resend for transactional invitations from the verified product domain and Cloudflare Email
-Routing for inbound operational aliases. The sending key is runtime-only Parameter Store material.
-Amazon SES is configured for Cognito account and authentication mail, while Resend remains the
-active invitation sender. SES production access is pending AWS approval; sandbox delivery is limited
-to verified recipients.
+Use Resend for transactional invitations and Cognito account/authentication email from the verified
+product domain, with Cloudflare Email Routing for inbound operational aliases. The sending key is
+runtime-only Parameter Store material. Cognito invokes a dedicated custom-email sender, so current
+code delivery does not depend on Amazon SES production access or recipient verification. SES stays
+configured on the user pool as a fallback only.
 Email is not used as an authorization channel: invitation acceptance always requires an
 authenticated identity and server-side membership validation.
 
