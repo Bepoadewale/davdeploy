@@ -28,7 +28,8 @@ Require a pilot acknowledgement in the API, verify the optional execution role w
 
 ## Acceptance status
 
-Local automated validation passed; pending CI, review, merge, and hosted deployment.
+Completed: local validation, CI, review, merge, and hosted deployment passed. The release is the
+control-plane contract only; no customer workload was created.
 
 ## Tests / validation performed
 

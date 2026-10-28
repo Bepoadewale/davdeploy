@@ -1,6 +1,6 @@
 # ticket191 — Reconcile current readiness and provider boundaries
 
-PR: pending
+PR: [#191 — Reconcile readiness and future evidence contracts](https://github.com/Bepoadewale/davdeploy/pull/191)
 Branch: `chore/reconcile-readiness-contracts`
 
 ## Problem / goal
@@ -26,14 +26,14 @@ pricing, and signed-webhook evolution without enabling a live provider or public
 
 ## Acceptance criteria
 
-- [ ] Current status no longer says the dispatched GitHub OIDC route is unexecuted.
-- [ ] Completed hosted identity/persistence work is removed from active backlog items.
-- [ ] Future pricing, observed-output, and webhook fixtures remain explicitly non-production.
-- [ ] Documentation and automated tests pass.
+- [x] Current status no longer says the dispatched GitHub OIDC route is unexecuted.
+- [x] Completed hosted identity/persistence work is removed from active backlog items.
+- [x] Future pricing, observed-output, and webhook fixtures remain explicitly non-production.
+- [ ] Documentation and full automated validation pass.
 
 ## Acceptance status
 
-Draft; implementation has not started.
+Implementation complete locally; full validation and PR CI are pending.
 
 ## Tests / validation performed
 

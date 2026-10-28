@@ -33,8 +33,9 @@ and reject oversized webhook bodies before parsing.
 
 ## Acceptance status
 
-Local validation passed. CI, review, merge, and the normal hosted-control-plane deployment gate
-remain pending.
+Completed: local validation, CI, review, merge, and the normal hosted-control-plane deployment
+gate passed. The release changed only the reviewed control-plane Lambda packages; it did not enable
+a public webhook or change a queue message.
 
 ## Tests / validation performed
 
