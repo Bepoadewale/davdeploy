@@ -57,7 +57,7 @@ The GitHub repository has been renamed from `ai-platform-product-strategy` to `d
 
 1. Run and record the controlled human browser invitation-to-approval journey, then conduct an explicitly approved Aurora recovery drill.
 2. Wire the guarded App Runner execution run to an explicitly enabled operator apply/destroy path and ingest real Terraform/AWS outputs into the output/resource inventory model.
-3. Add browser download/export controls and then wire real App Runner apply/destroy output ingestion into the existing execution evidence model.
+3. Browser download/export controls are implemented. Wire real App Runner apply/destroy output ingestion into the existing execution evidence model.
 
 ## Clean-room reproducibility
 
