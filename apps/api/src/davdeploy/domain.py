@@ -272,7 +272,9 @@ class AwsQuickCreateRequest(BaseModel):
 class AwsExistingRoleRequest(BaseModel):
     account_id: str = Field(pattern=r"^[0-9]{12}$")
     discovery_role_arn: str = Field(pattern=r"^arn:aws:iam::[0-9]{12}:role/.+$")
-    execution_role_arn: str | None = Field(default=None, pattern=r"^arn:aws:iam::[0-9]{12}:role/.+$")
+    execution_role_arn: str | None = Field(
+        default=None, pattern=r"^arn:aws:iam::[0-9]{12}:role/.+$"
+    )
 
 
 class AwsConnectionVerificationRequest(BaseModel):
@@ -399,6 +401,10 @@ class PlanCommentRequest(BaseModel):
 class SupportTicketRequest(BaseModel):
     subject: str = Field(min_length=3, max_length=160)
     body: str = Field(min_length=1, max_length=8000)
+
+
+class SupportTicketStateRequest(BaseModel):
+    state: str = Field(pattern=r"^(OPEN|IN_PROGRESS|RESOLVED|CLOSED)$")
 
 
 class DataLifecycleRequestBody(BaseModel):
