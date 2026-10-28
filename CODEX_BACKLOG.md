@@ -50,8 +50,11 @@
 ## P1 — Customer-cloud execution
 
 - [x] Create the davdeploy control-plane GitHub OIDC identity and a real customer discovery connection. Terraform applied only state/lock and IAM resources; STS, inventory and Cost Explorer were verified without a workload.
-- [ ] Dispatch the hosted GitHub OIDC workflow to prove the production trust route, then keep all deployment permissions profile-specific and separately approved.
-- [ ] Implement the live AWS STS role-assumption adapter with least privilege after the discovery-role pilot.
+- [x] Dispatch the hosted GitHub OIDC plan/apply workflow and prove the production trust route. The
+  October 2026 control-plane releases used the reviewed saved-plan gate; customer-workload
+  permissions remain separately approved.
+- [x] Implement the live AWS STS read-only role-assumption adapter with least privilege after the
+  discovery-role pilot. It is limited to verified customer discovery, not deployment.
 - [x] GitHub App installation/repository/branch discovery and safe manifest intelligence.
 - [x] Local GitHub webhook receiver contract with signature verification, delivery dedupe, replay protection, persisted installation states and UI visibility.
 - [x] Desired-state PR publisher for approved customer-plan revisions with exact-digest, branch, GitHub-state and profile-contract guardrails. Fixture mode is default; guarded live GitHub PR creation is implemented behind an explicit write flag.
@@ -75,11 +78,13 @@
 - [ ] Replace the fixture inventory and pricing catalogue with customer-approved AWS discovery and timestamped pricing sources.
 - [ ] Replace deterministic Day-2 telemetry and the fixed change endpoint with tenant-authorised telemetry, policy-bounded execution and independently observed customer-cloud changes.
 - [ ] Execute an authenticated Terraform plan-only review for the selected App Runner contract after a real operator enables `ALLOW_CLOUD_PLAN=true`. Do not add apply until separately authorised.
-- [ ] Harden the AWS-hosted control plane: replace fixture sign-in, fixture policy and App Runner SQLite with production OIDC/JWKS, OPA and durable PostgreSQL.
+- [x] Harden the AWS-hosted control plane: hosted Cognito/JWKS identity, policy, and durable Aurora
+  PostgreSQL are deployed. Recovery drills and customer-workload execution remain separate work.
 
 ## P1 — First cloud pilot prerequisites
 
-- [ ] Replace the local fixture issuer with a real trusted OIDC issuer and test the existing JWKS adapter against the hosted runtime.
+- [x] Configure Cognito as the trusted hosted issuer and validate the existing JWKS adapter through
+  controlled API, CLI, and MCP acceptance. A recorded full human browser journey remains separate.
 - [ ] Configure and test the planned GitHub App desired-state publisher and Argo observer.
 - [ ] Configure and test the planned AWS Load Balancer Controller, External Secrets Operator and exact browser redirect/CORS origins.
 - [ ] Run an explicitly authorised AWS create → validate → destroy pilot, including the failure, recovery, load and cost-evidence drills.

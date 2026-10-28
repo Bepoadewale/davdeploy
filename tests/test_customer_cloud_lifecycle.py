@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from davdeploy.domain import CloudInventorySnapshot
 from davdeploy.integrations import StsAwsDiscovery
+from davdeploy.models import Environment
 from test_product import founder, make_service
 
 
@@ -72,6 +73,7 @@ def test_customer_cloudformation_contract_keeps_administrator_pilot_opt_in():
 
 def test_live_pricing_evidence_labels_catalog_and_cost_explorer_failures():
     StsAwsDiscovery._pricing_evidence_cache.clear()
+
     class UnavailableClient:
         def get_products(self, **_kwargs):
             from botocore.exceptions import ClientError
@@ -125,3 +127,65 @@ def test_live_pricing_evidence_caches_cost_explorer_calls_per_customer_account(m
     assert first["cache"]["state"] == "MISS"
     assert second["cache"]["state"] == "HIT"
     assert second["cost_explorer"]["daily_unblended_cost_usd"] == ["1.23"]
+
+
+def test_fixture_observed_outputs_redact_sensitive_values_before_customer_readback():
+    """Keep the future observer contract testable without a customer cloud account."""
+    service, _ = make_service()
+    project = service.create_project(
+        founder(), "future-observation", "https://github.com/example/app"
+    )
+    environment = Environment(
+        organization_id=founder().organization_id,
+        project_id=project.id,
+        name="staging",
+        environment_type="staging",
+        state="READY",
+        desired_state={"execution_mode": "FIXTURE"},
+    )
+    service.db.add(environment)
+    service.db.flush()
+
+    service._record_environment_observation_assets(
+        environment,
+        {
+            "outputs": [
+                {
+                    "name": "application_url",
+                    "type": "https_url",
+                    "value": "https://staging.example.test",
+                    "source": "fixture-observer",
+                    "sensitive": False,
+                },
+                {
+                    "name": "database_password",
+                    "type": "secret_reference",
+                    "value": "never-return-a-customer-secret",
+                    "source": "fixture-observer",
+                    "sensitive": True,
+                },
+            ],
+            "resources": [
+                {
+                    "provider": "aws",
+                    "resource_type": "app_runner_service",
+                    "name": "fixture-service",
+                    "region": "us-east-1",
+                    "status": "OBSERVED",
+                    "tags": {"fixture": "true"},
+                }
+            ],
+        },
+    )
+    service.db.commit()
+
+    outputs = {item["name"]: item for item in service._environment_outputs(environment.id)}
+    resources = service._observed_resources(environment.id)
+
+    assert outputs["application_url"]["value"] == "https://staging.example.test"
+    assert outputs["database_password"]["value"] == "***"
+    assert outputs["database_password"]["source"] == "fixture-observer"
+    assert resources[0]["provider"] == "aws"
+    assert resources[0]["type"] == "app_runner_service"
+    assert resources[0]["name"] == "fixture-service"
+    assert resources[0]["status"] == "OBSERVED"
