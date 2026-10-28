@@ -19,7 +19,7 @@ None.
 - `python scripts/check_doc_conventions.py`
 - `make verify`
 
-## Result
+## Observed result
 
 Focused fixture contracts passed: 28 tests verified pricing-evidence limitations, sensitive
 observed-output redaction and signed fixture webhook boundaries. `make verify` passed 301 tests,
@@ -29,7 +29,7 @@ Ruff, action-configuration, OpenAPI and Compose checks; documentation convention
 
 None required. The tests use an in-memory database and fixture adapters.
 
-## Execution boundary
+## Final boundary
 
 No live provider, customer account, public webhook, queue message, or workload is contacted or
 changed by fixture contracts.
