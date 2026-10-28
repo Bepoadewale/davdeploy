@@ -3,7 +3,7 @@
 Date: 2026-10-28
 Execution type: local fixture and documentation validation
 Customer repository: none
-Commit: pending PR merge
+Commit: `7a503785a32e71d7a151b66556e65a672c56d55f` (merged PR #191)
 AWS account: none contacted
 AWS region: none contacted
 

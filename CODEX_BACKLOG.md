@@ -71,7 +71,7 @@
 - [x] Product-side cloud execution run history for approved App Runner revisions: admin-only, exact digest, rendered contract, ready preflight, plan-review binding and blocked-by-default command evidence.
 - [x] Execution-history and evidence-export APIs for customer workload runs, including attempt, digest, source, target, Terraform state, output/resource placeholders, destroy proof and failure reason.
 - [ ] Ingest real App Runner Terraform outputs and AWS resource observations through the product UI/API execution path.
-- [ ] Add browser-side downloadable evidence export and timeline grouping by project/environment.
+- [x] Browser-side downloadable plan/audit evidence and Activity grouping/filtering by project and environment are implemented in the static frontend. The export is browser-local and contains only API-rendered evidence.
 - [x] Scoped GitHub desired-state publication through reviewed pull requests is implemented behind an explicit live-write flag and test-proven with mocked GitHub API calls. Real customer-repo publication remains opt-in and unexecuted in routine local CI.
 - [ ] Real GitOps/Argo observer and customer-cloud workload agent.
 - [ ] Enterprise OIDC/JWKS adapter and organisation lifecycle.

@@ -29,15 +29,16 @@ pricing, and signed-webhook evolution without enabling a live provider or public
 - [x] Current status no longer says the dispatched GitHub OIDC route is unexecuted.
 - [x] Completed hosted identity/persistence work is removed from active backlog items.
 - [x] Future pricing, observed-output, and webhook fixtures remain explicitly non-production.
-- [ ] Documentation and full automated validation pass.
+- [x] Documentation and full automated validation passed.
 
 ## Acceptance status
 
-Implementation complete locally; full validation and PR CI are pending.
+Completed: local validation, PR CI, review and merge passed. This documentation/test-only change did
+not require a hosted runtime deployment.
 
 ## Tests / validation performed
 
-Will be recorded in `docs/test/test191.md`.
+Recorded in `docs/test/test191.md`.
 
 ## Evidence files produced
 

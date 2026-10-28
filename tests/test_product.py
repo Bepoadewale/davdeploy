@@ -390,6 +390,12 @@ def test_private_beta_workspace_controls_are_durable_and_tenant_scoped():
         founder(), "Need help", "Please help with a local review."
     )
     assert ticket.organization_id == founder().organization_id
+    assert service.support_tickets(founder())[0]["state"] == "OPEN"
+    updated_ticket = service.update_support_ticket_state(operator(), ticket.id, "IN_PROGRESS")
+    assert updated_ticket["state"] == "IN_PROGRESS"
+    assert service.support_tickets(founder())[0]["state"] == "IN_PROGRESS"
+    with pytest.raises(PermissionError, match="administrator"):
+        service.update_support_ticket_state(founder(), ticket.id, "RESOLVED")
     exported = service.request_data_lifecycle(operator(), "EXPORT")
     assert exported["state"] == "READY"
 

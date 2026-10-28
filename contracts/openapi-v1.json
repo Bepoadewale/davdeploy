@@ -820,6 +820,20 @@
         "title": "SupportTicketRequest",
         "type": "object"
       },
+      "SupportTicketStateRequest": {
+        "properties": {
+          "state": {
+            "pattern": "^(OPEN|IN_PROGRESS|RESOLVED|CLOSED)$",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "SupportTicketStateRequest",
+        "type": "object"
+      },
       "TerraformPlanRenderRequest": {
         "properties": {
           "content_digest": {
@@ -4060,6 +4074,41 @@
       }
     },
     "/api/v1/support/tickets": {
+      "get": {
+        "operationId": "list_support_tickets_api_v1_support_tickets_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Support Tickets"
+      },
       "post": {
         "operationId": "create_support_ticket_api_v1_support_tickets_post",
         "parameters": [
@@ -4104,6 +4153,62 @@
           }
         },
         "summary": "Create Support Ticket"
+      }
+    },
+    "/api/v1/support/tickets/{ticket_id}": {
+      "patch": {
+        "operationId": "update_support_ticket_api_v1_support_tickets__ticket_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket_id",
+            "required": true,
+            "schema": {
+              "title": "Ticket Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportTicketStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Support Ticket"
       }
     },
     "/api/v1/usage": {

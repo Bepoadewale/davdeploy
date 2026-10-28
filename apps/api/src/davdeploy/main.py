@@ -45,6 +45,7 @@ from davdeploy.domain import (
     ProjectRequest,
     SubscriptionRequest,
     SupportTicketRequest,
+    SupportTicketStateRequest,
     TerraformPlanRenderRequest,
     TerraformPlanReviewRequest,
 )
@@ -391,12 +392,28 @@ def create_support_ticket(
     service: ProductService = Depends(product_service),
 ):
     ticket = service.create_support_ticket(principal, request.subject, request.body)
-    return {
-        "id": ticket.id,
-        "subject": ticket.subject,
-        "state": ticket.state,
-        "created_at": ticket.created_at,
-    }
+    return service._support_ticket_response(ticket)
+
+
+@app.get("/api/v1/support/tickets")
+def list_support_tickets(
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    return service.support_tickets(principal)
+
+
+@app.patch("/api/v1/support/tickets/{ticket_id}")
+def update_support_ticket(
+    ticket_id: str,
+    request: SupportTicketStateRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.update_support_ticket_state(principal, ticket_id, request.state)
+    except (PermissionError, KeyError, ValueError) as error:
+        translate(error)
 
 
 @app.post("/api/v1/data-lifecycle", status_code=202)
@@ -632,8 +649,13 @@ def create_aws_quick_create_setup(
 ):
     REQUESTS.labels("cloud_connections.aws_quick_create").inc()
     try:
-        if request.access_mode == "administrator-pilot" and not request.acknowledge_administrator_access:
-            raise ValueError("acknowledge administrator access before enabling the deployment pilot")
+        if (
+            request.access_mode == "administrator-pilot"
+            and not request.acknowledge_administrator_access
+        ):
+            raise ValueError(
+                "acknowledge administrator access before enabling the deployment pilot"
+            )
         return service.aws_quick_create_setup(
             principal, connection_id, request.account_id, request.access_mode
         )
@@ -650,7 +672,11 @@ def attach_existing_aws_roles(
 ):
     try:
         return service.aws_existing_role_setup(
-            principal, connection_id, request.account_id, request.discovery_role_arn, request.execution_role_arn
+            principal,
+            connection_id,
+            request.account_id,
+            request.discovery_role_arn,
+            request.execution_role_arn,
         )
     except (PermissionError, ValueError) as error:
         translate(error)
