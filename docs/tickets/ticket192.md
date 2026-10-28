@@ -1,6 +1,6 @@
 # ticket192 — Workspace support lifecycle and final evidence reconciliation
 
-PR: pending
+PR: [#192 — Workspace support ticket lifecycle](https://github.com/Bepoadewale/davdeploy/pull/192)
 Branch: `feat/support-ticket-lifecycle`
 
 ## Problem / goal
