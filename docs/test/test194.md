@@ -1,5 +1,16 @@
 # test194 — Operational quality evidence
 
+Date: 2026-10-28
+Execution type: Local static and fixture validation; no customer workload execution.
+Customer repository: None
+Commit: `c57eac8` plus the final evidence-format correction
+AWS account: None
+AWS region: None
+
+## Resources created
+
+None.
+
 ## Commands executed
 
 ```sh
@@ -7,14 +18,16 @@
 make verify
 ```
 
-## Result
+## Observed result
 
 Focused validation passed 56 tests. Full verification passed.
 
-## Execution boundary
+## Teardown
+
+No resources were created.
+
+## Final boundary
 
 Local tests and documentation validation only.
 
-## Known limitations
-
-Does not perform a real customer-cloud execution or recovery drill.
+This evidence does not perform a real customer-cloud execution or recovery drill.
