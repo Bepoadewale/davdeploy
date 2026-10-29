@@ -57,3 +57,9 @@ def test_public_template_host_allows_only_versioned_template_reads_and_is_confir
 def test_control_plane_identity_can_assume_the_quick_create_role_name_pattern():
     configuration = Path("infrastructure/terraform/management-identity/main.tf").read_text()
     assert "role/davdeployDiscovery-*" in configuration
+
+
+def test_hosted_control_plane_can_verify_the_separate_execution_role_pattern():
+    configuration = Path("infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    assert "role/davdeployDiscovery-*" in configuration
+    assert "role/davdeployExecution-*" in configuration

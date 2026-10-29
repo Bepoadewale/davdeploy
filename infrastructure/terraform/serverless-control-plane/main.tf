@@ -187,9 +187,17 @@ resource "aws_iam_role_policy" "api" {
         Resource = aws_lambda_function.policy.arn
       },
       {
-        Effect   = "Allow"
-        Action   = ["sts:AssumeRole"]
-        Resource = ["arn:aws:iam::*:role/davdeployDiscovery-*"]
+        Effect = "Allow"
+        Action = ["sts:AssumeRole"]
+        # The discovery role stays read-only. An execution role exists only
+        # when a customer explicitly selected and acknowledged the separate
+        # administrator-pilot connection path; verification must be able to
+        # prove both trusted roles belong to that same account before any
+        # bounded runner can be considered.
+        Resource = [
+          "arn:aws:iam::*:role/davdeployDiscovery-*",
+          "arn:aws:iam::*:role/davdeployExecution-*",
+        ]
       },
       {
         Effect   = "Allow"
