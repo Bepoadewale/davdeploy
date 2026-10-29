@@ -99,7 +99,14 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Ref davdeployExecutionBrokerRoleArn
+              # The execution broker performs the bounded CodeBuild work. The
+              # discovery/API broker is also trusted only so the control plane
+              # can perform an STS identity verification before a run is ever
+              # eligible for queueing. Both paths require this unique external
+              # ID; neither changes the discovery-only default.
+              AWS:
+                - !Ref davdeployExecutionBrokerRoleArn
+                - !Ref davdeployDiscoveryBrokerRoleArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:

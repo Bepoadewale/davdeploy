@@ -40,6 +40,8 @@ def test_quick_create_template_makes_administrator_pilot_explicit_and_separate()
     assert "AdministratorAccess" in template
     assert "AppRunnerEcrAccessRole" in template
     assert "Condition: CreateAdministratorPilotRole" in template
+    assert "- !Ref davdeployExecutionBrokerRoleArn" in template
+    assert "- !Ref davdeployDiscoveryBrokerRoleArn" in template
     assert "iam:PassRole" not in template
     assert "GetSecretValue" not in template
 
