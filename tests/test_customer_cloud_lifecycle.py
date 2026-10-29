@@ -69,6 +69,8 @@ def test_customer_cloudformation_contract_keeps_administrator_pilot_opt_in():
     assert "AppRunnerEcrAccessRole" in template
     assert "AdministratorAccess" in template
     assert "sts:ExternalId" in template
+    assert "davdeployExecutionBrokerRoleArn" in template
+    assert "davdeployDiscoveryBrokerRoleArn" in template
 
 
 def test_live_pricing_evidence_labels_catalog_and_cost_explorer_failures():
