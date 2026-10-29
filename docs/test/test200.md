@@ -23,8 +23,9 @@ uv run pytest tests/test_customer_aws_connection_contract.py tests/test_terrafor
 ## Observed result
 
 The production plan showed one template object to add, zero changes and zero
-deletions. The prior object is moved into deletion-protected retained state.
-Eight focused tests passed.
+deletions. The reviewed apply added that object and reported zero destroyed;
+the prior object is now deletion-protected retained state. Eight focused tests
+passed.
 
 ## Teardown
 

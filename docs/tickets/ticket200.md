@@ -33,7 +33,8 @@ and document the retention rule for future revisions.
 
 ## Acceptance status
 
-Implemented locally; publication follows reviewed merge.
+Published on 2026-10-29: one new immutable object was added; no prior template
+object was deleted.
 
 ## Tests / validation performed
 
@@ -50,5 +51,5 @@ No existing template, stack, role, workload, or customer record is deleted.
 
 ## Follow-up work
 
-Publish the reviewed template, update the hosted control-plane template URL,
-then update the controlled stack and re-run role verification.
+For every later template revision, append the formerly active key to
+`retained_template_keys` before publication.

@@ -33,7 +33,8 @@ policy and cover both role patterns with a regression test.
 
 ## Acceptance status
 
-Implemented locally; awaiting the reviewed Terraform deployment.
+Deployed by the reviewed Terraform plan and apply on 2026-10-29. The controlled
+administrator-pilot connection was subsequently verified live.
 
 ## Tests / validation performed
 
@@ -50,4 +51,5 @@ No customer workload, Terraform apply, or destroy operation is run by this PR.
 
 ## Follow-up work
 
-Deploy the reviewed policy and re-run the controlled role verification.
+Validate the authenticated plan-only workflow before any cost-bearing workload
+execution.
