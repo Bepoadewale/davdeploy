@@ -3,23 +3,23 @@
 PR: [#203](https://github.com/Bepoadewale/davdeploy/pull/203)
 Branch: `feat/targeted-rate-limits`
 
-## Goal
+## Problem / goal
 
 Strengthen abuse resistance for sensitive DavDeploy API actions and notify operators about repeated authorization, throttling, and Cognito sign-in failures.
 
-## Current state
+## Current repo state
 
 The hosted HTTP API has a broad stage limit of 25 requests per second with a burst of 50. The
 application-level limiter defaults to disabled unless an environment value is set. Existing alarms
 cover Lambda failures, API 5xx responses, worker failures, DLQ messages, and Aurora capacity, but
 not repeated 401, 403, 429, or Cognito sign-in failures.
 
-## Research and references
+## Research / references used
 
 AWS API Gateway HTTP API route-level throttling documentation; AWS Cognito CloudWatch metrics for
 `SignInSuccesses` and `SignInThrottles`; current serverless Terraform and API middleware.
 
-## Work
+## Work planned for the PR
 
 1. Set a non-zero per-runtime fallback limit in the hosted Lambda environment.
 2. Add API Gateway route limits for invitation, plan, AWS verification, support, and API credential actions.
@@ -39,13 +39,13 @@ AWS API Gateway HTTP API route-level throttling documentation; AWS Cognito Cloud
 
 ## Acceptance status
 
-Implemented locally; pending validation, review, CI, and a separately authorised Terraform apply.
+Implemented and locally validated; pending CI, review, and a separately authorised Terraform apply.
 
-## Validation
+## Tests / validation performed
 
 Recorded in `docs/test/test203.md`.
 
-## Evidence files
+## Evidence files produced
 
 `docs/test/test203.md`.
 

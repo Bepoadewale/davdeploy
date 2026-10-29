@@ -1,5 +1,16 @@
 # test203 - Targeted API rate limits and security alerts
 
+Date: 2026-10-30
+Execution type: local tests and offline Terraform validation; no real AWS execution.
+Customer repository: not applicable.
+Commit: pending documentation correction and CI rerun.
+AWS account: not accessed.
+AWS region: not accessed.
+
+## Resources created
+
+None.
+
 ## Commands executed
 
 ```sh
@@ -10,7 +21,7 @@ terraform -chdir=infrastructure/terraform/serverless-control-plane validate
 make verify
 ```
 
-## Result
+## Observed result
 
 Focused tests passed: 30 tests. Terraform formatting, offline initialization, and validation passed.
 The complete local verification passed: Ruff, 307 tests, OpenAPI snapshot, and Compose configuration.
@@ -21,7 +32,12 @@ evidence was produced. The required clean-room cycle remains pending because the
 clean target removes Docker volumes, `.venv`, and `.local`, and that deletion requires separate
 user approval under the machine-wide safety rules.
 
-## Execution boundary
+## Teardown
+
+Not applicable. No local Docker stack, cloud resource, queue message, or customer resource was
+created by the completed validation. The attempted local proof stopped before Docker startup.
+
+## Final boundary
 
 Local tests and Terraform static validation only. No AWS plan or apply, Cognito change, customer
 cloud action, email, queue replay, or customer data access is authorised by this evidence.
