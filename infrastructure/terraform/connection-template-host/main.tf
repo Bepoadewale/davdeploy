@@ -64,7 +64,7 @@ resource "aws_s3_bucket_policy" "templates" {
   depends_on = [aws_s3_bucket_public_access_block.templates]
 }
 
-resource "aws_s3_object" "customer_discovery_role" {
+resource "aws_s3_object" "active_customer_discovery_role" {
   bucket       = aws_s3_bucket.templates.id
   key          = local.template_key
   source       = local.template_source
@@ -76,4 +76,27 @@ resource "aws_s3_object" "customer_discovery_role" {
     aws_s3_bucket_server_side_encryption_configuration.templates,
     aws_s3_bucket_versioning.templates,
   ]
+}
+
+# Preserve previously published immutable template objects. A customer may
+# still have an active CloudFormation stack or saved Quick Create URL pointing
+# at one of these keys, so replacing the current template must never delete it.
+resource "aws_s3_object" "retained_customer_templates" {
+  for_each = var.retained_template_keys
+
+  bucket = aws_s3_bucket.templates.id
+  key    = each.value
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = all
+  }
+}
+
+# Retain the former managed object when the first administrator-pilot-aware
+# template is superseded. Future template revisions append their former key to
+# `retained_template_keys` before publication.
+moved {
+  from = aws_s3_object.customer_discovery_role
+  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]
 }

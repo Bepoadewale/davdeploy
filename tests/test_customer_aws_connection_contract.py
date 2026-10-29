@@ -48,10 +48,14 @@ def test_quick_create_template_makes_administrator_pilot_explicit_and_separate()
 
 def test_public_template_host_allows_only_versioned_template_reads_and_is_confirmation_gated():
     configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
+    variables = Path("infrastructure/terraform/connection-template-host/variables.tf").read_text()
     script = Path("scripts/customer-aws-template-host.sh").read_text()
     assert 'actions   = ["s3:GetObject"]' in configuration
     assert 'resources = ["${aws_s3_bucket.templates.arn}/cloudformation/*"]' in configuration
     assert "s3:ListBucket" not in configuration
+    assert 'resource "aws_s3_object" "retained_customer_templates"' in configuration
+    assert "prevent_destroy = true" in configuration
+    assert "retained_template_keys" in variables
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
 
