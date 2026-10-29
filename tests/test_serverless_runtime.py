@@ -336,16 +336,40 @@ def test_serverless_stack_authorizes_only_the_selected_nova_model_family():
 def test_serverless_stack_manages_logs_and_actionable_alarms():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert 'resource "aws_cloudwatch_log_group" "lambda"' in terraform
+    assert 'resource "aws_cloudwatch_log_group" "api_gateway"' in terraform
     assert "retention_in_days = 14" in terraform
+    assert "retention_in_days = 30" in terraform
     assert 'resource "aws_sns_topic" "operations"' in terraform
     for alarm in (
         "api_errors",
         "worker_errors",
         "api_gateway_5xx",
+        "api_unauthorized_burst",
+        "api_forbidden_burst",
+        "api_throttled_burst",
+        "cognito_failed_sign_in_burst",
+        "cognito_sign_in_throttles",
         "worker_dead_letter",
         "database_capacity_high",
     ):
         assert f'resource "aws_cloudwatch_metric_alarm" "{alarm}"' in terraform
+
+
+def test_serverless_stack_limits_sensitive_routes_before_application_work():
+    terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    for route in (
+        "POST /api/v1/workspace/invitations",
+        "POST /api/v1/intents",
+        "POST /api/v1/intents/{intent_id}/plans",
+        "POST /api/v1/cloud-connections/{connection_id}/aws-verify",
+        "POST /api/v1/support/tickets",
+        "POST /api/v1/api-credentials",
+    ):
+        assert f'"{route}"' in terraform
+    assert "DAVDEPLOY_RATE_LIMIT_PER_MINUTE" in terraform
+    assert 'resource "aws_cloudwatch_log_metric_filter" "api_unauthorized"' in terraform
+    assert 'resource "aws_cloudwatch_log_metric_filter" "api_forbidden"' in terraform
+    assert 'resource "aws_cloudwatch_log_metric_filter" "api_throttled"' in terraform
 
 
 def test_serverless_stack_allows_only_preflight_without_jwt():
