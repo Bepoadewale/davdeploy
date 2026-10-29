@@ -436,6 +436,12 @@ resource "aws_cloudwatch_log_group" "lambda" {
   tags              = local.common_tags
 }
 
+resource "aws_cloudwatch_log_group" "api_gateway" {
+  name              = "/aws/apigateway/${local.name}"
+  retention_in_days = 30
+  tags              = local.common_tags
+}
+
 import {
   for_each = toset(["api", "cognito-link", "migrate", "worker"])
   to       = aws_cloudwatch_log_group.lambda[each.value]
@@ -516,6 +522,7 @@ locals {
     DAVDEPLOY_DATABASE_SECRET_ARN                = aws_rds_cluster.control_plane.master_user_secret[0].secret_arn
     DAVDEPLOY_DATABASE_NAME                      = var.database_name
     DAVDEPLOY_ALLOWED_FRONTEND_ORIGINS           = var.frontend_origin
+    DAVDEPLOY_RATE_LIMIT_PER_MINUTE              = tostring(var.application_rate_limit_per_minute)
     DAVDEPLOY_JWKS_URL                           = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}/.well-known/jwks.json"
     DAVDEPLOY_OIDC_ISSUER                        = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}"
     DAVDEPLOY_OIDC_AUDIENCE                      = aws_cognito_user_pool_client.frontend.id
@@ -677,6 +684,66 @@ resource "aws_apigatewayv2_stage" "default" {
   default_route_settings {
     throttling_burst_limit = 50
     throttling_rate_limit  = 25
+  }
+
+  # These routes trigger email delivery, model work, cloud API calls, or credentials.
+  # Gateway enforcement is shared across Lambda instances and happens before application work.
+  route_settings {
+    route_key              = "POST /api/v1/workspace/invitations"
+    throttling_burst_limit = 3
+    throttling_rate_limit  = 1
+  }
+
+  route_settings {
+    route_key              = "POST /api/v1/workspace/invitations/{invitation_id}/resend"
+    throttling_burst_limit = 2
+    throttling_rate_limit  = 1
+  }
+
+  route_settings {
+    route_key              = "POST /api/v1/intents"
+    throttling_burst_limit = 3
+    throttling_rate_limit  = 1
+  }
+
+  route_settings {
+    route_key              = "POST /api/v1/intents/{intent_id}/plans"
+    throttling_burst_limit = 2
+    throttling_rate_limit  = 0.5
+  }
+
+  route_settings {
+    route_key              = "POST /api/v1/cloud-connections/{connection_id}/aws-verify"
+    throttling_burst_limit = 1
+    throttling_rate_limit  = 0.2
+  }
+
+  route_settings {
+    route_key              = "POST /api/v1/support/tickets"
+    throttling_burst_limit = 3
+    throttling_rate_limit  = 1
+  }
+
+  route_settings {
+    route_key              = "POST /api/v1/api-credentials"
+    throttling_burst_limit = 3
+    throttling_rate_limit  = 1
+  }
+
+  route_settings {
+    route_key              = "DELETE /api/v1/api-credentials/{credential_id}"
+    throttling_burst_limit = 3
+    throttling_rate_limit  = 1
+  }
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway.arn
+    format = jsonencode({
+      requestId        = "$context.requestId"
+      routeKey         = "$context.routeKey"
+      status           = "$context.status"
+      integrationError = "$context.integrationErrorMessage"
+    })
   }
   tags = local.common_tags
 }
@@ -858,6 +925,155 @@ resource "aws_cloudwatch_metric_alarm" "api_gateway_5xx" {
   dimensions = {
     ApiId = aws_apigatewayv2_api.control_plane.id
     Stage = aws_apigatewayv2_stage.default.name
+  }
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_metric_filter" "api_unauthorized" {
+  name           = "${local.name}-api-unauthorized"
+  log_group_name = aws_cloudwatch_log_group.api_gateway.name
+  pattern        = "{ $.status = 401 }"
+
+  metric_transformation {
+    name          = "UnauthorizedResponses"
+    namespace     = "DavDeploy/Security"
+    value         = "1"
+    default_value = 0
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "api_forbidden" {
+  name           = "${local.name}-api-forbidden"
+  log_group_name = aws_cloudwatch_log_group.api_gateway.name
+  pattern        = "{ $.status = 403 }"
+
+  metric_transformation {
+    name          = "ForbiddenResponses"
+    namespace     = "DavDeploy/Security"
+    value         = "1"
+    default_value = 0
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "api_throttled" {
+  name           = "${local.name}-api-throttled"
+  log_group_name = aws_cloudwatch_log_group.api_gateway.name
+  pattern        = "{ $.status = 429 }"
+
+  metric_transformation {
+    name          = "ThrottledResponses"
+    namespace     = "DavDeploy/Security"
+    value         = "1"
+    default_value = 0
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_unauthorized_burst" {
+  alarm_name          = "${local.name}-api-unauthorized-burst"
+  alarm_description   = "Repeated unauthenticated API requests may indicate a broken client or credential attack."
+  namespace           = "DavDeploy/Security"
+  metric_name         = "UnauthorizedResponses"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 10
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_forbidden_burst" {
+  alarm_name          = "${local.name}-api-forbidden-burst"
+  alarm_description   = "Repeated denied API actions may indicate authorization probing or a broken client."
+  namespace           = "DavDeploy/Security"
+  metric_name         = "ForbiddenResponses"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 10
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_throttled_burst" {
+  alarm_name          = "${local.name}-api-throttled-burst"
+  alarm_description   = "Repeated API throttling may indicate abusive traffic or an undersized client retry policy."
+  namespace           = "DavDeploy/Security"
+  metric_name         = "ThrottledResponses"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "cognito_failed_sign_in_burst" {
+  alarm_name          = "${local.name}-cognito-failed-sign-in-burst"
+  alarm_description   = "Repeated Cognito sign-in failures may indicate a broken client or authentication attack."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  threshold           = 10
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  tags                = local.common_tags
+
+  metric_query {
+    id          = "failed_signins"
+    expression  = "sign_in_attempts - successful_signins"
+    label       = "Failed Cognito sign-ins"
+    return_data = true
+  }
+
+  metric_query {
+    id = "sign_in_attempts"
+    metric {
+      namespace   = "AWS/Cognito"
+      metric_name = "SignInSuccesses"
+      stat        = "SampleCount"
+      period      = 300
+      dimensions = {
+        UserPool       = aws_cognito_user_pool.identity.id
+        UserPoolClient = aws_cognito_user_pool_client.frontend.id
+      }
+    }
+  }
+
+  metric_query {
+    id = "successful_signins"
+    metric {
+      namespace   = "AWS/Cognito"
+      metric_name = "SignInSuccesses"
+      stat        = "Sum"
+      period      = 300
+      dimensions = {
+        UserPool       = aws_cognito_user_pool.identity.id
+        UserPoolClient = aws_cognito_user_pool_client.frontend.id
+      }
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cognito_sign_in_throttles" {
+  alarm_name          = "${local.name}-cognito-sign-in-throttles"
+  alarm_description   = "Cognito throttled sign-in requests. Investigate abuse or client retry behavior."
+  namespace           = "AWS/Cognito"
+  metric_name         = "SignInThrottles"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  dimensions = {
+    UserPool       = aws_cognito_user_pool.identity.id
+    UserPoolClient = aws_cognito_user_pool_client.frontend.id
   }
   tags = local.common_tags
 }

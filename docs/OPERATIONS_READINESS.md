@@ -40,6 +40,20 @@ delete, or otherwise mutate an SQS message.
    is not affected, next update time, and any customer action required.
 5. After recovery, document cause, timeline, safeguards, and follow-up owner.
 
+## Authentication and abuse alerts
+
+The control plane applies a broad API Gateway limit of 25 requests per second with a burst of 50.
+Sensitive routes receive lower gateway limits before Lambda, database, email, model, or cloud work
+starts: invitations, invitation resend, intents, plan generation, AWS verification, support tickets,
+and API credential changes. The Lambda process also has a 60-request-per-minute fallback limit per
+runtime instance for non-health requests.
+
+The operations topic receives alarms for repeated API 401, 403, and 429 responses, repeated
+Cognito sign-in failures, and Cognito sign-in throttling. A single failed customer sign-in does not
+page an operator. Investigate sustained bursts by preserving the time window, request IDs, route
+keys, deployment commit, and redacted Cognito/CloudWatch evidence. Do not attempt to identify a
+customer from raw authentication data or request their one-time code.
+
 ## Backup and recovery drill procedure
 
 Aurora backups and deletion protection are enabled, but restore evidence is not yet recorded.

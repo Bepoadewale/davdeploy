@@ -14,6 +14,17 @@ variable "frontend_origin" {
   }
 }
 
+variable "application_rate_limit_per_minute" {
+  type        = number
+  description = "Per-Lambda-instance fallback limit for non-health API requests. API Gateway route limits remain the primary distributed control."
+  default     = 60
+
+  validation {
+    condition     = var.application_rate_limit_per_minute >= 1 && var.application_rate_limit_per_minute <= 600
+    error_message = "application_rate_limit_per_minute must be between 1 and 600."
+  }
+}
+
 variable "artifact_bucket" {
   type        = string
   description = "Existing private S3 bucket containing the verified Lambda package."

@@ -25,5 +25,8 @@ configured by the deploying organization before public sign-up.
 
 Bearer-token API use avoids browser-cookie CSRF exposure. CSP, anti-framing,
 strict referrer, permissions and optional rate-limit protections are included.
-The in-process limiter is suitable for local/self-hosted demos; clustered
-hosting must replace it with a shared limiter at the edge or control plane.
+The hosted control plane enforces a broad API Gateway limit and stricter route limits before
+email delivery, model work, cloud verification, support-ticket creation, or API credential changes.
+It also keeps a per-runtime fallback limit. The fallback is defense in depth only; Gateway limits
+are the shared control. Repeated API 401, 403, and 429 responses, Cognito sign-in failures, and
+Cognito sign-in throttling notify the operations topic.
