@@ -23,8 +23,9 @@ make verify
 ## Observed result
 
 The pre-fix live connection verification returned `AccessDenied` for the
-separate execution role. The updated policy allows that exact role-name pattern;
-33 focused tests and the 305-test full suite passed locally.
+separate execution role. The updated policy was deployed through a reviewed
+Terraform plan/apply; after the template trust correction, live verification
+succeeded. Thirty-three focused tests and the 305-test full suite passed locally.
 
 ## Teardown
 

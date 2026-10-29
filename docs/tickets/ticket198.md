@@ -36,8 +36,8 @@ condition, and cover the contract.
 
 ## Acceptance status
 
-Implemented locally; template publication and controlled stack update follow
-the reviewed merge.
+Published and applied on 2026-10-29. The controlled stack was updated to the
+immutable template and the administrator-pilot connection verified live.
 
 ## Tests / validation performed
 
@@ -55,5 +55,5 @@ only for a pre-execution identity verification protected by the external ID.
 
 ## Follow-up work
 
-Publish the immutable template, update the controlled connection stack, and
-re-run verification before any authenticated plan-only test.
+Validate the authenticated plan-only workflow before any cost-bearing workload
+execution.

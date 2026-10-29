@@ -21,8 +21,10 @@ uv run pytest tests/test_customer_aws_connection_contract.py tests/test_customer
 ## Observed result
 
 The template accepts both the bounded CodeBuild execution broker and the
-hosted verifier under one required external-ID condition. CloudFormation
-validation succeeded and 12 focused tests passed.
+hosted verifier under one required external-ID condition. It was published at a
+new immutable public key, the controlled stack was updated, and live connection
+verification succeeded. CloudFormation validation succeeded and 12 focused
+tests passed.
 
 ## Teardown
 
