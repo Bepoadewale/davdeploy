@@ -16,6 +16,8 @@ export default {
     headers.set('x-davdeploy-edge', env.DAVDEPLOY_EDGE_ORIGIN_TOKEN);
     headers.set('x-forwarded-host', inbound.host);
 
-    return fetch(new Request(upstream.toString(), request, { headers }));
+    const init = { method: request.method, headers, redirect: 'manual' };
+    if (!['GET', 'HEAD'].includes(request.method)) init.body = request.body;
+    return fetch(new Request(upstream.toString(), init));
   },
 };
