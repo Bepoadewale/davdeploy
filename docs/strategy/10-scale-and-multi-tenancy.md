@@ -117,6 +117,27 @@ region, database active time, logs, retention, email volume and model traffic
 can change it. Customer infrastructure must remain billed to the customer's
 cloud account.
 
+### Aurora availability decision
+
+The initial Aurora Serverless v2 configuration is `min_capacity = 0` and
+`max_capacity = 2`. It can pause after idle time and eliminates database
+compute charges while paused. The first request after a pause can take roughly
+15 seconds or longer to establish a database connection.
+
+Keep this cost-optimised setting while the control plane is lightly used. When
+real customer evidence shows that first-use latency is unacceptable, set the
+minimum to **0.5 ACU**. This keeps the database warm and removes the
+auto-resume delay, at an indicative US East compute cost of about
+**$43.80/month** at 0.5 ACU continuously, plus database storage and related
+AWS services. At the current observed early-use level, that is roughly
+$35–$40/month more than the paused configuration.
+
+This decision does **not** require an ECS migration. Keep API and worker
+functions on Lambda for early customers. Investigate one provisioned Lambda
+concurrency only if measured Lambda cold starts become a separate customer
+experience problem. ECS Fargate remains a growth-stage decision for sustained
+traffic, long-running work, or worker-concurrency pressure.
+
 ### Growth trigger: containers only when evidence requires them
 
 Move API and worker processes to separate ECS Fargate services only when
