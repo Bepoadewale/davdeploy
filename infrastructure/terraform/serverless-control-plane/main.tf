@@ -84,17 +84,15 @@ resource "aws_cognito_user_pool" "identity" {
   user_pool_tier           = "ESSENTIALS"
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
-  # Optional preserves the existing passwordless email-code journey. Cognito TOTP
-  # is available for users who choose a password-based MFA journey; Cognito does
-  # not combine an enrolled TOTP factor with EMAIL_OTP passwordless sign-in.
-  mfa_configuration = "OPTIONAL"
+  # Cognito requires a password first factor before software-token MFA.
+  mfa_configuration = "ON"
 
   software_token_mfa_configuration {
     enabled = true
   }
 
   sign_in_policy {
-    allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP"]
+    allowed_first_auth_factors = ["PASSWORD"]
   }
 
   password_policy {
@@ -141,12 +139,10 @@ resource "aws_cognito_user_pool_client" "frontend" {
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   callback_urls                        = ["${var.frontend_origin}/auth/callback"]
   logout_urls                          = [var.frontend_origin]
-  # USER_PASSWORD_AUTH is retained solely for users who choose authenticator-app
-  # MFA. Cognito requires a password-based first factor before TOTP.
-  explicit_auth_flows    = ["ALLOW_USER_AUTH", "ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
-  access_token_validity  = 15
-  id_token_validity      = 15
-  refresh_token_validity = 7
+  explicit_auth_flows                  = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  access_token_validity                = 15
+  id_token_validity                    = 15
+  refresh_token_validity               = 1
 
   token_validity_units {
     access_token  = "minutes"
