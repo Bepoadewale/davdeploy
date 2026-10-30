@@ -656,6 +656,55 @@ resource "aws_apigatewayv2_route" "authenticated" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+locals {
+  # API Gateway can throttle only declared routes. These routes take precedence over
+  # the authenticated $default route and retain its exact integration and JWT boundary.
+  sensitive_api_route_limits = {
+    "POST /api/v1/workspace/invitations" = {
+      burst = 3
+      rate  = 1
+    }
+    "POST /api/v1/workspace/invitations/{invitation_id}/resend" = {
+      burst = 2
+      rate  = 1
+    }
+    "POST /api/v1/intents" = {
+      burst = 3
+      rate  = 1
+    }
+    "POST /api/v1/intents/{intent_id}/plans" = {
+      burst = 2
+      rate  = 0.5
+    }
+    "POST /api/v1/cloud-connections/{connection_id}/aws-verify" = {
+      burst = 1
+      rate  = 0.2
+    }
+    "POST /api/v1/support/tickets" = {
+      burst = 3
+      rate  = 1
+    }
+    "POST /api/v1/api-credentials" = {
+      burst = 3
+      rate  = 1
+    }
+    "DELETE /api/v1/api-credentials/{credential_id}" = {
+      burst = 3
+      rate  = 1
+    }
+  }
+}
+
+resource "aws_apigatewayv2_route" "sensitive" {
+  for_each = local.sensitive_api_route_limits
+
+  api_id             = aws_apigatewayv2_api.control_plane.id
+  route_key          = each.key
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.control_plane.id
   route_key = "GET /healthz"
@@ -688,52 +737,14 @@ resource "aws_apigatewayv2_stage" "default" {
 
   # These routes trigger email delivery, model work, cloud API calls, or credentials.
   # Gateway enforcement is shared across Lambda instances and happens before application work.
-  route_settings {
-    route_key              = "POST /api/v1/workspace/invitations"
-    throttling_burst_limit = 3
-    throttling_rate_limit  = 1
-  }
+  dynamic "route_settings" {
+    for_each = local.sensitive_api_route_limits
 
-  route_settings {
-    route_key              = "POST /api/v1/workspace/invitations/{invitation_id}/resend"
-    throttling_burst_limit = 2
-    throttling_rate_limit  = 1
-  }
-
-  route_settings {
-    route_key              = "POST /api/v1/intents"
-    throttling_burst_limit = 3
-    throttling_rate_limit  = 1
-  }
-
-  route_settings {
-    route_key              = "POST /api/v1/intents/{intent_id}/plans"
-    throttling_burst_limit = 2
-    throttling_rate_limit  = 0.5
-  }
-
-  route_settings {
-    route_key              = "POST /api/v1/cloud-connections/{connection_id}/aws-verify"
-    throttling_burst_limit = 1
-    throttling_rate_limit  = 0.2
-  }
-
-  route_settings {
-    route_key              = "POST /api/v1/support/tickets"
-    throttling_burst_limit = 3
-    throttling_rate_limit  = 1
-  }
-
-  route_settings {
-    route_key              = "POST /api/v1/api-credentials"
-    throttling_burst_limit = 3
-    throttling_rate_limit  = 1
-  }
-
-  route_settings {
-    route_key              = "DELETE /api/v1/api-credentials/{credential_id}"
-    throttling_burst_limit = 3
-    throttling_rate_limit  = 1
+    content {
+      route_key              = route_settings.key
+      throttling_burst_limit = route_settings.value.burst
+      throttling_rate_limit  = route_settings.value.rate
+    }
   }
 
   access_log_settings {
