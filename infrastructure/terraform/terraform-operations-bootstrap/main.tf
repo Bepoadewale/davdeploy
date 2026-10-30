@@ -558,6 +558,17 @@ data "aws_iam_policy_document" "apply_control_plane" {
       "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/davdeploy*:*"
     ]
   }
+  # API Gateway creates a CloudWatch Logs delivery when stage access logging is enabled.
+  # CloudWatch Logs log-delivery actions do not support resource-level restrictions.
+  statement {
+    sid    = "ApiGatewayAccessLogDelivery"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
+      "logs:DeleteLogDelivery", "logs:ListLogDeliveries"
+    ]
+    resources = ["*"]
+  }
   statement {
     sid    = "OperationalAlarms"
     effect = "Allow"
