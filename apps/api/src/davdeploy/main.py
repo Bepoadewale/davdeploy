@@ -49,6 +49,7 @@ from davdeploy.domain import (
     TerraformPlanRenderRequest,
     TerraformPlanReviewRequest,
 )
+from davdeploy.edge_origin import edge_origin_is_authorized
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.product_readiness import security_headers
@@ -146,6 +147,11 @@ configure_frontend_cors(
 @app.middleware("http")
 async def apply_api_guardrails(request: Request, call_next):
     """Apply bounded abuse protection, contract metadata and security headers."""
+    if not edge_origin_is_authorized(request.headers.get("x-davdeploy-edge")):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "This API is available through the DavDeploy edge endpoint."},
+        )
     client = request.client.host if request.client else "unknown"
     if (
         RATE_LIMIT.limit

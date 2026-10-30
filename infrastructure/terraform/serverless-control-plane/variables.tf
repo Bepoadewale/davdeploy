@@ -135,6 +135,12 @@ variable "resend_invitation_parameter_name" {
   default     = ""
 }
 
+variable "edge_origin_token_parameter_name" {
+  type        = string
+  description = "Optional SecureString SSM parameter holding the Cloudflare Worker origin token. Empty keeps the direct API path available during a staged edge rollout."
+  default     = ""
+}
+
 variable "database_name" {
   type        = string
   description = "Aurora PostgreSQL database name."

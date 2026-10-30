@@ -84,7 +84,14 @@ resource "aws_cognito_user_pool" "identity" {
   user_pool_tier           = "ESSENTIALS"
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
-  mfa_configuration        = "OFF"
+  # Optional preserves the existing passwordless email-code journey. Cognito TOTP
+  # is available for users who choose a password-based MFA journey; Cognito does
+  # not combine an enrolled TOTP factor with EMAIL_OTP passwordless sign-in.
+  mfa_configuration = "OPTIONAL"
+
+  software_token_mfa_configuration {
+    enabled = true
+  }
 
   sign_in_policy {
     allowed_first_auth_factors = ["PASSWORD", "EMAIL_OTP"]
@@ -134,10 +141,12 @@ resource "aws_cognito_user_pool_client" "frontend" {
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   callback_urls                        = ["${var.frontend_origin}/auth/callback"]
   logout_urls                          = [var.frontend_origin]
-  explicit_auth_flows                  = ["ALLOW_USER_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
-  access_token_validity                = 15
-  id_token_validity                    = 15
-  refresh_token_validity               = 7
+  # USER_PASSWORD_AUTH is retained solely for users who choose authenticator-app
+  # MFA. Cognito requires a password-based first factor before TOTP.
+  explicit_auth_flows    = ["ALLOW_USER_AUTH", "ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  access_token_validity  = 15
+  id_token_validity      = 15
+  refresh_token_validity = 7
 
   token_validity_units {
     access_token  = "minutes"
@@ -245,6 +254,11 @@ resource "aws_iam_role_policy" "api" {
         Effect   = "Allow"
         Action   = ["ssm:GetParameter"]
         Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.resend_invitation_parameter_name}"
+      }],
+      var.edge_origin_token_parameter_name == "" ? [] : [{
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.edge_origin_token_parameter_name}"
       }]
     )
   })
@@ -536,6 +550,7 @@ locals {
     DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER       = var.resend_invitation_parameter_name
     DAVDEPLOY_RESEND_FROM_ADDRESS                = var.resend_invitation_parameter_name == "" ? "" : "DavDeploy <notify@davdeploy.tech>"
     DAVDEPLOY_RESEND_REPLY_TO_ADDRESS            = var.resend_invitation_parameter_name == "" ? "" : "support@davdeploy.tech"
+    DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER    = var.edge_origin_token_parameter_name
     DAVDEPLOY_FRONTEND_ORIGIN                    = var.frontend_origin
     DAVDEPLOY_CONNECTION_SECRET_BACKEND          = "aws_secrets_manager"
     DAVDEPLOY_CONNECTION_SECRET_PREFIX           = "davdeploy/customer-connections"
