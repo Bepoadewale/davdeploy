@@ -387,6 +387,7 @@ def test_operations_apply_role_can_manage_only_davdeploy_api_security_logs():
     assert 'sid    = "ApiGatewayAccessLogDelivery"' in bootstrap
     assert '"logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery"' in bootstrap
     assert '"logs:DeleteLogDelivery", "logs:ListLogDeliveries"' in bootstrap
+    assert '"logs:DescribeResourcePolicies", "logs:PutResourcePolicy"' in bootstrap
     assert "log-group:*" not in bootstrap
 
 
