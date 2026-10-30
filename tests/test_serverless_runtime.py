@@ -366,6 +366,9 @@ def test_serverless_stack_limits_sensitive_routes_before_application_work():
         "POST /api/v1/api-credentials",
     ):
         assert f'"{route}"' in terraform
+    assert 'resource "aws_apigatewayv2_route" "sensitive"' in terraform
+    assert "for_each = local.sensitive_api_route_limits" in terraform
+    assert "authorization_type = \"JWT\"" in terraform
     assert "DAVDEPLOY_RATE_LIMIT_PER_MINUTE" in terraform
     assert 'resource "aws_cloudwatch_log_metric_filter" "api_unauthorized"' in terraform
     assert 'resource "aws_cloudwatch_log_metric_filter" "api_forbidden"' in terraform
@@ -387,5 +390,7 @@ def test_serverless_stack_allows_only_preflight_without_jwt():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert 'route_key = "OPTIONS /"' in terraform
     assert 'route_key = "OPTIONS /{proxy+}"' in terraform
-    assert terraform.count('authorization_type = "JWT"') == 1
-    assert terraform.count("authorizer_id      = aws_apigatewayv2_authorizer.cognito.id") == 1
+    assert terraform.count('authorization_type = "JWT"') == 2
+    assert terraform.count("authorizer_id      = aws_apigatewayv2_authorizer.cognito.id") == 2
+    assert 'resource "aws_apigatewayv2_route" "authenticated"' in terraform
+    assert 'resource "aws_apigatewayv2_route" "sensitive"' in terraform
