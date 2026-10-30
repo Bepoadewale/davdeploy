@@ -20,3 +20,17 @@ direct API Gateway request cannot access the application once the guard is on.
 
 The Worker preserves browser `Origin` and API authorization headers. API CORS
 continues to allow only the configured DavDeploy frontend origin.
+
+## Free edge rules
+
+The zone has three narrow Free-plan protections, managed outside this repository:
+
+- block common probe paths (`/.env`, `/.git/config`, `/wp-login.php`, `/xmlrpc.php`);
+- block methods other than GET, POST, PUT, PATCH, DELETE, and OPTIONS on
+  `api.davdeploy.tech`;
+- block an IP after more than 20 API requests in 10 seconds at a Cloudflare
+  colocation, for 10 seconds.
+
+The application and API Gateway limits remain stricter controls for sensitive
+operations. Cloudflare's Free rate limiter only supports the short 10-second
+period above, so this is a burst guard rather than the authoritative limiter.
