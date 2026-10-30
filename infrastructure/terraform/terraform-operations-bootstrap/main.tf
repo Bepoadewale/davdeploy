@@ -340,6 +340,18 @@ resource "aws_iam_role_policy" "apply_backend" {
 
 data "aws_iam_policy_document" "apply_backend" {
   statement {
+    sid       = "CloudTrailAuditBucketLifecycle"
+    effect    = "Allow"
+    actions   = ["s3:CreateBucket", "s3:DeleteBucket", "s3:PutBucketPolicy", "s3:DeleteBucketPolicy", "s3:PutBucketPublicAccessBlock", "s3:PutBucketOwnershipControls", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning", "s3:PutBucketTagging"]
+    resources = ["arn:${data.aws_partition.current.partition}:s3:::davdeploy-management-audit-${data.aws_caller_identity.current.account_id}-${var.region}"]
+  }
+  statement {
+    sid       = "CloudTrailLifecycle"
+    effect    = "Allow"
+    actions   = ["cloudtrail:CreateTrail", "cloudtrail:UpdateTrail", "cloudtrail:DeleteTrail", "cloudtrail:StartLogging", "cloudtrail:StopLogging", "cloudtrail:AddTags", "cloudtrail:RemoveTags"]
+    resources = ["arn:${data.aws_partition.current.partition}:cloudtrail:${var.region}:${data.aws_caller_identity.current.account_id}:trail/davdeploy-management-audit"]
+  }
+  statement {
     sid       = "StateBucket"
     effect    = "Allow"
     actions   = ["s3:GetBucketLocation", "s3:ListBucket"]
