@@ -730,6 +730,10 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # API Gateway rejects route-level settings until every referenced route exists.
+  # Keep the stage update after creation when this map introduces a new route.
+  depends_on = [aws_apigatewayv2_route.sensitive]
+
   default_route_settings {
     throttling_burst_limit = 50
     throttling_rate_limit  = 25

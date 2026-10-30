@@ -368,6 +368,7 @@ def test_serverless_stack_limits_sensitive_routes_before_application_work():
         assert f'"{route}"' in terraform
     assert 'resource "aws_apigatewayv2_route" "sensitive"' in terraform
     assert "for_each = local.sensitive_api_route_limits" in terraform
+    assert "depends_on = [aws_apigatewayv2_route.sensitive]" in terraform
     assert "authorization_type = \"JWT\"" in terraform
     assert "DAVDEPLOY_RATE_LIMIT_PER_MINUTE" in terraform
     assert 'resource "aws_cloudwatch_log_metric_filter" "api_unauthorized"' in terraform
