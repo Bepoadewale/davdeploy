@@ -1,0 +1,12 @@
+name = "davdeploy-api-edge"
+main = "src/index.js"
+compatibility_date = "2026-10-30"
+
+# The secret is uploaded separately with `wrangler secret put`; it is never
+# stored in source, Terraform state, browser configuration, or GitHub Actions.
+[vars]
+UPSTREAM_API_ORIGIN = "https://u885eka88l.execute-api.us-east-1.amazonaws.com"
+
+[[routes]]
+pattern = "api.davdeploy.tech/*"
+zone_name = "davdeploy.tech"

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from davdeploy import db, executor, lambda_cognito_link, main, policy, security
+from davdeploy import db, edge_origin, executor, lambda_cognito_link, main, policy, security
 from davdeploy.domain import PolicyResult
 from davdeploy.lambda_policy import handler as policy_handler
 from fastapi.testclient import TestClient
@@ -101,6 +101,30 @@ def test_aurora_readiness_exhaustion_is_a_controlled_503(monkeypatch):
     assert response.json() == {"detail": "database is resuming; retry shortly"}
     assert response.headers["retry-after"] == "10"
     assert response.headers["x-davdeploy-api-version"] == "v1"
+
+
+def test_edge_origin_guard_rejects_direct_requests_when_configured(monkeypatch):
+    edge_origin.configured_origin_token.cache_clear()
+    monkeypatch.setenv("DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER", "/davdeploy/edge")
+
+    class Ssm:
+        def get_parameter(self, **kwargs):
+            assert kwargs == {"Name": "/davdeploy/edge", "WithDecryption": True}
+            return {"Parameter": {"Value": "edge-secret"}}
+
+    monkeypatch.setattr(edge_origin.boto3, "client", lambda service: Ssm())
+    assert edge_origin.edge_origin_is_authorized("edge-secret")
+    assert not edge_origin.edge_origin_is_authorized("forged")
+    response = TestClient(main.app).get("/healthz")
+    assert response.status_code == 403
+    assert "DavDeploy edge endpoint" in response.json()["detail"]
+    edge_origin.configured_origin_token.cache_clear()
+
+
+def test_edge_origin_guard_is_off_without_a_parameter(monkeypatch):
+    edge_origin.configured_origin_token.cache_clear()
+    monkeypatch.delenv("DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER", raising=False)
+    assert edge_origin.edge_origin_is_authorized(None)
 
 
 def test_policy_lambda_preserves_approval_boundary():

@@ -48,6 +48,7 @@ jobs:
       TF_VAR_ses_identity_arn: ${{ secrets.SES_IDENTITY_ARN }}
       TF_VAR_ses_from_address: ${{ secrets.SES_FROM_ADDRESS }}
       TF_VAR_resend_invitation_parameter_name: ${{ vars.RESEND_INVITATION_PARAMETER_NAME || '' }}
+      TF_VAR_edge_origin_token_parameter_name: ${{ vars.DAVDEPLOY_EDGE_ORIGIN_TOKEN_PARAMETER_NAME || '' }}
       TF_VAR_budget_notification_email: ${{ secrets.BUDGET_NOTIFICATION_EMAIL }}
 
     steps:
