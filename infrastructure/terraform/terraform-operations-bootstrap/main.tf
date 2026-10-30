@@ -565,7 +565,8 @@ data "aws_iam_policy_document" "apply_control_plane" {
     effect = "Allow"
     actions = [
       "logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery",
-      "logs:DeleteLogDelivery", "logs:ListLogDeliveries"
+      "logs:DeleteLogDelivery", "logs:ListLogDeliveries", "logs:DescribeLogGroups",
+      "logs:DescribeResourcePolicies", "logs:PutResourcePolicy"
     ]
     resources = ["*"]
   }
