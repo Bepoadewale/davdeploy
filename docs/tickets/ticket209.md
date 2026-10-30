@@ -25,7 +25,7 @@ future cell design.
 - Current account cost data was reviewed only to calibrate the small-customer
   planning range; no resource was changed.
 
-## Work to be done
+## Work planned for the PR
 
 - Add an architecture and cost decision record to the scale strategy.
 - State the first-customer stack, indicative cost boundary, ECS migration
@@ -43,11 +43,11 @@ future cell design.
 
 Implemented locally; pending documentation CI and review.
 
-## Validation performed
+## Tests / validation performed
 
 Documentation review and repository documentation conventions CI are pending.
 
-## Evidence files
+## Evidence files produced
 
 No customer workload test was performed. This is documentation-only.
 
