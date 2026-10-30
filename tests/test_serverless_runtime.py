@@ -372,6 +372,17 @@ def test_serverless_stack_limits_sensitive_routes_before_application_work():
     assert 'resource "aws_cloudwatch_log_metric_filter" "api_throttled"' in terraform
 
 
+def test_operations_apply_role_can_manage_only_davdeploy_api_security_logs():
+    bootstrap = (
+        ROOT / "infrastructure/terraform/terraform-operations-bootstrap/main.tf"
+    ).read_text()
+
+    assert '"logs:PutMetricFilter", "logs:DeleteMetricFilter"' in bootstrap
+    assert "log-group:/aws/apigateway/davdeploy*" in bootstrap
+    assert "log-group:/aws/lambda/davdeploy-*" in bootstrap
+    assert "log-group:*" not in bootstrap
+
+
 def test_serverless_stack_allows_only_preflight_without_jwt():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert 'route_key = "OPTIONS /"' in terraform

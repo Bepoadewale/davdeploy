@@ -548,11 +548,14 @@ data "aws_iam_policy_document" "apply_control_plane" {
     effect = "Allow"
     actions = [
       "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy",
-      "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource"
+      "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource",
+      "logs:PutMetricFilter", "logs:DeleteMetricFilter"
     ]
     resources = [
       "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/davdeploy-*",
-      "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/davdeploy-*:*"
+      "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/davdeploy-*:*",
+      "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/davdeploy*",
+      "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/davdeploy*:*"
     ]
   }
   statement {
