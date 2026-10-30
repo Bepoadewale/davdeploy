@@ -348,7 +348,7 @@ data "aws_iam_policy_document" "apply_backend" {
   statement {
     sid       = "CloudTrailLifecycle"
     effect    = "Allow"
-    actions   = ["cloudtrail:CreateTrail", "cloudtrail:UpdateTrail", "cloudtrail:DeleteTrail", "cloudtrail:StartLogging", "cloudtrail:StopLogging", "cloudtrail:AddTags", "cloudtrail:RemoveTags"]
+    actions   = ["cloudtrail:CreateTrail", "cloudtrail:UpdateTrail", "cloudtrail:DeleteTrail", "cloudtrail:StartLogging", "cloudtrail:StopLogging", "cloudtrail:PutEventSelectors", "cloudtrail:AddTags", "cloudtrail:RemoveTags"]
     resources = ["arn:${data.aws_partition.current.partition}:cloudtrail:${var.region}:${data.aws_caller_identity.current.account_id}:trail/davdeploy-management-audit"]
   }
   statement {
