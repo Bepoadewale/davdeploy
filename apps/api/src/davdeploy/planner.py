@@ -14,6 +14,7 @@ from davdeploy.domain import (
     MonitoringSpecification,
     WorkloadSpec,
 )
+from davdeploy.module_catalogue import compose_modules
 
 
 class AwsV1Planner:
@@ -135,6 +136,7 @@ class AwsV1Planner:
                     private=True,
                 ),
             ],
+            modules=compose_modules(spec, selected.candidate_id),
             dependencies=[
                 "customer AWS account",
                 "GitHub repository connection",
