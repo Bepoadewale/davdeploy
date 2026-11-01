@@ -273,6 +273,12 @@ _CAPABILITY_MODULE = {
 }
 
 
+def known_capabilities() -> frozenset[str]:
+    """Return capability names accepted from model or repository evidence."""
+
+    return frozenset(_CAPABILITY_MODULE)
+
+
 def compose_modules(spec: WorkloadSpec, selected_profile: str) -> list[ArchitectureModule]:
     """Return a dependency-ordered internal module graph for one plan."""
 

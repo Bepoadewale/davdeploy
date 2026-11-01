@@ -105,6 +105,7 @@ def test_repository_analysis_is_persisted_and_feeds_intent_spec():
     assert analysis["selected_branch"] == "main"
     assert intent.spec["runtime"] == "python-fastapi"
     assert intent.spec["stateful"] is True
+    assert "relational_data" in intent.spec["capability_requirements"]
 
 
 def test_public_repository_discovery_uses_real_read_only_evidence():

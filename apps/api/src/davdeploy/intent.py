@@ -29,6 +29,7 @@ from davdeploy.model_gateway import (
     guarded_generate_structured,
     model_input_digest,
 )
+from davdeploy.module_catalogue import known_capabilities
 
 MATERIAL_FIELDS = (
     "source_repository",
@@ -68,6 +69,7 @@ class NovaIntentProposal(BaseModel):
     requires_gpu: bool
     multi_service: bool
     execution_duration_minutes: int | None
+    capability_requirements: list[str] = Field(default_factory=list, max_length=40)
     confidence: float = Field(ge=0, le=1)
 
 
@@ -83,9 +85,7 @@ class NovaIntentProvider:
         data_policy: str | None = None,
     ):
         self.gateway = gateway or configured_model_gateway()
-        self.model_id = model_id or os.getenv(
-            "DAVDEPLOY_BEDROCK_MODEL_ID", NOVA_2_LITE_MODEL_ID
-        )
+        self.model_id = model_id or os.getenv("DAVDEPLOY_BEDROCK_MODEL_ID", NOVA_2_LITE_MODEL_ID)
         self.max_output_tokens = max_output_tokens or int(
             os.getenv("DAVDEPLOY_MODEL_MAX_OUTPUT_TOKENS", "2000")
         )
@@ -111,7 +111,8 @@ class NovaIntentProvider:
                 "Use null only for nullable schema fields. For required boolean requirement fields, "
                 "use false when the capability is not explicitly required. Use an empty list for "
                 "missing list values. AWS is the product's current cloud boundary, not a fact to "
-                "infer from model memory."
+                "infer from model memory. Select capability_requirements only from the supplied "
+                "product vocabulary; those are customer needs, never AWS services."
             ),
             "customer_request": prompt,
             "selected_repository": source_repository,
@@ -189,6 +190,7 @@ class NovaIntentProvider:
             requires_gpu=proposal.requires_gpu,
             multi_service=proposal.multi_service,
             execution_duration_minutes=proposal.execution_duration_minutes,
+            capability_requirements=_safe_capabilities(proposal.capability_requirements),
             field_status=field_status,
             unknowns=unknowns,
             confidence=proposal.confidence,
@@ -247,6 +249,7 @@ class DeterministicIntentProvider:
         requires_kubernetes = "kubernetes" in lower and any(
             word in lower for word in ("required", "must", "need")
         )
+        capabilities = _capabilities_from_prompt(lower)
         unknowns = []
         if not source_repository:
             unknowns.append("source_repository")
@@ -289,6 +292,7 @@ class DeterministicIntentProvider:
             multi_service=any(
                 word in lower for word in ("multi-service", "microservice", "multiple services")
             ),
+            capability_requirements=capabilities,
             field_status={
                 "data_classification": "INFERRED"
                 if data_classification != "unknown"
@@ -333,6 +337,47 @@ def _material_unknowns(proposal: NovaIntentProposal, source_repository: str | No
         "environments": proposal.environments,
     }
     return [field for field in MATERIAL_FIELDS if not values[field]]
+
+
+def _safe_capabilities(capabilities: list[str]) -> list[str]:
+    """Keep only the product's allow-listed capability vocabulary."""
+
+    known = known_capabilities()
+    return sorted(
+        {
+            capability.strip().lower()
+            for capability in capabilities
+            if capability.strip().lower() in known
+        }
+    )
+
+
+def _capabilities_from_prompt(prompt: str) -> list[str]:
+    """Deterministic fallback when Bedrock is disabled in local/hosted policy."""
+
+    vocabulary = {
+        "identity": ("login", "sign in", "user account", "authentication", "users"),
+        "relational_data": ("database", "postgres", "mysql", "transaction"),
+        "nosql_data": ("dynamodb", "key-value", "key value"),
+        "file_storage": ("upload", "uploads", "file", "files", "asset", "assets"),
+        "jobs": ("background job", "background jobs", "scheduled", "schedule", "queue"),
+        "events": ("event-driven", "event driven", "webhook", "webhooks"),
+        "realtime": ("real-time", "realtime", "websocket", "live updates", "chat"),
+        "search": ("search", "indexing"),
+        "payments": ("payment", "payments", "subscription", "checkout"),
+        "ai": ("ai", "rag", "llm", "assistant", "model inference"),
+        "machine_learning": ("machine learning", "training", "ml model"),
+        "analytics": ("analytics", "warehouse", "reporting"),
+        "streaming": ("streaming", "stream processing", "kinesis", "kafka"),
+        "media": ("video", "media", "transcode", "live stream"),
+        "private_connectivity": ("private network", "private connectivity", "vpn", "hybrid"),
+        "backup_recovery": ("backup", "recovery", "disaster recovery"),
+    }
+    return sorted(
+        capability
+        for capability, terms in vocabulary.items()
+        if any(term in prompt for term in terms)
+    )
 
 
 def _material_question(field: str) -> MaterialQuestion:
