@@ -98,6 +98,8 @@ from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
 from davdeploy.terraform_generation import NovaTerraformGenerator
 
+BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
+
 
 def plan_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(
@@ -621,9 +623,11 @@ class ProductService:
         )
 
     def can_author_blog(self, principal: Principal) -> bool:
-        """Publishing is global and limited to verified DavDeploy team email accounts."""
+        """Publishing is global and limited to verified team identities."""
         email = (principal.email or "").strip().lower()
-        return principal.email_verified and email.endswith("@davdeploy.tech")
+        return principal.email_verified and (
+            email.endswith("@davdeploy.tech") or email in BLOG_AUTHOR_EMAILS
+        )
 
     def _require_blog_author(self, principal: Principal) -> None:
         if not self.can_author_blog(principal):
