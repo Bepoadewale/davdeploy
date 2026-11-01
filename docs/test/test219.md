@@ -6,9 +6,17 @@ Execution type: Local authorization and Terraform contract validation.
 
 Customer repository: None.
 
-AWS resources created: None.
+Commit: Final implementation commit is recorded by PR #219.
 
-## Commands
+AWS account: None.
+
+AWS region: None.
+
+## Resources created
+
+None.
+
+## Commands executed
 
 ```text
 make test
@@ -16,7 +24,7 @@ make terraform-validate
 make verify
 ```
 
-## Observed evidence
+## Observed result
 
 - Focused authorization/runtime tests: 36 passed.
 - `make verify`: 316 tests passed; configuration, Ruff, OpenAPI, and Docker
@@ -26,7 +34,11 @@ make verify
 - Post and comment ownership remain enforced.
 - The retired author-subject Terraform and workflow configuration is absent.
 
-## Boundary
+## Teardown
+
+No resources were created.
+
+## Final boundary
 
 No customer workload, cloud connection, or public blog post is created by this
 test evidence.

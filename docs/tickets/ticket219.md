@@ -16,6 +16,20 @@ PR #218 supplied a protected Cognito-subject allowlist. The product decision now
 uses a verified team email domain instead, so no operator-maintained author list
 is required.
 
+## Research / references used
+
+- Cognito ID-token verification already validates the signed `email` and
+  `email_verified` claims before a hosted request reaches the product service.
+- Existing server-side workspace membership resolution and blog post/comment
+  ownership checks.
+
+## Work planned for the PR
+
+- Authorize publishing only from verified `@davdeploy.tech` ID-token claims.
+- Remove the retired individual-subject deployment configuration.
+- Add authorization, ownership, runtime-claim, Terraform, and documentation
+  coverage.
+
 ## Work completed
 
 - Carry verified email claims from Cognito's signed ID token into the
@@ -35,9 +49,18 @@ is required.
 - [x] Full local verification passes: `make verify` reported 316 tests passing.
 - [ ] Required CI and hosted deployment pass.
 
-## Validation
+## Acceptance status
+
+Implementation and local verification are complete. CI and the normal saved-plan
+deployment remain pending.
+
+## Tests / validation performed
 
 See `docs/test/test219.md`. Focused tests and `make verify` passed locally.
+
+## Evidence files produced
+
+`docs/test/test219.md`
 
 ## Boundaries
 
