@@ -1,6 +1,7 @@
 # Product Roadmap
 
-1. **V1 foundation:** local intent → plan → policy → approval → bounded execution → observation → destruction.
+1. **Automatic infrastructure programme:** composed capability/module plans → natural-language understanding → universal and specialist module families → live operations → commercial launch. See the [nine-PR programme](automatic-infrastructure-program.md).
+2. **V1 foundation:** local intent → plan → policy → approval → bounded execution → observation → destruction.
 2. **BYOC execution:** scoped AWS role assumption, live inventory and pricing, profile-specific Terraform rendering, GitHub App, desired-state publication and GitOps observation.
 3. **AI runtime controls:** metering, release governance, model quality evidence and cost intelligence.
 4. **Business controls:** enterprise identity, policy packs, support and commercial packaging.

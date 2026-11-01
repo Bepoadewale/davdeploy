@@ -145,3 +145,39 @@ def test_plan_explains_why_it_selected_the_simplest_viable_option():
     assert "lowest-complexity" in (result.recommendation_reason or "")
     assert "band.$" not in (result.recommendation_reason or "")
     assert result.candidates
+
+
+def test_composed_plan_selects_internal_modules_without_customer_service_choices():
+    result = plan(
+        stateful=True,
+        event_driven=True,
+        capability_requirements=["identity", "file_storage", "payments", "realtime"],
+        environments=[EnvironmentName.PRODUCTION],
+    )
+
+    modules = {module.identifier: module for module in result.modules}
+    assert {
+        "aws-serverless-api",
+        "aws-identity",
+        "aws-file-storage",
+        "aws-relational-data",
+        "aws-jobs-events",
+        "aws-payments-webhooks",
+        "aws-realtime",
+        "aws-observability",
+        "aws-backup-recovery",
+    } <= modules.keys()
+    assert modules["aws-serverless-api"].execution_supported is False
+    assert modules["aws-relational-data"].execution_supported is False
+    assert "aws-identity" in modules["aws-realtime"].depends_on
+
+
+def test_private_ai_plan_composes_private_and_ai_modules():
+    result = plan(
+        requires_private_connectivity=True,
+        capability_requirements=["ai", "analytics"],
+    )
+
+    assert {"aws-ai-retrieval", "aws-data-analytics", "aws-private-connectivity"} <= {
+        module.identifier for module in result.modules
+    }

@@ -113,6 +113,7 @@ class WorkloadSpec(BaseModel):
     requires_gpu: bool = False
     multi_service: bool = False
     execution_duration_minutes: int | None = Field(default=None, ge=1)
+    capability_requirements: list[str] = Field(default_factory=list, max_length=40)
     existing_approved_resources: list[str] = Field(default_factory=list)
     repository_analysis: dict[str, Any] = Field(default_factory=dict)
     field_status: dict[str, str] = Field(default_factory=dict)
@@ -138,6 +139,22 @@ class ArchitectureComponent(BaseModel):
     purpose: str
     service: str
     private: bool = True
+
+
+class ArchitectureModule(BaseModel):
+    """One selected internal building block in a composed architecture.
+
+    Modules are an internal product boundary.  They are deliberately not an
+    AWS-service picker exposed to customers.
+    """
+
+    identifier: str
+    display_name: str
+    purpose: str
+    stage: str
+    services: list[str]
+    depends_on: list[str] = Field(default_factory=list)
+    execution_supported: bool = False
 
 
 class CostRange(BaseModel):
@@ -192,6 +209,7 @@ class ArchitecturePlan(BaseModel):
     cloud: str = "aws"
     region: str
     components: list[ArchitectureComponent]
+    modules: list[ArchitectureModule] = Field(default_factory=list)
     dependencies: list[str]
     assumptions: list[str]
     security_controls: list[str]
