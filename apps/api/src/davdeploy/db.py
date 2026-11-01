@@ -280,6 +280,10 @@ def run_migrations(target: Engine | None = None) -> None:
                     connection, "cloud_connections", {"execution_role_arn": "TEXT"}
                 )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (21)"))
+            version = 21
+        if version < 22:
+            Base.metadata.create_all(bind=connection)
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (22)"))
 
 
 def session() -> Generator[Session, None, None]:

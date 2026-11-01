@@ -56,6 +56,8 @@ from davdeploy.models import (
     ApiCredential,
     Approval,
     AuditEvent,
+    BlogComment,
+    BlogPost,
     CloudConnection,
     CloudDiscoveryJob,
     CloudExecutionRun,
@@ -617,6 +619,135 @@ class ProductService:
                 .order_by(PlanComment.created_at)
             ).all()
         )
+
+    @staticmethod
+    def _blog_author_subjects() -> set[str]:
+        return {
+            subject.strip()
+            for subject in os.getenv("DAVDEPLOY_BLOG_AUTHOR_SUBJECTS", "").split(",")
+            if subject.strip()
+        }
+
+    def can_author_blog(self, principal: Principal) -> bool:
+        """Publishing is global, never a permission granted to customer workspaces."""
+        return principal.subject in self._blog_author_subjects()
+
+    def _require_blog_author(self, principal: Principal) -> None:
+        if not self.can_author_blog(principal):
+            raise PermissionError("DavDeploy team publishing access is required")
+
+    @staticmethod
+    def _blog_post_response(post: BlogPost, include_draft: bool = False) -> dict[str, Any]:
+        response = {
+            "id": post.id,
+            "slug": post.slug,
+            "title": post.title,
+            "summary": post.summary,
+            "body": post.body,
+            "author_name": "DavDeploy team",
+            "created_at": post.created_at,
+            "updated_at": post.updated_at,
+            "published_at": post.published_at,
+        }
+        if include_draft:
+            response["state"] = post.state
+            response["author_subject"] = post.author_subject
+        return response
+
+    def public_blog_posts(self) -> list[dict[str, Any]]:
+        posts = self.db.scalars(
+            select(BlogPost)
+            .where(BlogPost.state == "PUBLISHED")
+            .order_by(BlogPost.published_at.desc(), BlogPost.created_at.desc())
+        ).all()
+        return [self._blog_post_response(post) for post in posts]
+
+    def public_blog_post(self, slug: str) -> dict[str, Any]:
+        post = self.db.scalar(
+            select(BlogPost).where(BlogPost.slug == slug, BlogPost.state == "PUBLISHED")
+        )
+        if not post:
+            raise KeyError("blog post not found")
+        return self._blog_post_response(post)
+
+    def team_blog_posts(self, principal: Principal) -> list[dict[str, Any]]:
+        self._require_blog_author(principal)
+        posts = self.db.scalars(select(BlogPost).order_by(BlogPost.updated_at.desc())).all()
+        return [self._blog_post_response(post, include_draft=True) for post in posts]
+
+    def create_blog_post(self, principal: Principal, payload: dict[str, str]) -> dict[str, Any]:
+        self._require_blog_author(principal)
+        post = BlogPost(author_subject=principal.subject, **payload)
+        if post.state == "PUBLISHED":
+            post.published_at = datetime.now(UTC)
+        self.db.add(post)
+        self.db.flush()
+        self.audit(principal, "blog.post_created", "blog_post", post.id, {"slug": post.slug})
+        self.db.commit()
+        return self._blog_post_response(post, include_draft=True)
+
+    def update_blog_post(
+        self, principal: Principal, post_id: str, payload: dict[str, str]
+    ) -> dict[str, Any]:
+        self._require_blog_author(principal)
+        post = self.db.get(BlogPost, post_id)
+        if not post:
+            raise KeyError("blog post not found")
+        if post.author_subject != principal.subject:
+            raise PermissionError("only the post author can edit this post")
+        for key, value in payload.items():
+            setattr(post, key, value)
+        if post.state == "PUBLISHED" and post.published_at is None:
+            post.published_at = datetime.now(UTC)
+        self.audit(principal, "blog.post_updated", "blog_post", post.id, {"slug": post.slug})
+        self.db.commit()
+        return self._blog_post_response(post, include_draft=True)
+
+    @staticmethod
+    def _blog_comment_response(comment: BlogComment) -> dict[str, Any]:
+        return {
+            "id": comment.id,
+            "body": comment.body,
+            "author_name": "DavDeploy reader",
+            "author_subject": comment.author_subject,
+            "created_at": comment.created_at,
+            "updated_at": comment.updated_at,
+        }
+
+    def blog_comments(self, slug: str) -> list[dict[str, Any]]:
+        post = self.db.scalar(
+            select(BlogPost).where(BlogPost.slug == slug, BlogPost.state == "PUBLISHED")
+        )
+        if not post:
+            raise KeyError("blog post not found")
+        comments = self.db.scalars(
+            select(BlogComment).where(BlogComment.post_id == post.id).order_by(BlogComment.created_at)
+        ).all()
+        return [self._blog_comment_response(comment) for comment in comments]
+
+    def create_blog_comment(self, principal: Principal, slug: str, body: str) -> dict[str, Any]:
+        post = self.db.scalar(
+            select(BlogPost).where(BlogPost.slug == slug, BlogPost.state == "PUBLISHED")
+        )
+        if not post:
+            raise KeyError("blog post not found")
+        comment = BlogComment(post_id=post.id, author_subject=principal.subject, body=body)
+        self.db.add(comment)
+        self.db.flush()
+        self.audit(principal, "blog.comment_created", "blog_comment", comment.id, {"post_id": post.id})
+        self.db.commit()
+        return self._blog_comment_response(comment)
+
+    def update_blog_comment(self, principal: Principal, comment_id: str, body: str) -> dict[str, Any]:
+        comment = self.db.get(BlogComment, comment_id)
+        if not comment:
+            raise KeyError("blog comment not found")
+        if comment.author_subject != principal.subject:
+            raise PermissionError("only the comment author can edit this comment")
+        comment.body = body
+        self.audit(principal, "blog.comment_updated", "blog_comment", comment.id, {})
+        self.db.commit()
+        return self._blog_comment_response(comment)
 
     def create_support_ticket(self, principal: Principal, subject: str, body: str) -> SupportTicket:
         ticket = SupportTicket(

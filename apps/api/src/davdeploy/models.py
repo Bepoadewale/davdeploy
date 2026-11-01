@@ -76,6 +76,38 @@ class PlanComment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class BlogPost(Base):
+    """Public editorial content, authored only by explicitly configured team subjects."""
+
+    __tablename__ = "blog_posts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    slug: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    summary: Mapped[str] = mapped_column(String(360))
+    body: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(String(24), default="DRAFT", index=True)
+    author_subject: Mapped[str] = mapped_column(String(160), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BlogComment(Base):
+    """A signed-in reader's public response to a published editorial post."""
+
+    __tablename__ = "blog_comments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    post_id: Mapped[str] = mapped_column(ForeignKey("blog_posts.id"), index=True)
+    author_subject: Mapped[str] = mapped_column(String(160), index=True)
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class UsageRecord(Base):
     __tablename__ = "usage_records"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
