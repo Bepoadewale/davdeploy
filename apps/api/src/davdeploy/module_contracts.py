@@ -133,6 +133,30 @@ _CONTRACTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], b
         ("transcode_failures", "delivery_errors"),
         False,
     ),
+    "aws-kubernetes-platform": (
+        ("aws_eks_cluster", "aws_eks_node_group", "aws_iam_role", "argocd_application"),
+        ("private_endpoint", "irsa", "gitops_review", "cluster_version_policy"),
+        ("node_readiness", "workload_availability", "control_plane_health"),
+        False,
+    ),
+    "aws-gpu-inference": (
+        ("aws_sagemaker_endpoint", "aws_eks_node_group", "aws_iam_role"),
+        ("quota_check", "accelerator_allow_list", "cost_ceiling", "image_provenance"),
+        ("gpu_utilization", "inference_latency", "capacity_errors"),
+        False,
+    ),
+    "aws-cpu-inference": (
+        ("aws_ecs_service", "aws_sagemaker_endpoint", "aws_iam_role"),
+        ("model_provenance", "cost_ceiling", "autoscaling_policy"),
+        ("inference_latency", "invocation_errors"),
+        False,
+    ),
+    "aws-private-connectivity": (
+        ("aws_vpc", "aws_vpc_endpoint", "aws_vpn_connection"),
+        ("private_routing", "restricted_egress", "network_audit"),
+        ("connection_state", "egress_denials"),
+        False,
+    ),
 }
 
 

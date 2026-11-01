@@ -225,3 +225,27 @@ def test_advanced_modules_have_bounded_ai_data_media_and_streaming_contracts():
     assert "query_budget" in contracts["aws-data-analytics"].policy_controls
     assert "iterator_age" in contracts["aws-stream-processing"].observation
     assert "signed_delivery" in contracts["aws-media"].policy_controls
+
+
+def test_specialised_scale_modules_require_explicit_controls():
+    result = plan(
+        requires_kubernetes=True,
+        requires_gpu=True,
+        multi_service=True,
+        peak_rps=100,
+        monthly_budget_usd=2_000,
+        model_requirements={"allow_managed_model": False},
+        capability_requirements=["private_connectivity"],
+    )
+    contracts = {contract.module_id: contract for contract in result.module_contracts}
+    assert "gitops_review" in contracts["aws-kubernetes-platform"].policy_controls
+    assert "private_routing" in contracts["aws-private-connectivity"].policy_controls
+
+    gpu_result = plan(
+        requires_gpu=True,
+        peak_rps=100,
+        monthly_budget_usd=2_000,
+        model_requirements={"allow_managed_model": False},
+    )
+    gpu_contracts = {contract.module_id: contract for contract in gpu_result.module_contracts}
+    assert "quota_check" in gpu_contracts["aws-gpu-inference"].policy_controls
