@@ -318,6 +318,32 @@ def test_intent_fixture_preserves_unknown_material_requirements():
     }
 
 
+def test_intent_fixture_infers_customer_capabilities_not_aws_services():
+    interpretation = DeterministicIntentProvider().interpret(
+        "Build an AI marketplace with user login, payments, file uploads, chat, search, "
+        "background jobs and analytics. Support 2 requests per second and peak at 10. "
+        "Keep monthly infrastructure under $500. Create production.",
+        "https://github.com/example/marketplace",
+        TenantScope(
+            organization_id="org-demo",
+            workspace_id="org-demo",
+            actor_id="user-founder",
+        ),
+    )
+
+    assert {
+        "ai",
+        "identity",
+        "payments",
+        "file_storage",
+        "realtime",
+        "search",
+        "jobs",
+        "analytics",
+    } <= set(interpretation.spec.capability_requirements)
+    assert all("aws_" not in item for item in interpretation.spec.capability_requirements)
+
+
 def test_model_usage_is_metered_with_safe_provider_metadata():
     class MeteredIntentProvider:
         def interpret(self, prompt, source_repository, tenant):

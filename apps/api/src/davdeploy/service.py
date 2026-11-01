@@ -718,7 +718,9 @@ class ProductService:
         if not post:
             raise KeyError("blog post not found")
         comments = self.db.scalars(
-            select(BlogComment).where(BlogComment.post_id == post.id).order_by(BlogComment.created_at)
+            select(BlogComment)
+            .where(BlogComment.post_id == post.id)
+            .order_by(BlogComment.created_at)
         ).all()
         return [self._blog_comment_response(comment) for comment in comments]
 
@@ -731,11 +733,15 @@ class ProductService:
         comment = BlogComment(post_id=post.id, author_subject=principal.subject, body=body)
         self.db.add(comment)
         self.db.flush()
-        self.audit(principal, "blog.comment_created", "blog_comment", comment.id, {"post_id": post.id})
+        self.audit(
+            principal, "blog.comment_created", "blog_comment", comment.id, {"post_id": post.id}
+        )
         self.db.commit()
         return self._blog_comment_response(comment)
 
-    def update_blog_comment(self, principal: Principal, comment_id: str, body: str) -> dict[str, Any]:
+    def update_blog_comment(
+        self, principal: Principal, comment_id: str, body: str
+    ) -> dict[str, Any]:
         comment = self.db.get(BlogComment, comment_id)
         if not comment:
             raise KeyError("blog comment not found")
@@ -4812,6 +4818,16 @@ class ProductService:
             )
             if repository_analysis.analysis.get("database_hints"):
                 spec_payload["stateful"] = True
+                spec_payload["capability_requirements"] = sorted(
+                    set(spec_payload.get("capability_requirements", [])) | {"relational_data"}
+                )
+            repository_capabilities = self._capabilities_from_repository_analysis(
+                repository_analysis.analysis
+            )
+            if repository_capabilities:
+                spec_payload["capability_requirements"] = sorted(
+                    set(spec_payload.get("capability_requirements", [])) | repository_capabilities
+                )
         state = LifecycleState.NEEDS_INPUT if spec.unknowns else LifecycleState.PLANNED
         intent = WorkloadIntent(
             organization_id=principal.organization_id,
@@ -4882,6 +4898,26 @@ class ProductService:
         if "python" in hints:
             return "python"
         return None
+
+    @staticmethod
+    def _capabilities_from_repository_analysis(analysis: dict[str, Any]) -> set[str]:
+        """Map safe repository hints to customer needs, never cloud-service choices."""
+
+        hints = " ".join(
+            str(item).lower()
+            for field in ("framework_hints", "runtime_hints", "data_hints", "deployment_hints")
+            for item in analysis.get(field, [])
+        )
+        capabilities: set[str] = set()
+        if any(token in hints for token in ("postgres", "mysql", "prisma", "sqlalchemy")):
+            capabilities.add("relational_data")
+        if any(token in hints for token in ("redis", "dynamodb", "mongodb")):
+            capabilities.add("nosql_data")
+        if any(token in hints for token in ("websocket", "socket.io", "graphql")):
+            capabilities.add("realtime")
+        if any(token in hints for token in ("celery", "bull", "rq", "worker")):
+            capabilities.add("jobs")
+        return capabilities
 
     def _intent(self, principal: Principal, intent_id: str) -> WorkloadIntent:
         intent = self.db.get(WorkloadIntent, intent_id)

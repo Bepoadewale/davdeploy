@@ -108,6 +108,16 @@ def test_nova_intent_is_typed_tenant_scoped_and_non_authoritative():
     assert "approval" not in result.spec.model_dump()
 
 
+def test_nova_intent_keeps_only_allow_listed_customer_capabilities():
+    intent_provider, _ = provider(
+        proposal(capability_requirements=["ai", "payments", "made_up_aws_admin_access"])
+    )
+
+    result = intent_provider.interpret("Deploy my AI product.", "example/ai", scope())
+
+    assert result.spec.capability_requirements == ["ai", "payments"]
+
+
 def test_nova_intent_recalculates_material_unknowns_locally():
     intent_provider, _ = provider(
         proposal(
