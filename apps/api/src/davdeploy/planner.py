@@ -17,6 +17,7 @@ from davdeploy.domain import (
 from davdeploy.module_catalogue import compose_modules
 from davdeploy.module_contracts import module_contracts
 from davdeploy.module_execution import module_execution_contracts
+from davdeploy.operational_readiness import operational_readiness
 
 
 class AwsV1Planner:
@@ -142,6 +143,7 @@ class AwsV1Planner:
             modules=modules,
             module_contracts=module_contracts(modules),
             module_execution=module_execution_contracts(modules),
+            operational_readiness=operational_readiness(modules),
             dependencies=[
                 "customer AWS account",
                 "GitHub repository connection",

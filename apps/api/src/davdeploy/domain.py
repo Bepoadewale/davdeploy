@@ -177,6 +177,14 @@ class ModuleExecutionContract(BaseModel):
     destroy_strategy: str
 
 
+class OperationalReadiness(BaseModel):
+    cost_evidence_state: str
+    quota_evidence_state: str
+    health_checks: list[str]
+    incident_controls: list[str]
+    recovery_controls: list[str]
+
+
 class CostRange(BaseModel):
     currency: str = "USD"
     monthly_low: int
@@ -232,6 +240,7 @@ class ArchitecturePlan(BaseModel):
     modules: list[ArchitectureModule] = Field(default_factory=list)
     module_contracts: list[ModuleContract] = Field(default_factory=list)
     module_execution: list[ModuleExecutionContract] = Field(default_factory=list)
+    operational_readiness: OperationalReadiness | None = None
     dependencies: list[str]
     assumptions: list[str]
     security_controls: list[str]
