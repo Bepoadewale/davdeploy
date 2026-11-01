@@ -96,19 +96,20 @@ record the full journey. Delivery confirmation alone does not prove workspace on
 
 ## Cognito account and authentication mail
 
-Cognito invokes the dedicated `davdeploy-cognito-email-sender` Lambda for confirmation, recovery,
-and email-OTP messages. The sender decrypts Cognito's one-time code with its customer-managed KMS
-key and sends it through Resend as `DavDeploy <notify@davdeploy.tech>`, with replies directed to
-`support@davdeploy.tech`. This is separate from the product invitation adapter, but uses the same
-verified Resend domain and narrowly scoped Parameter Store key.
+Cognito invokes the dedicated `davdeploy-cognito-email-sender` Lambda for account confirmation and
+password-recovery messages. The sender decrypts Cognito's one-time code with its customer-managed
+KMS key and sends it through Resend as `DavDeploy <notify@davdeploy.tech>`, with replies directed
+to `support@davdeploy.tech`. This is separate from the product invitation adapter, but uses the
+same verified Resend domain and narrowly scoped Parameter Store key.
 
 Amazon SES remains configured on the user pool as a fallback configuration, but Cognito custom
 sender delivery does not depend on SES production access or SES recipient verification. Do not
 remove the KMS key, sender Lambda, its invoke permission, or the sender's exact SSM/KMS grants:
 each is required for Cognito's encrypted-code delivery path.
 
-Before a new beta cohort, perform a controlled browser sign-up and email-OTP journey, checking
-Inbox and Spam, then record the result in a test evidence file.
+Before a new beta cohort, perform a controlled browser sign-up, password setup, authenticator-app
+enrolment, and sign-in journey, checking Inbox and Spam, then record the result in a test evidence
+file.
 
 ## Rotate or change provider
 
