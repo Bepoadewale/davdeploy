@@ -62,6 +62,41 @@ _CONTRACTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], b
         ("secret_access_denied", "rotation_status"),
         False,
     ),
+    "aws-relational-data": (
+        ("aws_rds_cluster", "aws_db_subnet_group", "aws_secretsmanager_secret"),
+        ("private_subnets", "encryption", "backup_retention", "deletion_protection"),
+        ("database_connections", "replication_lag", "backup_status"),
+        False,
+    ),
+    "aws-nosql-data": (
+        ("aws_dynamodb_table",),
+        ("encryption", "point_in_time_recovery", "tag_scope"),
+        ("read_throttle", "write_throttle", "table_size"),
+        False,
+    ),
+    "aws-jobs-events": (
+        ("aws_sqs_queue", "aws_cloudwatch_event_rule", "aws_sfn_state_machine"),
+        ("dead_letter_queue", "retry_policy", "least_privilege_role"),
+        ("queue_depth", "failed_executions", "dead_letters"),
+        False,
+    ),
+    "aws-payments-webhooks": (
+        (
+            "aws_apigatewayv2_api",
+            "aws_lambda_function",
+            "aws_sqs_queue",
+            "aws_secretsmanager_secret",
+        ),
+        ("signature_validation", "idempotency", "secret_references", "dead_letter_queue"),
+        ("webhook_failures", "queue_depth"),
+        False,
+    ),
+    "aws-realtime": (
+        ("aws_apigatewayv2_api", "aws_dynamodb_table"),
+        ("authenticated_connections", "connection_limits", "least_privilege_role"),
+        ("active_connections", "message_errors"),
+        False,
+    ),
 }
 
 

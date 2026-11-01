@@ -191,3 +191,17 @@ def test_universal_modules_have_typed_resource_and_policy_contracts():
     assert "mfa_policy" in contracts["aws-identity"].policy_controls
     assert "aws_s3_bucket" in contracts["aws-file-storage"].resources
     assert contracts["aws-managed-application"].destroy_supported is True
+
+
+def test_data_and_asynchronous_modules_have_safe_contracts():
+    result = plan(
+        stateful=True,
+        event_driven=True,
+        capability_requirements=["nosql_data", "payments", "realtime"],
+    )
+    contracts = {contract.module_id: contract for contract in result.module_contracts}
+
+    assert "aws_rds_cluster" in contracts["aws-relational-data"].resources
+    assert "aws_dynamodb_table" in contracts["aws-nosql-data"].resources
+    assert "dead_letter_queue" in contracts["aws-jobs-events"].policy_controls
+    assert "signature_validation" in contracts["aws-payments-webhooks"].policy_controls
