@@ -2,6 +2,8 @@
 
 PR: [#222](https://github.com/Bepoadewale/davdeploy/pull/222)
 
+Branch: `feat/mcp-admin-customer-approval`
+
 ## Problem / goal
 
 Allow an authenticated workspace administrator using MCP to record an explicit decision for a submitted customer-plan revision.
