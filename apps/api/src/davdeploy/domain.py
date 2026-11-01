@@ -168,6 +168,15 @@ class ModuleContract(BaseModel):
     destroy_supported: bool = False
 
 
+class ModuleExecutionContract(BaseModel):
+    module_id: str
+    execution_state: str
+    prerequisites: list[str]
+    health_evidence: list[str]
+    rollback_strategy: str
+    destroy_strategy: str
+
+
 class CostRange(BaseModel):
     currency: str = "USD"
     monthly_low: int
@@ -222,6 +231,7 @@ class ArchitecturePlan(BaseModel):
     components: list[ArchitectureComponent]
     modules: list[ArchitectureModule] = Field(default_factory=list)
     module_contracts: list[ModuleContract] = Field(default_factory=list)
+    module_execution: list[ModuleExecutionContract] = Field(default_factory=list)
     dependencies: list[str]
     assumptions: list[str]
     security_controls: list[str]

@@ -205,3 +205,12 @@ def test_data_and_asynchronous_modules_have_safe_contracts():
     assert "aws_dynamodb_table" in contracts["aws-nosql-data"].resources
     assert "dead_letter_queue" in contracts["aws-jobs-events"].policy_controls
     assert "signature_validation" in contracts["aws-payments-webhooks"].policy_controls
+
+
+def test_execution_contracts_do_not_claim_unimplemented_module_execution():
+    result = plan(capability_requirements=["identity"])
+    execution = {entry.module_id: entry for entry in result.module_execution}
+
+    assert execution["aws-managed-application"].execution_state == "PILOT_ELIGIBLE"
+    assert execution["aws-identity"].execution_state == "IMPLEMENTATION_REQUIRED"
+    assert "exact approved plan digest" in execution["aws-identity"].prerequisites
