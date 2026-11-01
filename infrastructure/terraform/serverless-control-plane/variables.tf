@@ -25,6 +25,12 @@ variable "application_rate_limit_per_minute" {
   }
 }
 
+variable "blog_author_subjects" {
+  type        = list(string)
+  description = "Cognito subjects explicitly allowed to create and edit public DavDeploy blog posts."
+  default     = []
+}
+
 variable "artifact_bucket" {
   type        = string
   description = "Existing private S3 bucket containing the verified Lambda package."
