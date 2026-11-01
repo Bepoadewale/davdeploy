@@ -120,7 +120,10 @@ jobs:
           set -euo pipefail
           migration_function="$(terraform output -raw migration_function_name)"
           test -n "${migration_function}" || { echo "Terraform returned no migration function" >&2; exit 1; }
-          for attempt in 1 2 3 4 5 6; do
+          # Aurora Serverless can take several minutes to resume after an idle
+          # period. Retry only that transient state, and surface any other
+          # migration failure immediately.
+          for attempt in $(seq 1 24); do
             invoke_result="$(aws lambda invoke \
               --function-name "${migration_function}" \
               --cli-binary-format raw-in-base64-out \
@@ -132,14 +135,23 @@ jobs:
               exit 0
             fi
 
-            if [ "${attempt}" -eq 6 ]; then
-              echo "Migration Lambda did not confirm completion after bounded retry" >&2
+            if ! jq -e '
+              .errorType == "StatementError"
+              and (.errorMessage | contains("DatabaseResumingException"))
+            ' migration-response.json >/dev/null; then
+              echo "Migration Lambda returned a non-retryable failure" >&2
               jq . migration-response.json >&2
               exit 1
             fi
 
-            echo "Migration attempt ${attempt} did not complete; waiting for a possible Aurora resume" >&2
-            sleep 10
+            if [ "${attempt}" -eq 24 ]; then
+              echo "Migration Lambda did not confirm completion after Aurora resume retry" >&2
+              jq . migration-response.json >&2
+              exit 1
+            fi
+
+            echo "Migration attempt ${attempt} found Aurora resuming; waiting 15 seconds" >&2
+            sleep 15
           done
 
       - name: Record result
