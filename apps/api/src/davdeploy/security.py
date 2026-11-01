@@ -29,6 +29,8 @@ class Principal:
     subject: str
     organization_id: str
     role: str
+    email: str | None = None
+    email_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,11 @@ def principal_from_claims(payload: dict, *, server_membership: bool = False) -> 
             subject=membership.subject,
             organization_id=membership.organization_id,
             role=membership.role,
+            email=payload.get("email"),
+            email_verified=(
+                payload.get("email_verified") is True
+                or payload.get("email_verified") == "true"
+            ),
         )
     role = payload["role"]
     if role not in {"developer", "operator", "administrator"}:

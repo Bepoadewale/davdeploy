@@ -210,6 +210,51 @@ def test_cognito_access_token_client_id_is_accepted_as_audience(monkeypatch):
     assert claims.email_verified is True
 
 
+def test_hosted_principal_retains_verified_cognito_email(monkeypatch):
+    verifier = security.JwksIdentityVerifier("https://example.test/jwks", "issuer", "client")
+    verifier.client = type(
+        "Client", (), {"get_signing_key_from_jwt": lambda self, token: type("Key", (), {"key": "key"})()}
+    )()
+    monkeypatch.setattr(
+        security.jwt,
+        "decode",
+        lambda *args, **kwargs: {
+            "sub": "subject",
+            "exp": 9999999999,
+            "aud": "client",
+            "email": "writer@davdeploy.tech",
+            "email_verified": True,
+        },
+    )
+    class Db:
+        def query(self, _model):
+            return self
+
+        def filter(self, _condition):
+            return self
+
+        def one_or_none(self):
+            return type(
+                "Membership",
+                (),
+                {"subject": "subject", "organization_id": "organization", "role": "developer"},
+            )()
+
+    class Session:
+        def __enter__(self):
+            return Db()
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(security, "SessionLocal", lambda: Session())
+
+    principal = verifier.verify("token")
+
+    assert principal.email == "writer@davdeploy.tech"
+    assert principal.email_verified is True
+
+
 def test_cognito_access_token_is_rejected_when_identity_token_is_required(monkeypatch):
     verifier = security.JwksIdentityVerifier(
         "https://example.test/jwks",

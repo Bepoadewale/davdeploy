@@ -77,7 +77,7 @@ class PlanComment(Base):
 
 
 class BlogPost(Base):
-    """Public editorial content, authored only by explicitly configured team subjects."""
+    """Public editorial content, authored only by verified DavDeploy team email accounts."""
 
     __tablename__ = "blog_posts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
