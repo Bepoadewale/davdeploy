@@ -16,10 +16,26 @@ This prevents a request that needs a simple managed application from accidentall
 
 **Executed locally:** the planner stores the selected profile in the immutable plan; the local worker passes that profile to the bounded executor; tests prove that an App Runner recommendation has no Kubernetes contract and an EKS recommendation does.
 
-**Implemented / unexecuted:** approved `aws-app-runner` customer-plan revisions can now render a plan-only Terraform contract. The rendered contract includes module inputs for the service, repository/branch, ECR/source boundary, IAM boundary, secret references, HTTPS assumptions, Prometheus/Grafana monitoring contract, required tags, selected account/region, revision ID and exact approved digest. The renderer persists the preview and exposes only offline validation commands. It does not expose `terraform apply`.
+**Implemented / planning:** approved `aws-app-runner` customer-plan revisions
+can render a digest-bound Terraform contract. The rendered contract includes
+module inputs for the service, repository/branch, ECR/source boundary, IAM
+boundary, secret references, HTTPS assumptions, Prometheus/Grafana monitoring
+contract, required tags, selected account/region, revision ID and exact
+approved digest. Other selected profiles have bounded planning contracts, not
+live cloud executors.
 
 Approved revisions can also run a workspace-administrator-only cloud-readiness preflight that checks account, region, tags, budget, reviewed PR state, runtime identity and dry-run/plan-only mode before any future cloud workflow can be considered. The local demo can produce `READY_FOR_AUTHORIZED_CLOUD_PLAN` only by using fixture reviewed-PR/check state and the explicit local runtime-identity checkbox; that is guardrail evidence, not proof of a hosted runtime identity or live GitHub checks.
 
-**Simulated:** the executor reports a deterministic local result. Fixture desired-state PR publication records a reviewed-PR contract without writing GitHub.
+**Pilot evidence:** `aws-app-runner` has separately recorded real AWS
+create, health-check and destroy pilot evidence. Product-driven execution is
+still controlled per customer, exact digest and explicit enablement; it is not
+general availability. The remaining profiles have no live customer-workload
+execution evidence.
 
-**Planned cloud pilot:** actual GitHub PR writes, authenticated AWS Terraform plan, apply, independent cloud observation and destroy remain separate, explicit future work.
+**Simulated:** the local executor reports a deterministic result. Fixture
+desired-state PR publication records a reviewed-PR contract without writing
+GitHub.
+
+**Adapter catalogue:** see [the governed workload-adapter catalogue](adapter-catalogue.md)
+for lifecycle labels, composition rules, promotion requirements and the
+monthly/quarterly maintenance cadence.
