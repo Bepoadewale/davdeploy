@@ -100,6 +100,20 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "decide_customer_plan_review",
+        "description": "Record an administrator's explicit APPROVED or REJECTED decision for one exact submitted customer-plan digest. The API independently verifies the MCP caller's workspace role and tenant membership.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["revision_id", "decision", "content_digest"],
+            "properties": {
+                "revision_id": {"type": "string"},
+                "decision": {"type": "string", "enum": ["APPROVED", "REJECTED"]},
+                "content_digest": {"type": "string"},
+                "reason": {"type": "string"},
+            },
+        },
+    },
+    {
         "name": "execute_approved_customer_dry_run",
         "description": "Request the local bounded dry-run executor for an already approved customer-plan revision. API policy remains authoritative; no cloud credentials are returned.",
         "inputSchema": {
@@ -299,6 +313,16 @@ class davdeployMcp:
         if name == "submit_customer_plan_review":
             return self.client.request(
                 "POST", f"/api/v1/customer-plan-revisions/{arguments['revision_id']}/submit"
+            )
+        if name == "decide_customer_plan_review":
+            return self.client.request(
+                "POST",
+                f"/api/v1/customer-plan-revisions/{arguments['revision_id']}/decisions",
+                {
+                    "decision": arguments["decision"],
+                    "content_digest": arguments["content_digest"],
+                    "reason": arguments.get("reason"),
+                },
             )
         if name == "execute_approved_customer_dry_run":
             return self.client.request(
