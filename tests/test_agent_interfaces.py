@@ -34,7 +34,7 @@ class RecordingClient:
         return {"ok": True}
 
 
-def test_mcp_catalogue_exposes_governed_operations_but_no_approval_or_credentials():
+def test_mcp_catalogue_exposes_governed_operations_and_only_customer_review_decisions():
     names = {tool["name"] for tool in TOOL_DEFINITIONS}
     assert {
         "analyze_workload",
@@ -43,6 +43,7 @@ def test_mcp_catalogue_exposes_governed_operations_but_no_approval_or_credential
         "create_customer_plan_review",
         "get_customer_plan_review",
         "submit_customer_plan_review",
+        "decide_customer_plan_review",
         "execute_approved_customer_dry_run",
         "render_customer_terraform",
         "preflight_customer_cloud",
@@ -56,7 +57,6 @@ def test_mcp_catalogue_exposes_governed_operations_but_no_approval_or_credential
     } <= names
     assert "approve_plan" not in names
     assert "approve_customer_plan_review" not in names
-    assert "decide_customer_plan_review" not in names
     assert all("credential" not in name for name in names)
 
 
@@ -78,7 +78,7 @@ def test_mcp_day2_tools_only_request_governed_api_operations():
     ]
 
 
-def test_mcp_customer_plan_tools_request_api_without_approval_or_credentials():
+def test_mcp_customer_plan_tools_forward_an_explicit_governed_decision():
     client = RecordingClient()
     server = davdeployMcp(client)
     assert server.call_tool("create_customer_plan_review", {"plan_id": "plan-1"}) == {"ok": True}
@@ -86,6 +86,15 @@ def test_mcp_customer_plan_tools_request_api_without_approval_or_credentials():
     assert server.call_tool("submit_customer_plan_review", {"revision_id": "revision-1"}) == {
         "ok": True
     }
+    assert server.call_tool(
+        "decide_customer_plan_review",
+        {
+            "revision_id": "revision-1",
+            "decision": "APPROVED",
+            "content_digest": "a" * 64,
+            "reason": "Administrator approved the exact reviewed digest.",
+        },
+    ) == {"ok": True}
     assert server.call_tool("execute_approved_customer_dry_run", {"revision_id": "revision-1"}) == {
         "ok": True
     }
@@ -93,6 +102,15 @@ def test_mcp_customer_plan_tools_request_api_without_approval_or_credentials():
         ("POST", "/api/v1/deployment-plans/plan-1/customer-review", None),
         ("GET", "/api/v1/customer-plan-revisions/revision-1", None),
         ("POST", "/api/v1/customer-plan-revisions/revision-1/submit", None),
+        (
+            "POST",
+            "/api/v1/customer-plan-revisions/revision-1/decisions",
+            {
+                "decision": "APPROVED",
+                "content_digest": "a" * 64,
+                "reason": "Administrator approved the exact reviewed digest.",
+            },
+        ),
         ("POST", "/api/v1/customer-plan-revisions/revision-1/execute-dry-run", None),
     ]
 
