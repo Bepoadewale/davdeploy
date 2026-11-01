@@ -38,6 +38,7 @@ jobs:
       TF_VAR_customer_execution_lock_table: ${{ vars.TF_STATE_LOCK_TABLE }}
       TF_VAR_customer_execution_kms_key_arns: '["${{ vars.TF_RELEASE_KMS_KEY_ARN }}", "${{ vars.TF_PLAN_KMS_KEY_ARN }}"]'
       TF_VAR_enable_customer_cloud_execution: ${{ vars.ENABLE_CUSTOMER_CLOUD_EXECUTION || 'false' }}
+      TF_VAR_blog_author_subjects: ${{ vars.DAVDEPLOY_BLOG_AUTHOR_SUBJECTS || '[]' }}
       TF_VAR_enable_github_app_read_only: ${{ vars.ENABLE_GITHUB_APP_READ_ONLY || 'false' }}
       TF_VAR_github_app_id: ${{ vars.DAVDEPLOY_GITHUB_APP_ID || '' }}
       TF_VAR_github_app_installation_id: ${{ vars.DAVDEPLOY_GITHUB_APP_INSTALLATION_ID || '' }}

@@ -533,6 +533,7 @@ locals {
     DAVDEPLOY_DATABASE_NAME                      = var.database_name
     DAVDEPLOY_ALLOWED_FRONTEND_ORIGINS           = var.frontend_origin
     DAVDEPLOY_RATE_LIMIT_PER_MINUTE              = tostring(var.application_rate_limit_per_minute)
+    DAVDEPLOY_BLOG_AUTHOR_SUBJECTS               = join(",", var.blog_author_subjects)
     DAVDEPLOY_JWKS_URL                           = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}/.well-known/jwks.json"
     DAVDEPLOY_OIDC_ISSUER                        = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}"
     DAVDEPLOY_OIDC_AUDIENCE                      = aws_cognito_user_pool_client.frontend.id
