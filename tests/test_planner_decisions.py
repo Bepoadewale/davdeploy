@@ -214,3 +214,14 @@ def test_execution_contracts_do_not_claim_unimplemented_module_execution():
     assert execution["aws-managed-application"].execution_state == "PILOT_ELIGIBLE"
     assert execution["aws-identity"].execution_state == "IMPLEMENTATION_REQUIRED"
     assert "exact approved plan digest" in execution["aws-identity"].prerequisites
+
+
+def test_advanced_modules_have_bounded_ai_data_media_and_streaming_contracts():
+    result = plan(capability_requirements=["ai", "search", "analytics", "streaming", "media"])
+    contracts = {contract.module_id: contract for contract in result.module_contracts}
+
+    assert "guardrails" in contracts["aws-ai-retrieval"].policy_controls
+    assert "aws_opensearch_domain" in contracts["aws-search"].resources
+    assert "query_budget" in contracts["aws-data-analytics"].policy_controls
+    assert "iterator_age" in contracts["aws-stream-processing"].observation
+    assert "signed_delivery" in contracts["aws-media"].policy_controls

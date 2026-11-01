@@ -97,6 +97,42 @@ _CONTRACTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], b
         ("active_connections", "message_errors"),
         False,
     ),
+    "aws-ai-retrieval": (
+        ("aws_bedrock_guardrail", "aws_s3_bucket", "aws_lambda_function"),
+        ("model_allow_list", "guardrails", "data_boundary", "evaluation_required"),
+        ("model_errors", "retrieval_latency", "guardrail_interventions"),
+        False,
+    ),
+    "aws-managed-ml": (
+        ("aws_sagemaker_endpoint", "aws_sagemaker_model", "aws_s3_bucket"),
+        ("model_registry", "network_isolation", "model_monitoring"),
+        ("endpoint_latency", "invocation_errors", "model_drift"),
+        False,
+    ),
+    "aws-search": (
+        ("aws_opensearch_domain", "aws_lambda_function"),
+        ("private_access", "encryption", "index_access_policy"),
+        ("cluster_health", "search_latency"),
+        False,
+    ),
+    "aws-data-analytics": (
+        ("aws_s3_bucket", "aws_glue_catalog_database", "aws_athena_workgroup"),
+        ("encryption", "query_budget", "data_governance"),
+        ("query_failures", "processed_bytes"),
+        False,
+    ),
+    "aws-stream-processing": (
+        ("aws_kinesis_stream", "aws_lambda_function"),
+        ("retention_policy", "consumer_least_privilege", "backpressure_alarm"),
+        ("iterator_age", "consumer_errors"),
+        False,
+    ),
+    "aws-media": (
+        ("aws_s3_bucket", "aws_mediaconvert_queue", "aws_cloudfront_distribution"),
+        ("private_origin", "signed_delivery", "transcode_limits"),
+        ("transcode_failures", "delivery_errors"),
+        False,
+    ),
 }
 
 
