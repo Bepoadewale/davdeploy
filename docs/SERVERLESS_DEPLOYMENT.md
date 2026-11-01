@@ -18,7 +18,7 @@ This is the production deployment contract. Manual Terraform plan/apply remains 
 7. Configure Google federation using the operator's local secret source. Do not pass the Google client secret through Terraform because it would be retained in Terraform state.
 8. Set `google_identity_provider_enabled = true`, plan, and apply the Cognito app-client update.
 9. Set the frontend's public Cognito and API variables in Cloudflare Pages and redeploy static assets.
-10. Run live Google, email OTP, invitation acceptance, tenant onboarding, authorization denial, API, worker retry, policy failure, backup, restore, and teardown smoke tests.
+10. Run live password-and-authenticator, invitation acceptance, tenant onboarding, authorization denial, API, worker retry, policy failure, backup, restore, and teardown smoke tests. Test Google separately only if it is intentionally enabled.
 
 ## Google identity provider
 
@@ -26,14 +26,14 @@ Create a Google OAuth web client with Cognito's generated `/oauth2/idpresponse` 
 
 The pre-sign-up Lambda links Google to an existing native Cognito account only when Google supplies a verified email. davdeploy still resolves organization and role from its own database.
 
-## Email OTP
+## Password and authenticator access
 
-Cognito choice-based `USER_AUTH` and `EMAIL_OTP` use the deployed Cognito custom-email sender.
-It decrypts Cognito's one-time code with the dedicated KMS key and sends through Resend from
-`notify@davdeploy.tech`, with replies directed to `support@davdeploy.tech`. Amazon SES remains
-configured on the user pool as a fallback, but current Cognito code delivery does not depend on SES
-production access or recipient verification. Workspace invitations use a separate Resend adapter.
-See [email operations](EMAIL_OPERATIONS.md) for the active delivery and rotation boundary.
+Cognito requires a password followed by software-token TOTP from an authenticator app. New accounts
+confirm their email before first sign-in; the initial password sign-in returns an MFA setup challenge
+and the customer adds the displayed key to an authenticator app. The custom email sender delivers
+confirmation and password-recovery codes through Resend from `notify@davdeploy.tech`, with replies
+directed to `support@davdeploy.tech`. Workspace invitations use a separate Resend adapter. See
+[email operations](EMAIL_OPERATIONS.md) for the active delivery and rotation boundary.
 
 ## Workspace invitations
 
@@ -44,13 +44,17 @@ inbound forwarding separately; it is not a transactional email provider.
 
 ## Required frontend values
 
-- `VITE_API_BASE_URL`: API Gateway output `api_base_url`
+- `VITE_API_BASE_URL`: `https://api.davdeploy.tech`
 - `VITE_AUTH_MODE=oidc`
 - `VITE_OIDC_AUTHORITY`: output `cognito_issuer`
 - `VITE_OIDC_CLIENT_ID`: output `cognito_client_id`
 - `VITE_COGNITO_REGION`: Terraform region
 - `VITE_COGNITO_USER_POOL_CLIENT_ID`: output `cognito_client_id`
 - exact Pages callback and logout URLs
+
+The Pages Function runtime value `DAVDEPLOY_API_ORIGIN` is also
+`https://api.davdeploy.tech`. The Cloudflare Worker inserts the origin header;
+the direct API Gateway endpoint is intentionally unavailable to browsers.
 
 All are public identifiers. None is a credential.
 
