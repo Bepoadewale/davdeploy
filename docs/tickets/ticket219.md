@@ -47,12 +47,12 @@ is required.
 - [x] A team member cannot edit another team member's post.
 - [x] No individual author subject is required in Terraform or GitHub Actions.
 - [x] Full local verification passes: `make verify` reported 316 tests passing.
-- [ ] Required CI and hosted deployment pass.
+- [x] Required CI and hosted deployment passed on 2026-11-01.
 
 ## Acceptance status
 
-Implementation and local verification are complete. CI and the normal saved-plan
-deployment remain pending.
+Implementation, CI, and the normal saved-plan deployment completed on
+2026-11-01. PR #220 adds the founder's exact verified Gmail exception.
 
 ## Tests / validation performed
 

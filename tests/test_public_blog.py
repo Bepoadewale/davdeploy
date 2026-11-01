@@ -29,10 +29,22 @@ def test_only_verified_davdeploy_team_email_can_create_public_blog_posts():
 
     assert post["state"] == "PUBLISHED"
     assert service.public_blog_posts()[0]["slug"] == post["slug"]
+    founder_gmail = principal(
+        "administrator", email="bepoadewale1@gmail.com", email_verified=True
+    )
+    gmail_post = service.create_blog_post(
+        founder_gmail, blog_payload(slug="founder-gmail-post")
+    )
+    assert gmail_post["state"] == "PUBLISHED"
     with pytest.raises(PermissionError, match="team publishing"):
         service.create_blog_post(
             principal("administrator", email="customer@example.com", email_verified=True),
             blog_payload(slug="not-allowed"),
+        )
+    with pytest.raises(PermissionError, match="team publishing"):
+        service.create_blog_post(
+            principal("administrator", email="another@gmail.com", email_verified=True),
+            blog_payload(slug="another-gmail-address"),
         )
     with pytest.raises(PermissionError, match="team publishing"):
         service.create_blog_post(
