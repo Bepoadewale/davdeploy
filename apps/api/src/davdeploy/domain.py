@@ -157,6 +157,17 @@ class ArchitectureModule(BaseModel):
     execution_supported: bool = False
 
 
+class ModuleContract(BaseModel):
+    """Versioned internal desired-state boundary for a selected module."""
+
+    module_id: str
+    version: str
+    resources: list[str]
+    policy_controls: list[str]
+    observation: list[str]
+    destroy_supported: bool = False
+
+
 class CostRange(BaseModel):
     currency: str = "USD"
     monthly_low: int
@@ -210,6 +221,7 @@ class ArchitecturePlan(BaseModel):
     region: str
     components: list[ArchitectureComponent]
     modules: list[ArchitectureModule] = Field(default_factory=list)
+    module_contracts: list[ModuleContract] = Field(default_factory=list)
     dependencies: list[str]
     assumptions: list[str]
     security_controls: list[str]

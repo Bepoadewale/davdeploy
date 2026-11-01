@@ -15,6 +15,7 @@ from davdeploy.domain import (
     WorkloadSpec,
 )
 from davdeploy.module_catalogue import compose_modules
+from davdeploy.module_contracts import module_contracts
 
 
 class AwsV1Planner:
@@ -118,6 +119,7 @@ class AwsV1Planner:
             ],
             cost_assumption="Estimated as a range, not an AWS bill. Retention, active series and viewer count materially affect cost.",
         )
+        modules = compose_modules(spec, selected.candidate_id)
         return ArchitecturePlan(
             profile=selected.candidate_id,
             region=region,
@@ -136,7 +138,8 @@ class AwsV1Planner:
                     private=True,
                 ),
             ],
-            modules=compose_modules(spec, selected.candidate_id),
+            modules=modules,
+            module_contracts=module_contracts(modules),
             dependencies=[
                 "customer AWS account",
                 "GitHub repository connection",

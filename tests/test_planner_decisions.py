@@ -181,3 +181,13 @@ def test_private_ai_plan_composes_private_and_ai_modules():
     assert {"aws-ai-retrieval", "aws-data-analytics", "aws-private-connectivity"} <= {
         module.identifier for module in result.modules
     }
+
+
+def test_universal_modules_have_typed_resource_and_policy_contracts():
+    result = plan(capability_requirements=["identity", "file_storage"])
+    contracts = {contract.module_id: contract for contract in result.module_contracts}
+
+    assert "aws_cognito_user_pool" in contracts["aws-identity"].resources
+    assert "mfa_policy" in contracts["aws-identity"].policy_controls
+    assert "aws_s3_bucket" in contracts["aws-file-storage"].resources
+    assert contracts["aws-managed-application"].destroy_supported is True
