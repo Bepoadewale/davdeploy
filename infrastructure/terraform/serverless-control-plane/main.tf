@@ -722,6 +722,24 @@ resource "aws_apigatewayv2_route" "health" {
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
+# Public editorial reading is intentionally explicit. All writes, team authoring,
+# and comment changes continue through the JWT-protected $default route.
+locals {
+  public_blog_read_routes = toset([
+    "GET /api/v1/blog/posts",
+    "GET /api/v1/blog/posts/{slug}",
+    "GET /api/v1/blog/posts/{slug}/comments",
+  ])
+}
+
+resource "aws_apigatewayv2_route" "public_blog_read" {
+  for_each = local.public_blog_read_routes
+
+  api_id    = aws_apigatewayv2_api.control_plane.id
+  route_key = each.value
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
 # An authenticated $default route also captures preflight requests. Explicit OPTIONS routes take
 # precedence and let the API's CORS middleware answer browsers without weakening application routes.
 resource "aws_apigatewayv2_route" "preflight_root" {
