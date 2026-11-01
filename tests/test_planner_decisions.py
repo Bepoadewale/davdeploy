@@ -249,3 +249,10 @@ def test_specialised_scale_modules_require_explicit_controls():
     )
     gpu_contracts = {contract.module_id: contract for contract in gpu_result.module_contracts}
     assert "quota_check" in gpu_contracts["aws-gpu-inference"].policy_controls
+
+
+def test_plan_exposes_operational_readiness_before_execution():
+    result = plan(stateful=True)
+    assert result.operational_readiness is not None
+    assert result.operational_readiness.quota_evidence_state == "REQUIRED_BEFORE_EXECUTION"
+    assert "database point-in-time recovery" in result.operational_readiness.recovery_controls
