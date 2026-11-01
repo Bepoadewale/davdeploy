@@ -620,17 +620,10 @@ class ProductService:
             ).all()
         )
 
-    @staticmethod
-    def _blog_author_subjects() -> set[str]:
-        return {
-            subject.strip()
-            for subject in os.getenv("DAVDEPLOY_BLOG_AUTHOR_SUBJECTS", "").split(",")
-            if subject.strip()
-        }
-
     def can_author_blog(self, principal: Principal) -> bool:
-        """Publishing is global, never a permission granted to customer workspaces."""
-        return principal.subject in self._blog_author_subjects()
+        """Publishing is global and limited to verified DavDeploy team email accounts."""
+        email = (principal.email or "").strip().lower()
+        return principal.email_verified and email.endswith("@davdeploy.tech")
 
     def _require_blog_author(self, principal: Principal) -> None:
         if not self.can_author_blog(principal):

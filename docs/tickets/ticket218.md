@@ -35,7 +35,9 @@ was supplied as Terraform input.
 
 ## Acceptance status
 
-Implementation and local validation are complete. Required CI and deployment are pending.
+PR #218 merged and its CI plus Terraform deployment completed on 2026-11-01.
+It was subsequently superseded by PR #219 after the product decision to authorize
+all verified `@davdeploy.tech` identities rather than an individual subject allowlist.
 
 ## Tests / validation performed
 
@@ -52,5 +54,5 @@ It creates only the secure configuration path for a separately verified Cognito 
 
 ## Follow-up work
 
-Set `DAVDEPLOY_BLOG_AUTHOR_SUBJECTS` in the protected `terraform-plan` GitHub
-environment after retrieving the founder's subject from the signed-in workspace profile.
+None for the retired subject-allowlist path. PR #219 owns the verified-team-email
+authorization path.
