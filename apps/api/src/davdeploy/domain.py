@@ -398,6 +398,18 @@ class PlanCommentRequest(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 
 
+class BlogPostRequest(BaseModel):
+    slug: str = Field(min_length=3, max_length=120, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    title: str = Field(min_length=3, max_length=180)
+    summary: str = Field(min_length=12, max_length=360)
+    body: str = Field(min_length=1, max_length=40_000)
+    state: str = Field(default="DRAFT", pattern=r"^(DRAFT|PUBLISHED)$")
+
+
+class BlogCommentRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
 class SupportTicketRequest(BaseModel):
     subject: str = Field(min_length=3, max_length=160)
     body: str = Field(min_length=1, max_length=8000)

@@ -25,6 +25,8 @@ from davdeploy.domain import (
     AwsConnectionVerificationRequest,
     AwsExistingRoleRequest,
     AwsQuickCreateRequest,
+    BlogCommentRequest,
+    BlogPostRequest,
     CloudConnectionRequest,
     CloudExecutionExecuteRequest,
     CloudExecutionRunRequest,
@@ -228,6 +230,98 @@ def public_status():
 @app.get("/metrics")
 def metrics():
     return Response(generate_latest(), media_type="text/plain; version=0.0.4")
+
+
+@app.get("/api/v1/blog/posts")
+def list_public_blog_posts(service: ProductService = Depends(product_service)):
+    """Published editorial posts are readable without a workspace account."""
+    return service.public_blog_posts()
+
+
+@app.get("/api/v1/blog/posts/{slug}")
+def get_public_blog_post(slug: str, service: ProductService = Depends(product_service)):
+    try:
+        return service.public_blog_post(slug)
+    except KeyError as error:
+        translate(error)
+
+
+@app.get("/api/v1/blog/posts/{slug}/comments")
+def list_public_blog_comments(slug: str, service: ProductService = Depends(product_service)):
+    try:
+        return service.blog_comments(slug)
+    except KeyError as error:
+        translate(error)
+
+
+@app.post("/api/v1/blog/posts/{slug}/comments", status_code=201)
+def create_public_blog_comment(
+    slug: str,
+    request: BlogCommentRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.create_blog_comment(principal, slug, request.body)
+    except (PermissionError, KeyError, ValueError) as error:
+        translate(error)
+
+
+@app.patch("/api/v1/blog/comments/{comment_id}")
+def edit_public_blog_comment(
+    comment_id: str,
+    request: BlogCommentRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.update_blog_comment(principal, comment_id, request.body)
+    except (PermissionError, KeyError, ValueError) as error:
+        translate(error)
+
+
+@app.get("/api/v1/blog/author-access")
+def blog_author_access(
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    return {"can_publish": service.can_author_blog(principal)}
+
+
+@app.get("/api/v1/blog/team/posts")
+def list_team_blog_posts(
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.team_blog_posts(principal)
+    except PermissionError as error:
+        translate(error)
+
+
+@app.post("/api/v1/blog/team/posts", status_code=201)
+def create_team_blog_post(
+    request: BlogPostRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.create_blog_post(principal, request.model_dump())
+    except (PermissionError, ValueError) as error:
+        translate(error)
+
+
+@app.patch("/api/v1/blog/team/posts/{post_id}")
+def edit_team_blog_post(
+    post_id: str,
+    request: BlogPostRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    try:
+        return service.update_blog_post(principal, post_id, request.model_dump())
+    except (PermissionError, KeyError, ValueError) as error:
+        translate(error)
 
 
 @app.post("/api/v1/auth/local-login")
