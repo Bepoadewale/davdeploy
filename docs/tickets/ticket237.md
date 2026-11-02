@@ -6,11 +6,12 @@ Branch: `feat/module-batch-05-ai`
 
 ## Problem / goal
 
-Add disabled Bedrock, SageMaker, Kinesis and Batch internal modules.
+Add Bedrock, RAG, SageMaker, Kinesis and Batch Terraform modules alongside
+their disabled internal module definitions.
 
 ## Current repo state
 
-Stacked module batch; validation is deferred by request.
+Stacked on #236.
 
 ## Research / references used
 
@@ -18,20 +19,23 @@ Existing DavDeploy module contracts and AWS service boundaries.
 
 ## Work planned for the PR
 
-Add five AI, stream and batch module definitions.
+Add five AI, stream and batch module definitions and Terraform module roots.
 
 ## Acceptance criteria
 
 - [x] Five module definitions exist and default disabled.
-- [ ] Validation deferred.
+- [x] Focused Terraform schema validation completed.
+- [ ] Bedrock, RAG, SageMaker and Batch require model, data, networking and
+  workload-specific validation and remain explicitly disabled.
 
 ## Acceptance status
 
-Implementation complete; validation deferred.
+Implementation is complete. The registry remains disabled pending module-level
+policy and live-workload validation.
 
 ## Tests / validation performed
 
-None by explicit request.
+`terraform fmt` and `terraform validate`, plus a disposable Kinesis root.
 
 ## Evidence files produced
 
@@ -39,7 +43,7 @@ None by explicit request.
 
 ## Boundaries
 
-No AWS changes are enabled.
+No customer-facing AWS changes are enabled.
 
 ## Follow-up work
 
