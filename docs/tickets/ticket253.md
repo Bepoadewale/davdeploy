@@ -1,6 +1,6 @@
 # ticket253 — Real CloudFront content workload certification
 
-PR: Pending creation.
+PR: [#253](https://github.com/Bepoadewale/davdeploy/pull/253)
 
 Branch: `test/real-cloudfront-workload`
 
@@ -26,16 +26,16 @@ page through CloudFront, record the HTTPS response, then destroy all resources.
 
 ## Acceptance criteria
 
-- [ ] CloudFront returns the owned health page over HTTPS.
-- [ ] The origin and distribution are removed after validation.
+- [x] CloudFront returns the owned health page over HTTPS.
+- [x] The origin and distribution are removed after validation.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 
-Pending controlled AWS execution.
+Recorded in `docs/test/test253.md`.
 
 ## Evidence files produced
 
