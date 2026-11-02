@@ -1,6 +1,6 @@
 # ticket254 — Real ACM and SES DNS validation certification
 
-PR: Pending creation.
+PR: [#254](https://github.com/Bepoadewale/davdeploy/pull/254)
 
 Branch: `test/real-email-dns-workload`
 
@@ -27,17 +27,17 @@ the AWS identities and temporary DNS records.
 
 ## Acceptance criteria
 
-- [ ] ACM reaches `ISSUED`.
-- [ ] SES identity and DKIM verification are confirmed.
-- [ ] AWS resources and temporary DNS records are removed.
+- [x] ACM reaches `ISSUED`.
+- [x] SES identity and DKIM verification are confirmed.
+- [x] AWS resources and temporary DNS records are removed.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 
-Pending controlled AWS execution.
+Recorded in `docs/test/test254.md`.
 
 ## Evidence files produced
 

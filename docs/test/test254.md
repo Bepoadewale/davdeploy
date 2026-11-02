@@ -6,7 +6,7 @@ Execution type: Controlled disposable AWS DNS validation.
 
 Customer repository: None.
 
-Commit: In progress.
+Commit: `21a9aeb` plus evidence update in progress.
 
 AWS account: `654654474502`.
 
@@ -14,20 +14,24 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-Pending controlled AWS execution.
+An ACM certificate and SES domain identity for
+`certemaildns20261102a.cert.davdeploy.tech`.
 
 ## Commands executed
 
-Pending controlled AWS execution.
+Terraform monitor apply/destroy commands were run against
+`infrastructure/terraform/module-validation/email-dns`; Cloudflare DNS API
+created and then removed the ACM, SES, DKIM and MAIL FROM records.
 
 ## Observed result
 
-Pending controlled AWS execution.
+ACM reached `ISSUED`; SES identity and DKIM both reached `Success`.
 
 ## Teardown
 
-Pending controlled AWS execution.
+Terraform recorded `Destroy complete! Resources: 4 destroyed.` Cloudflare DNS
+record absence was checked after deletion.
 
 ## Final boundary
 
-Pending controlled AWS execution.
+This validates DNS ownership only; it does not send customer email.
