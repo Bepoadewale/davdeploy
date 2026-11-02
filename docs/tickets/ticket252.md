@@ -22,12 +22,12 @@ then rerun the disposable job and record its observed result and teardown.
 
 ## Acceptance criteria
 
-- [ ] The submitted Batch job reaches `SUCCEEDED`.
-- [ ] CloudWatch receives the task output.
-- [ ] All resources tagged with the test ID are destroyed.
+- [x] The submitted Batch job reaches `SUCCEEDED`.
+- [x] CloudWatch receives the task output.
+- [x] All resources tagged with the test ID are destroyed.
 
 ## Boundaries
 
-This validates a minimal Fargate Batch workload. Private-only networking,
-custom images, retries and customer workload scheduling remain separately
-testable deployment concerns.
+This validates a minimal public-subnet Fargate Batch workload. Private-only
+networking, custom images, retries and customer workload scheduling remain
+separately testable deployment concerns.

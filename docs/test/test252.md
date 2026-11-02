@@ -16,5 +16,29 @@ recorded `Destroy complete! Resources: 8 destroyed.`
 
 ## Corrective validation
 
-Pending after this PR's explicit Fargate public-IP and CloudWatch Logs
-configuration is applied.
+AWS account: `654654474502`  
+AWS region: `us-east-1`  
+Test ID: `certbatchworkload20261102c`
+
+Commands:
+
+`scripts/terraform_run_monitor.py start apply infrastructure/terraform/module-validation/batch --run-id cert-batch-20261102c --terraform-arg='-var=test_id=certbatchworkload20261102c'`
+
+`aws batch submit-job --job-name davdeploy-certification --job-queue davdeploy-certbatchworkload20261102c --job-definition davdeploy-certbatchworkload20261102c`
+
+`scripts/terraform_run_monitor.py start destroy infrastructure/terraform/module-validation/batch --run-id cert-batch-destroy-20261102c --terraform-arg='-var=test_id=certbatchworkload20261102c'`
+
+Observed result:
+
+- The Fargate job `eddc2d70-ab74-412c-91aa-8a6930dbec4f` reached `SUCCEEDED`
+  with exit code `0`.
+- Its CloudWatch stream emitted `davdeploy-certification`.
+- Terraform recorded `Destroy complete! Resources: 9 destroyed.`
+- A direct Batch compute-environment lookup returned no matching environment
+  after teardown.
+
+## Final boundary
+
+The validation proves public-subnet Fargate networking and execution logging
+for the module's minimal workload. It does not certify every customer image,
+private networking topology or application-level retry policy.
