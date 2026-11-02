@@ -27,6 +27,11 @@ _IMPLEMENTATIONS: dict[str, ModuleImplementation] = {
     "aws-api-gateway-http": ModuleImplementation("aws-api-gateway-http", ("aws_apigatewayv2_api", "aws_apigatewayv2_stage"), "modules/api-gateway-http"),
     "aws-lambda-service": ModuleImplementation("aws-lambda-service", ("aws_lambda_function", "aws_iam_role"), "modules/lambda-service"),
     "aws-ecr-image": ModuleImplementation("aws-ecr-image", ("aws_ecr_repository", "aws_ecr_lifecycle_policy"), "modules/ecr-image"),
+    "aws-aurora-postgres": ModuleImplementation("aws-aurora-postgres", ("aws_rds_cluster", "aws_rds_cluster_instance"), "modules/aurora-postgres"),
+    "aws-dynamodb-table": ModuleImplementation("aws-dynamodb-table", ("aws_dynamodb_table",), "modules/dynamodb-table"),
+    "aws-elasticache-redis": ModuleImplementation("aws-elasticache-redis", ("aws_elasticache_replication_group",), "modules/elasticache-redis"),
+    "aws-opensearch": ModuleImplementation("aws-opensearch", ("aws_opensearch_domain",), "modules/opensearch"),
+    "aws-efs-shared-storage": ModuleImplementation("aws-efs-shared-storage", ("aws_efs_file_system", "aws_efs_mount_target"), "modules/efs-shared-storage"),
 }
 
 
