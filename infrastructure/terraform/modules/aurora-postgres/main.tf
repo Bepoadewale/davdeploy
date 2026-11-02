@@ -54,7 +54,11 @@ resource "aws_rds_cluster" "this" {
   backup_retention_period     = 7
   deletion_protection         = var.deletion_protection
   skip_final_snapshot         = var.skip_final_snapshot
-  tags                        = var.tags
+  serverlessv2_scaling_configuration {
+    min_capacity = 0.5
+    max_capacity = 2
+  }
+  tags = var.tags
 }
 
 resource "aws_rds_cluster_instance" "writer" {
