@@ -25,8 +25,8 @@ Add five AI, stream and batch module definitions and Terraform module roots.
 
 - [x] Five module definitions exist and default disabled.
 - [x] Focused Terraform schema validation completed.
-- [ ] Bedrock, RAG, SageMaker and Batch require model, data, networking and
-  workload-specific validation and remain explicitly disabled.
+- [ ] Bedrock, RAG, SageMaker, Batch and Kinesis require model, data,
+  networking and workload-specific validation and remain explicitly disabled.
 
 ## Acceptance status
 
@@ -35,7 +35,8 @@ policy and live-workload validation.
 
 ## Tests / validation performed
 
-`terraform fmt` and `terraform validate`, plus a disposable Kinesis root.
+`terraform fmt` and focused Terraform validation, plus a disposable Kinesis
+root prepared for later live execution.
 
 ## Evidence files produced
 

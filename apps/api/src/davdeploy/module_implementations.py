@@ -41,7 +41,7 @@ _IMPLEMENTATIONS: dict[str, ModuleImplementation] = {
     "aws-bedrock-knowledge-base": ModuleImplementation("aws-bedrock-knowledge-base", ("aws_bedrockagent_knowledge_base", "aws_s3_bucket"), "modules/bedrock-knowledge-base"),
     "aws-sagemaker-endpoint": ModuleImplementation("aws-sagemaker-endpoint", ("aws_sagemaker_endpoint", "aws_sagemaker_model"), "modules/sagemaker-endpoint"),
     "aws-kinesis-stream": ModuleImplementation("aws-kinesis-stream", ("aws_kinesis_stream",), "modules/kinesis-stream"),
-    "aws-batch-compute": ModuleImplementation("aws_batch_compute_environment", ("aws_batch_job_queue", "aws_batch_job_definition"), "modules/batch-compute"),
+    "aws-batch-compute": ModuleImplementation("aws-batch-compute", ("aws_batch_compute_environment", "aws_batch_job_queue", "aws_batch_job_definition"), "modules/batch-compute"),
 }
 
 
