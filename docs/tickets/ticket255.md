@@ -1,6 +1,6 @@
 # ticket255 — Real EKS workload certification
 
-PR: Pending creation.
+PR: [#255](https://github.com/Bepoadewale/davdeploy/pull/255)
 
 Branch: `test/real-eks-workload`
 
@@ -26,17 +26,17 @@ cluster API, deploy a minimal workload, observe readiness, then destroy it.
 
 ## Acceptance criteria
 
-- [ ] A minimal workload reaches Ready on real EKS nodes.
-- [ ] Operator public API access is limited to one CIDR.
-- [ ] Cluster and all owned networking resources are destroyed.
+- [x] A minimal workload reaches Ready on real EKS nodes.
+- [x] Operator public API access is limited to one CIDR.
+- [x] Cluster and all owned networking resources are destroyed.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 
-Pending controlled AWS execution.
+Recorded in `docs/test/test255.md`.
 
 ## Evidence files produced
 

@@ -6,7 +6,7 @@ Execution type: Controlled disposable AWS workload validation.
 
 Customer repository: None.
 
-Commit: In progress.
+Commit: `b553c2d` plus evidence update in progress.
 
 AWS account: `654654474502`.
 
@@ -14,20 +14,25 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-Pending controlled AWS execution.
+A disposable EKS cluster, two managed nodes, isolated VPC, NAT gateway, IAM
+roles and OIDC provider, tagged `TestId=certeksworkload20261102a`.
 
 ## Commands executed
 
-Pending controlled AWS execution.
+Terraform monitor applied and destroyed the EKS root. `aws eks update-kubeconfig`
+configured the temporary context; `kubectl` deployed NGINX, waited for rollout,
+and port-forwarded the owned service for an HTTP probe.
 
 ## Observed result
 
-Pending controlled AWS execution.
+Two EKS nodes became Ready. The NGINX deployment rolled out successfully, and
+the local probe returned its default HTML response through the Kubernetes
+service. Public API access was restricted to the operator `/32`.
 
 ## Teardown
 
-Pending controlled AWS execution.
+Terraform recorded `Destroy complete! Resources: 23 destroyed.`
 
 ## Final boundary
 
-Pending controlled AWS execution.
+This proves cluster workload readiness, not a public load-balancer path.
