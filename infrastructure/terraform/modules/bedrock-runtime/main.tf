@@ -14,7 +14,14 @@ resource "aws_bedrock_guardrail" "this" {
   blocked_input_messaging   = "This request cannot be processed."
   blocked_outputs_messaging = "This response cannot be returned."
   description               = "DavDeploy guardrail for ${var.name}"
-  tags                      = var.tags
+  content_policy_config {
+    filters_config {
+      type            = "HATE"
+      input_strength  = "LOW"
+      output_strength = "LOW"
+    }
+  }
+  tags = var.tags
 }
 
 output "invoke_policy_json" { value = data.aws_iam_policy_document.invoke.json }
