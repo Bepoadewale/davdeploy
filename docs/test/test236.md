@@ -28,16 +28,18 @@ AWS region: `us-east-1`.
 
 `AWS_PROFILE=ai-platform-pilot-key terraform apply -auto-approve -input=false -var='test_id=events-20261102a'`
 
+`AWS_PROFILE=ai-platform-pilot-key terraform destroy -auto-approve -input=false -var='test_id=events-20261102a'`
+
 ## Observed result
 
-The controlled apply has created the EventBridge bus, SNS topic and queue pair.
-SES is only defined: it requires a domain owner to publish DNS records. Step
-Functions requires a workflow-specific execution role. Teardown/state evidence
-will be updated after the active Terraform process finishes.
+Terraform created the EventBridge bus, SNS topic, SQS queue and encrypted DLQ,
+then destroyed all four resources. SES is only defined: it requires a domain
+owner to publish DNS records. Step Functions requires a workflow-specific
+execution role.
 
 ## Teardown
 
-The test root destroys all disposable resources before review readiness.
+Terraform state was empty after destroy. No test resources were retained.
 
 ## Final boundary
 
