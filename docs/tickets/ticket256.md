@@ -1,6 +1,6 @@
 # ticket256 — Real Step Functions workload certification
 
-PR: Pending creation.
+PR: [#256](https://github.com/Bepoadewale/davdeploy/pull/256)
 
 Branch: `test/real-workflow-workload`
 
@@ -25,16 +25,16 @@ the state machine and role.
 
 ## Acceptance criteria
 
-- [ ] An execution reaches `SUCCEEDED`.
-- [ ] All test-tagged resources are destroyed.
+- [x] An execution reaches `SUCCEEDED`.
+- [x] All test-tagged resources are destroyed.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 
-Pending controlled AWS execution.
+Recorded in `docs/test/test256.md`.
 
 ## Evidence files produced
 
