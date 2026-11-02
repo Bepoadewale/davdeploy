@@ -4,6 +4,8 @@ variable "instance_role_arn" { type = string }
 variable "subnet_ids" { type = list(string) }
 variable "security_group_ids" { type = list(string) }
 variable "image" { type = string }
+variable "log_group_name" { type = string }
+variable "region" { type = string }
 variable "tags" { type = map(string) }
 
 resource "aws_batch_compute_environment" "this" {
@@ -38,6 +40,20 @@ resource "aws_batch_job_definition" "this" {
   container_properties = jsonencode({
     image            = var.image
     executionRoleArn = var.instance_role_arn
+    # Fargate tasks in a public subnet need a public address to reach public
+    # ECR and CloudWatch Logs unless the caller supplies private endpoints/NAT.
+    # The validation root deliberately uses public default-VPC subnets.
+    networkConfiguration = {
+      assignPublicIp = "ENABLED"
+    }
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = var.log_group_name
+        "awslogs-region"        = var.region
+        "awslogs-stream-prefix" = "davdeploy"
+      }
+    }
     resourceRequirements = [
       { type = "VCPU", value = "0.25" },
       { type = "MEMORY", value = "512" }

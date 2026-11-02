@@ -1,5 +1,7 @@
 variable "test_id" { type = string }
 
+data "aws_region" "current" {}
+
 locals {
   name = "davdeploy-${var.test_id}"
   tags = { ManagedBy = "terraform", Purpose = "davdeploy-module-validation", TestId = var.test_id }
@@ -59,6 +61,11 @@ resource "aws_security_group" "batch" {
   }
   tags = local.tags
 }
+resource "aws_cloudwatch_log_group" "batch" {
+  name              = "/davdeploy/module-validation/${var.test_id}/batch"
+  retention_in_days = 1
+  tags              = local.tags
+}
 module "batch" {
   source             = "../../modules/batch-compute"
   name               = local.name
@@ -67,6 +74,8 @@ module "batch" {
   subnet_ids         = slice(data.aws_subnets.default.ids, 0, 2)
   security_group_ids = [aws_security_group.batch.id]
   image              = "public.ecr.aws/amazonlinux/amazonlinux:2023"
+  log_group_name     = aws_cloudwatch_log_group.batch.name
+  region             = data.aws_region.current.name
   tags               = local.tags
   depends_on         = [aws_iam_role_policy_attachment.batch_service, aws_iam_role_policy_attachment.task_execution]
 }
