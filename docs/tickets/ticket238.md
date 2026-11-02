@@ -26,7 +26,8 @@ Batch identifier, and reconcile registry paths/resources with actual modules.
 
 - [x] Five module definitions exist and default disabled.
 - [x] Batch module identifier is corrected.
-- [x] Registry paths and resource inventories match real module roots.
+- [x] Registry paths and resource inventories match real module roots, enforced
+  by a focused 30-module registry test.
 - [ ] Full platform lifecycle tests remain disabled because EKS, NAT, VPN and
   multi-region DNS require longer-lived network, external endpoint and cost
   controls.
@@ -38,7 +39,7 @@ network, recovery, cost and workload-specific validation evidence exists.
 
 ## Tests / validation performed
 
-Terraform formatting and provider-schema validation are run for the safe
+Terraform formatting and a focused registry test are run for the safe
 module roots. No expensive or externally coupled platform deployment is
 represented as tested.
 
