@@ -26,15 +26,17 @@ remain disabled until their individual validation pass.
 
 - [x] Five foundation module definitions exist.
 - [x] They are disabled by default.
-- [ ] Validation is intentionally deferred.
+- [x] KMS, parameter configuration and feature flags passed a real AWS cycle.
+- [ ] DNS zone and ACM certificate validation remain pending.
 
 ## Acceptance status
 
-Implementation complete; validation deferred by explicit request.
+Implementation complete. Partial real-AWS validation is recorded; DNS and ACM
+need a dedicated DNS-validation test.
 
 ## Tests / validation performed
 
-None. Manual validation is intentionally deferred.
+See `docs/test/test233.md`.
 
 ## Evidence files produced
 
