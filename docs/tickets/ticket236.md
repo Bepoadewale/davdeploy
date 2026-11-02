@@ -25,13 +25,15 @@ Add five event and notification module definitions and Terraform module roots.
 
 - [x] Five module definitions exist and default disabled.
 - [x] Focused Terraform schema validation completed.
+- [x] SQS, EventBridge and SNS disposable lifecycle completed in AWS.
 - [ ] SES DNS verification and workflow-specific Step Functions validation are
   deliberately separate from this disposable root.
 
 ## Acceptance status
 
-Implementation is complete. The registry remains disabled until each service
-has its own execution policy and controlled lifecycle evidence.
+Implementation and focused validation are complete. The registry remains
+disabled until each service has its own execution policy and controlled
+lifecycle evidence.
 
 ## Tests / validation performed
 
