@@ -3,10 +3,10 @@ data "aws_caller_identity" "current" {}
 locals {
   name = "davdeploy-module-test-${var.test_id}"
   tags = {
-    Project = "davdeploy"
+    Project   = "davdeploy"
     ManagedBy = "davdeploy"
-    Purpose = "temporary-module-validation"
-    TestId = var.test_id
+    Purpose   = "temporary-module-validation"
+    TestId    = var.test_id
   }
 }
 
