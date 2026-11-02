@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from davdeploy.commercial_readiness import commercial_readiness
 from davdeploy.contracts import PlanningEvidence
 from davdeploy.domain import (
     ArchitectureCandidate,
@@ -144,6 +145,7 @@ class AwsV1Planner:
             module_contracts=module_contracts(modules),
             module_execution=module_execution_contracts(modules),
             operational_readiness=operational_readiness(modules),
+            commercial_readiness=commercial_readiness(),
             dependencies=[
                 "customer AWS account",
                 "GitHub repository connection",

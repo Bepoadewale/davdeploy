@@ -185,6 +185,13 @@ class OperationalReadiness(BaseModel):
     recovery_controls: list[str]
 
 
+class CommercialReadiness(BaseModel):
+    onboarding: list[str]
+    support: list[str]
+    entitlement_state: str
+    billing_boundary: str
+
+
 class CostRange(BaseModel):
     currency: str = "USD"
     monthly_low: int
@@ -241,6 +248,7 @@ class ArchitecturePlan(BaseModel):
     module_contracts: list[ModuleContract] = Field(default_factory=list)
     module_execution: list[ModuleExecutionContract] = Field(default_factory=list)
     operational_readiness: OperationalReadiness | None = None
+    commercial_readiness: CommercialReadiness | None = None
     dependencies: list[str]
     assumptions: list[str]
     security_controls: list[str]

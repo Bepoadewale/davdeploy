@@ -256,3 +256,13 @@ def test_plan_exposes_operational_readiness_before_execution():
     assert result.operational_readiness is not None
     assert result.operational_readiness.quota_evidence_state == "REQUIRED_BEFORE_EXECUTION"
     assert "database point-in-time recovery" in result.operational_readiness.recovery_controls
+
+
+def test_plan_exposes_commercial_readiness_without_claiming_payment_collection():
+    result = plan()
+    assert result.commercial_readiness is not None
+    assert (
+        result.commercial_readiness.entitlement_state
+        == "WORKSPACE_SUBSCRIPTION_AND_USAGE_LIMITS_REQUIRED"
+    )
+    assert "requires a configured provider" in result.commercial_readiness.billing_boundary
