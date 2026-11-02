@@ -22,6 +22,11 @@ _IMPLEMENTATIONS: dict[str, ModuleImplementation] = {
     "aws-kms-key": ModuleImplementation("aws-kms-key", ("aws_kms_key", "aws_kms_alias"), "modules/kms-key"),
     "aws-parameter-config": ModuleImplementation("aws-parameter-config", ("aws_ssm_parameter",), "modules/parameter-config"),
     "aws-feature-flags": ModuleImplementation("aws-feature-flags", ("aws_appconfig_application", "aws_appconfig_environment"), "modules/feature-flags"),
+    "aws-s3-private-storage": ModuleImplementation("aws-s3-private-storage", ("aws_s3_bucket", "aws_s3_bucket_public_access_block"), "modules/s3-private-storage"),
+    "aws-cloudfront-delivery": ModuleImplementation("aws-cloudfront-delivery", ("aws_cloudfront_distribution", "aws_cloudfront_origin_access_control"), "modules/cloudfront-delivery"),
+    "aws-api-gateway-http": ModuleImplementation("aws-api-gateway-http", ("aws_apigatewayv2_api", "aws_apigatewayv2_stage"), "modules/api-gateway-http"),
+    "aws-lambda-service": ModuleImplementation("aws-lambda-service", ("aws_lambda_function", "aws_iam_role"), "modules/lambda-service"),
+    "aws-ecr-image": ModuleImplementation("aws-ecr-image", ("aws_ecr_repository", "aws_ecr_lifecycle_policy"), "modules/ecr-image"),
 }
 
 
