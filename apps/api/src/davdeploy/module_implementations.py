@@ -32,6 +32,11 @@ _IMPLEMENTATIONS: dict[str, ModuleImplementation] = {
     "aws-elasticache-redis": ModuleImplementation("aws-elasticache-redis", ("aws_elasticache_replication_group",), "modules/elasticache-redis"),
     "aws-opensearch": ModuleImplementation("aws-opensearch", ("aws_opensearch_domain",), "modules/opensearch"),
     "aws-efs-shared-storage": ModuleImplementation("aws-efs-shared-storage", ("aws_efs_file_system", "aws_efs_mount_target"), "modules/efs-shared-storage"),
+    "aws-sqs-queue": ModuleImplementation("aws-sqs-queue", ("aws_sqs_queue", "aws_sqs_queue_policy"), "modules/sqs-queue"),
+    "aws-eventbridge-bus": ModuleImplementation("aws-eventbridge-bus", ("aws_cloudwatch_event_bus", "aws_cloudwatch_event_rule"), "modules/eventbridge-bus"),
+    "aws-step-functions": ModuleImplementation("aws-step-functions", ("aws_sfn_state_machine", "aws_iam_role"), "modules/step-functions"),
+    "aws-sns-notifications": ModuleImplementation("aws-sns-notifications", ("aws_sns_topic", "aws_sns_topic_subscription"), "modules/sns-notifications"),
+    "aws-ses-email": ModuleImplementation("aws-ses-email", ("aws_ses_domain_identity", "aws_sesv2_configuration_set"), "modules/ses-email"),
 }
 
 
