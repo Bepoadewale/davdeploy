@@ -27,12 +27,13 @@ and retain strict disabled boundaries for anything not safely proven.
 ## Acceptance criteria
 
 - [x] Existing evidence and AWS state reconciled.
-- [ ] Each module has truthful validation or a concrete prerequisite boundary.
-- [x] Current disposable test resources are destroyed; no tagged resources remain.
+- [x] Each module has truthful validation or a concrete prerequisite boundary.
+- [x] Current disposable test resources are destroyed; final EKS teardown and
+  direct AWS absence checks completed.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 

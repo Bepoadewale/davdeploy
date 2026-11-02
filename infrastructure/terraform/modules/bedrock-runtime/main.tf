@@ -21,7 +21,7 @@ resource "aws_bedrock_guardrail" "this" {
       output_strength = "LOW"
     }
   }
-  tags                      = var.tags
+  tags = var.tags
 }
 
 output "invoke_policy_json" { value = data.aws_iam_policy_document.invoke.json }

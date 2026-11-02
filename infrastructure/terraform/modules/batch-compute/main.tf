@@ -21,11 +21,14 @@ resource "aws_batch_compute_environment" "this" {
 }
 
 resource "aws_batch_job_queue" "this" {
-  name                 = var.name
-  state                = "ENABLED"
-  priority             = 1
-  compute_environments = [aws_batch_compute_environment.this.arn]
-  tags                 = var.tags
+  name     = var.name
+  state    = "ENABLED"
+  priority = 1
+  compute_environment_order {
+    order               = 1
+    compute_environment = aws_batch_compute_environment.this.arn
+  }
+  tags = var.tags
 }
 
 resource "aws_batch_job_definition" "this" {
