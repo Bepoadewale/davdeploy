@@ -2,7 +2,11 @@ from hashlib import sha256
 
 from davdeploy.certification_factory import certification_scenarios, scenario_for_module
 from davdeploy.domain import ArchitectureModule
-from davdeploy.universal_execution import LifecycleEvidence, compile_universal_execution_plan, verify_cleanup
+from davdeploy.universal_execution import (
+    LifecycleEvidence,
+    compile_universal_execution_plan,
+    verify_cleanup,
+)
 
 
 def module(identifier: str, depends_on: list[str] | None = None) -> ArchitectureModule:

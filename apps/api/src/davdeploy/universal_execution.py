@@ -13,7 +13,6 @@ from typing import Protocol
 
 from davdeploy.domain import ArchitectureModule
 
-
 LIFECYCLE_OPERATIONS = ("plan", "apply", "observe", "rollback", "destroy", "verify_cleanup")
 
 
