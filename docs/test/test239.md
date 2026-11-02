@@ -1,11 +1,35 @@
 # test239 — Delivery module batch reopen
 
-This PR supersedes closed #234. The same focused evidence applies: a disposable
-S3 bucket, ECR repository, Lambda function and HTTP API were created in AWS
-account `654654474502` / `us-east-1`, the API returned `{"ok":true}`, S3 public
-access blocking and ECR immutability/scan-on-push were verified, and Terraform
-destroyed all 13 resources. See the complete commands and limitations in
-`docs/test/test234.md`.
+Date: 2026-11-02
 
-CloudFront remains statically validated and disabled pending an origin-specific
-lifecycle run.
+Execution type: Real AWS disposable lifecycle, inherited from superseded #234.
+
+Customer repository: None.
+
+Commit: Final PR commit pending.
+
+AWS account: `654654474502`.
+
+AWS region: `us-east-1`.
+
+## Resources created
+
+S3 bucket, ECR repository, Lambda function, HTTP API and disposable IAM role.
+
+## Commands executed
+
+See the complete command record in `docs/test/test234.md`.
+
+## Observed result
+
+The API returned `{"ok":true}`. S3 public-access blocking and ECR immutable,
+scan-on-push configuration were verified.
+
+## Teardown
+
+Terraform destroyed all 13 disposable resources. No test resources were retained.
+
+## Final boundary
+
+CloudFront is statically validated but remains disabled pending an
+origin-specific lifecycle run.
