@@ -29,3 +29,15 @@ module "flags" {
   name   = local.name
   tags   = local.tags
 }
+
+module "dns" {
+  source = "../../modules/dns-zone"
+  name   = "${var.test_id}.validation.davdeploy.invalid"
+  tags   = local.tags
+}
+
+module "certificate" {
+  source      = "../../modules/acm-certificate"
+  domain_name = "service.${var.test_id}.validation.davdeploy.invalid"
+  tags        = local.tags
+}
