@@ -27,7 +27,7 @@ resource "aws_security_group" "database" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "postgres" {
-  for_each                     = toset(var.application_security_group_ids)
+  for_each                     = { for index, security_group_id in var.application_security_group_ids : tostring(index) => security_group_id }
   security_group_id            = aws_security_group.database.id
   referenced_security_group_id = each.value
   from_port                    = 5432

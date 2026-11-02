@@ -26,9 +26,9 @@ and retain strict disabled boundaries for anything not safely proven.
 
 ## Acceptance criteria
 
-- [ ] Existing evidence and AWS state reconciled.
+- [x] Existing evidence and AWS state reconciled.
 - [ ] Each module has truthful validation or a concrete prerequisite boundary.
-- [ ] All disposable test resources are destroyed or recorded as retained.
+- [x] Current disposable test resources are destroyed; no tagged resources remain.
 
 ## Acceptance status
 
