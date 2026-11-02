@@ -20,11 +20,14 @@ AWS region: `us-east-1` unless a test records otherwise.
 - Aurora PostgreSQL Serverless v2 cluster and writer, ElastiCache Redis
   replication group, EFS file system/mount targets, and their private security
   groups in the disposable default-VPC test boundary.
+- CloudFront distribution with HTTPS-only custom origin, HTTPS redirect and
+  the default CloudFront certificate.
 
 ## Commands executed
 
 `terraform apply` / `terraform destroy` in `module-validation/data`, `ai`,
-`bedrock`, and `data-services`, under `AWS_PROFILE=ai-platform-pilot-key`.
+`bedrock`, `data-services` and `cloudfront`, under
+`AWS_PROFILE=ai-platform-pilot-key`.
 
 ## Observed result
 
@@ -37,6 +40,11 @@ added and the next lifecycle completed. The data-services run exposed
 apply-time `for_each` keys derived from an unknown security-group ID. Modules
 now use stable list-index keys, then Aurora, Redis and EFS all reached
 available before teardown.
+
+CloudFront deployed successfully with `www.example.com` as an intentionally
+non-customer test origin. Its generated distribution endpoint returned an
+expected origin 404 for `/index.html`, proving the edge path reached the
+origin; the distribution was then deleted.
 
 ## Teardown
 
