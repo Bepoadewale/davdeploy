@@ -6,11 +6,12 @@ Branch: `feat/module-batch-03-data`
 
 ## Problem / goal
 
-Add disabled Aurora, DynamoDB, Redis, OpenSearch and EFS internal modules.
+Add Aurora PostgreSQL, DynamoDB, Redis, OpenSearch and EFS Terraform modules
+alongside their disabled internal module definitions.
 
 ## Current repo state
 
-Stacked on module batches #233 and #234. Validation is deferred by request.
+Stacked on module batches #233 and #234.
 
 ## Research / references used
 
@@ -18,20 +19,25 @@ Existing DavDeploy module contracts and AWS service boundaries.
 
 ## Work planned for the PR
 
-Add five data module definitions.
+Add five data module definitions and reusable Terraform module roots.
 
 ## Acceptance criteria
 
 - [x] Five data module definitions exist and default disabled.
-- [ ] Validation deferred.
+- [x] All five module roots format and validate through the AWS provider schema.
+- [ ] Real lifecycle validation for private-network data services requires an
+  isolated VPC and longer-lived, service-specific test windows; it is not used
+  as evidence of customer deployment readiness in this PR.
 
 ## Acceptance status
 
-Implementation complete; validation deferred.
+Implementation is complete. Only the DynamoDB disposable lifecycle is suitable
+for this low-cost test root; the other modules deliberately remain disabled.
 
 ## Tests / validation performed
 
-None by explicit request.
+`terraform fmt` and focused Terraform validation; DynamoDB lifecycle evidence
+is recorded in `docs/test/test235.md` once teardown completes.
 
 ## Evidence files produced
 
@@ -39,7 +45,8 @@ None by explicit request.
 
 ## Boundaries
 
-No AWS changes are enabled.
+No customer-facing AWS changes are enabled. Private data modules require a
+reviewed network, service-specific recovery design and controlled validation.
 
 ## Follow-up work
 
