@@ -6,7 +6,7 @@ Execution type: Controlled disposable AWS workload validation.
 
 Customer repository: None.
 
-Commit: In progress.
+Commit: `5acda65` plus evidence update in progress.
 
 AWS account: `654654474502`.
 
@@ -14,20 +14,23 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-Pending controlled AWS execution.
+Disposable EventBridge bus/rule/target, encrypted SQS queue and DLQ, SNS topic,
+and a queue policy restricted to the exact rule ARN.
 
 ## Commands executed
 
-Pending controlled AWS execution.
+Terraform monitor applied and destroyed the root. `aws events put-events` sent
+one event; `aws sqs receive-message` read the delivered body.
 
 ## Observed result
 
-Pending controlled AWS execution.
+Event `bb3bbe2b-ecc6-bd36-a98a-393e623d4873` was accepted and its exact source,
+detail type and JSON detail arrived in SQS.
 
 ## Teardown
 
-Pending controlled AWS execution.
+Terraform recorded `Destroy complete! Resources: 7 destroyed.`
 
 ## Final boundary
 
-Pending controlled AWS execution.
+This certifies delivery only, not a consumer, replay or DLQ transition.

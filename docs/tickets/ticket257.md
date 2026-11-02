@@ -1,6 +1,6 @@
 # ticket257 — Real EventBridge to SQS workload certification
 
-PR: Pending creation.
+PR: [#257](https://github.com/Bepoadewale/davdeploy/pull/257)
 
 Branch: `test/real-event-delivery-workload`
 
@@ -24,16 +24,16 @@ receive it from SQS, and remove all temporary resources.
 
 ## Acceptance criteria
 
-- [ ] A submitted EventBridge event arrives in the queue.
-- [ ] All test resources are destroyed.
+- [x] A submitted EventBridge event arrives in the queue.
+- [x] All test resources are destroyed.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 
-Pending controlled AWS execution.
+Recorded in `docs/test/test257.md`.
 
 ## Evidence files produced
 
