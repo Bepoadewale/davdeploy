@@ -1,6 +1,14 @@
 variable "name" { type = string }
 variable "subnet_ids" { type = list(string) }
 variable "tags" { type = map(string) }
+variable "endpoint_public_access" {
+  type    = bool
+  default = false
+}
+variable "public_access_cidrs" {
+  type    = list(string)
+  default = []
+}
 
 data "aws_iam_policy_document" "assume_eks" {
   statement {
@@ -52,8 +60,9 @@ resource "aws_eks_cluster" "this" {
   version  = "1.31"
   vpc_config {
     subnet_ids              = var.subnet_ids
-    endpoint_public_access  = false
+    endpoint_public_access  = var.endpoint_public_access
     endpoint_private_access = true
+    public_access_cidrs     = var.public_access_cidrs
   }
   tags       = var.tags
   depends_on = [aws_iam_role_policy_attachment.cluster]
@@ -84,3 +93,4 @@ resource "aws_eks_node_group" "system" {
 output "cluster_name" { value = aws_eks_cluster.this.name }
 output "oidc_issuer" { value = aws_eks_cluster.this.identity[0].oidc[0].issuer }
 output "oidc_provider_arn" { value = aws_iam_openid_connect_provider.this.arn }
+output "endpoint" { value = aws_eks_cluster.this.endpoint }
