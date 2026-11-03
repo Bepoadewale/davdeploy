@@ -29,6 +29,7 @@ rm -rf "${build_root}/package/infrastructure/terraform/customer-workload-serverl
 rm -f "${build_root}/package/infrastructure/terraform/customer-workload-serverless-api/.terraform.lock.hcl"
 cp "${repo_root}/scripts/customer-workload-app-runner-pilot.sh" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-workload-serverless-api.sh" "${build_root}/package/scripts/"
+cp "${repo_root}/scripts/customer-serverless-artifact-build.py" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-workload-dispatcher.sh" "${build_root}/package/scripts/"
 (
   cd "${build_root}/package"

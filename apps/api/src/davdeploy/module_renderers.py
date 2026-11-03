@@ -40,7 +40,15 @@ _RENDERERS: dict[str, ModuleRenderer] = {
         module_id="aws-serverless-api",
         terraform_root="infrastructure/terraform/customer-workload-serverless-api",
         runner_script="scripts/customer-workload-serverless-api.sh",
-        supported_operations=("plan", "destroy_plan", "apply", "observe", "destroy", "verify_cleanup"),
+        supported_operations=(
+            "plan",
+            "destroy_plan",
+            "apply",
+            "observe",
+            "destroy",
+            "verify_cleanup",
+            "build_artifact",
+        ),
         certification="isolated AWS renderer certified; hosted dispatch not certified",
         execution_enabled=False,
         operation_commands=(
@@ -50,6 +58,7 @@ _RENDERERS: dict[str, ModuleRenderer] = {
             ("observe", "health"),
             ("destroy", "destroy-saved-plan"),
             ("verify_cleanup", "verify-cleanup"),
+            ("build_artifact", "build-artifact"),
         ),
     ),
 }

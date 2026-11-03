@@ -1,6 +1,6 @@
 # ticket273 — Build pinned Lambda source artifacts safely
 
-PR: pending
+PR: https://github.com/Bepoadewale/davdeploy/pull/273
 
 Branch: `feat/serverless-customer-artifact`
 
@@ -23,26 +23,26 @@ PR #272 packages the Lambda/API Terraform root and runner and adds a default-off
 
 ## Work planned for the PR
 
-Define and implement a no-build-command source contract that packages only a documented Lambda entrypoint and explicitly vendored dependencies from a full-SHA public GitHub commit. Reject mutable refs, unsafe file types/paths, oversized archives, and arbitrary build commands. Produce a digest-bound artifact plus result evidence in the connection-scoped S3 prefix. Keep the operation opt-in for hosted certification; do not add a customer run-creation or deploy path.
+Define and implement a no-build-command source contract that packages the root `index.py` Lambda entrypoint plus regular files in an optional `vendor/` directory from a full-SHA public GitHub commit. Vendor files are placed at the ZIP root for Python import resolution. Reject mutable refs, unsafe file types/paths, oversized archives, and arbitrary build commands. Produce a digest-bound artifact plus result evidence in the connection-scoped S3 prefix. Keep the operation opt-in for hosted certification; do not add a customer run-creation or deploy path.
 
 ## Acceptance criteria
 
-- [ ] Source repository is canonical and pinned to a full immutable commit.
-- [ ] Builder packages only the allowed entrypoint and vendor tree, with path/symlink and size validation.
-- [ ] No customer-provided shell/build commands execute.
-- [ ] Artifact is uploaded to the expected tenant/plan-scoped key and SHA-256 is recorded.
-- [ ] CodeBuild dispatch is typed, operation-specific, and disabled by default.
+- [x] Source repository is canonical and pinned to a full immutable commit.
+- [x] Builder packages only the allowed entrypoint and vendor tree, with path/symlink and size validation.
+- [x] No customer-provided shell/build commands execute.
+- [x] Artifact is uploaded to the expected tenant/plan-scoped key and SHA-256 is recorded; server-side encryption is verified.
+- [x] CodeBuild dispatch is typed, operation-specific, and disabled by default.
 - [ ] Focused tests and full local clean-room validation pass.
 - [ ] CI passes.
-- [ ] Customer run creation remains App Runner-only.
+- [x] Customer run creation remains App Runner-only.
 
 ## Acceptance status
 
-Not started.
+Implementation and focused verification are complete. The isolated clean-room run and PR CI remain.
 
 ## Tests / validation performed
 
-None yet.
+`make lint` passed. Focused artifact-builder, renderer, dispatcher, and cloud-execution tests passed: 35 tests. Full `.venv/bin/python -m pytest -q` passed: 367 tests. Shell syntax, Python compilation, documentation conventions, and `git diff --check` passed. The executor package builder included the new fixed artifact script and Lambda/API renderer files. No real AWS artifact upload was performed.
 
 ## Evidence files produced
 

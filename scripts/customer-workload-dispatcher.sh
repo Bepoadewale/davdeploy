@@ -50,6 +50,7 @@ case "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
   aws-managed-application:build-push-image:build-push-image|\
   aws-serverless-api:plan:plan|aws-serverless-api:plan:destroy-plan|\
   aws-serverless-api:destroy_plan:destroy-plan|\
+  aws-serverless-api:build_artifact:build-artifact|\
   aws-serverless-api:apply:apply-saved-plan|\
   aws-serverless-api:observe:health|\
   aws-serverless-api:destroy:destroy-saved-plan|\
@@ -64,6 +65,12 @@ esac
 if [[ "$(jq '.[0].dependencies | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 ]]; then
   echo "This renderer accepts no unresolved module dependencies" >&2
   exit 2
+fi
+
+if [[ "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" == \
+  "aws-serverless-api:build_artifact:build-artifact" ]]; then
+  script="scripts/customer-serverless-artifact-build.py"
+  exec python3 "$script"
 fi
 
 exec bash "$script" "$DAVDEPLOY_EXECUTION_OPERATION"
