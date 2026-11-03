@@ -28,6 +28,7 @@ from davdeploy.contracts import TenantScope
 from davdeploy.day2 import FixtureDay2Advisor
 from davdeploy.domain import (
     CloudInventorySnapshot,
+    ArchitectureModule,
     EnvironmentName,
     InfrastructurePlanDecision,
     InfrastructurePlanState,
@@ -97,6 +98,7 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
 from davdeploy.terraform_generation import NovaTerraformGenerator
+from davdeploy.universal_execution import compile_universal_execution_plan
 
 BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
 
@@ -3874,6 +3876,16 @@ class ProductService:
             or plan_hash(revision.content) != content_digest
         ):
             raise ValueError("stale cloud execution request: approved digest changed")
+        module_payload = revision.content.get("architecture", {}).get("modules", [])
+        try:
+            universal_plan = compile_universal_execution_plan(
+                [ArchitectureModule.model_validate(module) for module in module_payload],
+                workspace_id=principal.organization_id,
+                project_id=infrastructure_plan.project_id,
+                plan_digest=revision.content_digest,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("approved revision has an invalid universal execution graph") from error
         profile_name = revision.content.get("summary", {}).get("selected_profile")
         if profile_name != "aws-app-runner":
             raise ValueError(
@@ -4118,6 +4130,18 @@ class ProductService:
             "cloud_connection_id": connection_id or None,
             "execution_role_configured": bool(connection and connection.execution_role_arn),
             "execution_environment": execution_environment,
+            "universal_execution": {
+                "plan_digest": universal_plan.plan_digest,
+                "modules": [
+                    {
+                        "id": module.module_id,
+                        "dependencies": list(module.dependencies),
+                        "operations": list(module.operations),
+                        "resource_tags": dict(module.resource_tags),
+                    }
+                    for module in universal_plan.modules
+                ],
+            },
             "blockers": blockers,
             "boundary": (
                 "This run records a guarded execution request. It does not deploy unless the "
@@ -5106,6 +5130,11 @@ class ProductService:
             "inventory_snapshot": inventory_snapshot,
             "architecture": {
                 "components": architecture["components"],
+                # This is an internal dependency graph, not a cloud-service
+                # picker. It is preserved in the immutable customer revision
+                # so an execution request can compile the exact approved
+                # module set against that revision's digest.
+                "modules": architecture.get("modules", []),
                 "dependencies": architecture["dependencies"],
                 "capacity": architecture["estimated_capacity"],
                 "operational_characteristics": architecture["operational_characteristics"],

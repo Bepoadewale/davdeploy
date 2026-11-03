@@ -856,6 +856,10 @@ def test_cloud_execution_run_is_admin_only_and_blocked_by_default():
     assert run["command"]["apply_command_available"] is False
     assert run["outputs"]["status"] == "not_executed"
     assert run["content_digest"] == approved.content_digest
+    graph = run["evidence"]["universal_execution"]
+    assert graph["plan_digest"] == approved.content_digest
+    assert graph["modules"]
+    assert all(item["resource_tags"]["DavDeployPlan"] == approved.content_digest for item in graph["modules"])
     assert detail["cloud_execution_runs"][0]["id"] == run["id"]
     assert any(
         event.action == "cloud_execution.run_requested"
