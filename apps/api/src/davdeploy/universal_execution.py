@@ -157,5 +157,4 @@ def compile_universal_execution_plan(
 
 def verify_cleanup(evidence: tuple[LifecycleEvidence, ...], plan: UniversalExecutionPlan) -> bool:
     """Require an independent ABSENT observation for every composed module."""
-    absent = {item.module_id for item in evidence if item.operation == "verify_cleanup" and item.state == "ABSENT"}
-    return absent == {module.module_id for module in plan.modules}
+    return lifecycle_evidence_complete(plan, "verify_cleanup", evidence)

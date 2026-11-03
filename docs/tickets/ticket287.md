@@ -46,7 +46,7 @@ The implementation and full local verification pass. GitHub CI is pending.
 
 ## Tests / validation performed
 
-`make verify` passed: 417 tests, Ruff, Actions configuration, OpenAPI snapshot,
+`make verify` passed: 418 tests, Ruff, Actions configuration, OpenAPI snapshot,
 and Docker Compose configuration checks. `python3 scripts/check_doc_conventions.py`
 and `git diff --check` passed.
 
