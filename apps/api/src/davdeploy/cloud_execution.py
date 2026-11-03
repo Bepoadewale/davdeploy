@@ -16,6 +16,7 @@ from typing import Protocol
 import boto3
 
 from davdeploy.module_renderers import renderer_for
+from davdeploy.universal_execution import validate_lifecycle_work_graph
 
 
 @dataclass(frozen=True)
@@ -34,37 +35,14 @@ def validate_lifecycle_work(
     value: object, *, hosted_certification: bool = False
 ) -> tuple[dict[str, object], ...]:
     """Accept only durable, typed module work, never a command payload."""
-    if not isinstance(value, list) or not value:
-        raise ValueError("universal lifecycle work is required")
     accepted: list[dict[str, object]] = []
-    for item in value:
-        if not isinstance(item, dict):
-            raise TypeError("universal lifecycle work item must be an object")
-        module_id = item.get("module_id")
-        operation = item.get("operation")
-        dependencies = item.get("dependencies")
-        resource_tags = item.get("resource_tags")
-        if not isinstance(module_id, str) or not module_id:
-            raise ValueError("universal lifecycle work item has no module identifier")
-        if operation not in {
-            "plan",
-            "destroy_plan",
-            "apply",
-            "observe",
-            "destroy",
-            "verify_cleanup",
-            "build-push-image",
-            "build_artifact",
-        }:
-            raise ValueError("universal lifecycle work has an unsupported operation")
-        if not isinstance(dependencies, list) or not all(
-            isinstance(value, str) for value in dependencies
-        ):
-            raise ValueError("universal lifecycle work has invalid dependencies")
-        if not isinstance(resource_tags, dict) or not all(
-            isinstance(key, str) and isinstance(value, str) for key, value in resource_tags.items()
-        ):
-            raise ValueError("universal lifecycle work has invalid resource tags")
+    for item in validate_lifecycle_work_graph(value):
+        module_id = str(item["module_id"])
+        operation = str(item["operation"])
+        dependencies = item["dependencies"]
+        resource_tags = item["resource_tags"]
+        assert isinstance(dependencies, list)
+        assert isinstance(resource_tags, dict)
         renderer = renderer_for(module_id, operation, hosted_certification=hosted_certification)
         accepted.append(
             {

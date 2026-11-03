@@ -953,12 +953,49 @@ def test_codebuild_adapter_rejects_composed_runs_until_all_module_states_are_sup
             return {"build": {"id": "unexpected"}}
 
     environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
-    work = lifecycle_work() * 2
+    work = lifecycle_work() + [
+        {
+            "module_id": "aws-serverless-api",
+            "operation": "apply",
+            "dependencies": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        }
+    ]
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            "profile": "aws-serverless-api",
+        }
+    )
+    assert result.state == "FAILED"
+    assert "one certified module" in (result.failure_reason or "")
+    assert calls == []
+
+
+def test_codebuild_adapter_rejects_incomplete_graph_before_renderer_or_cloud_call():
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "unexpected"}}
+
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    work = lifecycle_work() + [
+        {
+            "module_id": "aws-serverless-api",
+            "operation": "apply",
+            "dependencies": ["missing"],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        }
+    ]
     result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
         {"environment": environment, "lifecycle_work": work}
     )
     assert result.state == "FAILED"
-    assert "one certified module" in (result.failure_reason or "")
+    assert "missing modules" in (result.failure_reason or "")
     assert calls == []
 
 
