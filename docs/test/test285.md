@@ -6,7 +6,7 @@ Execution type: Local configuration contract tests; no AWS deployment.
 
 Customer repository: None.
 
-Commit: PR #285 working tree; implementation has not yet been pushed.
+Commit: `1df3f9a` (Terraform workflow input wiring and configuration checks).
 
 AWS account: None.
 
