@@ -185,4 +185,4 @@ def test_invitation_migration_upgrades_existing_version_19_schema():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 22
+    assert version == 23

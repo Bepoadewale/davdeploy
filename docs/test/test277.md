@@ -6,7 +6,7 @@ Execution type: local database/model and API-service validation. No AWS workload
 
 Customer repository: None.
 
-Commit: pending implementation commit.
+Commit: pending final implementation commit.
 
 AWS account: Not used.
 
@@ -18,12 +18,15 @@ Local test database rows for cloud execution runs and module-instance records.
 
 ## Commands executed
 
-Focused cloud-execution tests and repository verification; exact final commands
-and results will be recorded before merge.
+`make verify` passed after the model, service and version 23 migration changes:
+381 tests passed, Ruff and configuration checks passed, the OpenAPI snapshot
+matched, and Compose configuration validated. One existing Starlette
+deprecation warning was emitted. Focused cloud-execution and database tests
+passed (35 total).
 
 ## Observed result
 
-Pending full clean-room validation.
+Fresh clean-room validation is pending.
 
 ## Teardown
 

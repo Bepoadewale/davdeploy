@@ -44,9 +44,9 @@ for existing databases.
 - [x] Each module in a compiled run has durable, tenant/project-bound initial instance state.
 - [x] Instance identity and idempotency key uniqueness are enforced by the database.
 - [x] Run history exposes its own persisted module instances, not another run's instances.
-- [x] Fresh-database creation and existing-database startup are covered by the repository's SQLAlchemy `create_all` startup path and isolated service tests.
+- [x] Fresh-database creation and existing-database upgrade from schema version 22 are tested.
 - [ ] Focused tests, full verification, clean-room cycle and CI pass.
-- [ ] Existing execution gates and renderer count remain unchanged.
+- [x] Existing execution gates and renderer count remain unchanged.
 
 ## Acceptance status
 
@@ -55,10 +55,10 @@ Fresh clean-room validation and PR CI remain pending.
 
 ## Tests / validation performed
 
- - `.venv/bin/ruff check apps/api/src/davdeploy/models.py apps/api/src/davdeploy/service.py tests/test_cloud_execution.py` — passed.
- - `.venv/bin/python -m pytest tests/test_cloud_execution.py -q` — 31 passed; one Starlette deprecation warning.
- - `make verify` — passed: configuration check, Ruff, 380 tests, OpenAPI snapshot and Compose config; one Starlette deprecation warning.
- - `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- `.venv/bin/ruff check apps/api/src/davdeploy/db.py apps/api/src/davdeploy/models.py apps/api/src/davdeploy/service.py tests/test_cloud_execution.py tests/test_db_config.py tests/test_invitation_email.py` — passed.
+- `.venv/bin/python -m pytest tests/test_db_config.py tests/test_cloud_execution.py -q` — 35 passed; one Starlette deprecation warning.
+- `make verify` — passed: configuration check, Ruff, 381 tests, OpenAPI snapshot and Compose config; one Starlette deprecation warning.
+- `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
 
 ## Evidence files produced
 
