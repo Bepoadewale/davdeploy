@@ -33,24 +33,27 @@ PR #273 is merged. The Lambda/API renderer and pinned artifact builder are packa
 
 ## Acceptance criteria
 
-- [ ] Results are bound to the exact run, plan digest, connection, and requested operation.
-- [ ] Artifact-build, plan, apply, health, destroy, and cleanup have distinct truthful states.
-- [ ] Health is recorded only from an explicit successful health result; destroy only from confirmed absence.
-- [ ] Malformed or cross-run evidence cannot mark a run successful.
-- [ ] Focused tests, full local clean-room cycle, and CI pass.
-- [ ] No customer execution gate or API run-creation path is enabled.
+- [x] Results are bound to the exact run, plan digest, connection, and requested operation.
+- [x] Artifact-build, plan, apply, health, destroy, and cleanup have distinct truthful states.
+- [x] Health is recorded only from an explicit successful health result matching the prior apply output; destroy only from confirmed absence.
+- [x] Malformed or cross-run evidence cannot mark a run successful.
+- [x] Focused tests and full local clean-room cycle pass.
+- [ ] CI passes.
+- [x] No customer execution gate or API run-creation path is enabled.
 
 ## Acceptance status
 
-Ticket created before implementation. No substantive code changes have been made.
+Renderer-aware evidence validation and state mapping are implemented. Focused tests, full suite, and isolated local clean-room validation pass. Required GitHub CI is pending.
 
 ## Tests / validation performed
 
-Bootstrap commit only; validation is pending.
+`make verify` passed: 378 tests, OpenAPI snapshot, configuration boundary, lint, and Docker Compose config; one existing Starlette/httpx deprecation warning. Focused cloud-execution tests passed: 30 tests. `GITHUB_PR_NUMBER=274 .venv/bin/python scripts/check_doc_conventions.py` and `git diff --check` passed.
+
+The full clean-room cycle used a fresh detached worktree at commit `1da2685` in `/tmp/davdeploy-cleanroom-pr274-20261103`. `make bootstrap-local` passed, followed by `make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify`; every target passed. Compose services were stopped with `docker compose stop`; the worktree and named Postgres volume remain.
 
 ## Evidence files produced
 
-No AWS workload is planned for this PR. Hosted CodeBuild lifecycle certification remains a follow-up.
+No AWS workload is planned for this PR. Hosted CodeBuild lifecycle certification remains a follow-up. Clean-room files remain under `/tmp/davdeploy-cleanroom-pr274-20261103`; services are stopped, not removed.
 
 ## Boundaries
 
