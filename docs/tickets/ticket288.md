@@ -33,18 +33,20 @@ compiler does not yet validate all graph and identity inputs.
 
 ## Acceptance criteria
 
-- [ ] Empty or malformed graph identity is rejected before lifecycle ordering.
-- [ ] Duplicate, self, and unknown dependencies are rejected.
-- [ ] Valid plans preserve deterministic dependency ordering and tags.
+- [x] Empty or malformed graph identity is rejected before lifecycle ordering.
+- [x] Duplicate, self, and unknown dependencies are rejected.
+- [x] Valid plans preserve deterministic dependency ordering and tags.
 - [ ] Focused tests and required CI pass.
 
 ## Acceptance status
 
-Implementation and validation are in progress.
+Implementation and local verification pass. GitHub CI is pending.
 
 ## Tests / validation performed
 
-Will be recorded before merge.
+`make verify` passed: 423 tests, Ruff, Actions configuration, OpenAPI snapshot,
+and Docker Compose configuration checks. `python3 scripts/check_doc_conventions.py`
+and `git diff --check` passed.
 
 ## Evidence files produced
 

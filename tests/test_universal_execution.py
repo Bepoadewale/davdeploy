@@ -36,6 +36,46 @@ def test_compiler_rejects_unknown_dependencies():
         raise AssertionError("unknown dependency accepted")
 
 
+def test_compiler_rejects_empty_graph_and_invalid_scope_or_digest():
+    digest = sha256(b"approved").hexdigest()
+    with pytest.raises(ValueError, match="at least one module"):
+        compile_universal_execution_plan([], workspace_id="w", project_id="p", plan_digest=digest)
+    with pytest.raises(ValueError, match="workspace and project"):
+        compile_universal_execution_plan(
+            [module("api")], workspace_id=" ", project_id="p", plan_digest=digest
+        )
+    for invalid_digest in ("g" * 64, digest.upper(), "short"):
+        with pytest.raises(ValueError, match="lowercase SHA-256"):
+            compile_universal_execution_plan(
+                [module("api")],
+                workspace_id="w",
+                project_id="p",
+                plan_digest=invalid_digest,
+            )
+
+
+@pytest.mark.parametrize(
+    ("identifier", "dependencies", "message"),
+    [
+        ("API", [], "invalid module identifier"),
+        ("", [], "invalid module identifier"),
+        ("api", ["api"], "cannot depend on itself"),
+        ("api", ["worker", "worker"], "duplicate dependencies"),
+    ],
+)
+def test_compiler_rejects_invalid_module_and_dependency_identifiers(
+    identifier, dependencies, message
+):
+    digest = sha256(b"approved").hexdigest()
+    with pytest.raises(ValueError, match=message):
+        compile_universal_execution_plan(
+            [module(identifier, dependencies)],
+            workspace_id="w",
+            project_id="p",
+            plan_digest=digest,
+        )
+
+
 def test_lifecycle_work_is_stable_and_reverses_for_cleanup():
     digest = sha256(b"approved").hexdigest()
     plan = compile_universal_execution_plan(
