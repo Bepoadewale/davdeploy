@@ -15,6 +15,8 @@ from typing import Protocol
 
 import boto3
 
+from davdeploy.module_renderers import renderer_for
+
 
 @dataclass(frozen=True)
 class CloudExecutionResult:
@@ -50,12 +52,17 @@ def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
             isinstance(key, str) and isinstance(value, str) for key, value in resource_tags.items()
         ):
             raise ValueError("universal lifecycle work has invalid resource tags")
+        renderer = renderer_for(module_id, operation)
         accepted.append(
             {
                 "module_id": module_id,
                 "operation": operation,
                 "dependencies": dependencies,
                 "resource_tags": resource_tags,
+                "renderer": {
+                    "terraform_root": renderer.terraform_root,
+                    "runner_script": renderer.runner_script,
+                },
             }
         )
     return tuple(accepted)
