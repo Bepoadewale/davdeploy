@@ -50,8 +50,8 @@ for existing databases.
 
 ## Acceptance status
 
-Implementation, focused tests and full repository verification passed.
-Fresh clean-room validation and PR CI remain pending.
+Implementation, focused tests, full repository verification and fresh
+clean-room validation passed. PR CI remains pending.
 
 ## Tests / validation performed
 
@@ -59,6 +59,12 @@ Fresh clean-room validation and PR CI remain pending.
 - `.venv/bin/python -m pytest tests/test_db_config.py tests/test_cloud_execution.py -q` — 35 passed; one Starlette deprecation warning.
 - `make verify` — passed: configuration check, Ruff, 381 tests, OpenAPI snapshot and Compose config; one Starlette deprecation warning.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- Fresh clean-room at commit `150b45f`, isolated worktree
+  `/tmp/davdeploy-cleanroom-pr277-20261103`, Compose project
+  `davdeploy-pr277-20261103`: bootstrap, smoke, API contract, customer-plan
+  E2E, all demos, trace check, full verification (381 tests), OPA, Terraform
+  validation, Kubernetes render, and scoped cleanup — passed. Local-only; no
+  AWS workload was created.
 
 ## Evidence files produced
 

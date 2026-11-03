@@ -6,7 +6,7 @@ Execution type: local database/model and API-service validation. No AWS workload
 
 Customer repository: None.
 
-Commit: pending final implementation commit.
+Commit: `150b45f` (migration and final clean-room validation).
 
 AWS account: Not used.
 
@@ -26,7 +26,12 @@ passed (35 total).
 
 ## Observed result
 
-Fresh clean-room validation is pending.
+The fresh clean-room at `150b45f` passed in isolated worktree
+`/tmp/davdeploy-cleanroom-pr277-20261103`, using Compose project
+`davdeploy-pr277-20261103`. The fail-fast sequence included bootstrap, smoke,
+API contract, customer-plan E2E, all simple/complex/degraded/Day-2/failure/
+readiness demos, trace check, `make verify` (381 tests), OPA, Terraform
+validation, Kubernetes render, and scoped cleanup. No AWS workload was run.
 
 ## Teardown
 
