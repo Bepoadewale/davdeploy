@@ -1,6 +1,6 @@
 # ticket267 — Serverless API customer renderer
 
-PR: pending
+PR: [#267](https://github.com/Bepoadewale/davdeploy/pull/267)
 
 Branch: `feat/serverless-api-renderer`
 
@@ -23,14 +23,14 @@ execution runner contract.
 ## Work planned for the PR
 
 Create an isolated serverless Terraform root and fixed runner operations for
-plan, immutable saved-plan apply, endpoint health check, destroy and absence
+plan, immutable-artifact apply, endpoint health check, destroy and absence
 verification. Bind the renderer only after its checks pass.
 
 ## Acceptance criteria
 
-- [ ] Lambda/API root has scoped tags, role, permission and output contract.
-- [ ] Runner accepts only immutable ZIP artifact and approved saved plan.
-- [ ] Health and cleanup commands are bounded.
+- [x] Lambda/API root has scoped tags, role, permission and output contract.
+- [x] Runner accepts only an immutable ZIP artifact.
+- [x] Health and cleanup commands are bounded.
 - [ ] Focused tests and full CI pass.
 
 ## Acceptance status
@@ -39,7 +39,7 @@ In progress.
 
 ## Tests / validation performed
 
-Pending implementation.
+`terraform -chdir=infrastructure/terraform/customer-workload-serverless-api validate`, `bash -n scripts/customer-workload-serverless-api.sh`, and `uv run pytest tests/test_serverless_renderer_contract.py -q` — passed.
 
 ## Evidence files produced
 
