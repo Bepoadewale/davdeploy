@@ -35,18 +35,20 @@ Multi-module customer execution remains disabled.
 
 ## Acceptance criteria
 
-- [ ] Each operation recognizes only its appropriate terminal evidence.
-- [ ] A failed or incomplete module prevents graph completion.
-- [ ] Unknown operation names remain rejected.
-- [ ] Focused tests and required CI pass.
+- [x] Each operation recognizes only its appropriate terminal evidence.
+- [x] A failed or incomplete module prevents graph completion.
+- [x] Unknown operation names remain rejected.
+- [ ] Required CI passes.
 
 ## Acceptance status
 
-Implementation and validation are in progress.
+The implementation and full local verification pass. GitHub CI is pending.
 
 ## Tests / validation performed
 
-Will be recorded before merge.
+`make verify` passed: 417 tests, Ruff, Actions configuration, OpenAPI snapshot,
+and Docker Compose configuration checks. `python3 scripts/check_doc_conventions.py`
+and `git diff --check` passed.
 
 ## Evidence files produced
 
