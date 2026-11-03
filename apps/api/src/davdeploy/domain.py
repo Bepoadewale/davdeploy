@@ -402,9 +402,15 @@ class CloudExecutionRunRequest(BaseModel):
     expected_region: str | None = Field(default=None, pattern=r"^[a-z]{2}-[a-z]+-\d$")
     mode: str = Field(
         default="GUARDED_CLOUD_EXECUTION",
-        pattern=r"^(GUARDED_CLOUD_EXECUTION|AUTHENTICATED_APP_RUNNER_APPLY|AUTHENTICATED_APP_RUNNER_DESTROY|AUTHENTICATED_APP_RUNNER_IMAGE_BUILD)$",
+        pattern=r"^(GUARDED_CLOUD_EXECUTION|AUTHENTICATED_APP_RUNNER_APPLY|AUTHENTICATED_APP_RUNNER_DESTROY|AUTHENTICATED_APP_RUNNER_IMAGE_BUILD|AUTHENTICATED_SERVERLESS_CERTIFICATION)$",
     )
     confirmation: str | None = None
+    serverless_operation: str | None = Field(
+        default=None,
+        pattern=r"^(build-artifact|plan|apply-saved-plan|health|destroy-plan|destroy-saved-plan|verify-cleanup)$",
+    )
+    prior_run_id: str | None = Field(default=None, min_length=1, max_length=36)
+    source_commit: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{40}$")
 
 
 class CloudExecutionExecuteRequest(BaseModel):

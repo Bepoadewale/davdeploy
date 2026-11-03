@@ -34,6 +34,60 @@ def lifecycle_work(operation="apply"):
     ]
 
 
+def allow_serverless_certification(monkeypatch, workspace_id):
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
+    monkeypatch.setenv("DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS", workspace_id)
+    monkeypatch.setenv("DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET", "customer-state")
+    monkeypatch.setenv("DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE", "customer-locks")
+    monkeypatch.setenv("DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI", "s3://releases/runner.zip")
+
+
+def approved_serverless_customer_review(service, db):
+    approved = approved_app_runner_customer_review(service)
+    connection = service.create_cloud_connection(
+        founder(), "Verified test cloud", "aws", "byoc_role_contract"
+    )
+    connection.setup_state = "VERIFIED"
+    connection.account_id = "654654474502"
+    connection.execution_role_arn = "arn:aws:iam::654654474502:role/davdeployExecution-test"
+    connection.external_id_secret_ref = "arn:aws:secretsmanager:us-east-1:654654474502:secret:test"
+    revision = db.get(InfrastructurePlanRevision, approved.id)
+    assert revision is not None
+    content = dict(revision.content)
+    content["summary"] = {**content["summary"], "selected_profile": "aws-lambda-api"}
+    content["target"] = {
+        **content["target"],
+        "connection_id": connection.id,
+        "account_id": connection.account_id,
+        "region": "us-east-1",
+    }
+    content["architecture"] = {
+        **content["architecture"],
+        "modules": [
+            {
+                "identifier": "aws-serverless-api",
+                "display_name": "Serverless API",
+                "purpose": "HTTP API backed by Lambda",
+                "stage": "certification",
+                "services": ["Lambda", "API Gateway"],
+                "depends_on": [],
+                "execution_supported": False,
+            }
+        ],
+    }
+    revision.content = content
+    revision.content_digest = plan_hash(content)
+    decision = db.scalar(
+        select(InfrastructurePlanDecisionRecord).where(
+            InfrastructurePlanDecisionRecord.revision_id == revision.id
+        )
+    )
+    assert decision is not None
+    decision.approved_digest = revision.content_digest
+    db.commit()
+    return revision, connection
+
+
 @pytest.mark.parametrize(
     ("operation", "phase", "detail", "expected_state"),
     [
@@ -430,6 +484,355 @@ def test_worker_builds_certification_context_from_persisted_run_mode():
     assert adapter.context["profile"] == "aws-serverless-api"
     assert adapter.context["mode"] == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
     assert adapter.context["lifecycle_work"][0]["operation"] == "build_artifact"
+
+
+def test_serverless_certification_run_chains_pinned_artifact_and_saved_plan(monkeypatch):
+    service, db = make_service()
+    revision, connection = approved_serverless_customer_review(service, db)
+    allow_serverless_certification(monkeypatch, founder().organization_id)
+    source_commit = "b" * 40
+
+    class GitHubResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"sha": source_commit}
+
+    monkeypatch.setattr("davdeploy.service.httpx.get", lambda *args, **kwargs: GitHubResponse())
+    wakeups = []
+    monkeypatch.setattr(service, "_wake_worker", lambda kind, run_id: wakeups.append(run_id))
+
+    artifact = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation=None,
+        serverless_operation="build-artifact",
+        source_commit=source_commit,
+    )
+    assert artifact["profile"] == "aws-serverless-api"
+    assert artifact["state"] == "READY_FOR_OPERATOR_SERVERLESS_CERTIFICATION"
+    assert artifact["evidence"]["execution_environment"][
+        "DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"
+    ].endswith(f"/{artifact['id']}/lambda.zip")
+    assert (
+        service.queue_cloud_execution_run(
+            operator(),
+            artifact["id"],
+            revision.content_digest,
+            "RUN_SERVERLESS_CERTIFICATION_PHASE",
+        )["state"]
+        == "QUEUED"
+    )
+    assert wakeups == [artifact["id"]]
+
+    artifact_run = db.get(CloudExecutionRun, artifact["id"])
+    assert artifact_run is not None
+    artifact_environment = dict(artifact_run.evidence["execution_environment"])
+    artifact_run.state = "ARTIFACT_READY"
+    artifact_run.outputs = {
+        "runner_artifact": {
+            "detail": {
+                "artifact_s3_uri": artifact_environment["DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"],
+                "artifact_sha256": "a" * 64,
+                "source_commit": source_commit,
+            }
+        }
+    }
+    db.commit()
+
+    with pytest.raises(ValueError, match="prior lifecycle run is not eligible"):
+        service.create_cloud_execution_run_for_revision(
+            operator(),
+            revision.id,
+            content_digest=revision.content_digest,
+            terraform_render_id=None,
+            preflight_id=None,
+            terraform_plan_review_id=None,
+            expected_account_id=connection.account_id,
+            expected_region="us-east-1",
+            mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            confirmation="APPLY_SERVERLESS_API_SAVED_PLAN",
+            serverless_operation="apply-saved-plan",
+            prior_run_id=artifact["id"],
+        )
+
+    plan = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation=None,
+        serverless_operation="plan",
+        prior_run_id=artifact["id"],
+    )
+    plan_run = db.get(CloudExecutionRun, plan["id"])
+    assert plan_run is not None
+    plan_environment = plan_run.evidence["execution_environment"]
+    assert (
+        plan_environment["DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"]
+        == artifact_environment["DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"]
+    )
+    assert plan_environment["DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256"] == "a" * 64
+    assert (
+        f"/{revision.content_digest}/apply/{plan['id']}.tfplan"
+        == plan_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"][
+            len(
+                "s3://customer-state/davdeploy/customer/"
+                f"{connection.id}/projects/{plan_run.project_id}"
+            ) :
+        ]
+    )
+
+    plan_run.state = "PLAN_READY_FOR_REVIEW"
+    plan_run.outputs = {
+        "runner_artifact": {
+            "detail": {
+                "saved_plan_s3_uri": plan_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"],
+                "saved_plan_sha256": "c" * 64,
+                "artifact_sha256": "a" * 64,
+                "plan_summary": {"resource_changes": []},
+            }
+        }
+    }
+    db.commit()
+    with pytest.raises(ValueError, match="explicit APPLY_SERVERLESS_API_SAVED_PLAN"):
+        service.create_cloud_execution_run_for_revision(
+            operator(),
+            revision.id,
+            content_digest=revision.content_digest,
+            terraform_render_id=None,
+            preflight_id=None,
+            terraform_plan_review_id=None,
+            expected_account_id=connection.account_id,
+            expected_region="us-east-1",
+            mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            confirmation="wrong",
+            serverless_operation="apply-saved-plan",
+            prior_run_id=plan["id"],
+        )
+
+    apply_run = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation="APPLY_SERVERLESS_API_SAVED_PLAN",
+        serverless_operation="apply-saved-plan",
+        prior_run_id=plan["id"],
+    )
+    apply_environment = db.get(CloudExecutionRun, apply_run["id"]).evidence["execution_environment"]
+    assert (
+        apply_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+        == plan_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+    )
+    assert apply_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256"] == "c" * 64
+    with pytest.raises(ValueError, match="already been submitted"):
+        service.create_cloud_execution_run_for_revision(
+            operator(),
+            revision.id,
+            content_digest=revision.content_digest,
+            terraform_render_id=None,
+            preflight_id=None,
+            terraform_plan_review_id=None,
+            expected_account_id=connection.account_id,
+            expected_region="us-east-1",
+            mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            confirmation="APPLY_SERVERLESS_API_SAVED_PLAN",
+            serverless_operation="apply-saved-plan",
+            prior_run_id=plan["id"],
+        )
+
+    apply_record = db.get(CloudExecutionRun, apply_run["id"])
+    assert apply_record is not None
+    apply_record.state = "SUCCEEDED_AWAITING_OBSERVATION"
+    apply_record.outputs = {
+        "runner_artifact": {
+            "detail": {
+                "saved_plan_sha256": "c" * 64,
+                "artifact_sha256": "a" * 64,
+                "outputs": {"api_endpoint": {"value": "https://api.example"}},
+            }
+        }
+    }
+    db.commit()
+
+    health = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation=None,
+        serverless_operation="health",
+        prior_run_id=apply_run["id"],
+    )
+    health_record = db.get(CloudExecutionRun, health["id"])
+    assert health_record is not None
+    health_environment = health_record.evidence["execution_environment"]
+    assert (
+        health_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+        == apply_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+    )
+    health_record.state = "HEALTHY"
+    health_record.outputs = {
+        "runner_artifact": {
+            "detail": {"endpoint": "https://api.example", "response": '{"ok":true}'}
+        }
+    }
+    db.commit()
+
+    destroy_plan = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation=None,
+        serverless_operation="destroy-plan",
+        prior_run_id=health["id"],
+    )
+    destroy_plan_record = db.get(CloudExecutionRun, destroy_plan["id"])
+    assert destroy_plan_record is not None
+    destroy_plan_environment = destroy_plan_record.evidence["execution_environment"]
+    assert (
+        f"/{revision.content_digest}/destroy/{destroy_plan['id']}.tfplan"
+        in destroy_plan_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+    )
+    destroy_plan_record.state = "DESTROY_PLAN_READY_FOR_REVIEW"
+    destroy_plan_record.outputs = {
+        "runner_artifact": {
+            "detail": {
+                "saved_plan_s3_uri": destroy_plan_environment[
+                    "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"
+                ],
+                "saved_plan_sha256": "d" * 64,
+                "artifact_sha256": "a" * 64,
+                "plan_summary": {"resource_changes": []},
+            }
+        }
+    }
+    db.commit()
+
+    destroy = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation="DESTROY_SERVERLESS_API_SAVED_PLAN",
+        serverless_operation="destroy-saved-plan",
+        prior_run_id=destroy_plan["id"],
+    )
+    destroy_record = db.get(CloudExecutionRun, destroy["id"])
+    assert destroy_record is not None
+    destroy_environment = destroy_record.evidence["execution_environment"]
+    assert (
+        destroy_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+        == destroy_plan_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+    )
+    assert destroy_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256"] == "d" * 64
+    destroy_record.state = "DESTROYED_VERIFIED"
+    destroy_record.outputs = {
+        "runner_artifact": {
+            "detail": {"saved_plan_sha256": "d" * 64, "cleanup": "confirmed_absent"}
+        }
+    }
+    db.commit()
+
+    cleanup = service.create_cloud_execution_run_for_revision(
+        operator(),
+        revision.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=connection.account_id,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        confirmation=None,
+        serverless_operation="verify-cleanup",
+        prior_run_id=destroy["id"],
+    )
+    cleanup_record = db.get(CloudExecutionRun, cleanup["id"])
+    assert cleanup_record is not None
+    cleanup_environment = cleanup_record.evidence["execution_environment"]
+    assert (
+        f"/{revision.content_digest}/apply/{destroy['id']}.tfplan"
+        in cleanup_environment["DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"]
+    )
+
+
+def test_serverless_certification_requires_an_explicit_workspace_allowlist(monkeypatch):
+    service, db = make_service()
+    revision, connection = approved_serverless_customer_review(service, db)
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
+    monkeypatch.setenv("DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS", "another-workspace")
+
+    with pytest.raises(PermissionError, match="not allowlisted"):
+        service.create_cloud_execution_run_for_revision(
+            operator(),
+            revision.id,
+            content_digest=revision.content_digest,
+            terraform_render_id=None,
+            preflight_id=None,
+            terraform_plan_review_id=None,
+            expected_account_id=connection.account_id,
+            expected_region="us-east-1",
+            mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            confirmation=None,
+            serverless_operation="build-artifact",
+            source_commit="b" * 40,
+        )
+    assert service.cloud_execution_runs(operator()) == []
+
+
+def test_app_runner_mode_rejects_serverless_lifecycle_fields():
+    service, _ = make_service()
+    approved = approved_app_runner_customer_review(service)
+    with pytest.raises(ValueError, match="require certification mode"):
+        service.create_cloud_execution_run_for_revision(
+            operator(),
+            approved.id,
+            content_digest=approved.content_digest,
+            terraform_render_id=None,
+            preflight_id=None,
+            terraform_plan_review_id=None,
+            expected_account_id=None,
+            expected_region=None,
+            mode="GUARDED_CLOUD_EXECUTION",
+            confirmation=None,
+            serverless_operation="build-artifact",
+        )
 
 
 def test_codebuild_adapter_constructs_only_the_fixed_app_runner_image_build_work():

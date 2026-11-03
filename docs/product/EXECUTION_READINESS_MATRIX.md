@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-03, backend main commit `2d77ee2206a425813b8169eed460aff9b5634dc2` (PR #281).
+Audit as of 2026-11-03, backend main commit `9060df2` (PR #283). The latest AWS deployment remains commit `2d77ee2`; PR #283's dispatch-boundary change has not been deployed.
 
 ## Hosted deployment evidence
 
@@ -28,7 +28,7 @@ database schema version 24 is deployed. PRs #277, #278 and #280 are now deployed
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
 | Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); still not a multi-module scheduler |
 | Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | Merged as `ef60ac3` and deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); never blindly replays an uncertain apply/destroy |
-| Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md` | Isolated AWS certified; hosted execution disabled |
+| Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md`; PR #284 adds an allowlisted typed hosted-certification lifecycle | Hosted code path in progress; feature is off by default; no hosted AWS lifecycle evidence yet |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | typed graph and dependency ordering helpers exist; CodeBuild rejects runs with more than one module | Not implemented as durable hosted orchestration |
 | Browser, CLI and MCP lifecycle parity | shared APIs exist, but frontend uses App Runner-specific modes and confirmation | Partial |
@@ -104,7 +104,7 @@ These entries identify resource roots or module paths. None is automatically a c
 | `aws-site-to-site-vpn` | `modules/site-to-site-vpn` | none |
 | `aws-multi-region-dns` | `modules/multi-region-dns` | none |
 
-The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled in the hosted registry. PR #275 adds project isolation and local lifecycle contract evidence; it is not hosted renderer certification. App Runner is currently the only registered hosted renderer.
+The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled for ordinary hosted customer execution. PR #275 adds project isolation; PR #284 adds a certification-only API lifecycle guarded by a disabled-by-default flag and explicit workspace allowlist. It remains unproven in hosted AWS. App Runner is currently the only enabled customer renderer.
 
 ## Work that remains
 

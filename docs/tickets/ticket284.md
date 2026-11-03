@@ -1,6 +1,6 @@
 # ticket284 — Add controlled serverless certification lifecycle
 
-PR: pending
+PR: https://github.com/Bepoadewale/davdeploy/pull/284
 Branch: `feat/serverless-certification-lifecycle`
 
 ## Problem / goal
@@ -37,30 +37,36 @@ serverless renderer remains disabled for ordinary customer execution.
 
 ## Acceptance criteria
 
-- [ ] Only one `aws-serverless-api` module can be scheduled per run.
-- [ ] Each lifecycle phase requires the exact eligible prior run and digest.
-- [ ] Apply and destroy require their own explicit exact confirmations.
-- [ ] Invalid, cross-project, stale, or unapproved requests never reach CodeBuild.
-- [ ] General customer execution remains disabled.
+- [x] Only one `aws-serverless-api` module can be scheduled per run.
+- [x] Each lifecycle phase requires the exact eligible prior run and digest.
+- [x] Apply and destroy require their own explicit exact confirmations; saved
+  plans cannot be submitted more than once.
+- [x] Invalid, cross-project, stale, or unapproved requests are rejected before
+  CodeBuild dispatch.
+- [x] General customer execution remains disabled by default and certification
+  requires a workspace allowlist.
 - [ ] Focused tests and required CI pass.
 
 ## Acceptance status
 
-Implementation not started.
+Typed lifecycle creation and fixture-backed phase chaining are implemented.
+Local verification passes; GitHub CI is pending. No AWS workload was deployed,
+so the renderer remains unavailable for customer execution.
 
 ## Tests / validation performed
 
-Commands and results will be recorded in `docs/test/test284.md` if a controlled
-AWS workload cycle is performed.
+Commands and results are recorded in `docs/test/test284.md`. Real AWS lifecycle
+certification remains follow-up work.
 
 ## Evidence files produced
 
-- `docs/test/test284.md` if required for a workload run.
+- `docs/test/test284.md`.
 
 ## Boundaries
 
 No multi-module dispatch, arbitrary command, or general customer execution is
-introduced by this certification-only flow.
+introduced by this certification-only flow. The hosted Terraform defaults keep
+the certification gate off and the workspace allowlist empty.
 
 ## Follow-up work
 

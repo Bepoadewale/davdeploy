@@ -68,6 +68,25 @@ variable "enable_customer_cloud_execution" {
   default     = false
 }
 
+variable "enable_serverless_api_hosted_certification" {
+  type        = bool
+  description = "Enable the isolated Lambda/API certification route for allowlisted workspaces only. Defaults to false."
+  default     = false
+}
+
+variable "serverless_certification_workspace_ids" {
+  type        = list(string)
+  description = "Workspace IDs permitted to use the isolated Lambda/API certification route. Empty denies all workspaces."
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for workspace_id in var.serverless_certification_workspace_ids : can(regex("^[A-Za-z0-9_-]{1,128}$", workspace_id))
+    ])
+    error_message = "Certification workspace IDs must contain only letters, numbers, underscores, or hyphens."
+  }
+}
+
 variable "enable_github_app_read_only" {
   type        = bool
   description = "Explicitly enable the configured GitHub App for read-only private repository onboarding."

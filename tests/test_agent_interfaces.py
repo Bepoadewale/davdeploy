@@ -256,6 +256,62 @@ def test_cli_cloud_lifecycle_commands_forward_exact_digests_only():
     ]
 
 
+def test_cli_and_mcp_can_request_typed_serverless_certification_phases():
+    digest = "e" * 64
+    client = RecordingClient()
+    cli_result = run(
+        Namespace(
+            command="create-customer-cloud-run",
+            revision_id="revision-1",
+            content_digest=digest,
+            terraform_render_id=None,
+            preflight_id=None,
+            terraform_plan_review_id=None,
+            expected_account_id="654654474502",
+            region="us-east-1",
+            confirmation=None,
+            serverless_operation="build-artifact",
+            prior_run_id=None,
+            source_commit="a" * 40,
+            destroy=False,
+        ),
+        client,
+    )
+    assert cli_result == {"ok": True}
+    assert client.calls[-1] == (
+        "POST",
+        "/api/v1/customer-plan-revisions/revision-1/cloud-execution-runs",
+        {
+            "content_digest": digest,
+            "terraform_render_id": None,
+            "preflight_id": None,
+            "terraform_plan_review_id": None,
+            "expected_account_id": "654654474502",
+            "expected_region": "us-east-1",
+            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            "confirmation": None,
+            "serverless_operation": "build-artifact",
+            "prior_run_id": None,
+            "source_commit": "a" * 40,
+        },
+    )
+
+    mcp_client = RecordingClient()
+    result = davdeployMcp(mcp_client).call_tool(
+        "create_customer_cloud_run",
+        {
+            "revision_id": "revision-2",
+            "content_digest": digest,
+            "region": "us-east-1",
+            "serverless_operation": "plan",
+            "prior_run_id": "artifact-run-1",
+        },
+    )
+    assert result == {"ok": True}
+    assert mcp_client.calls[-1][2]["mode"] == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+    assert mcp_client.calls[-1][2]["prior_run_id"] == "artifact-run-1"
+
+
 def test_agent_read_interfaces_remain_tenant_scoped():
     service, db = make_service()
     project = service.create_project(founder(), "agent-read", "https://github.com/example/agent")

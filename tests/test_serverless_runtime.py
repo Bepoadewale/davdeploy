@@ -398,8 +398,25 @@ def test_serverless_stack_authorizes_only_the_selected_nova_model_family():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert "foundation-model/amazon.nova-2-lite-v1:0" in terraform
     assert "inference-profile/${var.nova_model_id}" in terraform
-    assert 'DAVDEPLOY_ENABLE_NOVA_MODEL                  = "true"' in terraform
+    nova_setting = next(
+        line for line in terraform.splitlines() if "DAVDEPLOY_ENABLE_NOVA_MODEL" in line
+    )
+    assert '"true"' in nova_setting
     assert "foundation-model/*" not in terraform
+
+
+def test_hosted_serverless_certification_is_off_and_workspace_allowlisted_by_default():
+    terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    variables = (
+        ROOT / "infrastructure/terraform/serverless-control-plane/variables.tf"
+    ).read_text()
+    assert "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION" in terraform
+    assert "var.enable_serverless_api_hosted_certification" in terraform
+    assert "DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS" in terraform
+    assert 'variable "enable_serverless_api_hosted_certification"' in variables
+    assert 'variable "serverless_certification_workspace_ids"' in variables
+    assert "default     = false" in variables
+    assert "default     = []" in variables
 
 
 def test_serverless_stack_manages_logs_and_actionable_alarms():
