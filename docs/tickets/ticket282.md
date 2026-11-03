@@ -11,9 +11,10 @@ evidence.
 
 ## Current repo state
 
-PR #280 is merged and its code is not yet in the deployed Lambda package.
-Production runs the #270 package; App Runner is the only enabled hosted renderer,
-and multi-module customer execution is disabled.
+PR #280 is merged. The reviewed apply has deployed the module-outcome and worker
+lease changes through schema version 24. App Runner remains the only enabled
+hosted renderer, and multi-module customer execution is disabled. This PR
+reconciles current status documentation with that deployment.
 
 ## Research / references used
 
@@ -34,20 +35,24 @@ and multi-module customer execution is disabled.
 
 ## Acceptance criteria
 
-- [ ] Applied plan and exact production changes are documented.
-- [ ] Migration version and live health check are recorded.
-- [ ] Current status docs no longer describe the older package as deployed.
-- [ ] No customer workload renderer or multi-module gate is enabled.
+- [x] Applied plan and exact production changes are documented.
+- [x] Migration version and live health check are recorded.
+- [x] Current status docs no longer describe the older package as deployed.
+- [x] No customer workload renderer or multi-module gate is enabled.
 - [ ] Documentation checks and required CI pass.
 
 ## Acceptance status
 
-Implementation in progress.
+Deployment and read-only post-deployment checks are complete. Documentation
+updates are in progress; the PR is not ready until required checks pass.
 
 ## Tests / validation performed
 
 Deployment and post-deployment observations are being recorded in
 `docs/test/test282.md`.
+
+- `git diff --check` — passed.
+- `python scripts/check_doc_conventions.py` — passed.
 
 ## Evidence files produced
 
