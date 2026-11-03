@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 from davdeploy import db
+from davdeploy.models import Base
+from sqlalchemy import create_engine, inspect, text
 
 
 def test_hosted_mode_rejects_sqlite_database_url(monkeypatch):
@@ -29,3 +31,24 @@ def test_database_url_uses_data_api_without_retrieving_database_password(monkeyp
     monkeypatch.setenv("DAVDEPLOY_DATABASE_NAME", "davdeploy")
 
     assert db.database_url() == "postgresql+auroradataapi://:@/davdeploy"
+
+
+def test_execution_module_instance_migration_is_safe_for_existing_database():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    existing_tables = [
+        table
+        for table in Base.metadata.sorted_tables
+        if table.name != "cloud_execution_module_instances"
+    ]
+    with engine.begin() as connection:
+        Base.metadata.create_all(bind=connection, tables=existing_tables)
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (22)"))
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    assert inspect(engine).has_table("cloud_execution_module_instances")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 23
+    engine.dispose()

@@ -700,6 +700,15 @@ def test_ready_cloud_run_is_queued_and_observed_by_trusted_worker():
         confirmation="EXECUTE_APP_RUNNER_WORKLOAD",
     )
     assert run["state"] != "READY_FOR_OPERATOR_APP_RUNNER_EXECUTION"
+    module_instances = run["module_instances"]
+    assert module_instances
+    assert {item["instance_id"] for item in module_instances} == {
+        item["id"] for item in run["evidence"]["universal_execution"]["modules"]
+    }
+    assert all(item["state"] == "NOT_DISPATCHED" for item in module_instances)
+    assert all(item["project_id"] == run["project_id"] for item in module_instances)
+    assert all(item["input_digest"] == run["content_digest"] for item in module_instances)
+    assert len({item["instance_id"] for item in module_instances}) == len(module_instances)
     # Local test config does not enable cloud apply, so it remains blocked.
     assert service.run_next_cloud_execution() is False
 

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def new_id() -> str:
@@ -506,6 +506,41 @@ class CloudExecutionRun(Base):
     outputs: Mapped[dict] = mapped_column(JSON, default=dict)
     content_digest: Mapped[str] = mapped_column(String(64), index=True)
     requested_by_subject: Mapped[str] = mapped_column(String(160))
+    module_instances: Mapped[list[CloudExecutionModuleInstance]] = relationship(
+        back_populates="execution_run", cascade="all, delete-orphan", passive_deletes=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CloudExecutionModuleInstance(Base):
+    """Durable, tenant-scoped state for one module instance in an execution graph."""
+
+    __tablename__ = "cloud_execution_module_instances"
+    __table_args__ = (
+        UniqueConstraint("execution_run_id", "instance_id", name="uq_execution_module_instance"),
+        UniqueConstraint("idempotency_key", name="uq_execution_module_idempotency_key"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    execution_run_id: Mapped[str] = mapped_column(
+        ForeignKey("cloud_execution_runs.id", ondelete="CASCADE"), index=True
+    )
+    execution_run: Mapped[CloudExecutionRun] = relationship(back_populates="module_instances")
+    instance_id: Mapped[str] = mapped_column(String(128))
+    module_id: Mapped[str] = mapped_column(String(100), index=True)
+    state: Mapped[str] = mapped_column(String(40), default="NOT_DISPATCHED", index=True)
+    operation: Mapped[str] = mapped_column(String(32))
+    attempt: Mapped[int] = mapped_column(default=0)
+    input_digest: Mapped[str] = mapped_column(String(64), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(200))
+    dependencies: Mapped[list] = mapped_column(JSON, default=list)
+    outputs: Mapped[dict] = mapped_column(JSON, default=dict)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict)
+    version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
