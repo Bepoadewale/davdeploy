@@ -27,7 +27,7 @@ Added plan-digest-scoped saved-plan upload and SHA-256 verification for serverle
 - [x] Cleanup checks confirm live Lambda/API/IAM absence and empty Terraform state.
 - [x] Missing or malformed identifiers, digests, and account/role combinations fail before Terraform mutation.
 - [x] Focused tests and Terraform validation pass.
-- [ ] Updated PR revision passes required CI.
+- [x] Updated PR revision passes all seven required CI checks.
 - [x] No customer execution enablement or unrelated AWS changes.
 
 ## Acceptance status
@@ -41,7 +41,9 @@ serverless renderer contract and artifact/saved-plan digest rejection (4 passed)
 Terraform `fmt -check` for both customer and validation roots; Terraform
 validation for the isolated validation root; and
 `GITHUB_PR_NUMBER=269 python3 scripts/check_doc_conventions.py` all passed.
-No AWS resources were created by this PR.
+`make lint` passed and `make test` passed with 348 tests. All seven required CI
+checks passed on the current code revision. No AWS resources were created by
+this PR.
 
 ## Evidence files produced
 
