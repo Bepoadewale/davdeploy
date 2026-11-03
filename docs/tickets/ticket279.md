@@ -64,13 +64,13 @@ cannot prove the child result.
   as success without authoritative evidence.
 - [x] Focused tests, full verification and documentation checks pass.
 - [x] Full clean-room cycle passes.
-- [ ] Required CI passes.
+- [x] Required CI passes.
 - [x] Goal handoff accurately records #278 and the remaining execution work.
 
 ## Acceptance status
 
-Focused tests, full verification, documentation checks and the isolated
-clean-room cycle pass. Required PR CI remains pending. This PR changes local
+Focused tests, full verification, documentation checks, isolated clean-room
+validation and all seven required PR CI jobs pass. This PR changes local
 operator tooling only and creates no AWS resources.
 
 ## Tests / validation performed
@@ -88,7 +88,9 @@ operator tooling only and creates no AWS resources.
   trace check, full verification (390 tests), OPA (3/3), Terraform offline
   validation, Kubernetes render and scoped cleanup — passed. No AWS workload
   was created.
-- Required CI is pending.
+- GitHub Actions run
+  [41705992991](https://github.com/Bepoadewale/davdeploy/actions/runs/41705992991)
+  passed all seven required jobs on commit `0819c62`.
 
 ## Evidence files produced
 

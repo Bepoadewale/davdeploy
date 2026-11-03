@@ -30,6 +30,10 @@ Compose configuration passed. One existing Starlette deprecation warning.
 
 `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
 
+GitHub Actions run
+[`41705992991`](https://github.com/Bepoadewale/davdeploy/actions/runs/41705992991)
+passed all seven required jobs on commit `0819c62`.
+
 Fresh clean-room at commit `5f85f1c`, isolated worktree
 `/tmp/davdeploy-cleanroom-pr279-20261103`, Compose project
 `davdeploy-cleanroom-pr279-20261103`: bootstrap, smoke, API contract,
@@ -56,5 +60,4 @@ The existing Terraform run registry and all AWS resources are unchanged.
 
 Tests verify process outcome recording, metadata handling, and local state-root
 locking only. They do not validate Terraform resource behavior, an AWS account,
-a customer workload, or the product's hosted deployment runner. GitHub CI
-evidence remains pending.
+a customer workload, or the product's hosted deployment runner.
