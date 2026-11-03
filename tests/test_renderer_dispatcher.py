@@ -19,10 +19,26 @@ def _isolated_dispatcher(tmp_path: Path) -> tuple[Path, Path]:
     marker = tmp_path / "invoked"
     runner.write_text(f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8")
     runner.chmod(0o755)
+    serverless_runner = scripts / "customer-workload-serverless-api.sh"
+    serverless_runner.write_text(
+        f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8"
+    )
+    serverless_runner.chmod(0o755)
     return dispatcher, marker
 
 
 def _work(module_id: str = "aws-managed-application", operation: str = "apply") -> list[dict[str, object]]:
+    is_serverless = module_id == "aws-serverless-api"
+    terraform_root = (
+        "infrastructure/terraform/customer-workload-serverless-api"
+        if is_serverless
+        else "infrastructure/terraform/customer-workload-app-runner-pilot"
+    )
+    runner_script = (
+        "scripts/customer-workload-serverless-api.sh"
+        if is_serverless
+        else "scripts/customer-workload-app-runner-pilot.sh"
+    )
     return [
         {
             "module_id": module_id,
@@ -30,8 +46,8 @@ def _work(module_id: str = "aws-managed-application", operation: str = "apply") 
             "dependencies": [],
             "resource_tags": {"ManagedBy": "davdeploy"},
             "renderer": {
-                "terraform_root": "infrastructure/terraform/customer-workload-app-runner-pilot",
-                "runner_script": "scripts/customer-workload-app-runner-pilot.sh",
+                "terraform_root": terraform_root,
+                "runner_script": runner_script,
             },
         }
     ]
@@ -78,14 +94,21 @@ def test_dispatcher_rejects_unregistered_or_mixed_work_before_script(tmp_path: P
     )
     result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 2
-    assert "not enabled" in result.stderr
+    assert "certification route is disabled" in result.stderr
     assert not marker.exists()
 
+    env["DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION"] = "true"
+    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 0
+    assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
+    previous_invocation = marker.read_text(encoding="utf-8")
+
     env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(_work() * 2)
+    env.pop("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION")
     result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 2
     assert "one typed renderer entry" in result.stderr
-    assert not marker.exists()
+    assert marker.read_text(encoding="utf-8") == previous_invocation
 
 
 def test_dispatcher_rejects_unknown_fields_and_operation_mismatches(tmp_path: Path) -> None:
@@ -112,6 +135,63 @@ def test_dispatcher_rejects_unknown_fields_and_operation_mismatches(tmp_path: Pa
     assert not marker.exists()
 
 
+def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(tmp_path: Path) -> None:
+    dispatcher, marker = _isolated_dispatcher(tmp_path)
+    env = os.environ.copy()
+    env.update(
+        {
+            "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON": json.dumps(
+                _work("aws-serverless-api", "observe")
+            ),
+            "DAVDEPLOY_EXECUTION_OPERATION": "health",
+            "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION": "true",
+        }
+    )
+    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 0
+    assert marker.read_text(encoding="utf-8") == "health"
+
+    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(_work("aws-managed-application", "observe"))
+    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    assert result.returncode == 2
+    assert "operation does not match" in result.stderr
+
+
+def test_dispatcher_enforces_exact_serverless_operation_mapping(tmp_path: Path) -> None:
+    dispatcher, marker = _isolated_dispatcher(tmp_path)
+    mappings = (
+        ("plan", "plan"),
+        ("plan", "destroy-plan"),
+        ("destroy_plan", "destroy-plan"),
+        ("apply", "apply-saved-plan"),
+        ("observe", "health"),
+        ("destroy", "destroy-saved-plan"),
+        ("verify_cleanup", "verify-cleanup"),
+    )
+    env = os.environ.copy()
+    env["DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION"] = "true"
+    for work_operation, runner_operation in mappings:
+        env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(
+            _work("aws-serverless-api", work_operation)
+        )
+        env["DAVDEPLOY_EXECUTION_OPERATION"] = runner_operation
+        result = subprocess.run(
+            ["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text(encoding="utf-8") == runner_operation
+
+    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(
+        _work("aws-serverless-api", "observe")
+    )
+    env["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-saved-plan"
+    result = subprocess.run(
+        ["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 2
+    assert "operation does not match" in result.stderr
+
+
 def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
     package_builder = (ROOT / "scripts/build_customer_executor_package.sh").read_text(encoding="utf-8")
     buildspec = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text(
@@ -119,4 +199,6 @@ def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
     )
     assert "scripts/customer-workload-dispatcher.sh" in package_builder
     assert "scripts/customer-workload-app-runner-pilot.sh" in package_builder
+    assert "infrastructure/terraform/customer-workload-serverless-api" in package_builder
+    assert "scripts/customer-workload-serverless-api.sh" in package_builder
     assert "bash scripts/customer-workload-dispatcher.sh" in buildspec

@@ -31,14 +31,29 @@ case "$module_id:$terraform_root:$runner_script" in
   aws-managed-application:infrastructure/terraform/customer-workload-app-runner-pilot:scripts/customer-workload-app-runner-pilot.sh)
     script="scripts/customer-workload-app-runner-pilot.sh"
     ;;
+  aws-serverless-api:infrastructure/terraform/customer-workload-serverless-api:scripts/customer-workload-serverless-api.sh)
+    [[ "${DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION:-false}" == "true" ]] || {
+      echo "Serverless API hosted certification route is disabled" >&2; exit 2;
+    }
+    script="scripts/customer-workload-serverless-api.sh"
+    ;;
   *)
     echo "Module renderer is unknown or not enabled for hosted execution: ${module_id}" >&2
     exit 2
     ;;
 esac
 
-case "$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
-  plan:plan|plan:destroy-plan|apply:apply-saved-plan|destroy:destroy-saved-plan|build-push-image:build-push-image)
+case "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
+  aws-managed-application:plan:plan|aws-managed-application:plan:destroy-plan|\
+  aws-managed-application:apply:apply-saved-plan|\
+  aws-managed-application:destroy:destroy-saved-plan|\
+  aws-managed-application:build-push-image:build-push-image|\
+  aws-serverless-api:plan:plan|aws-serverless-api:plan:destroy-plan|\
+  aws-serverless-api:destroy_plan:destroy-plan|\
+  aws-serverless-api:apply:apply-saved-plan|\
+  aws-serverless-api:observe:health|\
+  aws-serverless-api:destroy:destroy-saved-plan|\
+  aws-serverless-api:verify_cleanup:verify-cleanup)
     ;;
   *)
     echo "Lifecycle operation does not match the approved runner operation" >&2
