@@ -28,21 +28,21 @@ module, index creation workflow, data source ingestion or retrieval evidence.
 
 ## Acceptance criteria
 
-- [ ] Collection, index, Knowledge Base and S3 data source are created with least-privilege roles.
-- [ ] A synthetic document is ingested and retrievable through Bedrock.
-- [ ] Temporary resources are destroyed and checked absent.
+- [x] Collection, index, Knowledge Base and S3 data source are created with least-privilege roles.
+- [x] A synthetic document is ingested and retrievable through Bedrock.
+- [x] Temporary resources are destroyed and checked absent.
 
 ## Acceptance status
 
-In progress.
+Complete; recorded in `docs/test/test262.md`.
 
 ## Tests / validation performed
 
-Bootstrap only.
+Terraform validation and a real AWS create, ingest, retrieve, destroy and absence check.
 
 ## Evidence files produced
 
-Pending `docs/test/test262.md`.
+`docs/test/test262.md`.
 
 ## Boundaries
 
