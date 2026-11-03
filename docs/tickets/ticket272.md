@@ -27,7 +27,7 @@ Implement a typed Lambda/API execution contract from approved plan through resul
 
 ## Acceptance criteria
 
-- [ ] Lambda/API plan, apply, observe, destroy-plan, destroy, and cleanup operations have exact typed operation mappings.
+- [x] Lambda/API plan, apply, observe, destroy-plan, destroy, and cleanup operations have exact typed operation mappings.
 - [ ] Worker run creation and result reconciliation are profile-aware without weakening App Runner checks.
 - [ ] Artifact, saved-plan, digest, account, connection and state paths are bound and validated.
 - [ ] The new renderer remains disabled for customers pending hosted AWS certification.
@@ -39,7 +39,7 @@ In progress.
 
 ## Tests / validation performed
 
-Not yet run.
+`make lint` passed. `.venv/bin/python -m pytest tests/test_module_renderers.py tests/test_cloud_execution.py -q` passed: 22 tests. `git diff --check` passed. The service run, dispatcher enablement, and reconciliation criteria remain incomplete.
 
 ## Evidence files produced
 

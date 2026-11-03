@@ -1,4 +1,9 @@
-from davdeploy.module_renderers import renderer_for, renderer_for_profile, renderer_manifest
+from davdeploy.module_renderers import (
+    renderer_command,
+    renderer_for,
+    renderer_for_profile,
+    renderer_manifest,
+)
 
 
 def test_only_checked_in_module_renderer_is_resolved():
@@ -11,6 +16,14 @@ def test_only_checked_in_module_renderer_is_resolved():
     serverless = next(item for item in manifest if item.module_id == "aws-serverless-api")
     assert serverless.execution_enabled is False
     assert serverless.terraform_root == "infrastructure/terraform/customer-workload-serverless-api"
+    assert dict(serverless.operation_commands) == {
+        "plan": "plan",
+        "destroy_plan": "destroy-plan",
+        "apply": "apply-saved-plan",
+        "observe": "health",
+        "destroy": "destroy-saved-plan",
+        "verify_cleanup": "verify-cleanup",
+    }
 
 
 def test_unbound_or_unsupported_renderer_work_is_rejected():
@@ -41,3 +54,14 @@ def test_serverless_profile_is_mapped_but_stays_disabled_for_hosted_execution():
         assert "no registered execution renderer" in str(error)
     else:
         raise AssertionError("unknown execution profile must fail closed")
+
+
+def test_runner_command_mapping_is_fixed_and_operation_specific():
+    app_runner = next(
+        item for item in renderer_manifest() if item.module_id == "aws-managed-application"
+    )
+    assert renderer_command(app_runner, "apply") == "apply-saved-plan"
+    assert renderer_command(app_runner, "destroy") == "destroy-saved-plan"
+    serverless = next(item for item in renderer_manifest() if item.module_id == "aws-serverless-api")
+    assert renderer_command(serverless, "observe") == "health"
+    assert renderer_command(serverless, "destroy_plan") == "destroy-plan"

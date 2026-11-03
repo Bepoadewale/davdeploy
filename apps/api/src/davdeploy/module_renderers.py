@@ -18,6 +18,7 @@ class ModuleRenderer:
     supported_operations: tuple[str, ...]
     certification: str
     execution_enabled: bool = True
+    operation_commands: tuple[tuple[str, str], ...] = ()
 
 
 _RENDERERS: dict[str, ModuleRenderer] = {
@@ -27,14 +28,28 @@ _RENDERERS: dict[str, ModuleRenderer] = {
         runner_script="scripts/customer-workload-app-runner-pilot.sh",
         supported_operations=("plan", "apply", "destroy", "build-push-image"),
         certification="real-customer-run evidence required per workload",
+        operation_commands=(
+            ("plan", "plan"),
+            ("apply", "apply-saved-plan"),
+            ("destroy", "destroy-saved-plan"),
+            ("build-push-image", "build-push-image"),
+        ),
     ),
     "aws-serverless-api": ModuleRenderer(
         module_id="aws-serverless-api",
         terraform_root="infrastructure/terraform/customer-workload-serverless-api",
         runner_script="scripts/customer-workload-serverless-api.sh",
-        supported_operations=("plan", "apply", "observe", "destroy", "verify_cleanup"),
+        supported_operations=("plan", "destroy_plan", "apply", "observe", "destroy", "verify_cleanup"),
         certification="isolated AWS renderer certified; hosted dispatch not certified",
         execution_enabled=False,
+        operation_commands=(
+            ("plan", "plan"),
+            ("destroy_plan", "destroy-plan"),
+            ("apply", "apply-saved-plan"),
+            ("observe", "health"),
+            ("destroy", "destroy-saved-plan"),
+            ("verify_cleanup", "verify-cleanup"),
+        ),
     ),
 }
 
@@ -53,6 +68,16 @@ def renderer_for_profile(profile: str, operation: str) -> ModuleRenderer:
     if module_id is None:
         raise ValueError(f"profile {profile} has no registered execution renderer")
     return renderer_for(module_id, operation)
+
+
+def renderer_command(renderer: ModuleRenderer, operation: str) -> str:
+    """Return the fixed checked-in script operation for typed lifecycle work."""
+    if operation not in renderer.supported_operations:
+        raise ValueError(f"module {renderer.module_id} does not support {operation}")
+    command = dict(renderer.operation_commands).get(operation)
+    if not command:
+        raise ValueError(f"module {renderer.module_id} has no command mapping for {operation}")
+    return command
 
 
 def renderer_for(module_id: str, operation: str) -> ModuleRenderer:

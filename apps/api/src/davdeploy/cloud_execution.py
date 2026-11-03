@@ -44,7 +44,7 @@ def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
         resource_tags = item.get("resource_tags")
         if not isinstance(module_id, str) or not module_id:
             raise ValueError("universal lifecycle work item has no module identifier")
-        if operation not in {"plan", "apply", "observe", "destroy", "verify_cleanup", "build-push-image"}:
+        if operation not in {"plan", "destroy_plan", "apply", "observe", "destroy", "verify_cleanup", "build-push-image"}:
             raise ValueError("universal lifecycle work has an unsupported operation")
         if not isinstance(dependencies, list) or not all(isinstance(value, str) for value in dependencies):
             raise ValueError("universal lifecycle work has invalid dependencies")
