@@ -1,6 +1,6 @@
 # ticket265 — Typed universal execution runner boundary
 
-PR: pending
+PR: [#265](https://github.com/Bepoadewale/davdeploy/pull/265)
 
 Branch: `feat/universal-execution-renderer`
 
@@ -26,9 +26,9 @@ reject malformed or unsupported work before an execution backend is called.
 
 ## Acceptance criteria
 
-- [ ] The worker passes immutable typed lifecycle work to the adapter.
-- [ ] The adapter rejects malformed work without a cloud call.
-- [ ] Existing execution tests remain compatible.
+- [x] The worker passes immutable typed lifecycle work to the adapter.
+- [x] The adapter rejects malformed work without a cloud call.
+- [x] Existing execution tests remain compatible.
 - [ ] Focused tests and full CI pass.
 
 ## Acceptance status
@@ -37,7 +37,7 @@ In progress.
 
 ## Tests / validation performed
 
-Pending implementation.
+`make lint && uv run pytest tests/test_cloud_execution.py tests/test_universal_execution.py -q` — 19 passed.
 
 ## Evidence files produced
 
