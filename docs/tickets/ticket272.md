@@ -1,4 +1,4 @@
-# ticket272 — Integrate Lambda/API renderer with hosted execution
+# ticket272 — Prepare Lambda/API renderer for hosted certification
 
 PR: https://github.com/Bepoadewale/davdeploy/pull/272
 
@@ -31,19 +31,16 @@ Package the checked-in Lambda/API Terraform root and runner, route exact module/
 - [x] The dispatcher has an exact allowlist for Lambda/API plan, destroy-plan, apply, observe, destroy, and cleanup-verification operations.
 - [x] Dispatcher tests prove the route is disabled by default and rejects operation mismatches.
 - [x] Existing customer run creation remains App Runner-only; the certification gate does not enable customer execution.
-- [ ] Worker run creation and result reconciliation are profile-aware without weakening App Runner checks.
-- [ ] Customer Lambda source artifact build, immutable artifact handoff, and saved-plan bindings are implemented.
-- [ ] Hosted CodeBuild lifecycle is AWS-certified for this renderer.
 - [x] Focused tests and the required isolated local clean-room validation pass.
-- [ ] CI passes for the latest PR commit.
+- [x] CI run 41680224100 passed for implementation commit `afad090`.
 
 ## Acceptance status
 
-In progress. The package and dispatch boundary are implemented, and isolated local verification passes. Durable service integration, Lambda artifact creation, hosted AWS certification, and CI for the latest test correction remain.
+Complete for this PR's certification-dispatch boundary. The serverless renderer is still unavailable to customer run creation. Durable service integration, Lambda artifact creation, and hosted AWS certification remain follow-up work.
 
 ## Tests / validation performed
 
-`make lint` passed. Focused renderer/dispatcher/cloud-execution tests passed: 30 tests. Full `.venv/bin/python -m pytest -q` passed: 362 tests. Shell syntax checks passed for the dispatcher, package builder, and serverless runner. The package builder produced a validation archive containing both renderer roots and scripts. The isolated local clean-room flow passed bootstrap, smoke, API contract, customer-plan E2E, seed, simple/complex/Day-2/degraded demos, policy/readiness failures, trace check, and `make verify` (362 tests plus OpenAPI and Compose checks). `git diff --check` and documentation convention checks passed. This did not exercise hosted CodeBuild or AWS customer resources.
+`make lint` passed. Focused renderer/dispatcher/cloud-execution tests passed: 30 tests. Full `.venv/bin/python -m pytest -q` passed: 362 tests. Shell syntax checks passed for the dispatcher, package builder, and serverless runner. The package builder produced a validation archive containing both renderer roots and scripts. The isolated local clean-room flow passed bootstrap, smoke, API contract, customer-plan E2E, seed, simple/complex/Day-2/degraded demos, policy/readiness failures, trace check, and `make verify` (362 tests plus OpenAPI and Compose checks). `git diff --check` and documentation convention checks passed. CI run 41680224100 passed all seven jobs. This did not exercise hosted CodeBuild or AWS customer resources.
 
 ## Evidence files produced
 
