@@ -1,5 +1,6 @@
 from hashlib import sha256
 
+import pytest
 from davdeploy.certification_factory import certification_scenarios, scenario_for_module
 from davdeploy.domain import ArchitectureModule
 from davdeploy.universal_execution import (
@@ -50,6 +51,70 @@ def test_lifecycle_work_is_stable_and_reverses_for_cleanup():
         plan,
         "apply",
         tuple(LifecycleEvidence(item.module_id, "apply", "SUCCEEDED") for item in plan.modules),
+    )
+
+
+@pytest.mark.parametrize(
+    ("operation", "state"),
+    [
+        ("plan", "PLAN_READY_FOR_REVIEW"),
+        ("apply", "SUCCEEDED_AWAITING_OBSERVATION"),
+        ("observe", "HEALTHY"),
+        ("rollback", "ROLLED_BACK"),
+        ("destroy", "DESTROYED_VERIFIED"),
+        ("verify_cleanup", "CLEANUP_VERIFIED"),
+    ],
+)
+def test_lifecycle_evidence_uses_operation_specific_terminal_states(operation, state):
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api")], workspace_id="workspace-1", project_id="project-1", plan_digest=digest
+    )
+    assert lifecycle_evidence_complete(
+        plan, operation, (LifecycleEvidence("api", operation, state),)
+    )
+
+
+@pytest.mark.parametrize(
+    ("operation", "wrong_state"),
+    [
+        ("plan", "HEALTHY"),
+        ("apply", "PLAN_READY_FOR_REVIEW"),
+        ("observe", "SUCCEEDED"),
+        ("rollback", "HEALTHY"),
+        ("destroy", "CLEANUP_VERIFIED"),
+        ("verify_cleanup", "DESTROYED_VERIFIED"),
+    ],
+)
+def test_lifecycle_evidence_rejects_wrong_operation_state(operation, wrong_state):
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api")], workspace_id="workspace-1", project_id="project-1", plan_digest=digest
+    )
+    assert not lifecycle_evidence_complete(
+        plan, operation, (LifecycleEvidence("api", operation, wrong_state),)
+    )
+
+
+def test_lifecycle_evidence_requires_every_module_and_unambiguous_outcomes():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"])],
+        workspace_id="workspace-1",
+        project_id="project-1",
+        plan_digest=digest,
+    )
+    assert not lifecycle_evidence_complete(
+        plan, "observe", (LifecycleEvidence("api", "observe", "HEALTHY"),)
+    )
+    assert not lifecycle_evidence_complete(
+        plan,
+        "observe",
+        (
+            LifecycleEvidence("api", "observe", "HEALTHY"),
+            LifecycleEvidence("worker", "observe", "HEALTHY"),
+            LifecycleEvidence("worker", "observe", "FAILED"),
+        ),
     )
 
 

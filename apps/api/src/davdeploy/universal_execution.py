@@ -17,6 +17,14 @@ from davdeploy.domain import ArchitectureModule
 LIFECYCLE_OPERATIONS = ("plan", "apply", "observe", "rollback", "destroy", "verify_cleanup")
 FORWARD_OPERATIONS = ("plan", "apply", "observe")
 REVERSE_OPERATIONS = ("rollback", "destroy", "verify_cleanup")
+TERMINAL_EVIDENCE_STATES = {
+    "plan": frozenset({"SUCCEEDED", "PLAN_READY_FOR_REVIEW", "DESTROY_PLAN_READY_FOR_REVIEW"}),
+    "apply": frozenset({"SUCCEEDED", "SUCCEEDED_AWAITING_OBSERVATION"}),
+    "observe": frozenset({"HEALTHY"}),
+    "rollback": frozenset({"ROLLED_BACK", "DESTROYED_VERIFIED"}),
+    "destroy": frozenset({"SUCCEEDED", "DESTROYED_VERIFIED"}),
+    "verify_cleanup": frozenset({"ABSENT", "CLEANUP_VERIFIED"}),
+}
 
 
 @dataclass(frozen=True)
@@ -92,14 +100,23 @@ def lifecycle_evidence_complete(
     operation: str,
     evidence: Iterable[LifecycleEvidence],
 ) -> bool:
-    """Require a terminal record for every module in the operation's work set."""
+    """Require one operation-appropriate terminal record for every graph node.
+
+    A module's successful health check cannot stand in for its plan or apply,
+    and a successful delete request is not cleanup proof until absence is
+    independently observed. Duplicate records are ambiguous because this
+    contract has no attempt ordering, so callers must pass the current
+    per-module outcome set rather than an event history.
+    """
     expected = {module.module_id for module in ordered_modules(plan, operation)}
-    completed = {
-        item.module_id
-        for item in evidence
-        if item.operation == operation and item.state in {"SUCCEEDED", "HEALTHY", "ABSENT"}
-    }
-    return completed == expected
+    terminal_states = TERMINAL_EVIDENCE_STATES[operation]
+    outcomes: dict[str, list[str]] = {module_id: [] for module_id in expected}
+    for item in evidence:
+        if item.operation == operation and item.module_id in outcomes:
+            outcomes[item.module_id].append(item.state)
+    return all(
+        len(states) == 1 and states[0] in terminal_states for states in outcomes.values()
+    )
 
 
 def compile_universal_execution_plan(
@@ -140,5 +157,4 @@ def compile_universal_execution_plan(
 
 def verify_cleanup(evidence: tuple[LifecycleEvidence, ...], plan: UniversalExecutionPlan) -> bool:
     """Require an independent ABSENT observation for every composed module."""
-    absent = {item.module_id for item in evidence if item.operation == "verify_cleanup" and item.state == "ABSENT"}
-    return absent == {module.module_id for module in plan.modules}
+    return lifecycle_evidence_complete(plan, "verify_cleanup", evidence)
