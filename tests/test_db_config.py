@@ -50,5 +50,30 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
 
     assert inspect(engine).has_table("cloud_execution_module_instances")
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 23
+        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 24
+    engine.dispose()
+
+
+def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (23)"))
+        connection.execute(
+            text("CREATE TABLE cloud_execution_runs (id VARCHAR(36) PRIMARY KEY)")
+        )
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("cloud_execution_runs")}
+    assert {
+        "worker_claim_version",
+        "worker_lease_token",
+        "worker_lease_expires_at",
+    } <= columns
+    indexes = {index["name"] for index in inspect(engine).get_indexes("cloud_execution_runs")}
+    assert "ix_cloud_execution_runs_worker_lease_expires_at" in indexes
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 24
     engine.dispose()

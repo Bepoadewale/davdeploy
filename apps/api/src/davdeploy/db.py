@@ -169,7 +169,7 @@ def run_migrations(target: Engine | None = None) -> None:
         ).scalar_one()
         if version < 1:
             Base.metadata.create_all(bind=connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (20)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (24)"))
             return
         if version < 2:
             connection.execute(
@@ -288,6 +288,25 @@ def run_migrations(target: Engine | None = None) -> None:
         if version < 23:
             Base.metadata.create_all(bind=connection)
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (23)"))
+            version = 23
+        if version < 24:
+            _add_columns_if_missing(
+                connection,
+                "cloud_execution_runs",
+                {
+                    "worker_claim_version": "INTEGER NOT NULL DEFAULT 0",
+                    "worker_lease_token": "VARCHAR(64)",
+                    "worker_lease_expires_at": "TIMESTAMP WITH TIME ZONE",
+                },
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_cloud_execution_runs_worker_lease_expires_at "
+                    "ON cloud_execution_runs(worker_lease_expires_at)"
+                )
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (24)"))
 
 
 def session() -> Generator[Session, None, None]:

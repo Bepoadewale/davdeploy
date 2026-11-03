@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-03, backend main commit `88688360f98200ed57bc253d02804d4ab6a359f9` (PR #278).
+Audit as of 2026-11-03, backend main commit `07e3916031c1469d94f04962b66b47ab034b735b` (PR #279).
 
 ## Hosted deployment evidence
 
@@ -23,7 +23,8 @@ its worker changes have not yet been deployed.
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` disabled | One customer renderer enabled |
 | CodeBuild dispatcher | One typed item; fixed registry mapping; unknown, disabled, malformed, dependency-bearing and multi-item work fail closed | Deployed |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
-| Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Locally verified and CI passed; not yet deployed; no leases, restart/resume, dependency scheduler, retry policy, or multi-module execution |
+| Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Merged and locally/CI verified; not yet deployed |
+| Worker claim and recovery | Draft PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | 49 focused tests and 396-test full verification pass; clean-room/CI pending; never blindly replays an uncertain apply/destroy |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md` | Isolated AWS certified; hosted execution disabled |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | typed graph and dependency ordering helpers exist; CodeBuild rejects runs with more than one module | Not implemented as durable hosted orchestration |
@@ -104,15 +105,16 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 
 ## Work that remains
 
-1. Deploy the merged PR #277/#278 control-plane code through the reviewed Terraform saved-plan workflow; confirm the deployed package/version and migration status. Preserve the default-disabled customer-workload gates.
-2. Implement durable hosted deployment/module-instance locking and worker leases, idempotency, retries/resume, dependency inputs/outputs, partial-failure recovery, output redaction and independent cleanup verification.
-3. Replace the App Runner-only service gate and single-module CodeBuild limitation with graph orchestration that resolves each module to a checked-in renderer. Do not add arbitrary scripts, roots or Terraform input.
-4. Integrate the Lambda/API renderer through the actual customer CodeBuild path; run hosted apply, real HTTP traffic, observations, update, intentional recovery, destroy and independently verified absence before enabling it.
-5. Add hosted renderer families in the order in the active execution-engine goal: storage/data/queues; static web and edge; containers/VM; relational and cache; async; search/analytics/streaming; AI/ML; Kubernetes/networking/multi-region.
-6. Turn the certification scenarios into hosted application tests that prove behavior, update/recovery and teardown, not only Terraform resource creation.
-7. Replace fixture pricing/inventory with timestamped provider data and customer-approved discovery, and ensure the built artifact matches the reviewed repository commit.
-8. Align frontend, CLI and MCP flows with the same provider-neutral API lifecycle and truthful observed evidence.
-9. Run the final browser, CLI and MCP AWS acceptance journey and reconcile status docs from its results.
+1. Complete PR #280 lease tests, full verification, clean-room and required CI; merge it only with accurate reconciliation semantics.
+2. Deploy merged PRs #277–#279 through the reviewed Terraform saved-plan workflow; confirm package/version and migrations. Preserve the default-disabled customer-workload gates.
+3. Build authenticated reconciliation for stale CodeBuild/SQS outcomes; only retry after evidence proves the prior external action did not apply.
+4. Add dependency-aware graph scheduling, per-module state, typed outputs, partial-failure compensation and reverse cleanup; retain the fixed renderer registry.
+5. Replace the App Runner-only service gate and single-module CodeBuild limitation as each renderer family is actually certified.
+6. Integrate the Lambda/API renderer through the hosted CodeBuild path and prove real traffic, health, update, recovery, destroy and independently verified absence before enabling it.
+7. Add hosted renderer families in the active execution-goal order; do not equate standalone service tests with composed renderer certification.
+8. Extend the scenario harness to exercise composed applications through the hosted runner, including traffic, update/recovery and absence verification.
+9. Replace fixture pricing/inventory with timestamped provider data, and align browser, CLI and MCP with the same authorized lifecycle.
+10. Run the final hosted browser, CLI and MCP acceptance journey and reconcile closeout evidence.
 
 See `docs/test/test268.md`, `docs/tickets/ticket270.md`, and the active goal handoff for detailed evidence and boundaries.
 
