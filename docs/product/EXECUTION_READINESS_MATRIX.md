@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-03, backend main commit `07e3916031c1469d94f04962b66b47ab034b735b` (PR #279).
+Audit as of 2026-11-03, backend main commit `ef60ac36d135b8b47242a1a7ffefa92c18d1d165` (PR #280).
 
 ## Hosted deployment evidence
 
@@ -11,8 +11,8 @@ An unauthenticated request to `https://api.davdeploy.tech/health` returned HTTP 
 On 2026-11-03, `https://api.davdeploy.tech/healthz` returned HTTP 200 with
 `{"status":"ok","product":"davdeploy"}` through the Cloudflare edge. AWS
 reported `davdeploy-api` Active with LastUpdateStatus Successful; its deployed
-version remains the #270 release at commit `93c895e`. PR #278 is merged, but
-its worker changes have not yet been deployed.
+version remains the #270 release at commit `93c895e`. PRs #277, #278 and #280
+contain worker/database changes that are merged but not yet deployed.
 
 ## Execution summary
 
@@ -24,7 +24,7 @@ its worker changes have not yet been deployed.
 | CodeBuild dispatcher | One typed item; fixed registry mapping; unknown, disabled, malformed, dependency-bearing and multi-item work fail closed | Deployed |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
 | Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Merged and locally/CI verified; not yet deployed |
-| Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | 50 focused tests and 397-test full verification pass; clean-room passed at code commit `3f32dc9`; CI run [41711545894](https://github.com/Bepoadewale/davdeploy/actions/runs/41711545894) passed; never blindly replays an uncertain apply/destroy |
+| Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | Merged as `ef60ac3`; 50 focused tests and 397-test full verification pass; clean-room passed at code commit `3f32dc9`; CI run [41713672566](https://github.com/Bepoadewale/davdeploy/actions/runs/41713672566) passed all seven jobs; never blindly replays an uncertain apply/destroy |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md` | Isolated AWS certified; hosted execution disabled |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | typed graph and dependency ordering helpers exist; CodeBuild rejects runs with more than one module | Not implemented as durable hosted orchestration |
@@ -105,16 +105,15 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 
 ## Work that remains
 
-1. Complete PR #280 lease tests, full verification, clean-room and required CI; merge it only with accurate reconciliation semantics.
-2. Deploy merged PRs #277–#279 through the reviewed Terraform saved-plan workflow; confirm package/version and migrations. Preserve the default-disabled customer-workload gates.
-3. Build authenticated reconciliation for stale CodeBuild/SQS outcomes; only retry after evidence proves the prior external action did not apply.
-4. Add dependency-aware graph scheduling, per-module state, typed outputs, partial-failure compensation and reverse cleanup; retain the fixed renderer registry.
-5. Replace the App Runner-only service gate and single-module CodeBuild limitation as each renderer family is actually certified.
-6. Integrate the Lambda/API renderer through the hosted CodeBuild path and prove real traffic, health, update, recovery, destroy and independently verified absence before enabling it.
-7. Add hosted renderer families in the active execution-goal order; do not equate standalone service tests with composed renderer certification.
-8. Extend the scenario harness to exercise composed applications through the hosted runner, including traffic, update/recovery and absence verification.
-9. Replace fixture pricing/inventory with timestamped provider data, and align browser, CLI and MCP with the same authorized lifecycle.
-10. Run the final hosted browser, CLI and MCP acceptance journey and reconcile closeout evidence.
+1. Deploy merged PRs #277–#280 through the reviewed Terraform saved-plan workflow; confirm package/version and migrations. Preserve the default-disabled customer-workload gates.
+2. Build authenticated reconciliation for stale CodeBuild/SQS outcomes; only retry after evidence proves the prior external action did not apply.
+3. Add dependency-aware graph scheduling, per-module state, typed outputs, partial-failure compensation and reverse cleanup; retain the fixed renderer registry.
+4. Replace the App Runner-only service gate and single-module CodeBuild limitation as each renderer family is actually certified.
+5. Integrate the Lambda/API renderer through the hosted CodeBuild path and prove real traffic, health, update, recovery, destroy and independently verified absence before enabling it.
+6. Add hosted renderer families in the active execution-goal order; do not equate standalone service tests with composed renderer certification.
+7. Extend the scenario harness to exercise composed applications through the hosted runner, including traffic, update/recovery and absence verification.
+8. Replace fixture pricing/inventory with timestamped provider data, and align browser, CLI and MCP with the same authorized lifecycle.
+9. Run the final hosted browser, CLI and MCP acceptance journey and reconcile closeout evidence.
 
 See `docs/test/test268.md`, `docs/tickets/ticket270.md`, and the active goal handoff for detailed evidence and boundaries.
 
