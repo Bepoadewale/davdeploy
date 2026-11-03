@@ -43,13 +43,15 @@ module work, and the Lambda renderer remains disabled.
 - [x] Duplicate events are idempotent and stale/different terminal results cannot overwrite evidence.
 - [x] Cross-run or digest-mismatched module state is rejected.
 - [x] Tests prove submission/plan and apply-awaiting-health states remain distinct.
-- [ ] Focused tests, full verification, clean-room cycle and CI pass.
+- [x] Focused tests, full verification, clean-room cycle and CI pass.
 - [x] No additional customer renderer or mixed-module execution is enabled.
 
 ## Acceptance status
 
-Implementation, focused tests, full repository verification and fresh
-clean-room validation passed. PR CI remains pending.
+Implementation, focused tests, full repository verification, fresh clean-room
+validation, and PR CI passed. GitHub Actions run
+[41702402191](https://github.com/Bepoadewale/davdeploy/actions/runs/41702402191)
+passed all seven required checks on `5206ba9`.
 
 ## Tests / validation performed
 
@@ -63,6 +65,9 @@ clean-room validation passed. PR CI remains pending.
   E2E, all demos, trace check, full verification (383 tests), OPA, Terraform
   validation, Kubernetes render and scoped cleanup — passed. Local-only; no
   AWS workload was created.
+- GitHub Actions run `41702402191` passed all seven checks: `cloud-contracts`,
+  `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, and
+  `supply-chain` on commit `5206ba9`.
 
 ## Evidence files produced
 
