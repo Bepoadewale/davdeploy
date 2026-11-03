@@ -736,6 +736,77 @@ def test_cloud_run_queue_requires_admin_and_exact_confirmation():
         raise AssertionError("developer could queue cloud execution")
 
 
+def test_module_instance_outcomes_are_idempotent_scoped_and_terminal():
+    service, _ = make_service()
+    approved = approved_app_runner_customer_review(service)
+    created = service.create_cloud_execution_run_for_revision(
+        operator(),
+        approved.id,
+        content_digest=approved.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=None,
+        expected_region=None,
+        mode="GUARDED_CLOUD_EXECUTION",
+        confirmation=None,
+    )
+    run = service.db.get(CloudExecutionRun, created["id"])
+    assert run is not None and run.module_instances
+    node = run.module_instances[0]
+
+    service._advance_cloud_execution_module_instances(run, "QUEUED")
+    service._advance_cloud_execution_module_instances(run, "RUNNING")
+    service._advance_cloud_execution_module_instances(run, "SUCCEEDED_AWAITING_OBSERVATION")
+    version = node.version
+    service._advance_cloud_execution_module_instances(run, "SUCCEEDED_AWAITING_OBSERVATION")
+    assert node.version == version
+    assert node.state == "SUCCEEDED_AWAITING_OBSERVATION"
+    assert [item["to"] for item in node.evidence["transitions"]] == [
+        "QUEUED",
+        "RUNNING",
+        "SUCCEEDED_AWAITING_OBSERVATION",
+    ]
+
+    with pytest.raises(ValueError, match="cannot be replayed or overwritten"):
+        service._advance_cloud_execution_module_instances(run, "HEALTHY")
+
+    node.project_id = "another-project"
+    with pytest.raises(ValueError, match="outside its execution run scope"):
+        service._advance_cloud_execution_module_instances(run, "FAILED")
+
+
+def test_submitted_codebuild_outcome_advances_module_without_claiming_health():
+    service, _ = make_service()
+    approved = approved_app_runner_customer_review(service)
+    created = service.create_cloud_execution_run_for_revision(
+        operator(),
+        approved.id,
+        content_digest=approved.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=None,
+        expected_region=None,
+        mode="GUARDED_CLOUD_EXECUTION",
+        confirmation=None,
+    )
+    run = service.db.get(CloudExecutionRun, created["id"])
+    assert run is not None and run.module_instances
+    node = run.module_instances[0]
+
+    for state in ("QUEUED", "RUNNING", "SUBMITTED", "PLAN_READY_FOR_REVIEW"):
+        service._advance_cloud_execution_module_instances(run, state)
+
+    assert node.state == "PLAN_READY_FOR_REVIEW"
+    assert [item["to"] for item in node.evidence["transitions"]] == [
+        "QUEUED",
+        "RUNNING",
+        "SUBMITTED",
+        "PLAN_READY_FOR_REVIEW",
+    ]
+
+
 def test_queueing_a_ready_cloud_run_wakes_the_worker(monkeypatch):
     service, _ = make_service()
     run = CloudExecutionRun(

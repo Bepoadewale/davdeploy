@@ -14,7 +14,7 @@ import httpx
 from botocore.exceptions import BotoCoreError, ClientError
 from httpx import HTTPError
 from opentelemetry import trace
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from davdeploy.cloud_execution import (
@@ -4465,6 +4465,7 @@ class ProductService:
         if confirmation != expected_confirmation:
             raise ValueError("explicit App Runner operation confirmation is required")
         run.state = "QUEUED"
+        self._advance_cloud_execution_module_instances(run, "QUEUED")
         run.evidence = {
             **(run.evidence or {}),
             "queued_by_subject": principal.subject,
@@ -4496,6 +4497,7 @@ class ProductService:
         if not run:
             return False
         run.state = "RUNNING"
+        self._advance_cloud_execution_module_instances(run, "RUNNING")
         self.db.commit()
         context = {
             "run_id": run.id,
@@ -4506,6 +4508,7 @@ class ProductService:
         }
         result = self.cloud_execution.execute(context)
         run.state = result.state
+        self._advance_cloud_execution_module_instances(run, result.state)
         run.outputs = {
             **(run.outputs or {}),
             **result.outputs,
@@ -4526,6 +4529,80 @@ class ProductService:
         )
         self.db.commit()
         return True
+
+    def _advance_cloud_execution_module_instances(
+        self, run: CloudExecutionRun, state: str
+    ) -> None:
+        """Persist a trusted run transition on only its digest-bound graph nodes."""
+        allowed_targets = {
+            "QUEUED",
+            "SUBMITTED",
+            "RUNNING",
+            "FAILED",
+            "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED",
+            "SUCCEEDED_AWAITING_OBSERVATION",
+            "PLAN_READY_FOR_REVIEW",
+            "DESTROY_PLAN_READY_FOR_REVIEW",
+            "HEALTHY",
+            "DESTROYED_VERIFIED",
+            "CLEANUP_VERIFIED",
+            "ARTIFACT_READY",
+            "IMAGE_BUILT_AWAITING_SERVICE_PLAN",
+        }
+        if state not in allowed_targets:
+            raise ValueError("cloud worker returned an unsupported module-instance state")
+        allowed_sources = {
+            "NOT_DISPATCHED": {"QUEUED", "SUBMITTED", "RUNNING", "FAILED", "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED"},
+            "QUEUED": {"SUBMITTED", "RUNNING", "FAILED", "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED"},
+            "SUBMITTED": {"RUNNING", *allowed_targets - {"QUEUED", "SUBMITTED", "RUNNING"}},
+            "RUNNING": allowed_targets - {"QUEUED", "RUNNING"},
+        }
+        now = datetime.now(UTC).isoformat()
+        for item in run.module_instances:
+            if (
+                item.execution_run_id != run.id
+                or item.organization_id != run.organization_id
+                or item.project_id != run.project_id
+                or item.input_digest != run.content_digest
+            ):
+                raise ValueError("module instance is outside its execution run scope")
+            if item.state == state:
+                continue
+            if item.state not in allowed_sources or state not in allowed_sources[item.state]:
+                raise ValueError("module instance state cannot be replayed or overwritten")
+            event = {"from": item.state, "to": state, "run_id": run.id, "recorded_at": now}
+            result = self.db.execute(
+                update(CloudExecutionModuleInstance)
+                .where(
+                    CloudExecutionModuleInstance.id == item.id,
+                    CloudExecutionModuleInstance.execution_run_id == run.id,
+                    CloudExecutionModuleInstance.organization_id == run.organization_id,
+                    CloudExecutionModuleInstance.project_id == run.project_id,
+                    CloudExecutionModuleInstance.input_digest == run.content_digest,
+                    CloudExecutionModuleInstance.state == item.state,
+                    CloudExecutionModuleInstance.version == item.version,
+                )
+                .values(
+                    state=state,
+                    attempt=item.attempt + (1 if state == "RUNNING" else 0),
+                    version=item.version + 1,
+                    evidence={
+                        **(item.evidence or {}),
+                        "transitions": [*(item.evidence or {}).get("transitions", []), event],
+                    },
+                    updated_at=datetime.now(UTC),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                raise ValueError("module instance changed concurrently; refusing stale outcome")
+            item.state = state
+            item.attempt += 1 if state == "RUNNING" else 0
+            item.version += 1
+            item.evidence = {
+                **(item.evidence or {}),
+                "transitions": [*(item.evidence or {}).get("transitions", []), event],
+            }
 
     def reconcile_cloud_execution_build(self, build_id: str) -> bool:
         """Persist one CodeBuild completion received through the SQS event bridge."""
@@ -4793,6 +4870,11 @@ class ProductService:
             "failure_reason": artifact_error
             or (None if status == "SUCCEEDED" else "Bounded CodeBuild runner failed."),
         }
+        # A missing result object is the one replayable CodeBuild case. Keep
+        # the graph node submitted until the exact same completed build can be
+        # reconciled; do not make the provisional read failure terminal.
+        if artifact_error != "runner result artifact URI is missing":
+            self._advance_cloud_execution_module_instances(run, run.state)
         self.audit(
             Principal("system-cloud-worker", run.organization_id, "operator"),
             "cloud_execution.codebuild_completed",
