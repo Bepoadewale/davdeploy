@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -4554,8 +4555,127 @@ class ProductService:
                 bucket, key = result_uri[5:].split("/", 1)
                 payload = boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
                 artifact = json.loads(payload.decode("utf-8"))
-                if artifact.get("run_id") != run.id or artifact.get("status") != "SUCCEEDED":
+                if (
+                    not isinstance(artifact, dict)
+                    or artifact.get("run_id") != run.id
+                    or artifact.get("status") != "SUCCEEDED"
+                ):
                     raise ValueError("runner result artifact does not match the execution run")
+                if run.profile == "aws-serverless-api":
+                    environment = evidence.get("execution_environment")
+                    command = run.command or {}
+                    if not isinstance(environment, dict) or not isinstance(command, dict):
+                        raise ValueError("serverless run context is malformed")
+                    expected_connection = str(
+                        environment.get("DAVDEPLOY_CUSTOMER_CONNECTION_ID") or ""
+                    )
+                    expected_phase = {
+                        "build-artifact": "artifact-build",
+                        "plan": "plan",
+                        "destroy-plan": "destroy-plan",
+                        "apply-saved-plan": "apply",
+                        "health": "health",
+                        "destroy-saved-plan": "destroy",
+                        "verify-cleanup": "verify-cleanup",
+                    }.get(str(environment.get("DAVDEPLOY_EXECUTION_OPERATION") or ""))
+                    if (
+                        artifact.get("schema_version") != "davdeploy.customer_execution_result.v1"
+                        or not re.fullmatch(r"[a-f0-9]{64}", run.content_digest)
+                        or artifact.get("plan_digest") != run.content_digest
+                        or not expected_connection
+                        or artifact.get("connection_id") != expected_connection
+                        or not expected_phase
+                        or artifact.get("phase") != expected_phase
+                        or command.get("operation")
+                        != environment.get("DAVDEPLOY_EXECUTION_OPERATION")
+                        or not isinstance(artifact.get("detail"), dict)
+                    ):
+                        raise ValueError(
+                            "serverless result does not match the approved run, connection, digest, and operation"
+                        )
+                    detail = artifact["detail"]
+                    artifact_digest = str(detail.get("artifact_sha256") or "")
+                    expected_artifact_uri = str(
+                        environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI") or ""
+                    )
+                    expected_source_commit = str(
+                        environment.get("DAVDEPLOY_CUSTOMER_SOURCE_COMMIT") or ""
+                    )
+                    if expected_phase == "artifact-build" and (
+                        detail.get("artifact_s3_uri") != expected_artifact_uri
+                        or not re.fullmatch(r"[a-f0-9]{64}", artifact_digest)
+                        or not re.fullmatch(r"[a-f0-9]{40}", expected_source_commit)
+                        or detail.get("source_commit")
+                        != expected_source_commit
+                    ):
+                        raise ValueError("serverless artifact result is incomplete or mismatched")
+                    if expected_phase in {"plan", "destroy-plan"} and (
+                        detail.get("saved_plan_s3_uri")
+                        != environment.get("DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI")
+                        or not re.fullmatch(
+                            r"[a-f0-9]{64}", str(detail.get("saved_plan_sha256") or "")
+                        )
+                        or not isinstance(detail.get("plan_summary"), dict)
+                        or not re.fullmatch(r"[a-f0-9]{64}", artifact_digest)
+                        or artifact_digest
+                        != environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256")
+                    ):
+                        raise ValueError("serverless saved-plan result is incomplete or mismatched")
+                    if expected_phase == "apply" and (
+                        not re.fullmatch(
+                            r"[a-f0-9]{64}", str(detail.get("saved_plan_sha256") or "")
+                        )
+                        or detail.get("saved_plan_sha256")
+                        != environment.get("DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256")
+                        or not re.fullmatch(r"[a-f0-9]{64}", artifact_digest)
+                        or artifact_digest
+                        != environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256")
+                        or not isinstance(detail.get("outputs"), dict)
+                    ):
+                        raise ValueError("serverless apply result is incomplete")
+                    if expected_phase == "health" and (
+                        not isinstance(detail.get("endpoint"), str)
+                        or not detail["endpoint"].startswith("https://")
+                        or not isinstance(detail.get("response"), str)
+                    ):
+                        raise ValueError("serverless health result is incomplete")
+                    if expected_phase == "health":
+                        prior_apply = self.db.scalar(
+                            select(CloudExecutionRun)
+                            .where(
+                                CloudExecutionRun.organization_id == run.organization_id,
+                                CloudExecutionRun.revision_id == run.revision_id,
+                                CloudExecutionRun.profile == "aws-serverless-api",
+                                CloudExecutionRun.state == "SUCCEEDED_AWAITING_OBSERVATION",
+                                CloudExecutionRun.content_digest == run.content_digest,
+                                CloudExecutionRun.id != run.id,
+                            )
+                            .order_by(CloudExecutionRun.created_at.desc())
+                            .limit(1)
+                        )
+                        prior_outputs = (
+                            ((prior_apply.outputs or {}).get("runner_artifact") or {})
+                            .get("detail", {})
+                            .get("outputs", {})
+                            if prior_apply
+                            else {}
+                        )
+                        applied_endpoint = prior_outputs.get("api_endpoint", {})
+                        if isinstance(applied_endpoint, dict):
+                            applied_endpoint = applied_endpoint.get("value")
+                        if detail["endpoint"] != applied_endpoint:
+                            raise ValueError(
+                                "serverless health endpoint does not match the approved apply output"
+                            )
+                    if (
+                        expected_phase in {"destroy", "verify-cleanup"}
+                        and detail.get("cleanup") != "confirmed_absent"
+                    ):
+                        raise ValueError("serverless cleanup result did not confirm absence")
+                    if expected_phase == "destroy" and detail.get(
+                        "saved_plan_sha256"
+                    ) != environment.get("DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256"):
+                        raise ValueError("serverless destroy result does not match the approved plan")
             except (
                 BotoCoreError,
                 ClientError,
@@ -4595,6 +4715,17 @@ class ProductService:
                     "reviewed_at": datetime.now(UTC).isoformat(),
                 }
                 run.state = review.state
+        elif run.profile == "aws-serverless-api":
+            phase = str(artifact.get("phase") or "")
+            run.state = {
+                "artifact-build": "ARTIFACT_READY",
+                "plan": "PLAN_READY_FOR_REVIEW",
+                "destroy-plan": "DESTROY_PLAN_READY_FOR_REVIEW",
+                "apply": "SUCCEEDED_AWAITING_OBSERVATION",
+                "health": "HEALTHY",
+                "destroy": "DESTROYED_VERIFIED",
+                "verify-cleanup": "CLEANUP_VERIFIED",
+            }[phase]
         else:
             detail = artifact.get("detail") or {}
             if run.mode == "AUTHENTICATED_APP_RUNNER_DESTROY":
@@ -4622,11 +4753,14 @@ class ProductService:
             "runner_artifact": artifact or None,
             "terraform_outputs": (artifact.get("detail") or {})
             if run.mode == "AUTHENTICATED_APP_RUNNER_APPLY"
+            else (artifact.get("detail") or {}).get("outputs")
+            if run.profile == "aws-serverless-api" and artifact.get("phase") == "apply"
             else None,
             "image_build": (artifact.get("detail") or {})
             if run.mode == "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD"
             else None,
-            "destroy_proof": (artifact.get("detail") or {}).get("destroy_proof"),
+            "destroy_proof": (artifact.get("detail") or {}).get("destroy_proof")
+            or (artifact.get("detail") or {}).get("cleanup"),
             "failure_reason": artifact_error
             or (None if status == "SUCCEEDED" else "Bounded CodeBuild runner failed."),
         }

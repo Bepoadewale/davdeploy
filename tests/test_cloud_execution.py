@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+
+import pytest
 from davdeploy.cloud_execution import (
     CloudExecutionResult,
     CodeBuildCloudExecutionAdapter,
@@ -28,6 +31,233 @@ def lifecycle_work(operation="apply"):
             "resource_tags": {"ManagedBy": "davdeploy"},
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("operation", "phase", "detail", "expected_state"),
+    [
+        (
+            "build-artifact",
+            "artifact-build",
+            {
+                "artifact_s3_uri": "s3://runner-artifacts/artifact.zip",
+                "artifact_sha256": "a" * 64,
+                "source_commit": "b" * 40,
+            },
+            "ARTIFACT_READY",
+        ),
+        (
+            "plan",
+            "plan",
+            {
+                "saved_plan_s3_uri": "s3://runner-artifacts/plan.tfplan",
+                "saved_plan_sha256": "c" * 64,
+                "artifact_sha256": "a" * 64,
+                "plan_summary": {"resource_changes": []},
+            },
+            "PLAN_READY_FOR_REVIEW",
+        ),
+        (
+            "destroy-plan",
+            "destroy-plan",
+            {
+                "saved_plan_s3_uri": "s3://runner-artifacts/destroy.tfplan",
+                "saved_plan_sha256": "c" * 64,
+                "artifact_sha256": "a" * 64,
+                "plan_summary": {"resource_changes": []},
+            },
+            "DESTROY_PLAN_READY_FOR_REVIEW",
+        ),
+        (
+            "apply-saved-plan",
+            "apply",
+            {
+                "saved_plan_sha256": "c" * 64,
+                "artifact_sha256": "a" * 64,
+                "outputs": {"api_endpoint": {"value": "https://api.example"}},
+            },
+            "SUCCEEDED_AWAITING_OBSERVATION",
+        ),
+        (
+            "health",
+            "health",
+            {"endpoint": "https://api.example", "response": '{"ok":true}'},
+            "HEALTHY",
+        ),
+        (
+            "destroy-saved-plan",
+            "destroy",
+            {"saved_plan_sha256": "c" * 64, "cleanup": "confirmed_absent"},
+            "DESTROYED_VERIFIED",
+        ),
+        (
+            "verify-cleanup",
+            "verify-cleanup",
+            {"cleanup": "confirmed_absent"},
+            "CLEANUP_VERIFIED",
+        ),
+    ],
+)
+def test_serverless_results_are_bound_to_the_typed_operation_and_get_truthful_states(
+    monkeypatch, operation, phase, detail, expected_state
+):
+    service, _ = make_service()
+    connection_id = "connection-123"
+    build_id = f"davdeploy:serverless-{operation}"
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id=f"revision-{operation}",
+        project_id=f"project-{operation}",
+        profile="aws-serverless-api",
+        state="SUBMITTED",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        attempt=1,
+        command={"operation": operation},
+        evidence={
+            "result_s3_uri": f"s3://runner-results/{operation}/result.json",
+            "execution_environment": {
+                "DAVDEPLOY_CUSTOMER_CONNECTION_ID": connection_id,
+                "DAVDEPLOY_EXECUTION_OPERATION": operation,
+                "DAVDEPLOY_CUSTOMER_SOURCE_COMMIT": "b" * 40,
+                "DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI": "s3://runner-artifacts/artifact.zip",
+                "DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256": "a" * 64,
+                "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI": detail.get("saved_plan_s3_uri", ""),
+                "DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256": "c" * 64,
+            },
+        },
+        outputs={"codebuild_build_id": build_id},
+        content_digest="d" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    if phase == "health":
+        service.db.add(
+            CloudExecutionRun(
+                organization_id=run.organization_id,
+                revision_id=run.revision_id,
+                project_id=run.project_id,
+                profile="aws-serverless-api",
+                state="SUCCEEDED_AWAITING_OBSERVATION",
+                mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+                attempt=1,
+                command={"operation": "apply-saved-plan"},
+                evidence={},
+                outputs={
+                    "runner_artifact": {
+                        "detail": {"outputs": {"api_endpoint": {"value": "https://api.example"}}}
+                    }
+                },
+                content_digest=run.content_digest,
+                requested_by_subject=operator().subject,
+            )
+        )
+    service.db.commit()
+    payload = {
+        "schema_version": "davdeploy.customer_execution_result.v1",
+        "run_id": run.id,
+        "status": "SUCCEEDED",
+        "connection_id": connection_id,
+        "plan_digest": run.content_digest,
+        "phase": phase,
+        "detail": detail,
+    }
+
+    class Body:
+        def read(self):
+            return json.dumps(payload).encode()
+
+    class CodeBuild:
+        def batch_get_builds(self, *, ids):
+            assert ids == [build_id]
+            return {"builds": [{"buildStatus": "SUCCEEDED", "buildComplete": True}]}
+
+    class S3:
+        def get_object(self, *, Bucket, Key):
+            assert (Bucket, Key) == ("runner-results", f"{operation}/result.json")
+            return {"Body": Body()}
+
+    monkeypatch.setattr(
+        "davdeploy.service.boto3.client",
+        lambda service_name: CodeBuild() if service_name == "codebuild" else S3(),
+    )
+
+    assert service.reconcile_cloud_execution_build(build_id) is True
+    reconciled = service.db.get(CloudExecutionRun, run.id)
+    assert reconciled.state == expected_state, reconciled.outputs.get("failure_reason")
+    assert service.db.get(CloudExecutionRun, run.id).outputs["runner_artifact"] == payload
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    [
+        {"plan_digest": "e" * 64},
+        {"connection_id": "another-connection"},
+        {"phase": "apply"},
+        {"run_id": "another-run"},
+    ],
+)
+def test_serverless_result_mismatches_never_mark_the_run_successful(monkeypatch, mismatch):
+    service, _ = make_service()
+    build_id = "davdeploy:serverless-mismatch"
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-serverless-mismatch",
+        project_id="project-serverless-mismatch",
+        profile="aws-serverless-api",
+        state="SUBMITTED",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        attempt=1,
+        command={"operation": "build-artifact"},
+        evidence={
+            "result_s3_uri": "s3://runner-results/serverless-mismatch/result.json",
+            "execution_environment": {
+                "DAVDEPLOY_CUSTOMER_CONNECTION_ID": "connection-456",
+                "DAVDEPLOY_EXECUTION_OPERATION": "build-artifact",
+                "DAVDEPLOY_CUSTOMER_SOURCE_COMMIT": "b" * 40,
+                "DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI": "s3://runner-artifacts/artifact.zip",
+                "DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256": "a" * 64,
+            },
+        },
+        outputs={"codebuild_build_id": build_id},
+        content_digest="f" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    service.db.commit()
+    payload = {
+        "schema_version": "davdeploy.customer_execution_result.v1",
+        "run_id": run.id,
+        "status": "SUCCEEDED",
+        "connection_id": "connection-456",
+        "plan_digest": run.content_digest,
+        "phase": "artifact-build",
+        "detail": {
+            "artifact_s3_uri": "s3://runner-artifacts/artifact.zip",
+            "artifact_sha256": "a" * 64,
+            "source_commit": "b" * 40,
+        },
+        **mismatch,
+    }
+
+    class Body:
+        def read(self):
+            return json.dumps(payload).encode()
+
+    class CodeBuild:
+        def batch_get_builds(self, *, ids):
+            return {"builds": [{"buildStatus": "SUCCEEDED", "buildComplete": True}]}
+
+    class S3:
+        def get_object(self, *, Bucket, Key):
+            return {"Body": Body()}
+
+    monkeypatch.setattr(
+        "davdeploy.service.boto3.client",
+        lambda service_name: CodeBuild() if service_name == "codebuild" else S3(),
+    )
+
+    assert service.reconcile_cloud_execution_build(build_id) is True
+    assert service.db.get(CloudExecutionRun, run.id).state == "FAILED"
 
 
 class FakeCloudExecutionAdapter:
@@ -59,9 +289,7 @@ def test_codebuild_adapter_submits_only_the_fixed_execution_environment():
             calls.append(kwargs)
             return {"build": {"id": "davdeploy:build-1", "arn": "arn:build-1"}}
 
-    environment = {
-        key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment
-    }
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
     environment["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-saved-plan"
     adapter = CodeBuildCloudExecutionAdapter("davdeploy-customer-executor", client=CodeBuild())
 
@@ -71,7 +299,10 @@ def test_codebuild_adapter_submits_only_the_fixed_execution_environment():
     assert result.outputs["codebuild_build_id"] == "davdeploy:build-1"
     assert calls[0]["projectName"] == "davdeploy-customer-executor"
     assert all(item["name"] != "COMMAND" for item in calls[0]["environmentVariablesOverride"])
-    assert any(item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON" for item in calls[0]["environmentVariablesOverride"])
+    assert any(
+        item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"
+        for item in calls[0]["environmentVariablesOverride"]
+    )
 
 
 def test_codebuild_adapter_accepts_typed_plan_work_for_plan_review():
@@ -88,7 +319,11 @@ def test_codebuild_adapter_accepts_typed_plan_work_for_plan_review():
         {"environment": environment, "lifecycle_work": lifecycle_work("plan")}
     )
     assert result.state == "SUBMITTED"
-    manifest = next(item["value"] for item in calls[0]["environmentVariablesOverride"] if item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")
+    manifest = next(
+        item["value"]
+        for item in calls[0]["environmentVariablesOverride"]
+        if item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"
+    )
     assert '"operation":"plan"' in manifest
 
 
@@ -160,7 +395,9 @@ def test_codebuild_adapter_constructs_only_the_fixed_app_runner_image_build_work
 def test_authenticated_plan_review_submits_typed_plan_work_to_the_worker(monkeypatch):
     service, db = make_service()
     approved = approved_app_runner_customer_review(service)
-    connection = service.create_cloud_connection(founder(), "Verified test cloud", "aws", "byoc_role_contract")
+    connection = service.create_cloud_connection(
+        founder(), "Verified test cloud", "aws", "byoc_role_contract"
+    )
     connection.setup_state = "VERIFIED"
     connection.account_id = "654654474502"
     connection.execution_role_arn = "arn:aws:iam::654654474502:role/davdeployExecution-test"
@@ -305,7 +542,10 @@ def test_admin_can_reconcile_only_the_safe_encrypted_result_read_failure(monkeyp
         attempt=1,
         command={},
         evidence={"result_s3_uri": "s3://runner-results/run/result.json"},
-        outputs={"codebuild_build_id": build_id, "failure_reason": "runner result artifact URI is missing"},
+        outputs={
+            "codebuild_build_id": build_id,
+            "failure_reason": "runner result artifact URI is missing",
+        },
         content_digest="b" * 64,
         requested_by_subject=founder().subject,
     )
@@ -314,7 +554,9 @@ def test_admin_can_reconcile_only_the_safe_encrypted_result_read_failure(monkeyp
 
     class Body:
         def read(self):
-            return ('{"run_id": "' + run.id + '", "status": "SUCCEEDED", "detail": {"output": "ok"}}').encode()
+            return (
+                '{"run_id": "' + run.id + '", "status": "SUCCEEDED", "detail": {"output": "ok"}}'
+            ).encode()
 
     class CodeBuild:
         def batch_get_builds(self, *, ids):
@@ -415,7 +657,9 @@ def test_ready_cloud_run_is_queued_and_observed_by_trusted_worker():
     adapter = FakeCloudExecutionAdapter()
     service.cloud_execution = adapter
     approved = approved_app_runner_customer_review(service)
-    render = service.create_terraform_plan_render_for_revision(founder(), approved.id, approved.content_digest)
+    render = service.create_terraform_plan_render_for_revision(
+        founder(), approved.id, approved.content_digest
+    )
     preflight = service.create_cloud_readiness_preflight(
         operator(),
         approved.id,
@@ -497,7 +741,9 @@ def test_queueing_a_ready_cloud_run_wakes_the_worker(monkeypatch):
     service.db.add(run)
     service.db.commit()
     wakeups = []
-    monkeypatch.setattr(service, "_wake_worker", lambda kind, job_id: wakeups.append((kind, job_id)))
+    monkeypatch.setattr(
+        service, "_wake_worker", lambda kind, job_id: wakeups.append((kind, job_id))
+    )
 
     queued = service.queue_cloud_execution_run(
         operator(), run.id, run.content_digest, "EXECUTE_APP_RUNNER_WORKLOAD"
@@ -634,7 +880,11 @@ def test_customer_image_build_pins_source_and_requires_foundation(monkeypatch):
     assert revision is not None
     revision.content = {
         **revision.content,
-        "target": {**revision.content["target"], "connection_id": connection.id, "account_id": connection.account_id},
+        "target": {
+            **revision.content["target"],
+            "connection_id": connection.id,
+            "account_id": connection.account_id,
+        },
     }
     revision.content_digest = plan_hash(revision.content)
     decision = service.db.scalar(
@@ -654,7 +904,13 @@ def test_customer_image_build_pins_source_and_requires_foundation(monkeypatch):
         mode="AUTHENTICATED_APP_RUNNER_APPLY",
         command={},
         evidence={},
-        outputs={"terraform_outputs": {"ecr_repository_url": {"value": f"654654474502.dkr.ecr.us-east-1.amazonaws.com/davdeploy-{connection.id}-workload"}}},
+        outputs={
+            "terraform_outputs": {
+                "ecr_repository_url": {
+                    "value": f"654654474502.dkr.ecr.us-east-1.amazonaws.com/davdeploy-{connection.id}-workload"
+                }
+            }
+        },
         content_digest=revision.content_digest,
         requested_by_subject=operator().subject,
     )
@@ -683,4 +939,6 @@ def test_customer_image_build_pins_source_and_requires_foundation(monkeypatch):
     assert persisted is not None
     assert persisted.mode == "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD"
     assert persisted.evidence["source"]["commit"] == "a" * 40
-    assert persisted.evidence["execution_environment"]["DAVDEPLOY_CUSTOMER_ECR_REPOSITORY_URL"].endswith("-workload")
+    assert persisted.evidence["execution_environment"][
+        "DAVDEPLOY_CUSTOMER_ECR_REPOSITORY_URL"
+    ].endswith("-workload")
