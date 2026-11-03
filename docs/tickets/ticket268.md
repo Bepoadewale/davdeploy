@@ -36,7 +36,7 @@ confirmed the test Lambda, API, and IAM role are absent.
 - [x] HTTP endpoint returns the expected test response.
 - [x] All 9 Terraform resources are destroyed; Lambda, API, and IAM role absence verified.
 - [x] Terraform formatting, initialization, and validation pass.
-- [ ] Updated PR revision passes required CI.
+- [x] Updated PR revision passes required CI (all seven checks passed).
 
 ## Acceptance status
 
@@ -49,7 +49,8 @@ integration or customer execution readiness.
 the validation root. A real HTTPS request returned HTTP 200 with
 `{"ok":true}`. Monitored Terraform destroy reported 9 resources destroyed;
 read-only AWS lookups returned not-found for the exact test Lambda, HTTP API,
-and IAM role. The current PR revision still needs its required CI run.
+and IAM role. All seven required GitHub CI checks passed on the current PR
+revision before this ticket status update.
 
 ## Evidence files produced
 
