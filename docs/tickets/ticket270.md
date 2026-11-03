@@ -27,11 +27,14 @@ Add serverless API to the renderer manifest as explicitly disabled, add a bounde
 - [x] The serverless API appears in the manifest as disabled and remains unavailable for customer execution.
 - [x] Unknown modules, invalid operations, extra commands, and unsupported mixed graphs fail closed.
 - [x] Authenticated plan review passes one typed plan-work item to CodeBuild.
-- [ ] Focused tests and required CI pass.
+- [x] Focused tests and required CI pass.
 
 ## Acceptance status
 
-Implementation and local validation are complete; hosted CI is pending.
+Merged at `93c895e6e40e80f20b71a6f3a21e3186ca63d576` on 2026-11-03. Required
+CI passed. This merge deploys the dispatcher infrastructure only when the
+separate approved Terraform workflow is applied; it does not enable the
+serverless customer renderer.
 
 ## Tests / validation performed
 
@@ -42,6 +45,8 @@ Implementation and local validation are complete; hosted CI is pending.
 - `terraform -chdir=infrastructure/terraform/serverless-control-plane validate` passed.
 - `GITHUB_PR_NUMBER=270 python3 scripts/check_doc_conventions.py` passed.
 - `git diff --check` passed.
+- PR #270 merged: [GitHub PR](https://github.com/Bepoadewale/davdeploy/pull/270).
+- Required checks passed in [workflow run 41670185868](https://github.com/Bepoadewale/davdeploy/actions/runs/41670185868).
 
 ## Evidence files produced
 
