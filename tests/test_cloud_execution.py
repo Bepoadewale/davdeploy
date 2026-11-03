@@ -333,7 +333,7 @@ def test_codebuild_adapter_accepts_typed_plan_work_for_plan_review():
     assert '"operation":"plan"' in manifest
 
 
-def test_codebuild_adapter_requires_certification_gate_for_serverless_renderer(monkeypatch):
+def test_codebuild_adapter_requires_durable_certification_mode_for_serverless_renderer(monkeypatch):
     calls = []
 
     class CodeBuild:
@@ -341,7 +341,7 @@ def test_codebuild_adapter_requires_certification_gate_for_serverless_renderer(m
             calls.append(kwargs)
             return {"build": {"id": "davdeploy:serverless-1", "arn": "arn:serverless-1"}}
 
-    monkeypatch.delenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", raising=False)
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
     environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
     environment["DAVDEPLOY_EXECUTION_OPERATION"] = "health"
     work = [
@@ -353,13 +353,26 @@ def test_codebuild_adapter_requires_certification_gate_for_serverless_renderer(m
         }
     ]
     adapter = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild())
-    blocked = adapter.execute({"environment": environment, "lifecycle_work": work})
+    blocked = adapter.execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "profile": "aws-serverless-api",
+            "mode": "AUTHENTICATED_APP_RUNNER_APPLY",
+        }
+    )
     assert blocked.state == "FAILED"
     assert "not enabled" in (blocked.failure_reason or "")
     assert calls == []
 
-    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
-    submitted = adapter.execute({"environment": environment, "lifecycle_work": work})
+    submitted = adapter.execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "profile": "aws-serverless-api",
+            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        }
+    )
     assert submitted.state == "SUBMITTED"
     manifest = next(
         item["value"]
@@ -373,6 +386,50 @@ def test_codebuild_adapter_requires_certification_gate_for_serverless_renderer(m
         "value": "true",
         "type": "PLAINTEXT",
     } in calls[0]["environmentVariablesOverride"]
+
+
+def test_worker_builds_certification_context_from_persisted_run_mode():
+    service, _ = make_service()
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-serverless-worker-context",
+        project_id="project-serverless-worker-context",
+        profile="aws-serverless-api",
+        state="QUEUED",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        attempt=1,
+        command={
+            "universal_lifecycle_work": [
+                {
+                    "module_id": "aws-serverless-api",
+                    "operation": "build_artifact",
+                    "dependencies": [],
+                    "resource_tags": {"ManagedBy": "davdeploy"},
+                }
+            ]
+        },
+        evidence={"execution_environment": {"DAVDEPLOY_EXECUTION_OPERATION": "build-artifact"}},
+        outputs={},
+        content_digest="a" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    service.db.commit()
+
+    class CapturingAdapter:
+        def __init__(self):
+            self.context = None
+
+        def execute(self, context):
+            self.context = context
+            return CloudExecutionResult("SUBMITTED", (), {"codebuild_build_id": "serverless-1"})
+
+    adapter = CapturingAdapter()
+    service.cloud_execution = adapter
+    assert service.run_next_cloud_execution() is True
+    assert adapter.context["profile"] == "aws-serverless-api"
+    assert adapter.context["mode"] == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+    assert adapter.context["lifecycle_work"][0]["operation"] == "build_artifact"
 
 
 def test_codebuild_adapter_constructs_only_the_fixed_app_runner_image_build_work():
