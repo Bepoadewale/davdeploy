@@ -6,6 +6,14 @@ Audit date: 2026-10-28. Branch reviewed: `main` after hosted Lambda/Aurora/Cogni
 
 Backend PR #270 is deployed through Terraform apply run [41671744510](https://github.com/Bepoadewale/davdeploy/actions/runs/41671744510). It applied 0 additions, 7 in-place changes, and 0 deletions. Database migrations completed. AWS reported the API Lambda active and successful, with the executor package pinned to commit `93c895e6e40e80f20b71a6f3a21e3186ca63d576`; the CodeBuild buildspec invokes the typed renderer dispatcher.
 
+Read-only checks on 2026-11-03 confirmed the Lambda remained Active with a
+Successful update, `https://api.davdeploy.tech/healthz` returned HTTP 200
+through Cloudflare, and the live CodeBuild buildspec still invokes the typed
+dispatcher. Backend PRs #277/#278 are now merged on main (`8868836`); they add
+durable module rows and single-renderer outcome transitions with local
+clean-room and CI evidence, but they have not yet been deployed. The hosted
+package remains `93c895e`.
+
 This release deploys the dispatcher but does not broaden the hosted customer execution capability: App Runner remains the only enabled renderer, and CodeBuild rejects multi-module runs. Lambda + HTTP API has isolated AWS HTTP and teardown evidence (`docs/test/test268.md`) but remains disabled for hosted execution. The product cannot yet deploy arbitrary compositions from natural language. See `EXECUTION_READINESS_MATRIX.md` for the per-module state and next work.
 
 ## What works today

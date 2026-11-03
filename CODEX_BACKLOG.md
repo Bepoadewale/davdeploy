@@ -70,6 +70,13 @@
 - [x] First-class deployment outputs and observed resource inventory for local dry-run environments, including customer-visible URLs/ARNs/log/dashboard references and destroyed-state history.
 - [x] Product-side cloud execution run history for approved App Runner revisions: admin-only, exact digest, rendered contract, ready preflight, plan-review binding and blocked-by-default command evidence.
 - [x] Execution-history and evidence-export APIs for customer workload runs, including attempt, digest, source, target, Terraform state, output/resource placeholders, destroy proof and failure reason.
+- [x] Define the typed execution lifecycle, bounded renderer registry, and CodeBuild dispatcher (PRs #264–#270). The deployed dispatcher remains App Runner-only and rejects multiple modules.
+- [x] Add an isolated Lambda + HTTP API renderer and certify HTTP 200 plus teardown (PRs #267–#269). This is isolated AWS evidence, not hosted customer-runner certification; the renderer remains disabled in hosted execution.
+- [x] Persist typed module-instance rows and single-renderer queue/worker/CodeBuild outcome transitions (PRs #277/#278). Tests, clean-room proof and CI pass. PR #278 is merged but not deployed; multi-module scheduling, durable leases, restart/resume and recovery remain unfinished.
+- [ ] Deploy the merged #277/#278 worker changes through the reviewed saved-plan workflow without enabling customer execution.
+- [ ] Implement durable worker claim/lease, concurrency, restart/resume, retry and partial-failure recovery.
+- [ ] Dispatch compatible approved module graphs through checked-in renderers with typed outputs, dependency ordering and reverse cleanup.
+- [ ] Certify each hosted renderer and composed workload through the customer execution runner, including health, update/recovery, destroy and independent absence verification.
 - [ ] Ingest real App Runner Terraform outputs and AWS resource observations through the product UI/API execution path.
 - [x] Browser-side downloadable plan/audit evidence and Activity grouping/filtering by project and environment are implemented in the static frontend. The export is browser-local and contains only API-rendered evidence.
 - [x] Scoped GitHub desired-state publication through reviewed pull requests is implemented behind an explicit live-write flag and test-proven with mocked GitHub API calls. Real customer-repo publication remains opt-in and unexecuted in routine local CI.

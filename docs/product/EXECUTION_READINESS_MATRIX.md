@@ -1,12 +1,18 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-03, backend main commit `ff5103f4be8f4ddbeca3bbde0829421b4c2f8a49` (PR #275).
+Audit as of 2026-11-03, backend main commit `88688360f98200ed57bc253d02804d4ab6a359f9` (PR #278).
 
 ## Hosted deployment evidence
 
 PR #270 was deployed by Terraform apply run [41671744510](https://github.com/Bepoadewale/davdeploy/actions/runs/41671744510). The reviewed plan applied 0 creates, 7 updates and 0 destroys. The workflow reported database migrations complete. A read-only AWS query then showed `davdeploy-api` active with a successful update and the executor package pinned to commit `93c895e`. The live CodeBuild project buildspec invokes `scripts/customer-workload-dispatcher.sh`.
 
 An unauthenticated request to `https://api.davdeploy.tech/health` returned HTTP 401. This endpoint is protected by the edge origin header and normal authorization. That probe does not establish application health; use the deployed status/health path with its required origin and auth context.
+
+On 2026-11-03, `https://api.davdeploy.tech/healthz` returned HTTP 200 with
+`{"status":"ok","product":"davdeploy"}` through the Cloudflare edge. AWS
+reported `davdeploy-api` Active with LastUpdateStatus Successful; its deployed
+version remains the #270 release at commit `93c895e`. PR #278 is merged, but
+its worker changes have not yet been deployed.
 
 ## Execution summary
 
@@ -17,6 +23,7 @@ An unauthenticated request to `https://api.davdeploy.tech/health` returned HTTP 
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` disabled | One customer renderer enabled |
 | CodeBuild dispatcher | One typed item; fixed registry mapping; unknown, disabled, malformed, dependency-bearing and multi-item work fail closed | Deployed |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
+| Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Locally verified and CI passed; not yet deployed; no leases, restart/resume, dependency scheduler, retry policy, or multi-module execution |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md` | Isolated AWS certified; hosted execution disabled |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | typed graph and dependency ordering helpers exist; CodeBuild rejects runs with more than one module | Not implemented as durable hosted orchestration |
@@ -97,14 +104,15 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 
 ## Work that remains
 
-1. Implement durable hosted deployment/module-instance state, locking, idempotency, retries/resume, dependency inputs/outputs, partial-failure recovery, output redaction and independent cleanup verification.
-2. Replace the App Runner-only service gate and single-module CodeBuild limitation with graph orchestration that resolves each module to a checked-in renderer. Do not add arbitrary scripts, roots or Terraform input.
-3. Integrate the Lambda/API renderer through the actual customer CodeBuild path; run hosted apply, real HTTP traffic, observations, update, intentional recovery, destroy and independently verified absence before enabling it.
-4. Add hosted renderer families in the order in the active execution-engine goal: storage/data/queues; static web and edge; containers/VM; relational and cache; async; search/analytics/streaming; AI/ML; Kubernetes/networking/multi-region.
-5. Turn the certification scenarios into hosted application tests that prove behavior, update/recovery and teardown, not only Terraform resource creation.
-6. Replace fixture pricing/inventory with timestamped provider data and customer-approved discovery, and ensure the built artifact matches the reviewed repository commit.
-7. Align frontend, CLI and MCP flows with the same provider-neutral API lifecycle and truthful observed evidence.
-8. Run the final browser, CLI and MCP AWS acceptance journey and reconcile status docs from its results.
+1. Deploy the merged PR #277/#278 control-plane code through the reviewed Terraform saved-plan workflow; confirm the deployed package/version and migration status. Preserve the default-disabled customer-workload gates.
+2. Implement durable hosted deployment/module-instance locking and worker leases, idempotency, retries/resume, dependency inputs/outputs, partial-failure recovery, output redaction and independent cleanup verification.
+3. Replace the App Runner-only service gate and single-module CodeBuild limitation with graph orchestration that resolves each module to a checked-in renderer. Do not add arbitrary scripts, roots or Terraform input.
+4. Integrate the Lambda/API renderer through the actual customer CodeBuild path; run hosted apply, real HTTP traffic, observations, update, intentional recovery, destroy and independently verified absence before enabling it.
+5. Add hosted renderer families in the order in the active execution-engine goal: storage/data/queues; static web and edge; containers/VM; relational and cache; async; search/analytics/streaming; AI/ML; Kubernetes/networking/multi-region.
+6. Turn the certification scenarios into hosted application tests that prove behavior, update/recovery and teardown, not only Terraform resource creation.
+7. Replace fixture pricing/inventory with timestamped provider data and customer-approved discovery, and ensure the built artifact matches the reviewed repository commit.
+8. Align frontend, CLI and MCP flows with the same provider-neutral API lifecycle and truthful observed evidence.
+9. Run the final browser, CLI and MCP AWS acceptance journey and reconcile status docs from its results.
 
 See `docs/test/test268.md`, `docs/tickets/ticket270.md`, and the active goal handoff for detailed evidence and boundaries.
 
