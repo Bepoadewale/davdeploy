@@ -2,7 +2,7 @@
 
 ## Current state
 
-**davdeploy V1 foundation — hosted control plane and customer-AWS discovery runtime are live; real customer-workload App Runner create → validate → destroy pilot executed twice and was torn down. Customer workload execution is not enabled in routine product operation.**
+**Hosted Lambda/Aurora/Cognito control plane and customer AWS discovery are live. PR #270's typed CodeBuild dispatcher is deployed. App Runner is the only enabled customer workload renderer and remains a controlled pilot; multi-module customer execution is not available.**
 
 The GitHub repository has been renamed from `ai-platform-product-strategy` to `davdeploy`. It is a private commercial product repository.
 
@@ -42,6 +42,9 @@ The GitHub repository has been renamed from `ai-platform-product-strategy` to `d
 - Customer-facing infrastructure-plan records now have separate draft, submitted, approved and rejected revision states. They are distinct from bounded execution plans: approval never deploys. Workspace-administrator self-approval is explicitly recorded and tenant-scoped.
 
 ## Boundaries
+
+- Deployment evidence current to 2026-11-03: protected Terraform apply run `41671744510` for commit `93c895e6e40e80f20b71a6f3a21e3186ca63d576` completed with 0 added, 7 changed and 0 destroyed. Database migrations completed. AWS reported the API Lambda active with a successful update and the executor artifact at that commit; the live CodeBuild buildspec invokes the typed dispatcher. This deploy changed control-plane packages and dispatcher configuration; it did not create a customer workload.
+- The hosted dispatcher accepts one typed lifecycle item and currently resolves only `aws-managed-application` (App Runner). Multi-module work fails closed. `aws-serverless-api` has isolated real AWS renderer evidence (`docs/test/test268.md`) but remains disabled for hosted customer execution. See `docs/product/EXECUTION_READINESS_MATRIX.md` for all 26 catalogue entries, 30 implementation entries, and remaining execution gaps.
 
 - Routine product operation still does **not** deploy a customer workload into AWS or a customer account. Customer-AWS discovery is live and read-only; it is not deployment permission. Customer-plan dry runs execute only against the local fixture worker. PR #42 separately executed and destroyed a guarded App Runner customer workload pilot twice using scripts/Terraform evidence. The current hosted control plane is the serverless Lambda/Aurora deployment, with password-plus-authenticator Cognito access and server-side workspace membership; it is a controlled private-beta control plane, not production workload execution. Cost Explorer values are delayed billing data, not settled cost evidence.
 - Terraform plan-only review records are governance evidence unless a future operator deliberately enables and runs authenticated plan mode. They are not apply, destroy or workload-readiness evidence.
