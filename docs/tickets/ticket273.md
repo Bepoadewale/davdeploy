@@ -32,21 +32,25 @@ Define and implement a no-build-command source contract that packages the root `
 - [x] No customer-provided shell/build commands execute.
 - [x] Artifact is uploaded to the expected tenant/plan-scoped key and SHA-256 is recorded; server-side encryption is verified.
 - [x] CodeBuild dispatch is typed, operation-specific, and disabled by default.
-- [ ] Focused tests and full local clean-room validation pass.
-- [ ] CI passes.
+- [x] Focused tests and full local clean-room validation pass.
+- [x] CI passes.
 - [x] Customer run creation remains App Runner-only.
 
 ## Acceptance status
 
-Implementation and focused verification are complete. The isolated clean-room run and PR CI remain.
+Implementation, focused verification, the isolated clean-room run, and PR CI are complete. No AWS customer workload was deployed or changed.
 
 ## Tests / validation performed
 
 `make lint` passed. Focused artifact-builder, renderer, dispatcher, and cloud-execution tests passed: 35 tests. Full `.venv/bin/python -m pytest -q` passed: 367 tests. Shell syntax, Python compilation, documentation conventions, and `git diff --check` passed. The executor package builder included the new fixed artifact script and Lambda/API renderer files. No real AWS artifact upload was performed.
 
+The isolated clean-room validation used a fresh detached worktree at commit `1af56633e76f504867e7c567b4e2505049d97c06` under `/tmp/davdeploy-cleanroom-pr273-20261103`. `make bootstrap-local` passed, followed by `make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify`; all targets passed and the full suite reported 367 tests passed with one Starlette deprecation warning. The clean-room Compose services were stopped with `docker compose stop`; the worktree and its named Postgres volume were retained.
+
+GitHub Actions run `41683563595` passed all seven checks: `docs-conventions`, `python`, `secrets`, `policy`, `cloud-contracts`, `supply-chain`, and `local-e2e`.
+
 ## Evidence files produced
 
-No AWS workload is planned for this implementation PR. A real hosted artifact build and Lambda lifecycle certification will require a separate disposable AWS evidence PR.
+No AWS workload is planned for this implementation PR. A real hosted artifact build and Lambda lifecycle certification will require a separate disposable AWS evidence PR. Local clean-room state remains at `/tmp/davdeploy-cleanroom-pr273-20261103`; it was stopped, not removed.
 
 ## Boundaries
 
