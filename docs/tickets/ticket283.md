@@ -1,14 +1,15 @@
-# ticket283 — Hosted serverless API lifecycle run contract
+# ticket283 — Bind hosted serverless dispatch to durable certification mode
 
 PR: https://github.com/Bepoadewale/davdeploy/pull/283
 Branch: `feat/hosted-serverless-api-run-lifecycle`
 
 ## Problem / goal
 
-Connect the already isolated and AWS-tested Lambda + HTTP API renderer to the
-hosted durable worker lifecycle for controlled certification. Preserve exact
-approved-plan, customer-account, result-integrity, and cleanup checks. Do not
-enable multi-module or unrestricted customer execution.
+The hosted serverless renderer was gated by a process environment variable.
+That made the privileged route dependent on deployment configuration rather
+than the durable, auditable execution run. Require the persisted certification
+mode and matching renderer profile before the trusted worker can submit the
+fixed serverless CodeBuild job. This change does not add customer execution.
 
 ## Current repo state
 
@@ -35,42 +36,37 @@ already exist. PRs #277–#280 are deployed; worker lease schema v24 is live.
 
 ## Work planned for the PR
 
+The planned trust-boundary change is complete:
+
 - Make the hosted-certification exception a durable run attribute, not an
   application-process environment switch.
 - Ensure only a persisted serverless-certification run context can dispatch the
   checked-in serverless renderer; a caller-supplied environment value alone must
   not grant that ability.
-- Then add the one-module certification lifecycle creation/queue contract,
-  binding every phase to the approved revision, project, verified connection,
-  target account/region, and exact prior artifact or saved plan.
-- Preserve phase-specific confirmation, result verification, and durable
-  module-instance transitions.
-- Keep the serverless API renderer disabled for ordinary customer execution
-  until controlled hosted lifecycle certification passes.
-- Record local and hosted certification evidence and keep the execution matrix
-  accurate.
+- The worker forwards `run.mode` from the persisted row into its adapter
+  context.
+- The registry admits the disabled serverless renderer only for the exact
+  `aws-serverless-api` profile and
+  `AUTHENTICATED_SERVERLESS_CERTIFICATION` mode.
+- CodeBuild receives the certification dispatcher variable only for that
+  matching mode.
+- Tests prove an environment variable alone or a mismatched run mode cannot
+  submit the serverless renderer.
 
 ## Acceptance criteria
 
-- [ ] A reviewed, approved serverless API revision can create only a typed,
-  single-module certification run.
-- [ ] Apply cannot proceed without its exact successful saved-plan run and
-  SHA-256 digest.
-- [ ] Observe must match the endpoint produced by the approved apply.
-- [ ] Destroy and cleanup verification bind to the same project and plan scope.
-- [ ] Invalid or unapproved work never reaches CodeBuild.
-- [ ] The ordinary customer execution gate and other renderers remain unchanged.
-- [ ] Focused tests, full verification, clean-room validation, and required CI
-  pass; live AWS evidence is recorded where a controlled authenticated path is
-  available.
+- [x] A process environment flag alone cannot enable serverless renderer work.
+- [x] A matching durable certification mode and renderer profile can dispatch
+  only the fixed checked-in serverless job.
+- [x] The ordinary customer execution gate and other renderers remain
+  unchanged.
+- [x] Focused tests, documentation checks, and required CI pass.
 
 ## Acceptance status
 
-The persisted worker mode is now forwarded into the trusted adapter context.
-The serverless renderer is accepted only when that durable mode and the
-`aws-serverless-api` profile match. API run creation and lifecycle phase
-validation remain unfinished; the PR stays draft and no customer execution is
-enabled.
+The durable-mode boundary change and its tests are complete. The follow-up
+serverless run-creation API and lifecycle phase validation remain unfinished;
+no customer execution is enabled.
 
 ## Tests / validation performed
 

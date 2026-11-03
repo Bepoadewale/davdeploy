@@ -1,12 +1,12 @@
-# test283 — Hosted serverless API lifecycle
+# test283 — Hosted serverless certification-mode boundary
 
 Date: 2026-11-03
 
-Execution type: Local unit and contract tests; no AWS execution.
+Execution type: Local unit and contract tests; GitHub Actions CI. No AWS execution.
 
 Customer repository: None.
 
-Commit: `bec7dc5` (hosted certification mode-bound renderer dispatch).
+Commit: `fb941d2` (hosted certification mode-bound renderer dispatch and test evidence).
 
 AWS account: None.
 
@@ -20,13 +20,15 @@ None.
 
 - `.venv/bin/ruff check` on changed Python source and tests — passed.
 - `.venv/bin/python -m pytest -q tests/test_module_renderers.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py tests/test_serverless_artifact_builder.py` — passed, 57 tests.
-- `python3 scripts/check_doc_conventions.py` — pending after adding required evidence fields.
+- `python3 scripts/check_doc_conventions.py` — passed.
+- PR #283 CI run `41722464073` — all seven jobs passed.
 
 ## Observed result
 
 The worker forwards the durable run mode to the adapter. A process environment
 flag alone cannot enable serverless renderer dispatch. A matching persisted
-serverless certification mode and profile is required.
+serverless certification mode and profile is required. No customer execution
+path was added.
 
 ## Teardown
 
@@ -36,38 +38,5 @@ local test fixtures.
 ## Final boundary
 
 General customer serverless execution remains disabled. The product API does not
-yet create this certification run mode; this PR is still in progress.
-
-## Current evidence
-
-This is an in-progress PR. The first implementation slice changes the hosted
-certification gate so that the API process environment cannot enable the
-serverless renderer by itself. The worker copies the persisted run mode into its
-private adapter context. The adapter accepts `aws-serverless-api` only when the
-profile and `AUTHENTICATED_SERVERLESS_CERTIFICATION` mode match, and only then
-adds the fixed CodeBuild certification variable.
-
-The product API does not create serverless certification runs yet. No AWS
-resources were created by this validation, and general customer execution
-remains disabled.
-
-## Local verification
-
-Command:
-
-```text
-.venv/bin/ruff format apps/api/src/davdeploy/cloud_execution.py apps/api/src/davdeploy/module_renderers.py apps/api/src/davdeploy/service.py tests/test_cloud_execution.py tests/test_module_renderers.py
-.venv/bin/ruff check apps/api/src/davdeploy/cloud_execution.py apps/api/src/davdeploy/module_renderers.py apps/api/src/davdeploy/service.py tests/test_cloud_execution.py tests/test_module_renderers.py
-.venv/bin/python -m pytest -q tests/test_module_renderers.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py tests/test_serverless_artifact_builder.py
-```
-
-Result: Ruff passed; 57 tests passed. One upstream Starlette/httpx deprecation
-warning was emitted.
-
-## Still required
-
-- Add administrator-authorized creation and queueing for the single-module
-  serverless lifecycle.
-- Validate each phase against the exact previous artifact or saved plan.
-- Run the hosted AWS lifecycle and record apply, health, destroy, and cleanup
-  evidence before considering renderer availability.
+yet create this certification run mode. Creating and validating that lifecycle
+is the next implementation step.
