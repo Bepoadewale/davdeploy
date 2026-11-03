@@ -27,8 +27,8 @@ from davdeploy.connection_secrets import (
 from davdeploy.contracts import TenantScope
 from davdeploy.day2 import FixtureDay2Advisor
 from davdeploy.domain import (
-    CloudInventorySnapshot,
     ArchitectureModule,
+    CloudInventorySnapshot,
     EnvironmentName,
     InfrastructurePlanDecision,
     InfrastructurePlanState,
