@@ -1,6 +1,6 @@
 # ticket260 — Real public multi-region DNS failover certification
 
-PR: Pending creation.
+PR: [#260](https://github.com/Bepoadewale/davdeploy/pull/260)
 
 Branch: `test/real-public-dns-failover`
 
@@ -28,17 +28,18 @@ then remove AWS resources and the delegation.
 
 ## Acceptance criteria
 
-- [ ] Public DNS resolves the delegated temporary name.
-- [ ] Route 53 reports both health endpoints healthy.
-- [ ] Temporary AWS resources and Cloudflare delegation are removed.
+- [x] Public DNS resolves the delegated temporary name.
+- [x] Route 53 reports the primary endpoint healthy, then unhealthy after a controlled failure.
+- [x] Public DNS switches to the healthy secondary endpoint.
+- [x] Temporary AWS resources and Cloudflare delegation are removed.
 
 ## Acceptance status
 
-In progress.
+Complete.
 
 ## Tests / validation performed
 
-Terraform validation passed locally.
+Recorded in `docs/test/test260.md`.
 
 ## Evidence files produced
 
