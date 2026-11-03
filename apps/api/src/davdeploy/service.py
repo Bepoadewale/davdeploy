@@ -98,7 +98,7 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
 from davdeploy.terraform_generation import NovaTerraformGenerator
-from davdeploy.universal_execution import compile_universal_execution_plan
+from davdeploy.universal_execution import compile_universal_execution_plan, lifecycle_work
 
 BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
 
@@ -4093,6 +4093,7 @@ class ProductService:
             .limit(1)
         )
         attempt_number = 1 if not previous else previous.attempt + 1
+        lifecycle_operation = "destroy" if destroy_mode else "apply"
         command = {
             "profile": "aws-app-runner",
             "terraform_root": "infrastructure/terraform/customer-workload-app-runner-pilot",
@@ -4112,6 +4113,7 @@ class ProductService:
             "destroy_command_available": state == "READY_FOR_OPERATOR_APP_RUNNER_EXECUTION"
             and destroy_mode,
             "destroy_required": True,
+            "universal_lifecycle_work": list(lifecycle_work(universal_plan, lifecycle_operation)),
         }
         evidence = {
             "revision_id": revision.id,
@@ -4132,6 +4134,8 @@ class ProductService:
             "execution_environment": execution_environment,
             "universal_execution": {
                 "plan_digest": universal_plan.plan_digest,
+                "operation": lifecycle_operation,
+                "work": list(lifecycle_work(universal_plan, lifecycle_operation)),
                 "modules": [
                     {
                         "id": module.module_id,
