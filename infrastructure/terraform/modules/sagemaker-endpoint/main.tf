@@ -1,6 +1,10 @@
 variable "name" { type = string }
 variable "execution_role_arn" { type = string }
 variable "image_uri" { type = string }
+variable "model_data_url" {
+  type        = string
+  description = "S3 URL of the immutable model.tar.gz artifact in the endpoint region."
+}
 variable "instance_type" {
   type    = string
   default = "ml.m5.large"
@@ -10,7 +14,10 @@ variable "tags" { type = map(string) }
 resource "aws_sagemaker_model" "this" {
   name               = var.name
   execution_role_arn = var.execution_role_arn
-  primary_container { image = var.image_uri }
+  primary_container {
+    image          = var.image_uri
+    model_data_url = var.model_data_url
+  }
   tags = var.tags
 }
 
