@@ -1,7 +1,8 @@
 # ticket285 — Wire certification allowlist into Terraform release workflow
 
-PR: pending
-Branch: `feat/terraform-certification-inputs`
+PR: https://github.com/Bepoadewale/davdeploy/pull/285 (merged)
+Branch: `feat/terraform-certification-inputs` (merged; deleted after merge)
+Merged commit: `2e39e4a45fee9bd69b5827a48431c052e5f772e2`
 
 ## Problem / goal
 
@@ -11,7 +12,7 @@ Environment variables into those Terraform inputs. Add explicit workflow wiring
 with safe defaults so the feature remains disabled until an operator sets the
 allowlist.
 
-## Current repo state
+## Current repo state before this PR
 
 PR #284 is merged. Both Terraform variables default to false/empty. The hosted
 control plane has not yet been updated with these inputs.
@@ -41,17 +42,21 @@ control plane has not yet been updated with these inputs.
 - [x] A workspace ID can only be enabled through explicit GitHub Environment
   configuration.
 - [x] Local tests and documentation checks pass.
-- [ ] Required CI passes.
+- [x] Required CI passes (run [41729016251](https://github.com/Bepoadewale/davdeploy/actions/runs/41729016251)).
 
 ## Acceptance status
 
-Workflow input wiring and classification are implemented and locally verified.
-GitHub CI is pending. No GitHub Environment values have been changed and no AWS
-deployment has been performed.
+Workflow input wiring and classification are implemented, CI-verified and
+deployed. Plan run [41729846651](https://github.com/Bepoadewale/davdeploy/actions/runs/41729846651)
+for the merged commit planned 0 adds, 6 in-place Lambda code updates and 0
+destroys. Apply run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958)
+passed after the authorized environment review. Migration verification passed;
+the public health endpoint returned HTTP 200. The certification gate is still
+`false` and its workspace allowlist is empty. No customer workload was deployed.
 
 ## Tests / validation performed
 
-Commands and results will be recorded in `docs/test/test285.md`.
+Commands and results are recorded in `docs/test/test285.md`.
 
 ## Evidence files produced
 
@@ -59,8 +64,8 @@ Commands and results will be recorded in `docs/test/test285.md`.
 
 ## Boundaries
 
-This PR does not change either setting in GitHub, enable the feature, deploy
-customer infrastructure, or enable general customer execution.
+This PR wires both settings with disabled defaults. The merged release deployed
+with those defaults and did not enable customer infrastructure execution.
 
 ## Follow-up work
 

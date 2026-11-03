@@ -4,23 +4,23 @@ Audit date: 2026-10-28. Branch reviewed: `main` after hosted Lambda/Aurora/Cogni
 
 ## Current deployment addendum — 2026-11-03
 
-The latest protected Terraform release is plan run [41716352953](https://github.com/Bepoadewale/davdeploy/actions/runs/41716352953)
-and apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229)
-for commit `2d77ee2206a425813b8169eed460aff9b5634dc2`. It changed six Lambda
-packages in place, with zero creates and zero destroys. The migration workflow
-completed through schema version 24. All six Lambda functions report the same
-release code hash; Aurora is available; and
-`https://api.davdeploy.tech/healthz` returned HTTP 200 through Cloudflare.
+The latest protected Terraform release is plan run [41729846651](https://github.com/Bepoadewale/davdeploy/actions/runs/41729846651)
+and apply run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958)
+for commit `2e39e4a45fee9bd69b5827a48431c052e5f772e2`. It changed six Lambda
+packages in place, with zero creates and zero destroys. Migration verification
+passed, and `https://api.davdeploy.tech/healthz` returned HTTP 200. The hosted
+serverless certification control is deployed but remains disabled: its flag is
+`false` and its workspace allowlist is empty.
 
-PRs #277, #278 and #280 are now deployed. These changes add durable module
-outcomes and worker leases for the current single-renderer path. The dispatcher
-still enables only App Runner and rejects multi-module runs. Lambda + HTTP API
-has isolated AWS HTTP and teardown evidence (`docs/test/test268.md`) but remains
-disabled for hosted execution. The product cannot yet deploy arbitrary
-compositions from natural language. See `EXECUTION_READINESS_MATRIX.md` for the
-per-module state and next work.
-
-This release deploys the dispatcher but does not broaden the hosted customer execution capability: App Runner remains the only enabled renderer, and CodeBuild rejects multi-module runs. Lambda + HTTP API has isolated AWS HTTP and teardown evidence (`docs/test/test268.md`) but remains disabled for hosted execution. The product cannot yet deploy arbitrary compositions from natural language. See `EXECUTION_READINESS_MATRIX.md` for the per-module state and next work.
+PRs #283–#285 add a persisted certification mode, typed single-module Lambda/API
+lifecycle requests, exact artifact and saved-plan chaining, and protected
+Terraform inputs. These changes do not enable general customer execution. The
+App Runner renderer remains the only generally enabled hosted renderer;
+multi-module CodeBuild requests remain rejected. There is no hosted AWS
+customer-workload lifecycle evidence for the Lambda/API renderer. The product
+cannot yet safely deploy arbitrary compositions from natural language. See
+`EXECUTION_READINESS_MATRIX.md` and `COMPOSED_EXECUTION_GOAL.md` for current
+capability and remaining work.
 
 ## What works today
 
