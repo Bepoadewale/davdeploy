@@ -160,7 +160,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_customer_cloud_run",
-        "description": "Create an approval-gated cloud execution request. It cannot queue or apply without all backend guards and exact confirmation.",
+        "description": "Create an approval-gated cloud execution request. App Runner uses its existing mode. The optional serverless_operation is only for the administrator-controlled certification workspace and requires exact prior-run chaining and confirmation.",
         "inputSchema": {
             "type": "object",
             "required": ["revision_id", "content_digest", "region"],
@@ -170,6 +170,12 @@ TOOL_DEFINITIONS = [
                 "terraform_plan_review_id": {"type": "string"}, "expected_account_id": {"type": "string"},
                 "region": {"type": "string"}, "confirmation": {"type": "string"},
                 "destroy": {"type": "boolean", "description": "Execute only a reviewed saved Terraform destroy plan."},
+                "serverless_operation": {
+                    "type": "string",
+                    "enum": ["build-artifact", "plan", "apply-saved-plan", "health", "destroy-plan", "destroy-saved-plan", "verify-cleanup"],
+                },
+                "prior_run_id": {"type": "string"},
+                "source_commit": {"type": "string", "pattern": "^[a-fA-F0-9]{40}$"},
             },
         },
     },
@@ -370,6 +376,7 @@ class davdeployMcp:
                 },
             )
         if name == "create_customer_cloud_run":
+            serverless_operation = arguments.get("serverless_operation")
             return self.client.request(
                 "POST",
                 f"/api/v1/customer-plan-revisions/{arguments['revision_id']}/cloud-execution-runs",
@@ -380,8 +387,17 @@ class davdeployMcp:
                     "terraform_plan_review_id": arguments.get("terraform_plan_review_id"),
                     "expected_account_id": arguments.get("expected_account_id"),
                     "expected_region": arguments["region"],
-                    "mode": "AUTHENTICATED_APP_RUNNER_DESTROY" if bool(arguments.get("destroy")) else "AUTHENTICATED_APP_RUNNER_APPLY",
+                    "mode": (
+                        "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+                        if serverless_operation
+                        else "AUTHENTICATED_APP_RUNNER_DESTROY"
+                        if bool(arguments.get("destroy"))
+                        else "AUTHENTICATED_APP_RUNNER_APPLY"
+                    ),
                     "confirmation": arguments.get("confirmation"),
+                    "serverless_operation": serverless_operation,
+                    "prior_run_id": arguments.get("prior_run_id"),
+                    "source_commit": arguments.get("source_commit"),
                 },
             )
         if name == "build_customer_image":

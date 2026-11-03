@@ -1044,6 +1044,9 @@ def create_customer_plan_cloud_execution_run(
             expected_region=request.expected_region,
             mode=request.mode,
             confirmation=request.confirmation,
+            serverless_operation=request.serverless_operation,
+            prior_run_id=request.prior_run_id,
+            source_commit=request.source_commit,
         )
     except (PermissionError, ValueError, KeyError) as error:
         translate(error)

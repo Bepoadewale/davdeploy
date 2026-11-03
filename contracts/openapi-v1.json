@@ -260,7 +260,7 @@
           },
           "mode": {
             "default": "GUARDED_CLOUD_EXECUTION",
-            "pattern": "^(GUARDED_CLOUD_EXECUTION|AUTHENTICATED_APP_RUNNER_APPLY|AUTHENTICATED_APP_RUNNER_DESTROY|AUTHENTICATED_APP_RUNNER_IMAGE_BUILD)$",
+            "pattern": "^(GUARDED_CLOUD_EXECUTION|AUTHENTICATED_APP_RUNNER_APPLY|AUTHENTICATED_APP_RUNNER_DESTROY|AUTHENTICATED_APP_RUNNER_IMAGE_BUILD|AUTHENTICATED_SERVERLESS_CERTIFICATION)$",
             "title": "Mode",
             "type": "string"
           },
@@ -274,6 +274,43 @@
               }
             ],
             "title": "Preflight Id"
+          },
+          "prior_run_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Run Id"
+          },
+          "serverless_operation": {
+            "anyOf": [
+              {
+                "pattern": "^(build-artifact|plan|apply-saved-plan|health|destroy-plan|destroy-saved-plan|verify-cleanup)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serverless Operation"
+          },
+          "source_commit": {
+            "anyOf": [
+              {
+                "pattern": "^[a-fA-F0-9]{40}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Commit"
           },
           "terraform_plan_review_id": {
             "anyOf": [

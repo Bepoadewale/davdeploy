@@ -100,7 +100,21 @@ def _parser() -> argparse.ArgumentParser:
     cloud_run.add_argument("--terraform-plan-review-id")
     cloud_run.add_argument("--expected-account-id")
     cloud_run.add_argument("--region", required=True)
-    cloud_run.add_argument("--confirmation", required=True)
+    cloud_run.add_argument("--confirmation")
+    cloud_run.add_argument(
+        "--serverless-operation",
+        choices=(
+            "build-artifact",
+            "plan",
+            "apply-saved-plan",
+            "health",
+            "destroy-plan",
+            "destroy-saved-plan",
+            "verify-cleanup",
+        ),
+    )
+    cloud_run.add_argument("--prior-run-id")
+    cloud_run.add_argument("--source-commit")
     cloud_run.add_argument("--destroy", action="store_true")
 
     image_build = subparsers.add_parser("build-customer-image")
@@ -230,8 +244,17 @@ def run(
                 "terraform_plan_review_id": args.terraform_plan_review_id,
                 "expected_account_id": args.expected_account_id,
                 "expected_region": args.region,
-                "mode": "AUTHENTICATED_APP_RUNNER_DESTROY" if args.destroy else "AUTHENTICATED_APP_RUNNER_APPLY",
+                "mode": (
+                    "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+                    if args.serverless_operation
+                    else "AUTHENTICATED_APP_RUNNER_DESTROY"
+                    if args.destroy
+                    else "AUTHENTICATED_APP_RUNNER_APPLY"
+                ),
                 "confirmation": args.confirmation,
+                "serverless_operation": args.serverless_operation,
+                "prior_run_id": args.prior_run_id,
+                "source_commit": args.source_commit,
             },
         )
     if args.command == "build-customer-image":

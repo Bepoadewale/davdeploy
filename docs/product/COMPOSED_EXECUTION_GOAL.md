@@ -4,8 +4,8 @@ Updated: 2026-11-03. This checklist tracks the goal in the attached execution
 specification. It is not a launch-readiness claim. “Implemented” means code
 exists; only “AWS verified” and “deployed” records those stronger states.
 
-Allowed status values: `not started`, `implemented`, `locally verified`,
-`AWS verified`, `deployed`.
+Allowed status values: `not started`, `in progress`, `implemented`,
+`locally verified`, `AWS verified`, `deployed`.
 
 ## Ordered execution checklist
 
@@ -14,7 +14,7 @@ Allowed status values: `not started`, `implemented`, `locally verified`,
 | 1. Reconcile baseline, active operations, PR #270 and deployment | `deployed` | Latest apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229) for commit `2d77ee2206a425813b8169eed460aff9b5634dc2` completed successfully: 0 creates, 6 in-place Lambda package updates, 0 destroys; database schema v24 completed. AWS reports the Lambda package hash matches across all six functions, Aurora is available, and `https://api.davdeploy.tech/healthz` returns HTTP 200 through Cloudflare. The local monitor registry has no active process; 40 legacy local Terraform records remain `FINISHED_UNKNOWN_EXIT` and their absent exit codes are not retroactively claimed as success. |
 | 2. Maintain implementation-to-evidence matrix | `implemented` | See `EXECUTION_READINESS_MATRIX.md`. It enumerates all 26 catalogue modules and 30 implementation entries, separating underlying AWS evidence from hosted renderer evidence. Next: enrich each entry with exact accepted inputs/outputs/dependencies, recovery and cleanup proof, pricing source, role, region and quotas as each renderer is implemented. |
 | 3. Durable execution engine | `deployed` | PR #277 (`6c39ad3`) persists per-module graph rows; PR #278 (`8868836`, CI run [41703537515](https://github.com/Bepoadewale/davdeploy/actions/runs/41703537515)) persists scoped single-renderer outcomes. PR #280 (`ef60ac3`) adds atomic worker leases, heartbeats and reconciliation-required state after uncertain outcomes. Protected apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229) deployed the package and schema v24. No uncertain external work is automatically replayed. Dependency scheduling, safe retries after authenticated reconciliation, partial-failure recovery, and graph cleanup verification remain. |
-| 4. Hosted Lambda/API lifecycle | `not started` | PR #267 renderer, #268 isolated AWS HTTP/teardown proof, #269 artifact/plan hardening, #273 artifact builder, #274 result reconciliation, and #275 project isolation are foundations. Hosted Lambda run creation remains disabled. Next: connect the typed saved-plan lifecycle to the actual customer CodeBuild path, then certify apply, HTTP traffic, health, update, recovery, destroy and independently verified absence before enabling it. |
+| 4. Hosted Lambda/API lifecycle | `in progress` | PR #283 binds renderer access to the persisted certification mode. PR #284 adds typed, single-module lifecycle requests, exact prior-run/artifact/saved-plan chaining, apply/destroy confirmations, and a disabled-by-default workspace allowlist. Local fixtures pass; no hosted AWS lifecycle has been run. Next: merge, deploy the still-disabled configuration, then run controlled apply, HTTP health, destroy and independently verified cleanup before considering broader availability. |
 | 5. Genuine module composition | `not started` | CodeBuild currently rejects multi-module work. Implement typed output bindings, dependency order, independent state, resume/retry and reverse cleanup. Prove Lambda/API + DynamoDB + SQS + private S3 with real data flow and failure/recovery. |
 | 6. Renderer families 1–8 | `not started` | The full ordering and module scope are in `EXECUTION_READINESS_MATRIX.md` and the goal: storage/data/queues; web/edge; containers/VM; databases/cache; async; search/analytics/streaming; AI/ML; Kubernetes/networking/failover. Make each family pass its lifecycle and hosted certification before presenting it as operational. |
 | 7. Planning, artifact, pricing and preflight | `not started` | Planner and constraints exist, but the matrix records fixture inputs/pricing and the current Lambda source contract is narrow. Add timestamped regional pricing and quota/permission evidence, bind deployed artifact to reviewed source, and clearly label assumptions. |
@@ -36,7 +36,7 @@ Allowed status values: `not started`, `implemented`, `locally verified`,
   #278 and #280 are deployed by apply run `41716835229`.
 - PR #280 adds versioned worker leases and refuses to replay an uncertain
   operation. It is merged, CI-verified, and deployed.
-- The Lambda/API renderer is still disabled for hosted customer execution.
+- The Lambda/API renderer is still disabled for general hosted customer execution. PR #284's certification route remains off by default with an empty workspace allowlist, and has no hosted AWS lifecycle evidence yet.
 - App Runner remains the single hosted renderer.
 - Multi-module CodeBuild requests remain fail-closed.
 - Individual service-level AWS tests do not establish a hosted composed

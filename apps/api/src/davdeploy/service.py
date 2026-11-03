@@ -3874,6 +3874,386 @@ class ProductService:
             "boundary": "Terraform apply/destroy is unavailable. This record does not create AWS resources.",
         }
 
+    def _create_serverless_certification_run(
+        self,
+        principal: Principal,
+        revision_id: str,
+        *,
+        content_digest: str,
+        operation: str | None,
+        prior_run_id: str | None,
+        source_commit: str | None,
+        expected_account_id: str | None,
+        expected_region: str | None,
+        confirmation: str | None,
+    ) -> dict[str, Any]:
+        """Create one allowlisted hosted-certification phase for Lambda/API.
+
+        This narrow path is restricted to an explicitly allowlisted workspace.
+        Each follow-on phase consumes a successful, digest-bound prior run; it
+        cannot select an arbitrary repository, AWS role, Terraform root, or
+        previous plan artifact.
+        """
+        if not self._is_workspace_administrator(principal):
+            raise PermissionError("only a workspace administrator can request certification")
+        if (
+            os.getenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "false").lower()
+            != "true"
+        ):
+            raise ValueError("hosted serverless certification is disabled for this environment")
+        allowed_workspaces = {
+            value.strip()
+            for value in os.getenv("DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS", "").split(
+                ","
+            )
+            if value.strip()
+        }
+        if not allowed_workspaces or principal.organization_id not in allowed_workspaces:
+            raise PermissionError("workspace is not allowlisted for hosted renderer certification")
+        if operation not in {
+            "build-artifact",
+            "plan",
+            "apply-saved-plan",
+            "health",
+            "destroy-plan",
+            "destroy-saved-plan",
+            "verify-cleanup",
+        }:
+            raise ValueError("a supported serverless certification phase is required")
+        revision, infrastructure_plan, _ = self._approved_customer_revision(principal, revision_id)
+        if (
+            revision.content_digest != content_digest
+            or plan_hash(revision.content) != content_digest
+        ):
+            raise ValueError("stale serverless certification request: approved digest changed")
+        content = revision.content
+        if (content.get("summary") or {}).get("selected_profile") != "aws-lambda-api":
+            raise ValueError("serverless certification requires an approved Lambda API plan")
+        module_payload = (content.get("architecture") or {}).get("modules") or []
+        if len(module_payload) != 1 or module_payload[0].get("identifier") != "aws-serverless-api":
+            raise ValueError("serverless certification requires exactly one Lambda API module")
+        connection_id = str((content.get("target") or {}).get("connection_id") or "")
+        if not connection_id:
+            raise ValueError("serverless certification requires a verified cloud connection")
+        connection = self._cloud_connection(principal, connection_id)
+        if (
+            connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or not connection.execution_role_arn
+            or not connection.external_id_secret_ref
+            or not connection.account_id
+        ):
+            raise ValueError("cloud connection is not verified for bounded execution")
+        account_id = str(connection.account_id)
+        region = str((content.get("target") or {}).get("region") or "")
+        if expected_account_id and expected_account_id != account_id:
+            raise ValueError("expected AWS account does not match the verified connection")
+        if expected_region and expected_region != region:
+            raise ValueError("expected AWS region does not match the approved plan")
+        if not region:
+            raise ValueError("approved serverless plan has no AWS region")
+
+        bucket = os.getenv("DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET", "")
+        lock_table = os.getenv("DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE", "")
+        executor_artifact_uri = os.getenv("DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI", "")
+        if not bucket or not lock_table or not executor_artifact_uri:
+            raise ValueError("hosted customer execution runner configuration is incomplete")
+        if not re.fullmatch(r"[A-Za-z0-9.-]{3,63}", bucket):
+            raise ValueError("hosted customer execution state bucket is invalid")
+        project_id = infrastructure_plan.project_id
+        prefix = f"s3://{bucket}/davdeploy/customer/{connection.id}/projects/{project_id}/"
+        digest_prefix = f"{prefix}{content_digest}/"
+
+        application = content.get("application_analysis") or {}
+        repository_url = str(application.get("repository") or "")
+        branch = str(application.get("branch") or "")
+        repository_connection = self.db.scalar(
+            select(RepositoryConnection).where(
+                RepositoryConnection.organization_id == principal.organization_id,
+                RepositoryConnection.project_id == project_id,
+                RepositoryConnection.repository_url == repository_url,
+            )
+        )
+        if not repository_url or not branch or repository_connection is None:
+            raise ValueError("approved plan must use a repository connected to this project")
+        if (
+            repository_connection.selected_branch
+            and repository_connection.selected_branch != branch
+        ):
+            raise ValueError("approved source branch no longer matches the project connection")
+
+        prior: CloudExecutionRun | None = None
+        prior_environment: dict[str, Any] = {}
+        prior_detail: dict[str, Any] = {}
+        required_prior = {
+            "build-artifact": None,
+            "plan": ({"build-artifact"}, {"ARTIFACT_READY"}),
+            "apply-saved-plan": ({"plan"}, {"PLAN_READY_FOR_REVIEW"}),
+            "health": ({"apply-saved-plan"}, {"SUCCEEDED_AWAITING_OBSERVATION"}),
+            "destroy-plan": (
+                {"apply-saved-plan", "health"},
+                {"SUCCEEDED_AWAITING_OBSERVATION", "HEALTHY"},
+            ),
+            "destroy-saved-plan": ({"destroy-plan"}, {"DESTROY_PLAN_READY_FOR_REVIEW"}),
+            "verify-cleanup": ({"destroy-saved-plan"}, {"DESTROYED_VERIFIED"}),
+        }[operation]
+        if required_prior is None:
+            if prior_run_id:
+                raise ValueError("artifact build must not reference a prior execution run")
+        else:
+            if not prior_run_id:
+                raise ValueError("this lifecycle phase requires its successful prior run")
+            prior = self.db.get(CloudExecutionRun, prior_run_id)
+            expected_operations, expected_states = required_prior
+            if (
+                prior is None
+                or prior.organization_id != principal.organization_id
+                or prior.project_id != project_id
+                or prior.revision_id != revision.id
+                or prior.profile != "aws-serverless-api"
+                or prior.mode != "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+                or prior.content_digest != content_digest
+                or (prior.command or {}).get("operation") not in expected_operations
+                or prior.state not in expected_states
+            ):
+                raise ValueError("prior lifecycle run is not eligible for this phase")
+            if operation in {"apply-saved-plan", "destroy-saved-plan"}:
+                prior_consumers = self.db.scalars(
+                    select(CloudExecutionRun).where(
+                        CloudExecutionRun.organization_id == principal.organization_id,
+                        CloudExecutionRun.revision_id == revision.id,
+                        CloudExecutionRun.profile == "aws-serverless-api",
+                        CloudExecutionRun.mode == "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+                        CloudExecutionRun.content_digest == content_digest,
+                    )
+                )
+                if any(
+                    (candidate.command or {}).get("prior_run_id") == prior.id
+                    and (candidate.command or {}).get("operation") == operation
+                    for candidate in prior_consumers
+                ):
+                    raise ValueError("this saved plan has already been submitted for execution")
+            prior_environment = (prior.evidence or {}).get("execution_environment") or {}
+            artifact_result = (prior.outputs or {}).get("runner_artifact") or {}
+            prior_detail = artifact_result.get("detail") or {}
+            if (
+                prior_environment.get("DAVDEPLOY_CUSTOMER_CONNECTION_ID") != connection.id
+                or prior_environment.get("EXPECTED_AWS_ACCOUNT_ID") != account_id
+                or prior_environment.get("AWS_REGION") != region
+            ):
+                raise ValueError("prior lifecycle run does not match this connection and target")
+
+        confirmation_by_operation = {
+            "apply-saved-plan": "APPLY_SERVERLESS_API_SAVED_PLAN",
+            "destroy-saved-plan": "DESTROY_SERVERLESS_API_SAVED_PLAN",
+        }
+        expected_confirmation = confirmation_by_operation.get(operation)
+        if expected_confirmation and confirmation != expected_confirmation:
+            raise ValueError(f"explicit {expected_confirmation} confirmation is required")
+        if not expected_confirmation and confirmation is not None:
+            raise ValueError("this serverless lifecycle phase does not accept confirmation text")
+
+        if operation == "build-artifact":
+            if not source_commit or not re.fullmatch(r"[a-fA-F0-9]{40}", source_commit):
+                raise ValueError("artifact build requires a full immutable source commit")
+            try:
+                repository_name = self.public_github.repository_name(repository_url)
+                response = httpx.get(
+                    f"https://api.github.com/repos/{repository_name}/commits/{source_commit}",
+                    headers=self.public_github._headers(),
+                    timeout=10,
+                )
+                response.raise_for_status()
+                verified_commit = str(response.json().get("sha") or "").lower()
+            except (HTTPError, ValueError) as error:
+                raise ValueError(
+                    "the pinned source commit is not readable from the connected public repository"
+                ) from error
+            if verified_commit != source_commit.lower():
+                raise ValueError("GitHub did not verify the requested source commit")
+        else:
+            if source_commit is not None:
+                raise ValueError(
+                    "follow-on phases inherit the commit from their prior artifact run"
+                )
+            source_commit = str(prior_environment.get("DAVDEPLOY_CUSTOMER_SOURCE_COMMIT") or "")
+            if not re.fullmatch(r"[a-f0-9]{40}", source_commit):
+                raise ValueError("prior artifact run has no verified immutable source commit")
+
+        artifact_uri = (
+            f"{prefix}artifacts/{content_digest}/{prior.id}/lambda.zip"
+            if prior and operation != "build-artifact"
+            else ""
+        )
+        artifact_sha256 = str(prior_environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256") or "")
+        if operation == "plan":
+            artifact_uri = str(prior_detail.get("artifact_s3_uri") or "")
+            artifact_sha256 = str(prior_detail.get("artifact_sha256") or "")
+        elif operation in {
+            "apply-saved-plan",
+            "health",
+            "destroy-plan",
+            "destroy-saved-plan",
+            "verify-cleanup",
+        }:
+            artifact_uri = str(prior_environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI") or "")
+            artifact_sha256 = str(
+                prior_environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256") or ""
+            )
+        if operation != "build-artifact" and (
+            not artifact_uri.startswith(f"{prefix}artifacts/{content_digest}/")
+            or not re.fullmatch(r"[a-f0-9]{64}", artifact_sha256)
+        ):
+            raise ValueError("prior phase has no valid project-scoped Lambda artifact")
+
+        plan_kind = (
+            "destroy"
+            if operation in {"destroy-plan", "destroy-saved-plan", "verify-cleanup"}
+            else "apply"
+        )
+        saved_plan_uri = (
+            f"{digest_prefix}{plan_kind}/{prior.id}.tfplan"
+            if operation in {"apply-saved-plan", "health", "destroy-saved-plan", "verify-cleanup"}
+            and prior
+            else f"{digest_prefix}{plan_kind}/pending.tfplan"
+        )
+        saved_plan_sha256 = ""
+        if operation in {
+            "apply-saved-plan",
+            "health",
+            "destroy-saved-plan",
+        }:
+            saved_plan_uri = str(
+                prior_environment.get("DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI") or ""
+            )
+            saved_plan_sha256 = str(
+                prior_detail.get("saved_plan_sha256")
+                or prior_environment.get("DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256")
+                or ""
+            )
+        elif operation == "verify-cleanup":
+            # The cleanup probe requires a syntactically valid apply-plan URI
+            # but never downloads or executes this artifact.
+            saved_plan_uri = f"{digest_prefix}apply/{prior.id}.tfplan"
+
+        operation_script = {
+            "build-artifact": "build-artifact",
+            "plan": "plan",
+            "apply-saved-plan": "apply-saved-plan",
+            "health": "health",
+            "destroy-plan": "destroy-plan",
+            "destroy-saved-plan": "destroy-saved-plan",
+            "verify-cleanup": "verify-cleanup",
+        }[operation]
+        bucket_base = f"davdeploy/customer/{connection.id}/runs/"
+        run = CloudExecutionRun(
+            organization_id=principal.organization_id,
+            revision_id=revision.id,
+            project_id=project_id,
+            profile="aws-serverless-api",
+            state="READY_FOR_OPERATOR_SERVERLESS_CERTIFICATION",
+            mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            attempt=1,
+            command={
+                "operation": operation_script,
+                "prior_run_id": prior.id if prior else None,
+                "universal_lifecycle_work": [
+                    {
+                        "module_id": "aws-serverless-api",
+                        "operation": {
+                            "build-artifact": "build_artifact",
+                            "plan": "plan",
+                            "apply-saved-plan": "apply",
+                            "health": "observe",
+                            "destroy-plan": "destroy_plan",
+                            "destroy-saved-plan": "destroy",
+                            "verify-cleanup": "verify_cleanup",
+                        }[operation],
+                        "dependencies": [],
+                        "resource_tags": {
+                            "ManagedBy": "davdeploy",
+                            "WorkspaceId": principal.organization_id,
+                            "ProjectId": project_id,
+                            "PlanDigest": content_digest,
+                        },
+                    }
+                ],
+            },
+            evidence={},
+            outputs={"status": "not_executed", "resources_created": []},
+            content_digest=content_digest,
+            requested_by_subject=principal.subject,
+        )
+        self.db.add(run)
+        self.db.flush()
+        if operation == "build-artifact":
+            artifact_uri = f"{prefix}artifacts/{content_digest}/{run.id}/lambda.zip"
+        if operation in {"plan", "destroy-plan"}:
+            saved_plan_uri = f"{digest_prefix}{plan_kind}/{run.id}.tfplan"
+        environment = {
+            "AWS_REGION": region,
+            "EXPECTED_AWS_ACCOUNT_ID": account_id,
+            "TF_STATE_BUCKET": bucket,
+            "TF_LOCK_TABLE": lock_table,
+            "DAVDEPLOY_CUSTOMER_CONNECTION_ID": connection.id,
+            "DAVDEPLOY_CUSTOMER_PROJECT_ID": project_id,
+            "DAVDEPLOY_CUSTOMER_EXECUTION_ROLE_ARN": connection.execution_role_arn,
+            "DAVDEPLOY_EXTERNAL_ID_SECRET_ARN": connection.external_id_secret_ref,
+            "DAVDEPLOY_EXECUTION_ARTIFACT_S3_URI": executor_artifact_uri,
+            "DAVDEPLOY_EXECUTION_OPERATION": operation_script,
+            "DAVDEPLOY_EXECUTION_RUN_ID": run.id,
+            "DAVDEPLOY_EXECUTION_RESULT_S3_URI": f"s3://{bucket}/{bucket_base}{run.id}/result.json",
+            "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI": saved_plan_uri,
+            "DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256": saved_plan_sha256,
+            "DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI": artifact_uri,
+            "DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256": artifact_sha256,
+            "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": content_digest,
+            "DAVDEPLOY_CUSTOMER_SOURCE_REPOSITORY": repository_url,
+            "DAVDEPLOY_CUSTOMER_SOURCE_COMMIT": source_commit.lower(),
+        }
+        run.evidence = {
+            "result_s3_uri": environment["DAVDEPLOY_EXECUTION_RESULT_S3_URI"],
+            "execution_environment": environment,
+            "prior_run_id": prior.id if prior else None,
+            "boundary": "One fixed Lambda/API certification phase runs against the approved revision and verified customer connection.",
+        }
+        self.db.add(
+            CloudExecutionModuleInstance(
+                organization_id=principal.organization_id,
+                project_id=project_id,
+                execution_run_id=run.id,
+                instance_id="aws-serverless-api",
+                module_id="aws-serverless-api",
+                state="NOT_DISPATCHED",
+                operation="destroy"
+                if operation in {"destroy-plan", "destroy-saved-plan", "verify-cleanup"}
+                else "apply",
+                attempt=0,
+                input_digest=content_digest,
+                idempotency_key=f"{run.id}:aws-serverless-api",
+                dependencies=[],
+                outputs={},
+                evidence={
+                    "reason": "single typed certification phase persisted; dispatch awaits confirmation"
+                },
+                version=1,
+            )
+        )
+        self.audit(
+            principal,
+            "cloud_execution.serverless_certification_requested",
+            "cloud_execution_run",
+            run.id,
+            {
+                "revision_id": revision.id,
+                "digest": content_digest,
+                "operation": operation_script,
+                "prior_run_id": prior.id if prior else None,
+            },
+        )
+        self.db.commit()
+        return self._cloud_execution_run_payload(run)
+
     def create_cloud_execution_run_for_revision(
         self,
         principal: Principal,
@@ -3887,6 +4267,9 @@ class ProductService:
         expected_region: str | None,
         mode: str,
         confirmation: str | None,
+        serverless_operation: str | None = None,
+        prior_run_id: str | None = None,
+        source_commit: str | None = None,
     ) -> dict[str, Any]:
         """Record a guarded App Runner execution run request.
 
@@ -3895,6 +4278,20 @@ class ProductService:
         """
         if not self._is_workspace_administrator(principal):
             raise PermissionError("only a workspace administrator can request cloud execution")
+        if mode == "AUTHENTICATED_SERVERLESS_CERTIFICATION":
+            return self._create_serverless_certification_run(
+                principal,
+                revision_id,
+                content_digest=content_digest,
+                operation=serverless_operation,
+                prior_run_id=prior_run_id,
+                source_commit=source_commit,
+                expected_account_id=expected_account_id,
+                expected_region=expected_region,
+                confirmation=confirmation,
+            )
+        if serverless_operation or prior_run_id or source_commit:
+            raise ValueError("serverless lifecycle fields require certification mode")
         if mode == "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD":
             raise ValueError("use the governed customer-image-build endpoint for image delivery")
         revision, infrastructure_plan, _ = self._approved_customer_revision(principal, revision_id)
@@ -4465,21 +4862,36 @@ class ProductService:
             raise PermissionError("cloud execution run not found in this organization")
         if run.content_digest != content_digest:
             raise ValueError("stale cloud execution run digest")
-        if run.state != "READY_FOR_OPERATOR_APP_RUNNER_EXECUTION":
+        if run.state not in {
+            "READY_FOR_OPERATOR_APP_RUNNER_EXECUTION",
+            "READY_FOR_OPERATOR_SERVERLESS_CERTIFICATION",
+        }:
             raise ValueError(f"cloud execution run is not ready: {run.state}")
-        expected_confirmation = {
-            "AUTHENTICATED_APP_RUNNER_DESTROY": "DESTROY_APP_RUNNER_WORKLOAD",
-            "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD": "BUILD_CUSTOMER_IMAGE",
-        }.get(run.mode, "EXECUTE_APP_RUNNER_WORKLOAD")
+        if (
+            run.mode == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+            and run.profile != "aws-serverless-api"
+        ):
+            raise ValueError("serverless certification mode requires its matching renderer")
+        expected_confirmation = (
+            "RUN_SERVERLESS_CERTIFICATION_PHASE"
+            if run.mode == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+            else {
+                "AUTHENTICATED_APP_RUNNER_DESTROY": "DESTROY_APP_RUNNER_WORKLOAD",
+                "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD": "BUILD_CUSTOMER_IMAGE",
+            }.get(run.mode, "EXECUTE_APP_RUNNER_WORKLOAD")
+        )
         if confirmation != expected_confirmation:
-            raise ValueError("explicit App Runner operation confirmation is required")
+            raise ValueError("explicit confirmation for this cloud execution run is required")
         run.state = "QUEUED"
         self._advance_cloud_execution_module_instances(run, "QUEUED")
         run.evidence = {
             **(run.evidence or {}),
             "queued_by_subject": principal.subject,
             "queue_confirmation": expected_confirmation,
-            "boundary": "Queued for the trusted App Runner adapter; no user-supplied command is accepted.",
+            "boundary": (
+                "Queued for the fixed renderer selected by the persisted run profile and mode; "
+                "no user-supplied command is accepted."
+            ),
         }
         self.audit(
             principal,

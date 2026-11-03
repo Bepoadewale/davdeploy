@@ -526,48 +526,50 @@ resource "aws_lambda_permission" "cognito_link" {
 
 locals {
   runtime_environment = {
-    DAVDEPLOY_HOSTED_MODE                        = "true"
-    DAVDEPLOY_AUTO_MIGRATE                       = "false"
-    DAVDEPLOY_AURORA_CLUSTER_ARN                 = aws_rds_cluster.control_plane.arn
-    DAVDEPLOY_DATABASE_SECRET_ARN                = aws_rds_cluster.control_plane.master_user_secret[0].secret_arn
-    DAVDEPLOY_DATABASE_NAME                      = var.database_name
-    DAVDEPLOY_ALLOWED_FRONTEND_ORIGINS           = var.frontend_origin
-    DAVDEPLOY_RATE_LIMIT_PER_MINUTE              = tostring(var.application_rate_limit_per_minute)
-    DAVDEPLOY_JWKS_URL                           = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}/.well-known/jwks.json"
-    DAVDEPLOY_OIDC_ISSUER                        = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}"
-    DAVDEPLOY_OIDC_AUDIENCE                      = aws_cognito_user_pool_client.frontend.id
-    DAVDEPLOY_POLICY_FUNCTION_ARN                = aws_lambda_function.policy.arn
-    DAVDEPLOY_MODEL_PROVIDER                     = "bedrock"
-    DAVDEPLOY_ENABLE_NOVA_MODEL                  = "true"
-    DAVDEPLOY_BEDROCK_MODEL_ID                   = var.nova_model_id
-    DAVDEPLOY_EXECUTOR_MODE                      = "embedded_fixture"
-    DAVDEPLOY_EMAIL_PROVIDER                     = var.resend_invitation_parameter_name != "" ? "resend" : (var.ses_identity_arn == "" ? "disabled" : "ses")
-    DAVDEPLOY_SES_FROM_ADDRESS                   = var.ses_from_address
-    DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER       = var.resend_invitation_parameter_name
-    DAVDEPLOY_RESEND_FROM_ADDRESS                = var.resend_invitation_parameter_name == "" ? "" : "DavDeploy <notify@davdeploy.tech>"
-    DAVDEPLOY_RESEND_REPLY_TO_ADDRESS            = var.resend_invitation_parameter_name == "" ? "" : "support@davdeploy.tech"
-    DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER    = var.edge_origin_token_parameter_name
-    DAVDEPLOY_FRONTEND_ORIGIN                    = var.frontend_origin
-    DAVDEPLOY_CONNECTION_SECRET_BACKEND          = "aws_secrets_manager"
-    DAVDEPLOY_CONNECTION_SECRET_PREFIX           = "davdeploy/customer-connections"
-    DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED         = "true"
-    DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN          = aws_iam_role.api.arn
-    DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN          = aws_iam_role.customer_executor.arn
-    DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL        = var.aws_connection_template_url
-    DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT          = aws_codebuild_project.customer_executor.name
-    DAVDEPLOY_CLOUD_EXECUTION_BACKEND            = "codebuild"
-    DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED    = tostring(var.enable_customer_cloud_execution)
-    DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION        = tostring(var.enable_customer_cloud_execution)
-    ALLOW_CLOUD_PLAN                             = tostring(var.enable_customer_cloud_execution)
-    ALLOW_CLOUD_APPLY                            = tostring(var.enable_customer_cloud_execution)
-    DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI = "s3://${var.artifact_bucket}/${var.customer_execution_artifact_key}"
-    DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET    = var.customer_execution_state_bucket
-    DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE      = var.customer_execution_lock_table
-    DAVDEPLOY_WORKER_QUEUE_URL                   = aws_sqs_queue.worker.id
-    DAVDEPLOY_GITHUB_APP_READ_ONLY               = tostring(var.enable_github_app_read_only)
-    DAVDEPLOY_GITHUB_APP_ID                      = var.github_app_id
-    DAVDEPLOY_GITHUB_APP_INSTALLATION_ID         = var.github_app_installation_id
-    DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN   = var.github_app_credential_secret_arn
+    DAVDEPLOY_HOSTED_MODE                                = "true"
+    DAVDEPLOY_AUTO_MIGRATE                               = "false"
+    DAVDEPLOY_AURORA_CLUSTER_ARN                         = aws_rds_cluster.control_plane.arn
+    DAVDEPLOY_DATABASE_SECRET_ARN                        = aws_rds_cluster.control_plane.master_user_secret[0].secret_arn
+    DAVDEPLOY_DATABASE_NAME                              = var.database_name
+    DAVDEPLOY_ALLOWED_FRONTEND_ORIGINS                   = var.frontend_origin
+    DAVDEPLOY_RATE_LIMIT_PER_MINUTE                      = tostring(var.application_rate_limit_per_minute)
+    DAVDEPLOY_JWKS_URL                                   = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}/.well-known/jwks.json"
+    DAVDEPLOY_OIDC_ISSUER                                = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}"
+    DAVDEPLOY_OIDC_AUDIENCE                              = aws_cognito_user_pool_client.frontend.id
+    DAVDEPLOY_POLICY_FUNCTION_ARN                        = aws_lambda_function.policy.arn
+    DAVDEPLOY_MODEL_PROVIDER                             = "bedrock"
+    DAVDEPLOY_ENABLE_NOVA_MODEL                          = "true"
+    DAVDEPLOY_BEDROCK_MODEL_ID                           = var.nova_model_id
+    DAVDEPLOY_EXECUTOR_MODE                              = "embedded_fixture"
+    DAVDEPLOY_EMAIL_PROVIDER                             = var.resend_invitation_parameter_name != "" ? "resend" : (var.ses_identity_arn == "" ? "disabled" : "ses")
+    DAVDEPLOY_SES_FROM_ADDRESS                           = var.ses_from_address
+    DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER               = var.resend_invitation_parameter_name
+    DAVDEPLOY_RESEND_FROM_ADDRESS                        = var.resend_invitation_parameter_name == "" ? "" : "DavDeploy <notify@davdeploy.tech>"
+    DAVDEPLOY_RESEND_REPLY_TO_ADDRESS                    = var.resend_invitation_parameter_name == "" ? "" : "support@davdeploy.tech"
+    DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER            = var.edge_origin_token_parameter_name
+    DAVDEPLOY_FRONTEND_ORIGIN                            = var.frontend_origin
+    DAVDEPLOY_CONNECTION_SECRET_BACKEND                  = "aws_secrets_manager"
+    DAVDEPLOY_CONNECTION_SECRET_PREFIX                   = "davdeploy/customer-connections"
+    DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED                 = "true"
+    DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN                  = aws_iam_role.api.arn
+    DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
+    DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
+    DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
+    DAVDEPLOY_CLOUD_EXECUTION_BACKEND                    = "codebuild"
+    DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED            = tostring(var.enable_customer_cloud_execution)
+    DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION                = tostring(var.enable_customer_cloud_execution)
+    DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION = tostring(var.enable_serverless_api_hosted_certification)
+    DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS     = join(",", var.serverless_certification_workspace_ids)
+    ALLOW_CLOUD_PLAN                                     = tostring(var.enable_customer_cloud_execution)
+    ALLOW_CLOUD_APPLY                                    = tostring(var.enable_customer_cloud_execution)
+    DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI         = "s3://${var.artifact_bucket}/${var.customer_execution_artifact_key}"
+    DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET            = var.customer_execution_state_bucket
+    DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE              = var.customer_execution_lock_table
+    DAVDEPLOY_WORKER_QUEUE_URL                           = aws_sqs_queue.worker.id
+    DAVDEPLOY_GITHUB_APP_READ_ONLY                       = tostring(var.enable_github_app_read_only)
+    DAVDEPLOY_GITHUB_APP_ID                              = var.github_app_id
+    DAVDEPLOY_GITHUB_APP_INSTALLATION_ID                 = var.github_app_installation_id
+    DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN           = var.github_app_credential_secret_arn
   }
 }
 
