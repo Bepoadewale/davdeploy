@@ -3711,6 +3711,19 @@ class ProductService:
                     ],
                 }
             else:
+                plan_lifecycle_work = [
+                    {
+                        "module_id": "aws-managed-application",
+                        "operation": "plan",
+                        "dependencies": [],
+                        "resource_tags": {
+                            "ManagedBy": "davdeploy",
+                            "DavDeployWorkspace": principal.organization_id,
+                            "DavDeployProject": infrastructure_plan.project_id,
+                            "DavDeployPlan": revision.content_digest,
+                        },
+                    }
+                ]
                 plan_run = CloudExecutionRun(
                     organization_id=principal.organization_id,
                     revision_id=revision.id,
@@ -3724,6 +3737,7 @@ class ProductService:
                     command={
                         "operation": "destroy-plan" if destroy_review else "plan",
                         "artifact_bound_apply": True,
+                        "universal_lifecycle_work": plan_lifecycle_work,
                     },
                     evidence={},
                     outputs={"status": "submitting", "resources_created": []},
@@ -3791,7 +3805,11 @@ class ProductService:
                         "boundary": "A bounded runner may generate a Terraform plan artifact only. It cannot apply this request.",
                     }
                     result = self.cloud_execution.execute(
-                        {"run_id": plan_run.id, "environment": execution_environment}
+                        {
+                            "run_id": plan_run.id,
+                            "environment": execution_environment,
+                            "lifecycle_work": plan_lifecycle_work,
+                        }
                     )
                     plan_run.state = result.state
                     plan_run.outputs = {

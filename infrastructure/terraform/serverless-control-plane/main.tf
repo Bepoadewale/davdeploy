@@ -347,7 +347,7 @@ resource "aws_codebuild_project" "customer_executor" {
         build:
           commands:
             - cd /tmp/davdeploy-executor/source
-            - bash scripts/customer-workload-app-runner-pilot.sh "$DAVDEPLOY_EXECUTION_OPERATION"
+            - bash scripts/customer-workload-dispatcher.sh
     EOT
   }
 

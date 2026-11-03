@@ -17,6 +17,7 @@ class ModuleRenderer:
     runner_script: str
     supported_operations: tuple[str, ...]
     certification: str
+    execution_enabled: bool = True
 
 
 _RENDERERS: dict[str, ModuleRenderer] = {
@@ -24,8 +25,16 @@ _RENDERERS: dict[str, ModuleRenderer] = {
         module_id="aws-managed-application",
         terraform_root="infrastructure/terraform/customer-workload-app-runner-pilot",
         runner_script="scripts/customer-workload-app-runner-pilot.sh",
-        supported_operations=("apply", "destroy"),
+        supported_operations=("plan", "apply", "destroy", "build-push-image"),
         certification="real-customer-run evidence required per workload",
+    ),
+    "aws-serverless-api": ModuleRenderer(
+        module_id="aws-serverless-api",
+        terraform_root="infrastructure/terraform/customer-workload-serverless-api",
+        runner_script="scripts/customer-workload-serverless-api.sh",
+        supported_operations=("plan", "apply", "observe", "destroy", "verify_cleanup"),
+        certification="isolated AWS renderer certified; hosted dispatch not certified",
+        execution_enabled=False,
     ),
 }
 
@@ -35,6 +44,8 @@ def renderer_for(module_id: str, operation: str) -> ModuleRenderer:
     renderer = _RENDERERS.get(module_id)
     if renderer is None:
         raise ValueError(f"module {module_id} has no executable renderer")
+    if not renderer.execution_enabled:
+        raise ValueError(f"module {module_id} renderer is not enabled for customer execution")
     if operation not in renderer.supported_operations:
         raise ValueError(f"module {module_id} does not support {operation}")
     return renderer

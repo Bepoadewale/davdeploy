@@ -12,7 +12,10 @@ from davdeploy.models import (
 )
 from davdeploy.service import plan_hash
 from sqlalchemy import select
-from test_customer_plan_review import approved_app_runner_customer_review
+from test_customer_plan_review import (
+    approved_app_runner_customer_review,
+    ready_app_runner_preflight,
+)
 from test_product import founder, make_service, operator
 
 
@@ -59,7 +62,7 @@ def test_codebuild_adapter_submits_only_the_fixed_execution_environment():
     environment = {
         key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment
     }
-    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-foundation"
+    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-saved-plan"
     adapter = CodeBuildCloudExecutionAdapter("davdeploy-customer-executor", client=CodeBuild())
 
     result = adapter.execute({"environment": environment, "lifecycle_work": lifecycle_work()})
@@ -69,6 +72,114 @@ def test_codebuild_adapter_submits_only_the_fixed_execution_environment():
     assert calls[0]["projectName"] == "davdeploy-customer-executor"
     assert all(item["name"] != "COMMAND" for item in calls[0]["environmentVariablesOverride"])
     assert any(item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON" for item in calls[0]["environmentVariablesOverride"])
+
+
+def test_codebuild_adapter_accepts_typed_plan_work_for_plan_review():
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "davdeploy:plan-1", "arn": "arn:plan-1"}}
+
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "destroy-plan"
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {"environment": environment, "lifecycle_work": lifecycle_work("plan")}
+    )
+    assert result.state == "SUBMITTED"
+    manifest = next(item["value"] for item in calls[0]["environmentVariablesOverride"] if item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")
+    assert '"operation":"plan"' in manifest
+
+
+def test_codebuild_adapter_constructs_only_the_fixed_app_runner_image_build_work():
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "davdeploy:image-1", "arn": "arn:image-1"}}
+
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "build-push-image"
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {"environment": environment}
+    )
+    assert result.state == "SUBMITTED"
+    manifest = next(
+        item["value"]
+        for item in calls[0]["environmentVariablesOverride"]
+        if item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"
+    )
+    assert '"module_id":"aws-managed-application"' in manifest
+    assert '"operation":"build-push-image"' in manifest
+
+
+def test_authenticated_plan_review_submits_typed_plan_work_to_the_worker(monkeypatch):
+    service, db = make_service()
+    approved = approved_app_runner_customer_review(service)
+    connection = service.create_cloud_connection(founder(), "Verified test cloud", "aws", "byoc_role_contract")
+    connection.setup_state = "VERIFIED"
+    connection.account_id = "654654474502"
+    connection.execution_role_arn = "arn:aws:iam::654654474502:role/davdeployExecution-test"
+    connection.external_id_secret_ref = "arn:aws:secretsmanager:us-east-1:654654474502:secret:test"
+    revision = db.get(InfrastructurePlanRevision, approved.id)
+    assert revision is not None
+    revision.content = {
+        **revision.content,
+        "target": {
+            **revision.content["target"],
+            "connection_id": connection.id,
+            "account_id": connection.account_id,
+            "region": "us-east-1",
+        },
+    }
+    revision.content_digest = plan_hash(revision.content)
+    decision = db.scalar(
+        select(InfrastructurePlanDecisionRecord).where(
+            InfrastructurePlanDecisionRecord.revision_id == revision.id
+        )
+    )
+    assert decision is not None
+    decision.approved_digest = revision.content_digest
+    db.commit()
+    preflight = ready_app_runner_preflight(service, db, revision)
+    monkeypatch.setenv("ALLOW_CLOUD_PLAN", "true")
+    monkeypatch.setenv("DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET", "customer-state")
+    monkeypatch.setenv("DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE", "customer-locks")
+    monkeypatch.setenv("DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI", "s3://releases/runner.zip")
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION", "true")
+    monkeypatch.setenv("DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED", "true")
+
+    class Submitted:
+        def __init__(self):
+            self.contexts = []
+
+        def execute(self, context):
+            self.contexts.append(context)
+            return CloudExecutionResult("SUBMITTED", (), {"codebuild_build_id": "plan-1"})
+
+    adapter = Submitted()
+    service.cloud_execution = adapter
+    review = service.create_terraform_plan_review_for_revision(
+        operator(),
+        approved.id,
+        content_digest=revision.content_digest,
+        preflight_id=preflight["id"],
+        expected_account_id=None,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_TERRAFORM_PLAN",
+        allow_cloud_plan=True,
+    )
+    assert review["state"] == "AUTHENTICATED_PLAN_SUBMITTED"
+    work = adapter.contexts[0]["lifecycle_work"]
+    assert work[0]["module_id"] == "aws-managed-application"
+    assert work[0]["operation"] == "plan"
+    plan_run = db.scalar(
+        select(CloudExecutionRun).where(CloudExecutionRun.terraform_plan_review_id == review["id"])
+    )
+    assert plan_run is not None
+    assert plan_run.command["universal_lifecycle_work"] == work
 
 
 def test_codebuild_adapter_rejects_untyped_lifecycle_work_without_a_cloud_call():
@@ -85,6 +196,24 @@ def test_codebuild_adapter_rejects_untyped_lifecycle_work_without_a_cloud_call()
     )
     assert result.state == "FAILED"
     assert "module identifier" in (result.failure_reason or "")
+    assert calls == []
+
+
+def test_codebuild_adapter_rejects_composed_runs_until_all_module_states_are_supported():
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "unexpected"}}
+
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    work = lifecycle_work() * 2
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {"environment": environment, "lifecycle_work": work}
+    )
+    assert result.state == "FAILED"
+    assert "one certified module" in (result.failure_reason or "")
     assert calls == []
 
 
