@@ -44,7 +44,7 @@ def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
         resource_tags = item.get("resource_tags")
         if not isinstance(module_id, str) or not module_id:
             raise ValueError("universal lifecycle work item has no module identifier")
-        if operation not in {"apply", "destroy"}:
+        if operation not in {"plan", "apply", "observe", "destroy", "verify_cleanup", "build-push-image"}:
             raise ValueError("universal lifecycle work has an unsupported operation")
         if not isinstance(dependencies, list) or not all(isinstance(value, str) for value in dependencies):
             raise ValueError("universal lifecycle work has invalid dependencies")
@@ -66,6 +66,22 @@ def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
             }
         )
     return tuple(accepted)
+
+
+def trusted_execution_work(context: dict[str, object]) -> tuple[dict[str, object], ...]:
+    """Resolve lifecycle work or one fixed App Runner image-build task."""
+    value = context.get("lifecycle_work")
+    environment = context.get("environment") or {}
+    if value is None and isinstance(environment, dict) and environment.get("DAVDEPLOY_EXECUTION_OPERATION") == "build-push-image":
+        value = [
+            {
+                "module_id": "aws-managed-application",
+                "operation": "build-push-image",
+                "dependencies": [],
+                "resource_tags": {"ManagedBy": "davdeploy"},
+            }
+        ]
+    return validate_lifecycle_work(value)
 
 
 class DisabledCloudExecutionAdapter:
@@ -90,7 +106,7 @@ class AppRunnerCloudExecutionAdapter:
 
     def execute(self, context: dict[str, object]) -> CloudExecutionResult:
         try:
-            validate_lifecycle_work(context.get("lifecycle_work"))
+            trusted_execution_work(context)
         except (TypeError, ValueError) as error:
             return CloudExecutionResult("FAILED", (), {}, str(error))
         if os.getenv("DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED", "false").lower() != "true":
@@ -177,9 +193,13 @@ class CodeBuildCloudExecutionAdapter:
     def execute(self, context: dict[str, object]) -> CloudExecutionResult:
         environment = context.get("environment") or {}
         try:
-            lifecycle_work = validate_lifecycle_work(context.get("lifecycle_work"))
+            lifecycle_work = trusted_execution_work(context)
         except (TypeError, ValueError) as error:
             return CloudExecutionResult("FAILED", (), {}, str(error))
+        if len(lifecycle_work) != 1:
+            return CloudExecutionResult(
+                "FAILED", (), {}, "CodeBuild currently accepts one certified module per execution run."
+            )
         if not self.project_name:
             return DisabledCloudExecutionAdapter().execute(context)
         if not isinstance(environment, dict) or not self.required_environment.issubset(environment):

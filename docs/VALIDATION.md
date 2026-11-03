@@ -459,6 +459,28 @@ Results:
 
 This is local/offline evidence only. It did not run authenticated `terraform plan`, `terraform apply`, `terraform destroy`, AWS APIs, GitHub writes, GitOps sync, Kubernetes commands, or production deployment.
 
+## Typed CodeBuild renderer dispatch
+
+Date: 2026-11-03. Environment: macOS, Python, Terraform CLI, and local test fixtures.
+
+The customer execution archive now includes a deterministic dispatcher. It accepts exactly one typed lifecycle item, resolves only the enabled App Runner renderer, checks that the operation matches the approved execution operation, and invokes the checked-in App Runner script. Unknown or disabled renderers, mixed work, unresolved dependencies, malformed work, and operation mismatches fail before a runner or Terraform is invoked. The isolated serverless API renderer remains disabled for hosted customer execution. Authenticated App Runner plan review now persists and submits one typed `plan` item.
+
+Validation performed:
+
+```bash
+make lint
+make test
+.venv/bin/python -m pytest tests/test_renderer_dispatcher.py tests/test_module_renderers.py tests/test_cloud_execution.py -q
+terraform -chdir=infrastructure/terraform/serverless-control-plane fmt -check -recursive
+terraform -chdir=infrastructure/terraform/serverless-control-plane validate
+GITHUB_PR_NUMBER=270 python3 scripts/check_doc_conventions.py
+git diff --check
+```
+
+Results: lint passed; full suite passed (**357 tests**); focused renderer/cloud-execution suite passed (**25 tests**); Terraform formatting and validation passed; ticket convention check and diff check passed.
+
+This is local code and fixture evidence only. No hosted CodeBuild execution, customer workload, AWS mutation, or multi-module deployment was performed. The dispatcher is not evidence that additional renderer families are ready for customer execution. See `docs/tickets/ticket270.md` for scope and boundaries.
+
 ## Cloud-readiness guardrails
 
 Date: 2026-10-12. Environment: macOS, Docker Desktop, Python 3.12, Terraform CLI and local fixture identities.
