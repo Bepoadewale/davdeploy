@@ -24,6 +24,7 @@ MAX_UNCOMPRESSED_BYTES = 240 * 1024 * 1024
 MAX_COMPRESSED_BYTES = 49 * 1024 * 1024
 REPOSITORY_COMPONENT_RE = re.compile(r"[A-Za-z0-9_.-]+\Z")
 CONNECTION_RE = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+PROJECT_RE = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
 RUN_RE = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 SHA256_RE = re.compile(r"[a-f0-9]{64}\Z")
 COMMIT_RE = re.compile(r"[a-f0-9]{40}\Z")
@@ -71,6 +72,7 @@ def validate_environment(environment: dict[str, str]) -> dict[str, str]:
     repository = required(environment, "DAVDEPLOY_CUSTOMER_SOURCE_REPOSITORY")
     commit = required(environment, "DAVDEPLOY_CUSTOMER_SOURCE_COMMIT").lower()
     connection_id = required(environment, "DAVDEPLOY_CUSTOMER_CONNECTION_ID")
+    project_id = required(environment, "DAVDEPLOY_CUSTOMER_PROJECT_ID")
     plan_digest = required(environment, "DAVDEPLOY_CUSTOMER_PLAN_DIGEST").lower()
     run_id = required(environment, "DAVDEPLOY_EXECUTION_RUN_ID")
     region = required(environment, "AWS_REGION")
@@ -86,6 +88,8 @@ def validate_environment(environment: dict[str, str]) -> dict[str, str]:
         raise ValueError("Source commit must be a full immutable Git commit SHA")
     if not CONNECTION_RE.fullmatch(connection_id):
         raise ValueError("Customer connection identifier is invalid")
+    if not PROJECT_RE.fullmatch(project_id):
+        raise ValueError("Customer project identifier is invalid")
     if not SHA256_RE.fullmatch(plan_digest):
         raise ValueError("Customer plan digest must be a SHA-256 digest")
     if not RUN_RE.fullmatch(run_id):
@@ -95,17 +99,18 @@ def validate_environment(environment: dict[str, str]) -> dict[str, str]:
 
     artifact_bucket, artifact_key = s3_bucket_key(artifact_uri)
     result_bucket, result_key = s3_bucket_key(result_uri)
-    scope = f"davdeploy/customer/{connection_id}/"
+    scope = f"davdeploy/customer/{connection_id}/projects/{project_id}/"
     expected_artifact_key = f"{scope}artifacts/{plan_digest}/{run_id}/lambda.zip"
     expected_result_key = f"{scope}runs/{run_id}/result.json"
     if artifact_bucket != result_bucket or artifact_key != expected_artifact_key:
-        raise ValueError("Lambda artifact URI is outside its connection, plan, and run scope")
+        raise ValueError("Lambda artifact URI is outside its connection, project, plan, and run scope")
     if result_key != expected_result_key:
-        raise ValueError("Execution result URI is outside its connection and run scope")
+        raise ValueError("Execution result URI is outside its connection, project, and run scope")
     return {
         "repository": repository,
         "commit": commit,
         "connection_id": connection_id,
+        "project_id": project_id,
         "plan_digest": plan_digest,
         "run_id": run_id,
         "region": region,
@@ -303,6 +308,7 @@ def run(environment: dict[str, str] | None = None) -> dict[str, object]:
             "phase": "artifact-build",
             "status": "SUCCEEDED",
             "connection_id": context["connection_id"],
+            "project_id": context["project_id"],
             "plan_digest": context["plan_digest"],
             "generated_at": datetime.now(UTC).isoformat(),
             "detail": detail,

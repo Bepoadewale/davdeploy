@@ -4569,6 +4569,9 @@ class ProductService:
                     expected_connection = str(
                         environment.get("DAVDEPLOY_CUSTOMER_CONNECTION_ID") or ""
                     )
+                    expected_project = str(
+                        environment.get("DAVDEPLOY_CUSTOMER_PROJECT_ID") or ""
+                    )
                     expected_phase = {
                         "build-artifact": "artifact-build",
                         "plan": "plan",
@@ -4584,6 +4587,8 @@ class ProductService:
                         or artifact.get("plan_digest") != run.content_digest
                         or not expected_connection
                         or artifact.get("connection_id") != expected_connection
+                        or not expected_project
+                        or artifact.get("project_id") != expected_project
                         or not expected_phase
                         or artifact.get("phase") != expected_phase
                         or command.get("operation")

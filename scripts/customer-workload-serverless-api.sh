@@ -10,7 +10,7 @@ require() {
 }
 
 for name in AWS_REGION EXPECTED_AWS_ACCOUNT_ID TF_STATE_BUCKET TF_LOCK_TABLE \
-  DAVDEPLOY_CUSTOMER_CONNECTION_ID DAVDEPLOY_CUSTOMER_EXECUTION_ROLE_ARN \
+  DAVDEPLOY_CUSTOMER_CONNECTION_ID DAVDEPLOY_CUSTOMER_PROJECT_ID DAVDEPLOY_CUSTOMER_EXECUTION_ROLE_ARN \
   DAVDEPLOY_EXTERNAL_ID_SECRET_ARN DAVDEPLOY_EXECUTION_RUN_ID \
   DAVDEPLOY_EXECUTION_RESULT_S3_URI DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI \
   DAVDEPLOY_CUSTOMER_PLAN_DIGEST; do
@@ -28,8 +28,11 @@ case "${1:-}" in
 esac
 
 connection_id="$DAVDEPLOY_CUSTOMER_CONNECTION_ID"
+project_id="$DAVDEPLOY_CUSTOMER_PROJECT_ID"
 run_id="$DAVDEPLOY_EXECUTION_RUN_ID"
-service_name="${DAVDEPLOY_CUSTOMER_SERVICE_NAME:-davdeploy-${connection_id}-api}"
+project_scope="${connection_id}:${project_id}"
+project_suffix="$(printf '%s' "$project_scope" | shasum -a 256 | awk '{print substr($1, 1, 32)}')"
+service_name="davdeploy-${project_suffix}-api"
 result_uri="$DAVDEPLOY_EXECUTION_RESULT_S3_URI"
 saved_plan_uri="$DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"
 artifact_uri="${DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI:-}"
@@ -50,14 +53,15 @@ customer_profile="davdeploy-customer"
 [[ "$TF_STATE_BUCKET" =~ ^[A-Za-z0-9.-]{3,63}$ ]] || { echo "Terraform state bucket is invalid" >&2; exit 2; }
 [[ "$TF_LOCK_TABLE" =~ ^[A-Za-z0-9_.-]{3,255}$ ]] || { echo "Terraform lock table name is invalid" >&2; exit 2; }
 [[ "$connection_id" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "Customer connection identifier is invalid" >&2; exit 2; }
+[[ "$project_id" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "Customer project identifier is invalid" >&2; exit 2; }
 [[ "$run_id" =~ ^[A-Za-z0-9_-]{1,80}$ ]] || { echo "Execution run identifier is invalid" >&2; exit 2; }
 [[ "$service_name" =~ ^[A-Za-z][A-Za-z0-9_-]{0,56}$ ]] || { echo "Customer service name is invalid" >&2; exit 2; }
 [[ "$DAVDEPLOY_CUSTOMER_PLAN_DIGEST" =~ ^[a-f0-9]{64}$ ]] || { echo "Customer plan digest must be a SHA-256 digest" >&2; exit 2; }
 [[ "$result_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Execution result URI is invalid" >&2; exit 2; }
 [[ "$saved_plan_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Saved plan URI is invalid" >&2; exit 2; }
-customer_state_prefix="s3://${TF_STATE_BUCKET}/davdeploy/customer/${connection_id}/"
+customer_state_prefix="s3://${TF_STATE_BUCKET}/davdeploy/customer/${connection_id}/projects/${project_id}/"
 saved_plan_prefix="${customer_state_prefix}${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}/${saved_plan_kind}/"
-[[ "$result_uri" == "$customer_state_prefix"* ]] || { echo "Execution result must be stored in the connection's state prefix" >&2; exit 2; }
+[[ "$result_uri" == "${customer_state_prefix}runs/${run_id}/result.json" ]] || { echo "Execution result must be stored in this project's run prefix" >&2; exit 2; }
 [[ "$saved_plan_uri" == "$saved_plan_prefix"* ]] || { echo "Saved plan must be stored in this plan's digest prefix" >&2; exit 2; }
 
 cleanup() {
@@ -115,6 +119,7 @@ tf_vars=(
   "-var=region=${AWS_REGION}"
   "-var=expected_account_id=${EXPECTED_AWS_ACCOUNT_ID}"
   "-var=connection_id=${connection_id}"
+  "-var=project_id=${project_id}"
   "-var=plan_digest=${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}"
   "-var=service_name=${service_name}"
   "-var=artifact_path=${artifact}"
@@ -124,7 +129,7 @@ tf_vars=(
 tf_init() {
   terraform -chdir="$root" init -input=false -reconfigure \
     -backend-config="bucket=${TF_STATE_BUCKET}" \
-    -backend-config="key=davdeploy/customer/${connection_id}/serverless-api.tfstate" \
+    -backend-config="key=davdeploy/customer/${connection_id}/projects/${project_id}/serverless-api.tfstate" \
     -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
     -backend-config="region=${AWS_REGION}"
 }
@@ -133,6 +138,15 @@ download_artifact() {
   require DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI
   require DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256
   [[ "$artifact_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Serverless artifact URI is invalid" >&2; exit 2; }
+  local artifact_prefix="s3://${TF_STATE_BUCKET}/davdeploy/customer/${connection_id}/projects/${project_id}/artifacts/${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}/"
+  [[ "$artifact_uri" == "$artifact_prefix"* && "$artifact_uri" == */lambda.zip ]] || {
+    echo "Serverless artifact must be stored under this project's approved plan prefix" >&2; exit 2;
+  }
+  local artifact_run_id="${artifact_uri#"$artifact_prefix"}"
+  artifact_run_id="${artifact_run_id%/lambda.zip}"
+  [[ "$artifact_run_id" =~ ^[A-Za-z0-9_-]{1,80}$ ]] || {
+    echo "Serverless artifact run identifier is invalid" >&2; exit 2;
+  }
   [[ "$artifact_sha256" =~ ^[a-f0-9]{64}$ ]] || { echo "Serverless artifact SHA-256 is invalid" >&2; exit 2; }
   platform_aws s3 cp "$artifact_uri" "$artifact" --only-show-errors
   echo "${artifact_sha256}  ${artifact}" | shasum -a 256 --check --status || {
@@ -145,9 +159,10 @@ write_result() {
   local detail='{}'
   if [[ -n "$detail_file" && -f "$detail_file" ]]; then detail="$(cat "$detail_file")"; fi
   jq -n --arg run_id "$run_id" --arg phase "$phase" --arg status "$status" \
-    --arg connection_id "$connection_id" --arg plan_digest "$DAVDEPLOY_CUSTOMER_PLAN_DIGEST" \
+    --arg connection_id "$connection_id" --arg project_id "$project_id" \
+    --arg plan_digest "$DAVDEPLOY_CUSTOMER_PLAN_DIGEST" \
     --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --argjson detail "$detail" \
-    '{schema_version:"davdeploy.customer_execution_result.v1",run_id:$run_id,phase:$phase,status:$status,connection_id:$connection_id,plan_digest:$plan_digest,generated_at:$generated_at,detail:$detail}' \
+    '{schema_version:"davdeploy.customer_execution_result.v1",run_id:$run_id,phase:$phase,status:$status,connection_id:$connection_id,project_id:$project_id,plan_digest:$plan_digest,generated_at:$generated_at,detail:$detail}' \
     >"$result_file"
   platform_aws s3 cp "$result_file" "$result_uri" --only-show-errors
 }

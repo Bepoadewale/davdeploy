@@ -29,13 +29,15 @@ def _source_tree(root: Path) -> None:
 
 def _environment() -> dict[str, str]:
     connection_id = "connection_123"
+    project_id = "project_123"
     plan_digest = "a" * 64
     run_id = "run_123"
-    prefix = f"davdeploy/customer/{connection_id}"
+    prefix = f"davdeploy/customer/{connection_id}/projects/{project_id}"
     return {
         "DAVDEPLOY_CUSTOMER_SOURCE_REPOSITORY": "https://github.com/example/customer-api",
         "DAVDEPLOY_CUSTOMER_SOURCE_COMMIT": "b" * 40,
         "DAVDEPLOY_CUSTOMER_CONNECTION_ID": connection_id,
+        "DAVDEPLOY_CUSTOMER_PROJECT_ID": project_id,
         "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": plan_digest,
         "DAVDEPLOY_EXECUTION_RUN_ID": run_id,
         "DAVDEPLOY_EXECUTION_OPERATION": "build-artifact",
@@ -103,6 +105,29 @@ def test_artifact_environment_requires_pinned_public_repo_and_exact_scoped_s3_pa
     context = artifact_builder.validate_environment(_environment())
     assert context["commit"] == "b" * 40
 
+    invalid_project = _environment()
+    invalid_project["DAVDEPLOY_CUSTOMER_PROJECT_ID"] = "../other-project"
+    with pytest.raises(ValueError, match="project identifier"):
+        artifact_builder.validate_environment(invalid_project)
+
+    cross_project_key = _environment()
+    cross_project_key["DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"] = (
+        cross_project_key["DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"].replace(
+            "/projects/project_123/", "/projects/another_project/"
+        )
+    )
+    with pytest.raises(ValueError, match="project"):
+        artifact_builder.validate_environment(cross_project_key)
+
+    cross_project_result = _environment()
+    cross_project_result["DAVDEPLOY_EXECUTION_RESULT_S3_URI"] = (
+        cross_project_result["DAVDEPLOY_EXECUTION_RESULT_S3_URI"].replace(
+            "/projects/project_123/", "/projects/another_project/"
+        )
+    )
+    with pytest.raises(ValueError, match="project"):
+        artifact_builder.validate_environment(cross_project_result)
+
     invalid_repo = _environment()
     invalid_repo["DAVDEPLOY_CUSTOMER_SOURCE_REPOSITORY"] = "https://example.com/customer-api"
     with pytest.raises(ValueError, match="public GitHub"):
@@ -136,6 +161,25 @@ def test_artifact_environment_requires_pinned_public_repo_and_exact_scoped_s3_pa
     disabled["DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION"] = "false"
     with pytest.raises(ValueError, match="route is disabled"):
         artifact_builder.validate_environment(disabled)
+
+
+def test_project_scope_separates_artifact_and_result_objects():
+    first = _environment()
+    second = _environment()
+    second["DAVDEPLOY_CUSTOMER_PROJECT_ID"] = "project_456"
+    second["DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"] = second[
+        "DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI"
+    ].replace("project_123", "project_456")
+    second["DAVDEPLOY_EXECUTION_RESULT_S3_URI"] = second[
+        "DAVDEPLOY_EXECUTION_RESULT_S3_URI"
+    ].replace("project_123", "project_456")
+
+    first_context = artifact_builder.validate_environment(first)
+    second_context = artifact_builder.validate_environment(second)
+
+    assert first_context["project_id"] != second_context["project_id"]
+    assert first_context["artifact_uri"] != second_context["artifact_uri"]
+    assert first_context["result_uri"] != second_context["result_uri"]
 
 
 def test_run_checks_out_exact_commit_and_uploads_digest_bound_artifact_and_result(monkeypatch):
@@ -184,6 +228,7 @@ def test_run_checks_out_exact_commit_and_uploads_digest_bound_artifact_and_resul
     evidence = json.loads(uploaded[result_uri])
     assert evidence["phase"] == "artifact-build"
     assert evidence["status"] == "SUCCEEDED"
+    assert evidence["project_id"] == env["DAVDEPLOY_CUSTOMER_PROJECT_ID"]
     assert evidence["detail"]["source_commit"] == env["DAVDEPLOY_CUSTOMER_SOURCE_COMMIT"]
     assert evidence["detail"]["artifact_sha256"] == hashlib.sha256(uploaded[artifact_uri]).hexdigest()
     assert result["artifact_key"].endswith("/lambda.zip")
