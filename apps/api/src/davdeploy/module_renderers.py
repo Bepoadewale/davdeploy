@@ -39,6 +39,22 @@ _RENDERERS: dict[str, ModuleRenderer] = {
 }
 
 
+def renderer_for_profile(profile: str, operation: str) -> ModuleRenderer:
+    """Resolve a selected planning profile to a bounded lifecycle renderer.
+
+    This deliberately does not bypass ``execution_enabled``. A profile may be
+    understood by the execution layer while remaining unavailable to customer
+    execution until its hosted AWS certification is complete.
+    """
+    module_id = {
+        "aws-app-runner": "aws-managed-application",
+        "aws-lambda-api": "aws-serverless-api",
+    }.get(profile)
+    if module_id is None:
+        raise ValueError(f"profile {profile} has no registered execution renderer")
+    return renderer_for(module_id, operation)
+
+
 def renderer_for(module_id: str, operation: str) -> ModuleRenderer:
     """Resolve a checked-in renderer or reject an unbound lifecycle module."""
     renderer = _RENDERERS.get(module_id)

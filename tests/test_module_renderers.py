@@ -1,4 +1,4 @@
-from davdeploy.module_renderers import renderer_for, renderer_manifest
+from davdeploy.module_renderers import renderer_for, renderer_for_profile, renderer_manifest
 
 
 def test_only_checked_in_module_renderer_is_resolved():
@@ -25,3 +25,19 @@ def test_unbound_or_unsupported_renderer_work_is_rejected():
             assert "module" in str(error)
         else:
             raise AssertionError("unbound renderer work was accepted")
+
+
+def test_serverless_profile_is_mapped_but_stays_disabled_for_hosted_execution():
+    try:
+        renderer_for_profile("aws-lambda-api", "apply")
+    except ValueError as error:
+        assert "not enabled for customer execution" in str(error)
+    else:
+        raise AssertionError("serverless renderer must stay disabled before hosted certification")
+
+    try:
+        renderer_for_profile("aws-unknown", "apply")
+    except ValueError as error:
+        assert "no registered execution renderer" in str(error)
+    else:
+        raise AssertionError("unknown execution profile must fail closed")
