@@ -4613,6 +4613,8 @@ class ProductService:
             _last_cloud_execution_lease_scan = scan_now
 
         now = datetime.now(UTC)
+        # Do not infer abandonment for pre-lease RUNNING records. They may still
+        # be owned by an older worker during a rolling deploy.
         expired = list(
             self.db.scalars(
                 select(CloudExecutionRun).where(

@@ -935,6 +935,32 @@ def test_expired_cloud_execution_lease_requires_reconciliation_without_replay(
     assert service.db.get(CloudExecutionRun, run.id).outputs == {}
 
 
+def test_prelease_running_record_is_not_assumed_abandoned():
+    service, _ = make_service()
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-legacy-running",
+        project_id="project-legacy-running",
+        profile="aws-app-runner",
+        state="RUNNING",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        attempt=1,
+        command={},
+        evidence={},
+        outputs={},
+        content_digest="e" * 64,
+        requested_by_subject=founder().subject,
+    )
+    service.db.add(run)
+    service.db.commit()
+    service._scan_expired_cloud_execution_leases()
+
+    persisted = service.db.get(CloudExecutionRun, run.id)
+    assert persisted is not None
+    assert persisted.state == "RUNNING"
+    assert persisted.worker_lease_token is None
+
+
 def test_adapter_exception_marks_run_uncertain_without_requeueing():
     service, _ = make_service()
     run = _queued_cloud_execution_run(service)

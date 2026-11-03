@@ -42,6 +42,8 @@ reconciliation-required until the exact external operation is known.
 - Make worker completion conditional on the same claim token/version.
 - Detect expired claims and mark the run for reconciliation without resubmitting
   apply/destroy work or asserting success/failure without evidence.
+- Leave pre-lease `RUNNING` rows without a claim token untouched during rolling
+  deployment; their owner status cannot be inferred from the new lease fields.
 - Preserve audit history, tenant/project/plan digest scope, and the current
   single-renderer fail-closed behavior.
 - Test migration upgrade, concurrent claims, stale completion rejection,
@@ -51,28 +53,35 @@ reconciliation-required until the exact external operation is known.
 
 ## Acceptance criteria
 
-- [ ] Existing databases migrate idempotently and the latest schema is v24.
-- [ ] Only one worker can claim a given queued run.
-- [ ] Only the current claim owner can persist worker completion.
-- [ ] An expired claim is visible for reconciliation and is never blindly replayed.
-- [ ] Existing single-renderer execution and fail-closed gates remain intact.
-- [ ] Tenant, project and approved digest checks remain enforced.
+- [x] Existing databases migrate idempotently and the latest schema is v24.
+- [x] Only one worker can claim a given queued run.
+- [x] Only the current claim owner can persist worker completion.
+- [x] An expired claim is visible for reconciliation and is never blindly replayed.
+- [x] Existing single-renderer execution and fail-closed gates remain intact.
+- [x] Tenant, project and approved digest checks remain enforced.
 - [x] Focused tests, full verification and documentation checks pass.
-- [ ] Clean-room cycle passes.
+- [x] Clean-room cycle passes.
 - [ ] Required PR CI passes.
 
 ## Acceptance status
 
-Focused worker and migration tests plus full verification pass. The clean-room
-cycle and required PR CI are pending.
+Focused worker and migration tests, full verification and the isolated
+clean-room cycle pass. Required PR CI is pending.
 
 ## Tests / validation performed
 
 - `.venv/bin/ruff check apps/api/src/davdeploy/service.py apps/api/src/davdeploy/models.py apps/api/src/davdeploy/db.py tests/test_cloud_execution.py tests/test_db_config.py tests/test_invitation_email.py` — passed.
-- `.venv/bin/python -m pytest tests/test_cloud_execution.py tests/test_db_config.py tests/test_invitation_email.py -q` — 49 passed; one existing Starlette deprecation warning.
-- `make verify` — 396 passed; Ruff/configuration checks, OpenAPI snapshot and Compose configuration passed; one existing Starlette deprecation warning.
+- `.venv/bin/python -m pytest tests/test_cloud_execution.py tests/test_db_config.py tests/test_invitation_email.py -q` — 50 passed; one existing Starlette deprecation warning.
+- `make verify` — 397 passed; Ruff/configuration checks, OpenAPI snapshot and Compose configuration passed; one existing Starlette deprecation warning.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Clean-room and required CI are pending.
+- Fresh clean-room at commit `3f32dc9`, isolated worktree
+  `/tmp/davdeploy-cleanroom-pr280-20261103`, Compose project
+  `davdeploy-cleanroom-pr280-20261103`: bootstrap, smoke, API contract,
+  customer-plan E2E, seed, simple/complex/degraded/Day-2/canonical/failure/readiness
+  demos, trace check, full verification (396 tests), OPA (3/3), Terraform offline
+  validation, Kubernetes render and scoped cleanup — passed. No AWS workload was
+  created.
+- Required CI is pending.
 
 ## Evidence files produced
 
@@ -84,10 +93,6 @@ No AWS resource changes or customer workload execution. No widening of renderer
 support, IAM permissions, trust policies or Terraform authority. No automatic
 replay of an uncertain apply or destroy. No deletion of customer or existing
 local data.
-
-## Evidence / validation
-
-Pending implementation.
 
 ## Follow-up work
 
