@@ -7,8 +7,13 @@ variable "allow_from_public" {
 }
 variable "tags" { type = map(string) }
 
+locals {
+  # OpenSearch Serverless policy names are capped at 32 characters.
+  policy_name_prefix = substr(var.name, 0, 26)
+}
+
 resource "aws_opensearchserverless_security_policy" "encryption" {
-  name = "${var.name}-encryption"
+  name = "${local.policy_name_prefix}-enc"
   type = "encryption"
   policy = jsonencode({
     Rules       = [{ ResourceType = "collection", Resource = ["collection/${var.name}"] }]
@@ -17,7 +22,7 @@ resource "aws_opensearchserverless_security_policy" "encryption" {
 }
 
 resource "aws_opensearchserverless_security_policy" "network" {
-  name = "${var.name}-network"
+  name = "${local.policy_name_prefix}-net"
   type = "network"
   policy = jsonencode([{
     Rules = [
@@ -40,7 +45,7 @@ resource "aws_opensearchserverless_collection" "this" {
 }
 
 resource "aws_opensearchserverless_access_policy" "this" {
-  name = "${var.name}-data"
+  name = "${local.policy_name_prefix}-data"
   type = "data"
   policy = jsonencode([{
     Description = "Scoped vector collection access for DavDeploy Knowledge Base lifecycle."
