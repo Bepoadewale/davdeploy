@@ -20,14 +20,15 @@ deployment evidence.
 The customer serverless API Terraform root, AWS Lambda/API Gateway modules,
 and existing disposable module validation conventions.
 
-## Work completed in the PR
+## Work planned for the PR
 
-Added a disposable certification root importing the customer serverless API
-renderer and using the repository's Lambda test package. The renderer was
-applied in AWS account `654654474502`, region `us-east-1`; its HTTPS endpoint
-returned HTTP 200 and `{"ok":true}`. The monitored destroy completed with 9
-resources destroyed. Read-only AWS checks confirmed the test Lambda, API, and
-IAM role are absent.
+Add a disposable certification root importing the customer serverless API
+renderer and using the repository's Lambda test package.
+
+Completed: the renderer was applied in AWS account `654654474502`, region
+`us-east-1`; its HTTPS endpoint returned HTTP 200 and `{"ok":true}`. The
+monitored destroy completed with 9 resources destroyed. Read-only AWS checks
+confirmed the test Lambda, API, and IAM role are absent.
 
 ## Acceptance criteria
 
