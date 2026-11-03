@@ -4,6 +4,7 @@ locals {
   tags = {
     ManagedBy           = "davdeploy"
     DavDeployConnection = var.connection_id
+    DavDeployProject    = var.project_id
     DavDeployPlan       = var.plan_digest
     Scope               = "customer-workload"
   }

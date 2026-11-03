@@ -34,24 +34,32 @@ PR #267 added the isolated Lambda/API Terraform root and runner. PR #273 added a
 
 ## Acceptance criteria
 
-- [ ] Missing, malformed, or mismatched project IDs fail before S3 writes or Terraform execution.
-- [ ] Two projects in one cloud connection resolve to distinct state, artifact, result, and resource identities.
-- [ ] All Lambda/API resources carry the approved project ownership tag.
-- [ ] Artifact and runner contract tests cover the new paths and reject cross-project scope.
+- [x] Missing, malformed, or mismatched project IDs fail before S3 writes or Terraform execution.
+- [x] Two projects in one cloud connection resolve to distinct state, artifact, result, and resource identities.
+- [x] Lambda/API resources carry the approved connection and project ownership tags.
+- [x] Artifact and runner contract tests cover the new paths and reject cross-project scope.
 - [ ] Focused tests, full local clean-room cycle, and CI pass.
-- [ ] No customer execution path is enabled.
+- [x] No customer execution path is enabled.
 
 ## Acceptance status
 
-Ticket created before substantive implementation. Validation is pending.
+Implementation is complete locally. Focused validation and full repository
+verification passed. Fresh clean-room validation and PR CI remain pending.
 
 ## Tests / validation performed
 
-Bootstrap commit only.
+- `bash -n scripts/customer-workload-serverless-api.sh scripts/customer-workload-dispatcher.sh` — passed.
+- `python3 -m py_compile scripts/customer-serverless-artifact-build.py` — passed.
+- `.venv/bin/ruff check scripts/customer-serverless-artifact-build.py apps/api/src/davdeploy/service.py tests/test_serverless_artifact_builder.py tests/test_serverless_renderer_contract.py tests/test_serverless_runner_safety.py tests/test_cloud_execution.py` — passed.
+- `.venv/bin/python -m pytest tests/test_serverless_artifact_builder.py tests/test_serverless_renderer_contract.py tests/test_serverless_runner_safety.py tests/test_cloud_execution.py -q` — 41 passed, one Starlette deprecation warning.
+- `terraform -chdir=infrastructure/terraform/customer-workload-serverless-api init -backend=false -input=false` and `terraform ... validate` — passed; no cloud backend or account used.
+- `make verify` — passed: configuration boundary, Ruff, 380 tests, OpenAPI snapshot, and Compose configuration; one Starlette deprecation warning.
+- `git diff --check` and Terraform formatting check — passed.
+- Fresh clean-room cycle and CI — pending.
 
 ## Evidence files produced
 
-No AWS workload is planned for this PR. Project-isolated hosted lifecycle certification remains a follow-up.
+See `docs/test/test275.md`. No AWS workload is planned for this PR. Project-isolated hosted lifecycle certification remains a follow-up.
 
 ## Boundaries
 
