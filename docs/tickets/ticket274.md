@@ -51,7 +51,7 @@ Renderer-aware evidence validation and state mapping are implemented. Focused te
 
 The full clean-room cycle used a fresh detached worktree at final implementation commit `99af7a9` in `/tmp/davdeploy-cleanroom-pr274-final-20261103`. `make bootstrap-local` passed, followed by `make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify`; every target passed. Compose services were stopped with `docker compose stop`; the worktree and named Postgres volume remain.
 
-GitHub Actions run `41690135563` passed all seven checks: `cloud-contracts`, `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, and `supply-chain` on commit `fe8f70c`. CI will re-run for this final ticket evidence revision.
+GitHub Actions run `41690845660` passed all seven checks: `cloud-contracts`, `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, and `supply-chain` on commit `3b1f5b4`, which contains the final implementation and ticket evidence before this CI record. The merge gate will verify the final ticket-only revision as well.
 
 ## Evidence files produced
 
