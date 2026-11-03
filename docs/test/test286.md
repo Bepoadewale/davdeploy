@@ -30,6 +30,8 @@ code packages. This PR does not modify infrastructure or hosted settings.
   `{"status":"ok","product":"davdeploy"}`.
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Required CI run [41735166439](https://github.com/Bepoadewale/davdeploy/actions/runs/41735166439)
+  — all seven jobs passed.
 
 ## Observed result
 

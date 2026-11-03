@@ -40,12 +40,12 @@ The hosted API health endpoint returned HTTP 200. No customer workload was run.
   empty.
 - [x] Current state does not claim that the Lambda/API renderer has completed a
   hosted AWS lifecycle.
-- [ ] Required CI passes.
+- [x] Required CI passes (run [41735166439](https://github.com/Bepoadewale/davdeploy/actions/runs/41735166439)).
 
 ## Acceptance status
 
-Documentation changes are ready for review. Validation results and CI status
-will be recorded before merge.
+Documentation conventions, whitespace checks and required CI pass. The pull
+request is ready for merge.
 
 ## Tests / validation performed
 
