@@ -7,6 +7,7 @@ credentials from a model or browser.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from hashlib import sha256
@@ -25,6 +26,8 @@ TERMINAL_EVIDENCE_STATES = {
     "destroy": frozenset({"SUCCEEDED", "DESTROYED_VERIFIED"}),
     "verify_cleanup": frozenset({"ABSENT", "CLEANUP_VERIFIED"}),
 }
+_MODULE_ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{0,99}\Z")
+_PLAN_DIGEST_PATTERN = re.compile(r"[a-f0-9]{64}\Z")
 
 
 @dataclass(frozen=True)
@@ -123,6 +126,19 @@ def compile_universal_execution_plan(
     modules: list[ArchitectureModule], *, workspace_id: str, project_id: str, plan_digest: str
 ) -> UniversalExecutionPlan:
     """Compile dependency-ordered internal modules into bounded lifecycle work."""
+    if not modules:
+        raise ValueError("module graph must contain at least one module")
+    if not workspace_id.strip() or not project_id.strip():
+        raise ValueError("workspace and project identifiers are required")
+    if not _PLAN_DIGEST_PATTERN.fullmatch(plan_digest):
+        raise ValueError("plan digest must be a lowercase SHA-256 hex digest")
+    for module in modules:
+        if not _MODULE_ID_PATTERN.fullmatch(module.identifier):
+            raise ValueError("module graph contains an invalid module identifier")
+        if len(module.depends_on) != len(set(module.depends_on)):
+            raise ValueError(f"module {module.identifier} contains duplicate dependencies")
+        if module.identifier in module.depends_on:
+            raise ValueError(f"module {module.identifier} cannot depend on itself")
     known = {module.identifier for module in modules}
     if len(known) != len(modules):
         raise ValueError("module graph contains duplicate module identifiers")
@@ -146,8 +162,6 @@ def compile_universal_execution_plan(
     canonical = "|".join(f"{item.module_id}:{','.join(item.dependencies)}" for item in result)
     expected = sha256(canonical.encode()).hexdigest()
     # The caller-provided digest remains the authoritative approved artifact.
-    if len(plan_digest) != 64:
-        raise ValueError("plan digest must be a SHA-256 hex digest")
     return UniversalExecutionPlan(
         plan_digest=plan_digest,
         modules=tuple(result),
