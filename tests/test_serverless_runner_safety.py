@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import os
 import hashlib
+import os
 import subprocess
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/customer-workload-serverless-api.sh"
