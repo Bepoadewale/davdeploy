@@ -39,12 +39,12 @@ reconciles current status documentation with that deployment.
 - [x] Migration version and live health check are recorded.
 - [x] Current status docs no longer describe the older package as deployed.
 - [x] No customer workload renderer or multi-module gate is enabled.
-- [ ] Documentation checks and required CI pass.
+- [x] Documentation checks pass; required GitHub CI remains the merge gate.
 
 ## Acceptance status
 
 Deployment and read-only post-deployment checks are complete. Documentation
-updates are in progress; the PR is not ready until required checks pass.
+updates and local documentation checks pass; GitHub CI remains the merge gate.
 
 ## Tests / validation performed
 
