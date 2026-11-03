@@ -15,6 +15,8 @@ The current Terraform environments use these non-secret variables:
 - `EXPECTED_AWS_ACCOUNT_ID`
 - `FRONTEND_ORIGIN`
 - `GOOGLE_IDENTITY_PROVIDER_ENABLED`
+- `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED`
+- `SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON`
 - `TF_PLAN_BUCKET`
 - `TF_PLAN_KMS_KEY_ARN`
 - `TF_RELEASE_BUCKET`
@@ -25,6 +27,12 @@ The current Terraform environments use these non-secret variables:
 These values identify deployment configuration. They do not authenticate a caller and remain
 GitHub Actions variables. Bucket policies, IAM trust policies, KMS policies, branch restrictions,
 and environment protections provide authorization.
+
+The serverless API certification inputs are off by default. Set
+`SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED` to `true` only for a controlled certification and
+set `SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON` to a JSON list containing only the test
+workspace ID. An empty list denies all workspaces. Configure them in the protected
+`terraform-plan` environment; Terraform apply consumes the exact immutable saved plan.
 
 The current encrypted environment values are:
 

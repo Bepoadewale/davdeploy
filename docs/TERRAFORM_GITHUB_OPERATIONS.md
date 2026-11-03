@@ -51,6 +51,8 @@ are unencrypted and must never hold credentials. See `docs/CONFIGURATION_SECURIT
 Optional `terraform-plan` variable:
 
 - `GOOGLE_IDENTITY_PROVIDER_ENABLED`, default `false`
+- `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED`, default `false`; keep false except for an explicitly approved, allowlisted renderer certification.
+- `SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON`, default `[]`; a JSON list of exact workspace IDs. An empty list denies every workspace. Configure these in `terraform-plan`; the apply workflow applies only the immutable plan created from those values.
 
 Optional `terraform-plan` environment secrets:
 

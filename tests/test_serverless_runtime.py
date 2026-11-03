@@ -419,6 +419,18 @@ def test_hosted_serverless_certification_is_off_and_workspace_allowlisted_by_def
     assert "default     = []" in variables
 
 
+def test_terraform_plan_workflow_passes_disabled_certification_defaults():
+    workflow = (ROOT / ".github/workflows/terraform-plan.yml").read_text()
+    assert (
+        "TF_VAR_enable_serverless_api_hosted_certification: ${{ vars.SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED || 'false' }}"
+        in workflow
+    )
+    assert (
+        "TF_VAR_serverless_certification_workspace_ids: ${{ vars.SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON || '[]' }}"
+        in workflow
+    )
+
+
 def test_serverless_stack_manages_logs_and_actionable_alarms():
     terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     assert 'resource "aws_cloudwatch_log_group" "lambda"' in terraform
