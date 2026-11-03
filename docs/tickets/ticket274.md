@@ -38,18 +38,20 @@ PR #273 is merged. The Lambda/API renderer and pinned artifact builder are packa
 - [x] Health is recorded only from an explicit successful health result matching the prior apply output; destroy only from confirmed absence.
 - [x] Malformed or cross-run evidence cannot mark a run successful.
 - [x] Focused tests and full local clean-room cycle pass.
-- [ ] CI passes.
+- [x] CI passes.
 - [x] No customer execution gate or API run-creation path is enabled.
 
 ## Acceptance status
 
-Renderer-aware evidence validation and state mapping are implemented. Focused tests, full suite, and isolated local clean-room validation pass. Required GitHub CI is pending.
+Renderer-aware evidence validation and state mapping are implemented. Focused tests, full suite, isolated local clean-room validation, and all seven required GitHub Actions checks pass.
 
 ## Tests / validation performed
 
 `make verify` passed: 378 tests, OpenAPI snapshot, configuration boundary, lint, and Docker Compose config; one existing Starlette/httpx deprecation warning. Focused cloud-execution tests passed: 30 tests. `GITHUB_PR_NUMBER=274 .venv/bin/python scripts/check_doc_conventions.py` and `git diff --check` passed.
 
 The full clean-room cycle used a fresh detached worktree at commit `1da2685` in `/tmp/davdeploy-cleanroom-pr274-20261103`. `make bootstrap-local` passed, followed by `make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify`; every target passed. Compose services were stopped with `docker compose stop`; the worktree and named Postgres volume remain.
+
+GitHub Actions run `41686804769` passed all seven checks: `cloud-contracts`, `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, and `supply-chain` on implementation commit `1da2685`. Documentation-only acceptance update is now included; CI is re-running for the final ticket revision.
 
 ## Evidence files produced
 
