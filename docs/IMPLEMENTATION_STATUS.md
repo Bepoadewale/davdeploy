@@ -65,14 +65,13 @@ Terraform describes separate state/lock/budget guardrails plus a private VPC, EK
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
 # Current hosted execution status — 2026-11-03
 
-The control plane remains active. The latest protected Terraform apply is run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229) for commit `2d77ee2206a425813b8169eed460aff9b5634dc2`. The plan applied 0 added, 6 changed and 0 destroyed. All six Lambda packages were updated in place, database migrations completed through schema v24, and `https://api.davdeploy.tech/healthz` returned HTTP 200 through the Cloudflare edge. The package hash is identical across all six functions. This deployed worker-lease and module-outcome code without enabling new customer workload renderers.
+The control plane remains active. The latest protected Terraform apply is run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958) for commit `2e39e4a45fee9bd69b5827a48431c052e5f772e2`. Its reviewed plan updated six Lambda packages in place with zero creates and zero destroys. Migration verification passed and `https://api.davdeploy.tech/healthz` returned HTTP 200. The serverless certification controls introduced in PRs #283–#285 are deployed but remain disabled: `DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION=false`, with an empty workspace allowlist. No customer workload was created by this release.
 
-The dispatcher accepts one typed item and one enabled renderer: `aws-managed-application` (App Runner). Multi-module work fails closed. The isolated Lambda + HTTP API AWS certification in `docs/test/test268.md` does not enable that renderer in hosted execution. No composed customer workload was deployed by the PR #270 release. See `docs/product/EXECUTION_READINESS_MATRIX.md` for the catalogue-to-renderer mapping and outstanding work.
+PR #283 binds renderer dispatch to persisted certification mode. PR #284 adds a typed single-module Lambda/API lifecycle, chained to exact approved runs and pinned artifact/saved-plan digests. PR #285 wires a protected workspace allowlist into Terraform. The Lambda/API route is not yet AWS-certified through the hosted control plane. App Runner remains the only generally enabled hosted renderer, and multi-module CodeBuild work remains rejected.
 
-PR #277 adds durable per-module run graph rows, PR #278 records current
-single-renderer outcomes on those rows, and PR #280 adds worker leases and safe
-reconciliation after uncertain outcomes. They are now deployed. These records
-are not yet a durable graph scheduler and do not enable Lambda or multi-module
-customer runs.
+PRs #277, #278 and #280 add durable per-module run rows, outcome persistence,
+worker leases and reconciliation-required state after uncertain outcomes.
+These are deployed. They do not yet provide a dependency-aware graph scheduler,
+partial-failure recovery or multi-module cleanup proof.
 
 The older dated sections below describe implementation and validation at their stated time. Read them as historical evidence, not as the current deployment state.
