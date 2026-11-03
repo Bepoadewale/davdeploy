@@ -7,9 +7,10 @@ credentials from a model or browser.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Iterable, Protocol
+from typing import Protocol
 
 from davdeploy.domain import ArchitectureModule
 

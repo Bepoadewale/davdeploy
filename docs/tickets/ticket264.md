@@ -15,12 +15,12 @@ graphs while retaining the existing deterministic authorization boundary.
 The compiler emits lifecycle operations and resource tags, but hosted run
 creation still rejects every selected profile other than `aws-app-runner`.
 
-## Research / references
+## Research / references used
 
 Existing `universal_execution.py`, composed deployment tests, and the current
 customer execution runner contract.
 
-## Work planned
+## Work planned for the PR
 
 Add typed execution operation validation, dependency ordering, plan-level
 command metadata, and service integration without accepting free-form cloud
@@ -37,11 +37,11 @@ commands or weakening existing authorization checks.
 
 In progress.
 
-## Validation performed
+## Tests / validation performed
 
 `uv run pytest tests/test_universal_execution.py tests/test_composed_deployment.py tests/test_cloud_execution.py -q` — 19 passed.
 
-## Evidence files
+## Evidence files produced
 
 No AWS workload is created by this contract-only PR.
 
