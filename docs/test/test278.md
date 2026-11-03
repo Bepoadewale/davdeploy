@@ -6,7 +6,7 @@ Execution type: local service and worker-contract validation. No AWS workload wa
 
 Customer repository: None.
 
-Commit: pending final implementation commit.
+Commit: `46f673b` (implementation and clean-room cycle).
 
 AWS account: Not used.
 
@@ -24,7 +24,12 @@ existing Starlette deprecation warning was emitted.
 
 ## Observed result
 
-Fresh local clean-room validation is pending.
+Fresh clean-room at `46f673b` passed in worktree
+`/tmp/davdeploy-cleanroom-pr278-20261103`, Compose project
+`davdeploy-pr278-20261103`: bootstrap, smoke, API contract, customer-plan E2E,
+simple/complex/degraded/Day-2/failure/readiness demos, trace check, `make verify`
+(383 tests), OPA, Terraform validation, Kubernetes render, and scoped cleanup.
+No AWS workload was created.
 
 ## Teardown
 

@@ -44,12 +44,12 @@ module work, and the Lambda renderer remains disabled.
 - [x] Cross-run or digest-mismatched module state is rejected.
 - [x] Tests prove submission/plan and apply-awaiting-health states remain distinct.
 - [ ] Focused tests, full verification, clean-room cycle and CI pass.
-- [ ] No additional customer renderer or mixed-module execution is enabled.
+- [x] No additional customer renderer or mixed-module execution is enabled.
 
 ## Acceptance status
 
-Implementation, focused tests and full repository verification passed. Fresh
-clean-room validation and PR CI remain pending.
+Implementation, focused tests, full repository verification and fresh
+clean-room validation passed. PR CI remains pending.
 
 ## Tests / validation performed
 
@@ -57,6 +57,12 @@ clean-room validation and PR CI remain pending.
 - `.venv/bin/python -m pytest tests/test_cloud_execution.py -q` — 33 passed; one Starlette deprecation warning.
 - `make verify` — passed: configuration check, Ruff, 383 tests, OpenAPI snapshot and Compose config; one Starlette deprecation warning.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- Fresh clean-room at commit `46f673b`, isolated worktree
+  `/tmp/davdeploy-cleanroom-pr278-20261103`, Compose project
+  `davdeploy-pr278-20261103`: bootstrap, smoke, API contract, customer-plan
+  E2E, all demos, trace check, full verification (383 tests), OPA, Terraform
+  validation, Kubernetes render and scoped cleanup — passed. Local-only; no
+  AWS workload was created.
 
 ## Evidence files produced
 
