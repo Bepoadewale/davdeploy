@@ -1,29 +1,27 @@
-# PR #261: Real SageMaker endpoint inference certification
+# test261 — Real SageMaker endpoint inference certification
 
-## Classification
+Date: 2026-11-03
 
-Real disposable AWS execution. This is not a customer workload and it did not
-use customer credentials or data.
+Execution type: Controlled disposable AWS execution, live inference probe, and verified teardown.
 
-## Scope
+Customer repository: None. This was an isolated platform certification, not a customer workload.
 
-- Repository/commit under test: `Bepoadewale/davdeploy`, PR #261 branch
-  `test/real-sagemaker-inference` at `b091f8d` plus this evidence commit.
-- Account/region: `654654474502`, `us-east-1`.
-- Test ID: `certsagemaker20261103a`.
-- Opt-in boundary: `DAVDEPLOY_DISPOSABLE_CERTIFICATION=certsagemaker20261103a`.
+Commit: `d76cd88` plus documentation-convention correction in progress.
 
-## Created resources
+AWS account: `654654474502`.
+
+AWS region: `us-east-1`.
+
+## Resources created
 
 - Private AES256-encrypted S3 artifact bucket
   `davdeploy-certsagemaker20261103a-artifacts`.
-- SageMaker execution role
-  `davdeploy-certsagemaker20261103a-endpoint`, scoped to that bucket's model
-  prefix and the AWS-managed XGBoost image pull.
+- SageMaker execution role `davdeploy-certsagemaker20261103a-endpoint`, scoped
+  to that bucket's model prefix and the managed XGBoost image pull.
 - SageMaker model, endpoint configuration and `ml.m5.large` real-time endpoint
   `davdeploy-certsagemaker20261103a`.
 
-## Commands and observed result
+## Commands executed
 
 The bootstrap and endpoint operations used the repository PID monitor:
 
@@ -55,6 +53,9 @@ uv run --extra certification python scripts/certify_sagemaker_endpoint.py \
 
 The local helper generated a small XGBoost 1.7 model artifact and uploaded it
 to `s3://davdeploy-certsagemaker20261103a-artifacts/model/certsagemaker20261103a/model.tar.gz`.
+
+## Observed result
+
 Terraform created the endpoint successfully in 3 minutes 22 seconds. The live
 `sagemaker-runtime InvokeEndpoint` CSV probe returned:
 
@@ -66,25 +67,16 @@ Terraform created the endpoint successfully in 3 minutes 22 seconds. The live
 }
 ```
 
-## Teardown and absence checks
+## Teardown
 
 The destroy operation used run ID `cert-sagemaker-destroy-20261103a` and
 completed with `8 destroyed`. It removed the endpoint, configuration, model,
 role policy, role, bucket encryption/public-access configuration, and bucket.
 
-After the destroy completed, both independent checks passed:
+## Final boundary
 
-```text
-aws sagemaker describe-endpoint --endpoint-name davdeploy-certsagemaker20261103a
-# ValidationException: endpoint absent
-
-aws s3api head-bucket --bucket davdeploy-certsagemaker20261103a-artifacts
-# Not Found: bucket absent
-```
-
-## Limitations
-
-This certifies the bounded SageMaker real-time XGBoost endpoint module: owned
-artifact, create, successful inference, and cleanup. It does not certify
-customer training pipelines, GPU inference, model registry, autoscaling,
-private VPC endpoints, or arbitrary model containers.
+After the destroy completed, `aws sagemaker describe-endpoint` returned a
+validation error for the endpoint name and `aws s3api head-bucket` returned
+Not Found for the artifact bucket. This certifies the bounded real-time
+XGBoost endpoint path only, not customer training pipelines, GPU inference,
+model registry, autoscaling, private VPC endpoints or arbitrary containers.
