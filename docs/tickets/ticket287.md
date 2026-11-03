@@ -38,11 +38,11 @@ Multi-module customer execution remains disabled.
 - [x] Each operation recognizes only its appropriate terminal evidence.
 - [x] A failed or incomplete module prevents graph completion.
 - [x] Unknown operation names remain rejected.
-- [ ] Required CI passes.
+- [x] Required CI passes (run [41740183717](https://github.com/Bepoadewale/davdeploy/actions/runs/41740183717)).
 
 ## Acceptance status
 
-The implementation and full local verification pass. GitHub CI is pending.
+The implementation, full local verification and all seven GitHub CI jobs pass.
 
 ## Tests / validation performed
 
