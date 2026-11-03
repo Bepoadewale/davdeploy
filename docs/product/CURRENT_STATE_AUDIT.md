@@ -2,6 +2,12 @@
 
 Audit date: 2026-10-28. Branch reviewed: `main` after hosted Lambda/Aurora/Cognito/Resend deployment and the customer-workflow hardening work.
 
+## Current deployment addendum — 2026-11-03
+
+Backend PR #270 is deployed through Terraform apply run [41671744510](https://github.com/Bepoadewale/davdeploy/actions/runs/41671744510). It applied 0 additions, 7 in-place changes, and 0 deletions. Database migrations completed. AWS reported the API Lambda active and successful, with the executor package pinned to commit `93c895e6e40e80f20b71a6f3a21e3186ca63d576`; the CodeBuild buildspec invokes the typed renderer dispatcher.
+
+This release deploys the dispatcher but does not broaden the hosted customer execution capability: App Runner remains the only enabled renderer, and CodeBuild rejects multi-module runs. Lambda + HTTP API has isolated AWS HTTP and teardown evidence (`docs/test/test268.md`) but remains disabled for hosted execution. The product cannot yet deploy arbitrary compositions from natural language. See `EXECUTION_READINESS_MATRIX.md` for the per-module state and next work.
+
 ## What works today
 
 - A local FastAPI, PostgreSQL, OPA, worker, Prometheus, Grafana and Tempo stack runs with Docker Compose for deterministic development evidence.
