@@ -19,7 +19,7 @@ from test_product import founder, make_service, operator
 def lifecycle_work(operation="apply"):
     return [
         {
-            "module_id": "runtime",
+            "module_id": "aws-managed-application",
             "operation": operation,
             "dependencies": [],
             "resource_tags": {"ManagedBy": "davdeploy"},

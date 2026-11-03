@@ -1,6 +1,6 @@
 # ticket266 — Universal module renderer registry
 
-PR: pending
+PR: [#266](https://github.com/Bepoadewale/davdeploy/pull/266)
 
 Branch: `feat/universal-module-dispatch`
 
@@ -27,9 +27,9 @@ application module. Unknown or unbound modules must remain non-executable.
 
 ## Acceptance criteria
 
-- [ ] Renderer selection is deterministic and module-id based.
-- [ ] Only checked-in renderer bindings are returned.
-- [ ] Unknown and unbound modules are rejected.
+- [x] Renderer selection is deterministic and module-id based.
+- [x] Only checked-in renderer bindings are returned.
+- [x] Unknown and unbound modules are rejected.
 - [ ] Focused tests and full CI pass.
 
 ## Acceptance status
@@ -38,7 +38,7 @@ In progress.
 
 ## Tests / validation performed
 
-Pending implementation.
+`make lint && uv run pytest tests/test_module_renderers.py tests/test_cloud_execution.py -q` — 16 passed.
 
 ## Evidence files produced
 
