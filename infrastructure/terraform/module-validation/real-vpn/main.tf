@@ -1,5 +1,14 @@
 data "aws_availability_zones" "available" { state = "available" }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"]
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+}
+
 data "aws_ami" "al2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -114,14 +123,67 @@ resource "aws_security_group" "workload" {
   tags = local.tags
 }
 
+resource "aws_iam_role" "peer_ssm" {
+  name = "${local.name}-peer-ssm"
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "peer_ssm" {
+  role       = aws_iam_role.peer_ssm.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy" "peer_vpn_sample" {
+  name = "read-own-vpn-sample"
+  role = aws_iam_role.peer_ssm.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["ec2:GetVpnConnectionDeviceSampleConfiguration"]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "peer_ssm" {
+  name = "${local.name}-peer-ssm"
+  role = aws_iam_role.peer_ssm.name
+}
+
 resource "aws_instance" "peer" {
-  ami                    = data.aws_ami.al2023.id
+  ami                    = data.aws_ami.ubuntu.id
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.peer.id
   vpc_security_group_ids = [aws_security_group.peer.id]
   source_dest_check      = false
-  user_data              = "#!/bin/bash\ndnf -y install strongswan\nsystemctl enable strongswan\n"
+  user_data              = <<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y strongswan awscli
+    systemctl enable --now strongswan-starter
+  EOT
   tags                   = merge(local.tags, { Name = "${local.name}-peer" })
+}
+
+// The pinned AWS provider does not expose an instance-profile association
+// resource. Keep this bounded, disposable association in Terraform so the
+// certification uses Session Manager rather than a public SSH key.
+resource "terraform_data" "peer_ssm_association" {
+  triggers_replace = [
+    aws_instance.peer.id,
+    aws_iam_instance_profile.peer_ssm.name,
+  ]
+
+  provisioner "local-exec" {
+    command = "aws ec2 associate-iam-instance-profile --region ${var.region} --instance-id ${aws_instance.peer.id} --iam-instance-profile Arn=${aws_iam_instance_profile.peer_ssm.arn}"
+  }
 }
 
 resource "aws_instance" "workload" {

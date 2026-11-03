@@ -25,20 +25,20 @@ temporary resources.
 
 ## Acceptance criteria
 
-- [ ] Both tunnel and routed probe evidence is recorded.
+- [x] Both tunnel and routed probe evidence is recorded.
 - [ ] All created resources are tagged and destroyed.
 
 ## Acceptance status
 
-In progress.
+Traffic evidence is complete; cleanup is in progress.
 
 ## Tests / validation performed
 
-Bootstrap only.
+Real IKEv2 establishment and a four-packet routed ICMP probe succeeded.
 
 ## Evidence files produced
 
-Pending `docs/test/test263.md`.
+`docs/test/test263.md`.
 
 ## Boundaries
 
