@@ -92,6 +92,43 @@ def test_codebuild_adapter_accepts_typed_plan_work_for_plan_review():
     assert '"operation":"plan"' in manifest
 
 
+def test_codebuild_adapter_requires_certification_gate_for_serverless_renderer(monkeypatch):
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "davdeploy:serverless-1", "arn": "arn:serverless-1"}}
+
+    monkeypatch.delenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", raising=False)
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "health"
+    work = [
+        {
+            "module_id": "aws-serverless-api",
+            "operation": "observe",
+            "dependencies": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        }
+    ]
+    adapter = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild())
+    blocked = adapter.execute({"environment": environment, "lifecycle_work": work})
+    assert blocked.state == "FAILED"
+    assert "not enabled" in (blocked.failure_reason or "")
+    assert calls == []
+
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
+    submitted = adapter.execute({"environment": environment, "lifecycle_work": work})
+    assert submitted.state == "SUBMITTED"
+    manifest = next(
+        item["value"]
+        for item in calls[0]["environmentVariablesOverride"]
+        if item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"
+    )
+    assert '"module_id":"aws-serverless-api"' in manifest
+    assert "customer-workload-serverless-api" in manifest
+
+
 def test_codebuild_adapter_constructs_only_the_fixed_app_runner_image_build_work():
     calls = []
 

@@ -7,6 +7,7 @@ implementation.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 
@@ -81,11 +82,21 @@ def renderer_command(renderer: ModuleRenderer, operation: str) -> str:
 
 
 def renderer_for(module_id: str, operation: str) -> ModuleRenderer:
-    """Resolve a checked-in renderer or reject an unbound lifecycle module."""
+    """Resolve a checked-in renderer or reject an unbound lifecycle module.
+
+    The serverless opt-in is only for controlled hosted certification. Customer
+    run creation has a separate profile gate and must not use this flag as a
+    rollout switch.
+    """
     renderer = _RENDERERS.get(module_id)
     if renderer is None:
         raise ValueError(f"module {module_id} has no executable renderer")
-    if not renderer.execution_enabled:
+    serverless_certification_enabled = (
+        module_id == "aws-serverless-api"
+        and os.getenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "false").lower()
+        == "true"
+    )
+    if not renderer.execution_enabled and not serverless_certification_enabled:
         raise ValueError(f"module {module_id} renderer is not enabled for customer execution")
     if operation not in renderer.supported_operations:
         raise ValueError(f"module {module_id} does not support {operation}")

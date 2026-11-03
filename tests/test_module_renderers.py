@@ -40,13 +40,20 @@ def test_unbound_or_unsupported_renderer_work_is_rejected():
             raise AssertionError("unbound renderer work was accepted")
 
 
-def test_serverless_profile_is_mapped_but_stays_disabled_for_hosted_execution():
+def test_serverless_profile_is_opt_in_for_certification_not_customer_execution(monkeypatch):
+    monkeypatch.delenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", raising=False)
     try:
         renderer_for_profile("aws-lambda-api", "apply")
     except ValueError as error:
         assert "not enabled for customer execution" in str(error)
     else:
         raise AssertionError("serverless renderer must stay disabled before hosted certification")
+
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
+    for operation in ("plan", "destroy_plan", "apply", "observe", "destroy", "verify_cleanup"):
+        serverless = renderer_for_profile("aws-lambda-api", operation)
+        assert serverless.module_id == "aws-serverless-api"
+        assert serverless.execution_enabled is False
 
     try:
         renderer_for_profile("aws-unknown", "apply")
