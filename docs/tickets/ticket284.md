@@ -45,13 +45,18 @@ serverless renderer remains disabled for ordinary customer execution.
   CodeBuild dispatch.
 - [x] General customer execution remains disabled by default and certification
   requires a workspace allowlist.
-- [ ] Focused tests and required CI pass.
+- [x] Focused local suite, full `make verify`, docs checks, and Terraform
+  validation pass.
+- [ ] Required PR CI passes.
 
 ## Acceptance status
 
 Typed lifecycle creation and fixture-backed phase chaining are implemented.
-Local verification passes; GitHub CI is pending. No AWS workload was deployed,
-so the renderer remains unavailable for customer execution.
+Local verification passes; GitHub CI is pending. The repository's local
+`make clean-local` cycle was not run because that target removes `.venv`, `.local`
+and Docker volumes; the CI clean-runner proof remains the clean integration
+check. No AWS workload was deployed, so the renderer remains unavailable for
+customer execution.
 
 ## Tests / validation performed
 

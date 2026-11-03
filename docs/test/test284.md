@@ -6,7 +6,7 @@ Execution type: Local unit/contract verification and Terraform validation; no AW
 
 Customer repository: None.
 
-Commit: PR #284 working tree; implementation has not yet been pushed.
+Commit: `569cb3c` (controlled serverless certification lifecycle implementation).
 
 AWS account: None.
 
@@ -25,6 +25,7 @@ allowlist defaults to empty.
 - `terraform -chdir=infrastructure/terraform/serverless-control-plane validate` —
   passed.
 - Focused cloud execution tests — 43 passed.
+- `python3 scripts/check_doc_conventions.py` — passed.
 
 ## Observed result
 
@@ -37,6 +38,9 @@ fields to the governed API. No CodeBuild job or AWS workload was started.
 ## Teardown
 
 No AWS resources were created. Local tests use disposable in-memory fixtures.
+The repository's `make clean-local` procedure was not run because it deletes
+the existing `.venv`, `.local`, and Docker volumes. Required CI uses a fresh
+runner for integration verification.
 
 ## Final boundary
 
