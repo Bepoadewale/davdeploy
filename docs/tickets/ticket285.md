@@ -25,8 +25,9 @@ control plane has not yet been updated with these inputs.
 
 ## Work planned for the PR
 
-- Pass the explicit certification boolean and workspace-ID list through both
-  protected Terraform workflows.
+- Pass the explicit certification boolean and workspace-ID list into the
+  protected Terraform plan workflow; apply consumes only the immutable saved
+  plan produced from those inputs.
 - Default the workflow inputs to false and an empty list.
 - Document the expected GitHub Environment variable format and keep secrets out
   of the configuration.
@@ -34,15 +35,19 @@ control plane has not yet been updated with these inputs.
 
 ## Acceptance criteria
 
-- [ ] Plan and apply receive the same typed certification settings.
-- [ ] Missing settings keep the route disabled and deny every workspace.
-- [ ] A workspace ID can only be enabled through explicit GitHub Environment
+- [x] The protected plan workflow receives typed settings and apply applies only
+  the saved plan containing those exact settings.
+- [x] Missing settings keep the route disabled and deny every workspace.
+- [x] A workspace ID can only be enabled through explicit GitHub Environment
   configuration.
-- [ ] Tests, documentation checks, and required CI pass.
+- [x] Local tests and documentation checks pass.
+- [ ] Required CI passes.
 
 ## Acceptance status
 
-Implementation not started.
+Workflow input wiring and classification are implemented and locally verified.
+GitHub CI is pending. No GitHub Environment values have been changed and no AWS
+deployment has been performed.
 
 ## Tests / validation performed
 
