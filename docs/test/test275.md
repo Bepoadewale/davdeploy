@@ -17,5 +17,37 @@ enable Lambda customer execution.
 - `make verify` — passed: configuration check, Ruff, 380 tests, OpenAPI snapshot, and Compose config; one Starlette deprecation warning.
 - `git diff --check`, Bash syntax check, Python bytecode compilation, and Terraform format check — passed.
 
-Fresh clean-room validation and GitHub Actions checks are pending and will be
-recorded here before merge.
+## Fresh clean-room cycle
+
+At commit `fdd9e6c`, an isolated worktree at
+`/tmp/davdeploy-cleanroom-pr275-20261103` used Compose project
+`davdeploy-pr275-20261103`. This fail-fast sequence passed:
+
+```text
+make clean-local
+make bootstrap-local
+make smoke
+make api-contract
+make customer-plan-e2e
+make demo-simple
+make demo-complex
+make demo-degraded
+make demo-day2
+make demo
+make demo-failure
+make demo-readiness-failure
+make trace-check
+make verify
+make opa-test
+make terraform-validate
+make kubernetes-render
+make clean-local
+```
+
+All targets passed, including 380 tests, OPA 3/3, offline Terraform validation,
+and Kubernetes rendering. Final cleanup removed only the uniquely named
+clean-room Compose resources and that worktree's generated `.venv` and `.local`
+data. No AWS customer resources were created. This is local workflow evidence,
+not AWS certification of the Lambda renderer.
+
+GitHub Actions PR checks remain pending.

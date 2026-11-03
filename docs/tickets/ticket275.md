@@ -44,7 +44,7 @@ PR #267 added the isolated Lambda/API Terraform root and runner. PR #273 added a
 ## Acceptance status
 
 Implementation is complete locally. Focused validation and full repository
-verification passed. Fresh clean-room validation and PR CI remain pending.
+verification and a fresh isolated clean-room cycle passed. PR CI remains pending.
 
 ## Tests / validation performed
 
@@ -55,7 +55,14 @@ verification passed. Fresh clean-room validation and PR CI remain pending.
 - `terraform -chdir=infrastructure/terraform/customer-workload-serverless-api init -backend=false -input=false` and `terraform ... validate` — passed; no cloud backend or account used.
 - `make verify` — passed: configuration boundary, Ruff, 380 tests, OpenAPI snapshot, and Compose configuration; one Starlette deprecation warning.
 - `git diff --check` and Terraform formatting check — passed.
-- Fresh clean-room cycle and CI — pending.
+- Fresh clean-room cycle at commit `fdd9e6c`, using isolated worktree
+  `/tmp/davdeploy-cleanroom-pr275-20261103` and Compose project
+  `davdeploy-pr275-20261103` — passed: bootstrap, smoke, API contract,
+  customer-plan E2E, simple/complex/degraded/Day-2/failure/readiness demos,
+  trace check, full verification (380 tests), OPA (3/3), Terraform offline
+  validation, Kubernetes render, and scoped cleanup. This is local fixture
+  evidence, not AWS renderer certification.
+- GitHub PR checks — pending.
 
 ## Evidence files produced
 
