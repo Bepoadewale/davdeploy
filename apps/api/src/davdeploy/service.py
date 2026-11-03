@@ -4580,6 +4580,7 @@ class ProductService:
                     }.get(str(environment.get("DAVDEPLOY_EXECUTION_OPERATION") or ""))
                     if (
                         artifact.get("schema_version") != "davdeploy.customer_execution_result.v1"
+                        or not re.fullmatch(r"[a-f0-9]{64}", run.content_digest)
                         or artifact.get("plan_digest") != run.content_digest
                         or not expected_connection
                         or artifact.get("connection_id") != expected_connection
@@ -4597,11 +4598,15 @@ class ProductService:
                     expected_artifact_uri = str(
                         environment.get("DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI") or ""
                     )
+                    expected_source_commit = str(
+                        environment.get("DAVDEPLOY_CUSTOMER_SOURCE_COMMIT") or ""
+                    )
                     if expected_phase == "artifact-build" and (
                         detail.get("artifact_s3_uri") != expected_artifact_uri
                         or not re.fullmatch(r"[a-f0-9]{64}", artifact_digest)
+                        or not re.fullmatch(r"[a-f0-9]{40}", expected_source_commit)
                         or detail.get("source_commit")
-                        != environment.get("DAVDEPLOY_CUSTOMER_SOURCE_COMMIT")
+                        != expected_source_commit
                     ):
                         raise ValueError("serverless artifact result is incomplete or mismatched")
                     if expected_phase in {"plan", "destroy-plan"} and (
