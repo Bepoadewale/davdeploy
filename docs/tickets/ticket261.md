@@ -29,11 +29,11 @@ so an endpoint could not be honestly certified by resource creation alone.
 | Module requires a model artifact | Met locally |
 | Artifact bucket is private and encrypted | Met locally |
 | Endpoint role is scoped to its model artifact and managed image pull | Met locally |
-| Real endpoint invocation and teardown are recorded | Pending live run |
+| Real endpoint invocation and teardown are recorded | Met in `docs/test/test261.md` |
 
 ## Evidence and boundaries
 
-The live run will be recorded in `docs/test/test261.md`. It uses only a
+The live run is recorded in `docs/test/test261.md`. It used only a
 temporary, tagged artifact bucket, IAM role, SageMaker model/configuration and
 endpoint in account `654654474502`, `us-east-1`. SageMaker retains immutable
 training/job history by service design if a training job is used; this
