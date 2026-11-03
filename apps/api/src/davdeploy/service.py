@@ -62,6 +62,7 @@ from davdeploy.models import (
     BlogPost,
     CloudConnection,
     CloudDiscoveryJob,
+    CloudExecutionModuleInstance,
     CloudExecutionRun,
     CloudReadinessPreflight,
     DataLifecycleRequest,
@@ -4211,6 +4212,29 @@ class ProductService:
                 # worker environment reconstruction.
                 "result_s3_uri": execution_environment["DAVDEPLOY_EXECUTION_RESULT_S3_URI"],
             }
+        # Persist the approved typed graph as owner-scoped module-instance rows
+        # at run creation. A queued or blocked run is not evidence that any node
+        # was dispatched or applied.
+        lifecycle_operation = "destroy" if destroy_mode else "apply"
+        for module in universal_plan.modules:
+            self.db.add(
+                CloudExecutionModuleInstance(
+                    organization_id=principal.organization_id,
+                    project_id=infrastructure_plan.project_id,
+                    execution_run_id=run.id,
+                    instance_id=module.module_id,
+                    module_id=module.module_id,
+                    state="NOT_DISPATCHED",
+                    operation=lifecycle_operation,
+                    attempt=0,
+                    input_digest=universal_plan.plan_digest,
+                    idempotency_key=f"{run.id}:{module.module_id}",
+                    dependencies=list(module.dependencies),
+                    outputs={},
+                    evidence={"reason": "run graph persisted; module dispatch is not enabled"},
+                    version=1,
+                )
+            )
         self.audit(
             principal,
             "cloud_execution.run_requested",
@@ -4829,6 +4853,7 @@ class ProductService:
         return {
             "id": run.id,
             "revision_id": run.revision_id,
+            "project_id": run.project_id,
             "profile": run.profile,
             "state": run.state,
             "mode": run.mode,
@@ -4839,6 +4864,22 @@ class ProductService:
             "command": run.command,
             "evidence": run.evidence,
             "outputs": run.outputs,
+            "module_instances": [
+                {
+                    "project_id": item.project_id,
+                    "instance_id": item.instance_id,
+                    "module_id": item.module_id,
+                    "state": item.state,
+                    "operation": item.operation,
+                    "attempt": item.attempt,
+                    "input_digest": item.input_digest,
+                    "dependencies": item.dependencies,
+                    "outputs": item.outputs,
+                    "evidence": item.evidence,
+                    "version": item.version,
+                }
+                for item in run.module_instances
+            ],
             "content_digest": run.content_digest,
             "requested_by_subject": run.requested_by_subject,
             "created_at": run.created_at.isoformat() if run.created_at else None,
