@@ -16,6 +16,17 @@ from test_customer_plan_review import approved_app_runner_customer_review
 from test_product import founder, make_service, operator
 
 
+def lifecycle_work(operation="apply"):
+    return [
+        {
+            "module_id": "runtime",
+            "operation": operation,
+            "dependencies": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        }
+    ]
+
+
 class FakeCloudExecutionAdapter:
     def __init__(self, state="READY"):
         self.state = state
@@ -51,12 +62,30 @@ def test_codebuild_adapter_submits_only_the_fixed_execution_environment():
     environment["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-foundation"
     adapter = CodeBuildCloudExecutionAdapter("davdeploy-customer-executor", client=CodeBuild())
 
-    result = adapter.execute({"environment": environment})
+    result = adapter.execute({"environment": environment, "lifecycle_work": lifecycle_work()})
 
     assert result.state == "SUBMITTED"
     assert result.outputs["codebuild_build_id"] == "davdeploy:build-1"
     assert calls[0]["projectName"] == "davdeploy-customer-executor"
     assert all(item["name"] != "COMMAND" for item in calls[0]["environmentVariablesOverride"])
+    assert any(item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON" for item in calls[0]["environmentVariablesOverride"])
+
+
+def test_codebuild_adapter_rejects_untyped_lifecycle_work_without_a_cloud_call():
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "unexpected"}}
+
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {"environment": environment, "lifecycle_work": [{"command": "terraform apply"}]}
+    )
+    assert result.state == "FAILED"
+    assert "module identifier" in (result.failure_reason or "")
+    assert calls == []
 
 
 def test_codebuild_completion_accepts_the_eventbridge_build_arn(monkeypatch):

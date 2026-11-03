@@ -4459,6 +4459,7 @@ class ProductService:
             "profile": run.profile,
             "digest": run.content_digest,
             "environment": (run.evidence or {}).get("execution_environment", {}),
+            "lifecycle_work": (run.command or {}).get("universal_lifecycle_work"),
         }
         result = self.cloud_execution.execute(context)
         run.state = result.state

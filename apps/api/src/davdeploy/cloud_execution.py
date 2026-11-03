@@ -6,6 +6,7 @@ checked-in script with a fixed operation allowlist and bounded timeouts.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -25,6 +26,39 @@ class CloudExecutionResult:
 
 class CloudExecutionAdapter(Protocol):
     def execute(self, context: dict[str, object]) -> CloudExecutionResult: ...
+
+
+def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
+    """Accept only durable, typed module work, never a command payload."""
+    if not isinstance(value, list) or not value:
+        raise ValueError("universal lifecycle work is required")
+    accepted: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise TypeError("universal lifecycle work item must be an object")
+        module_id = item.get("module_id")
+        operation = item.get("operation")
+        dependencies = item.get("dependencies")
+        resource_tags = item.get("resource_tags")
+        if not isinstance(module_id, str) or not module_id:
+            raise ValueError("universal lifecycle work item has no module identifier")
+        if operation not in {"apply", "destroy"}:
+            raise ValueError("universal lifecycle work has an unsupported operation")
+        if not isinstance(dependencies, list) or not all(isinstance(value, str) for value in dependencies):
+            raise ValueError("universal lifecycle work has invalid dependencies")
+        if not isinstance(resource_tags, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in resource_tags.items()
+        ):
+            raise ValueError("universal lifecycle work has invalid resource tags")
+        accepted.append(
+            {
+                "module_id": module_id,
+                "operation": operation,
+                "dependencies": dependencies,
+                "resource_tags": resource_tags,
+            }
+        )
+    return tuple(accepted)
 
 
 class DisabledCloudExecutionAdapter:
@@ -48,6 +82,10 @@ class AppRunnerCloudExecutionAdapter:
         self.timeout_seconds = timeout_seconds
 
     def execute(self, context: dict[str, object]) -> CloudExecutionResult:
+        try:
+            validate_lifecycle_work(context.get("lifecycle_work"))
+        except (TypeError, ValueError) as error:
+            return CloudExecutionResult("FAILED", (), {}, str(error))
         if os.getenv("DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED", "false").lower() != "true":
             return DisabledCloudExecutionAdapter().execute(context)
         script = self.root / "scripts" / "customer-workload-app-runner-pilot.sh"
@@ -131,6 +169,10 @@ class CodeBuildCloudExecutionAdapter:
 
     def execute(self, context: dict[str, object]) -> CloudExecutionResult:
         environment = context.get("environment") or {}
+        try:
+            lifecycle_work = validate_lifecycle_work(context.get("lifecycle_work"))
+        except (TypeError, ValueError) as error:
+            return CloudExecutionResult("FAILED", (), {}, str(error))
         if not self.project_name:
             return DisabledCloudExecutionAdapter().execute(context)
         if not isinstance(environment, dict) or not self.required_environment.issubset(environment):
@@ -145,6 +187,13 @@ class CodeBuildCloudExecutionAdapter:
             for key, value in sorted(environment.items())
             if isinstance(key, str) and isinstance(value, str)
         ]
+        overrides.append(
+            {
+                "name": "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON",
+                "value": json.dumps(lifecycle_work, sort_keys=True, separators=(",", ":")),
+                "type": "PLAINTEXT",
+            }
+        )
         response = self.client.start_build(
             projectName=self.project_name,
             environmentVariablesOverride=overrides,
