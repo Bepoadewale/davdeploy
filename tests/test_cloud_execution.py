@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from davdeploy.cloud_execution import (
@@ -776,6 +777,36 @@ def test_module_instance_outcomes_are_idempotent_scoped_and_terminal():
         service._advance_cloud_execution_module_instances(run, "FAILED")
 
 
+def test_module_instance_records_reconciliation_required_after_worker_loss():
+    service, _ = make_service()
+    approved = approved_app_runner_customer_review(service)
+    created = service.create_cloud_execution_run_for_revision(
+        operator(),
+        approved.id,
+        content_digest=approved.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=None,
+        expected_region=None,
+        mode="GUARDED_CLOUD_EXECUTION",
+        confirmation=None,
+    )
+    run = service.db.get(CloudExecutionRun, created["id"])
+    assert run is not None and run.module_instances
+    node = run.module_instances[0]
+
+    for state in ("QUEUED", "RUNNING", "RECONCILIATION_REQUIRED"):
+        service._advance_cloud_execution_module_instances(run, state)
+
+    assert node.state == "RECONCILIATION_REQUIRED"
+    assert [event["to"] for event in node.evidence["transitions"]] == [
+        "QUEUED",
+        "RUNNING",
+        "RECONCILIATION_REQUIRED",
+    ]
+
+
 def test_submitted_codebuild_outcome_advances_module_without_claiming_health():
     service, _ = make_service()
     approved = approved_app_runner_customer_review(service)
@@ -836,6 +867,135 @@ def test_queueing_a_ready_cloud_run_wakes_the_worker(monkeypatch):
 
     assert queued["state"] == "QUEUED"
     assert wakeups == [("cloud_execution", run.id)]
+
+
+def _queued_cloud_execution_run(service):
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-lease-test",
+        project_id="project-lease-test",
+        profile="aws-app-runner",
+        state="QUEUED",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        attempt=1,
+        command={},
+        evidence={},
+        outputs={},
+        content_digest="d" * 64,
+        requested_by_subject=founder().subject,
+    )
+    service.db.add(run)
+    service.db.commit()
+    return run
+
+
+def test_cloud_execution_worker_claim_is_exclusive_and_keeps_token_private():
+    service, _ = make_service()
+    run = _queued_cloud_execution_run(service)
+
+    first_claim = service._claim_next_cloud_execution_run()
+    second_claim = service._claim_next_cloud_execution_run()
+
+    assert first_claim is not None
+    claimed_run, lease_token = first_claim
+    assert second_claim is None
+    assert claimed_run.state == "RUNNING"
+    assert claimed_run.worker_lease_token == lease_token
+    assert claimed_run.attempt == 1
+    assert claimed_run.worker_claim_version == 1
+    assert claimed_run.worker_lease_expires_at is not None
+    public_payload = service._cloud_execution_run_payload(claimed_run)
+    assert lease_token not in json.dumps(public_payload)
+    assert run.id == claimed_run.id
+
+
+def test_expired_cloud_execution_lease_requires_reconciliation_without_replay(
+    monkeypatch,
+):
+    service, _ = make_service()
+    run = _queued_cloud_execution_run(service)
+    claim = service._claim_next_cloud_execution_run()
+    assert claim is not None
+    claimed_run, lease_token = claim
+    claimed_run.worker_lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    service.db.commit()
+    monkeypatch.setattr("davdeploy.service._last_cloud_execution_lease_scan", 0.0)
+    monkeypatch.setattr("davdeploy.service.CLOUD_EXECUTION_LEASE_SCAN_SECONDS", 0)
+
+    service._scan_expired_cloud_execution_leases()
+
+    refreshed = service.db.get(CloudExecutionRun, run.id)
+    assert refreshed is not None
+    assert refreshed.state == "RECONCILIATION_REQUIRED"
+    assert refreshed.worker_lease_token is None
+    assert refreshed.worker_lease_expires_at is None
+    assert refreshed.evidence["worker_reconciliation"]["automatic_replay"] is False
+    stale_result = CloudExecutionResult("READY", (), {"unexpected": True})
+    assert service._complete_cloud_execution_claim(run.id, lease_token, stale_result) is False
+    assert service.db.get(CloudExecutionRun, run.id).outputs == {}
+
+
+def test_prelease_running_record_is_not_assumed_abandoned():
+    service, _ = make_service()
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-legacy-running",
+        project_id="project-legacy-running",
+        profile="aws-app-runner",
+        state="RUNNING",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        attempt=1,
+        command={},
+        evidence={},
+        outputs={},
+        content_digest="e" * 64,
+        requested_by_subject=founder().subject,
+    )
+    service.db.add(run)
+    service.db.commit()
+    service._scan_expired_cloud_execution_leases()
+
+    persisted = service.db.get(CloudExecutionRun, run.id)
+    assert persisted is not None
+    assert persisted.state == "RUNNING"
+    assert persisted.worker_lease_token is None
+
+
+def test_adapter_exception_marks_run_uncertain_without_requeueing():
+    service, _ = make_service()
+    run = _queued_cloud_execution_run(service)
+
+    class UncertainAdapter:
+        def execute(self, context):
+            del context
+            raise TimeoutError("result not known")
+
+    service.cloud_execution = UncertainAdapter()
+
+    assert service.run_next_cloud_execution() is True
+    persisted = service.db.get(CloudExecutionRun, run.id)
+    assert persisted is not None
+    assert persisted.state == "RECONCILIATION_REQUIRED"
+    assert persisted.worker_lease_token is None
+    assert persisted.evidence["worker_reconciliation"]["automatic_replay"] is False
+    assert service.run_next_cloud_execution() is False
+
+
+def test_worker_records_configured_adapter_result_and_releases_lease():
+    service, _ = make_service()
+    run = _queued_cloud_execution_run(service)
+    service.cloud_execution = DisabledCloudExecutionAdapter()
+
+    assert service.run_next_cloud_execution() is True
+
+    persisted = service.db.get(CloudExecutionRun, run.id)
+    assert persisted is not None
+    assert persisted.state == "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED"
+    assert persisted.worker_lease_token is None
+    assert persisted.worker_lease_expires_at is None
+    assert persisted.worker_claim_version == 1
+    assert persisted.attempt == 1
+    assert persisted.outputs["failure_reason"]
 
 
 def test_reassigned_execution_context_is_durably_persisted():

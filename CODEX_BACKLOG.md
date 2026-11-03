@@ -74,7 +74,8 @@
 - [x] Add an isolated Lambda + HTTP API renderer and certify HTTP 200 plus teardown (PRs #267–#269). This is isolated AWS evidence, not hosted customer-runner certification; the renderer remains disabled in hosted execution.
 - [x] Persist typed module-instance rows and single-renderer queue/worker/CodeBuild outcome transitions (PRs #277/#278). Tests, clean-room proof and CI pass. PR #278 is merged but not deployed; multi-module scheduling, durable leases, restart/resume and recovery remain unfinished.
 - [ ] Deploy the merged #277/#278 worker changes through the reviewed saved-plan workflow without enabling customer execution.
-- [ ] Implement durable worker claim/lease, concurrency, restart/resume, retry and partial-failure recovery.
+- [ ] PR #280 is building durable worker claims, lease heartbeat and stale-run reconciliation. Retry/resume remains intentionally disabled when an external operation's outcome is uncertain.
+- [ ] Add authenticated stale CodeBuild/SQS reconciliation, dependency scheduling, bounded safe retries, partial-failure recovery and graph cleanup verification.
 - [ ] Dispatch compatible approved module graphs through checked-in renderers with typed outputs, dependency ordering and reverse cleanup.
 - [ ] Certify each hosted renderer and composed workload through the customer execution runner, including health, update/recovery, destroy and independent absence verification.
 - [ ] Ingest real App Runner Terraform outputs and AWS resource observations through the product UI/API execution path.

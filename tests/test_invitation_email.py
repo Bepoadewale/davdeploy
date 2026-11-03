@@ -140,7 +140,7 @@ def test_hosted_resend_sender_reads_the_key_from_ssm(monkeypatch):
     invitation_email._resend_api_key_from_environment.cache_clear()
 
 
-def test_fresh_schema_records_current_invitation_migration():
+def test_fresh_schema_records_current_migration_version():
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
 
     run_migrations(engine)
@@ -149,9 +149,17 @@ def test_fresh_schema_records_current_invitation_migration():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 20
+    assert version == 24
     columns = {column["name"] for column in inspect(engine).get_columns("workspace_invitations")}
     assert {"delivery_state", "send_count", "last_sent_at", "cancelled_at"} <= columns
+    execution_columns = {
+        column["name"] for column in inspect(engine).get_columns("cloud_execution_runs")
+    }
+    assert {
+        "worker_claim_version",
+        "worker_lease_token",
+        "worker_lease_expires_at",
+    } <= execution_columns
 
 
 def test_invitation_migration_upgrades_existing_version_19_schema():
@@ -185,4 +193,4 @@ def test_invitation_migration_upgrades_existing_version_19_schema():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 23
+    assert version == 24

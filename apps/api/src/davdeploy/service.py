@@ -5,6 +5,8 @@ import json
 import os
 import re
 import secrets
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
@@ -103,6 +105,11 @@ from davdeploy.terraform_generation import NovaTerraformGenerator
 from davdeploy.universal_execution import compile_universal_execution_plan, lifecycle_work
 
 BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
+CLOUD_EXECUTION_WORKER_LEASE_SECONDS = 900
+CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS = 60
+CLOUD_EXECUTION_LEASE_SCAN_SECONDS = 30
+_last_cloud_execution_lease_scan = 0.0
+_cloud_execution_lease_scan_lock = threading.Lock()
 
 
 def plan_hash(payload: dict[str, Any]) -> str:
@@ -4487,16 +4494,12 @@ class ProductService:
         return self._cloud_execution_run_payload(run)
 
     def run_next_cloud_execution(self) -> bool:
-        """Run one durable cloud execution job through the configured adapter."""
-        run = self.db.scalar(
-            select(CloudExecutionRun)
-            .where(CloudExecutionRun.state == "QUEUED")
-            .order_by(CloudExecutionRun.created_at)
-            .limit(1)
-        )
-        if not run:
+        """Claim and process one queued run without permitting duplicate owners."""
+        self._scan_expired_cloud_execution_leases()
+        claim = self._claim_next_cloud_execution_run()
+        if claim is None:
             return False
-        run.state = "RUNNING"
+        run, lease_token = claim
         self._advance_cloud_execution_module_instances(run, "RUNNING")
         self.db.commit()
         context = {
@@ -4506,8 +4509,240 @@ class ProductService:
             "environment": (run.evidence or {}).get("execution_environment", {}),
             "lifecycle_work": (run.command or {}).get("universal_lifecycle_work"),
         }
-        result = self.cloud_execution.execute(context)
+        heartbeat_stop = threading.Event()
+        heartbeat = threading.Thread(
+            target=self._renew_cloud_execution_lease,
+            args=(run.id, lease_token, heartbeat_stop),
+            daemon=True,
+            name=f"davdeploy-cloud-run-lease-{run.id[:8]}",
+        )
+        heartbeat.start()
+        try:
+            result = self.cloud_execution.execute(context)
+        except Exception as error:  # noqa: BLE001 - adapter may already have side effects
+            self._mark_cloud_execution_reconciliation_required(
+                run.id, lease_token, f"adapter raised {type(error).__name__}"
+            )
+            return True
+        finally:
+            heartbeat_stop.set()
+            heartbeat.join(timeout=CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS + 1)
+        self._complete_cloud_execution_claim(run.id, lease_token, result)
+        return True
+
+    def _claim_next_cloud_execution_run(
+        self,
+    ) -> tuple[CloudExecutionRun, str] | None:
+        """Atomically move one queued run to RUNNING and assign an unguessable lease."""
+        candidate = self.db.scalar(
+            select(CloudExecutionRun)
+            .where(CloudExecutionRun.state == "QUEUED")
+            .order_by(CloudExecutionRun.created_at, CloudExecutionRun.id)
+            .limit(1)
+        )
+        if candidate is None:
+            return None
+        now = datetime.now(UTC)
+        lease_token = secrets.token_hex(32)
+        claimed = self.db.execute(
+            update(CloudExecutionRun)
+            .where(
+                CloudExecutionRun.id == candidate.id,
+                CloudExecutionRun.organization_id == candidate.organization_id,
+                CloudExecutionRun.project_id == candidate.project_id,
+                CloudExecutionRun.content_digest == candidate.content_digest,
+                CloudExecutionRun.state == "QUEUED",
+                CloudExecutionRun.worker_claim_version == candidate.worker_claim_version,
+            )
+            .values(
+                state="RUNNING",
+                worker_claim_version=CloudExecutionRun.worker_claim_version + 1,
+                worker_lease_token=lease_token,
+                worker_lease_expires_at=now
+                + timedelta(seconds=CLOUD_EXECUTION_WORKER_LEASE_SECONDS),
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        run = self.db.scalar(
+            select(CloudExecutionRun)
+            .where(CloudExecutionRun.id == candidate.id)
+            .execution_options(populate_existing=True)
+        )
+        return (run, lease_token) if run is not None else None
+
+    def _renew_cloud_execution_lease(
+        self, run_id: str, lease_token: str, stop: threading.Event
+    ) -> None:
+        """Extend a live claim using an independent database session."""
+        interval = CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS
+        bind = self.db.get_bind()
+        while not stop.wait(interval):
+            now = datetime.now(UTC)
+            with Session(bind=bind) as heartbeat_db:
+                renewed = heartbeat_db.execute(
+                    update(CloudExecutionRun)
+                    .where(
+                        CloudExecutionRun.id == run_id,
+                        CloudExecutionRun.state == "RUNNING",
+                        CloudExecutionRun.worker_lease_token == lease_token,
+                        CloudExecutionRun.worker_lease_expires_at > now,
+                    )
+                    .values(
+                        worker_lease_expires_at=now
+                        + timedelta(seconds=CLOUD_EXECUTION_WORKER_LEASE_SECONDS),
+                        updated_at=now,
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                heartbeat_db.commit()
+            if renewed.rowcount != 1:
+                return
+
+    def _scan_expired_cloud_execution_leases(self) -> None:
+        """Flag expired claims for reconciliation without replaying external work."""
+        global _last_cloud_execution_lease_scan
+        scan_now = time.monotonic()
+        with _cloud_execution_lease_scan_lock:
+            if scan_now - _last_cloud_execution_lease_scan < CLOUD_EXECUTION_LEASE_SCAN_SECONDS:
+                return
+            _last_cloud_execution_lease_scan = scan_now
+
+        now = datetime.now(UTC)
+        # Do not infer abandonment for pre-lease RUNNING records. They may still
+        # be owned by an older worker during a rolling deploy.
+        expired = list(
+            self.db.scalars(
+                select(CloudExecutionRun).where(
+                    CloudExecutionRun.state == "RUNNING",
+                    CloudExecutionRun.worker_lease_token.is_not(None),
+                    CloudExecutionRun.worker_lease_expires_at <= now,
+                )
+            )
+        )
+        for run in expired:
+            old_token = run.worker_lease_token
+            changed = self.db.execute(
+                update(CloudExecutionRun)
+                .where(
+                    CloudExecutionRun.id == run.id,
+                    CloudExecutionRun.state == "RUNNING",
+                    CloudExecutionRun.worker_lease_token == old_token,
+                    CloudExecutionRun.worker_lease_expires_at <= now,
+                )
+                .values(
+                    state="RECONCILIATION_REQUIRED",
+                    worker_lease_token=None,
+                    worker_lease_expires_at=None,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if changed.rowcount != 1:
+                continue
+            run.state = "RECONCILIATION_REQUIRED"
+            run.worker_lease_token = None
+            run.worker_lease_expires_at = None
+            run.evidence = {
+                **(run.evidence or {}),
+                "worker_reconciliation": {
+                    "reason": "worker lease expired before a durable outcome was recorded",
+                    "detected_at": now.isoformat(),
+                    "previous_lease_token_sha256": hashlib.sha256(
+                        str(old_token).encode()
+                    ).hexdigest(),
+                    "automatic_replay": False,
+                },
+            }
+            self._advance_cloud_execution_module_instances(
+                run, "RECONCILIATION_REQUIRED"
+            )
+            self.audit(
+                Principal("system-cloud-worker", run.organization_id, "operator"),
+                "cloud_execution.lease_expired_reconciliation_required",
+                "cloud_execution_run",
+                run.id,
+                {"automatic_replay": False, "digest": run.content_digest},
+            )
+        if expired:
+            self.db.commit()
+
+    def _mark_cloud_execution_reconciliation_required(
+        self, run_id: str, lease_token: str, reason: str
+    ) -> None:
+        run = self.db.scalar(
+            select(CloudExecutionRun)
+            .where(
+                CloudExecutionRun.id == run_id,
+                CloudExecutionRun.state == "RUNNING",
+                CloudExecutionRun.worker_lease_token == lease_token,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if run is None:
+            self.db.rollback()
+            return
+        run.state = "RECONCILIATION_REQUIRED"
+        run.worker_lease_token = None
+        run.worker_lease_expires_at = None
+        run.evidence = {
+            **(run.evidence or {}),
+            "worker_reconciliation": {
+                "reason": reason,
+                "detected_at": datetime.now(UTC).isoformat(),
+                "automatic_replay": False,
+            },
+        }
+        self._advance_cloud_execution_module_instances(
+            run, "RECONCILIATION_REQUIRED"
+        )
+        self.audit(
+            Principal("system-cloud-worker", run.organization_id, "operator"),
+            "cloud_execution.adapter_outcome_uncertain",
+            "cloud_execution_run",
+            run.id,
+            {"automatic_replay": False},
+        )
+        self.db.commit()
+
+    def _complete_cloud_execution_claim(
+        self, run_id: str, lease_token: str, result
+    ) -> bool:
+        now = datetime.now(UTC)
+        updated = self.db.execute(
+            update(CloudExecutionRun)
+            .where(
+                CloudExecutionRun.id == run_id,
+                CloudExecutionRun.state == "RUNNING",
+                CloudExecutionRun.worker_lease_token == lease_token,
+                CloudExecutionRun.worker_lease_expires_at > now,
+            )
+            .values(
+                state=result.state,
+                worker_lease_token=None,
+                worker_lease_expires_at=None,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if updated.rowcount != 1:
+            self.db.rollback()
+            return False
+        run = self.db.scalar(
+            select(CloudExecutionRun)
+            .where(CloudExecutionRun.id == run_id)
+            .execution_options(populate_existing=True)
+        )
+        if run is None:
+            self.db.rollback()
+            return False
         run.state = result.state
+        run.worker_lease_token = None
+        run.worker_lease_expires_at = None
         self._advance_cloud_execution_module_instances(run, result.state)
         run.outputs = {
             **(run.outputs or {}),
@@ -4548,12 +4783,26 @@ class ProductService:
             "CLEANUP_VERIFIED",
             "ARTIFACT_READY",
             "IMAGE_BUILT_AWAITING_SERVICE_PLAN",
+            "RECONCILIATION_REQUIRED",
         }
         if state not in allowed_targets:
             raise ValueError("cloud worker returned an unsupported module-instance state")
         allowed_sources = {
-            "NOT_DISPATCHED": {"QUEUED", "SUBMITTED", "RUNNING", "FAILED", "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED"},
-            "QUEUED": {"SUBMITTED", "RUNNING", "FAILED", "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED"},
+            "NOT_DISPATCHED": {
+                "QUEUED",
+                "SUBMITTED",
+                "RUNNING",
+                "FAILED",
+                "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED",
+                "RECONCILIATION_REQUIRED",
+            },
+            "QUEUED": {
+                "SUBMITTED",
+                "RUNNING",
+                "FAILED",
+                "BLOCKED_CLOUD_EXECUTION_NOT_ENABLED",
+                "RECONCILIATION_REQUIRED",
+            },
             "SUBMITTED": {"RUNNING", *allowed_targets - {"QUEUED", "SUBMITTED", "RUNNING"}},
             "RUNNING": allowed_targets - {"QUEUED", "RUNNING"},
         }
