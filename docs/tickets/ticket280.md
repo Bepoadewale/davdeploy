@@ -61,12 +61,12 @@ reconciliation-required until the exact external operation is known.
 - [x] Tenant, project and approved digest checks remain enforced.
 - [x] Focused tests, full verification and documentation checks pass.
 - [x] Clean-room cycle passes.
-- [ ] Required PR CI passes.
+- [x] Required PR CI passes.
 
 ## Acceptance status
 
-Focused worker and migration tests, full verification and the isolated
-clean-room cycle pass. Required PR CI is pending.
+Focused worker and migration tests, full verification, the isolated clean-room
+cycle and all seven required PR CI jobs pass.
 
 ## Tests / validation performed
 
@@ -81,7 +81,9 @@ clean-room cycle pass. Required PR CI is pending.
   demos, trace check, full verification (396 tests), OPA (3/3), Terraform offline
   validation, Kubernetes render and scoped cleanup — passed. No AWS workload was
   created.
-- Required CI is pending.
+- GitHub Actions run
+  [41711545894](https://github.com/Bepoadewale/davdeploy/actions/runs/41711545894)
+  passed all seven required jobs on commit `4787798`.
 
 ## Evidence files produced
 

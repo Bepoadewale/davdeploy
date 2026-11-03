@@ -7,7 +7,8 @@ workload is created.
 
 Customer repository: None.
 
-Commit: `3f32dc9` for the code and clean-room cycle; subsequent PR documentation updates follow on the same branch.
+Commit: `3f32dc9` for code and the clean-room cycle. Full local verification,
+focused coverage and CI evidence are on subsequent PR commits.
 
 AWS account: Not used.
 
@@ -28,6 +29,10 @@ and pytest temporary files.
 Compose configuration passed; one existing Starlette deprecation warning.
 
 `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
+
+GitHub Actions run
+[`41711545894`](https://github.com/Bepoadewale/davdeploy/actions/runs/41711545894)
+passed all seven required jobs on commit `4787798`.
 
 Fresh clean-room at commit `3f32dc9`, isolated worktree
 `/tmp/davdeploy-cleanroom-pr280-20261103`, Compose project
