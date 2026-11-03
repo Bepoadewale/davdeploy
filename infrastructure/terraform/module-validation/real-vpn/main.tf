@@ -132,6 +132,22 @@ resource "aws_instance" "workload" {
   tags                   = merge(local.tags, { Name = "${local.name}-workload" })
 }
 
+module "vpn" {
+  source                   = "../../modules/site-to-site-vpn"
+  name                     = local.name
+  vpc_id                   = aws_vpc.workload.id
+  customer_gateway_ip      = aws_instance.peer.public_ip
+  static_routes_only       = true
+  remote_ipv4_network_cidr = "10.250.0.0/16"
+  tags                     = local.tags
+}
+
+resource "aws_vpn_gateway_route_propagation" "workload" {
+  vpn_gateway_id = module.vpn.vpn_gateway_id
+  route_table_id = aws_vpc.workload.default_route_table_id
+}
+
 output "peer_public_ip" { value = aws_instance.peer.public_ip }
 output "peer_instance_id" { value = aws_instance.peer.id }
 output "workload_private_ip" { value = aws_instance.workload.private_ip }
+output "vpn_connection_id" { value = module.vpn.vpn_connection_id }
