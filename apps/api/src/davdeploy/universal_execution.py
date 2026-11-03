@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Protocol
+from typing import Iterable, Protocol
 
 from davdeploy.domain import ArchitectureModule
 
 LIFECYCLE_OPERATIONS = ("plan", "apply", "observe", "rollback", "destroy", "verify_cleanup")
+FORWARD_OPERATIONS = ("plan", "apply", "observe")
+REVERSE_OPERATIONS = ("rollback", "destroy", "verify_cleanup")
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,61 @@ class LifecycleEvidence:
 
 class LifecycleExecutor(Protocol):
     def run(self, plan: UniversalExecutionPlan, operation: str) -> tuple[LifecycleEvidence, ...]: ...
+
+
+def ordered_modules(plan: UniversalExecutionPlan, operation: str) -> tuple[ModuleLifecycle, ...]:
+    """Return a stable dependency order for one bounded lifecycle operation.
+
+    Apply-like work executes dependencies before their consumers. Cleanup-like
+    work reverses that order. This contract deliberately contains no commands,
+    credentials, or provider SDK calls.
+    """
+    if operation not in LIFECYCLE_OPERATIONS:
+        raise ValueError(f"unsupported lifecycle operation: {operation}")
+    by_id = {module.module_id: module for module in plan.modules}
+    remaining = {module.module_id: set(module.dependencies) for module in plan.modules}
+    ordered: list[ModuleLifecycle] = []
+    while remaining:
+        ready = sorted(identifier for identifier, dependencies in remaining.items() if not dependencies)
+        if not ready:
+            raise ValueError("module graph contains a dependency cycle")
+        for identifier in ready:
+            ordered.append(by_id[identifier])
+            del remaining[identifier]
+        completed = set(ready)
+        for dependencies in remaining.values():
+            dependencies.difference_update(completed)
+    if operation in REVERSE_OPERATIONS:
+        ordered.reverse()
+    return tuple(ordered)
+
+
+def lifecycle_work(plan: UniversalExecutionPlan, operation: str) -> tuple[dict[str, object], ...]:
+    """Serialize only typed lifecycle work for a durable execution runner."""
+    return tuple(
+        {
+            "module_id": module.module_id,
+            "operation": operation,
+            "dependencies": list(module.dependencies),
+            "resource_tags": dict(module.resource_tags),
+        }
+        for module in ordered_modules(plan, operation)
+    )
+
+
+def lifecycle_evidence_complete(
+    plan: UniversalExecutionPlan,
+    operation: str,
+    evidence: Iterable[LifecycleEvidence],
+) -> bool:
+    """Require a terminal record for every module in the operation's work set."""
+    expected = {module.module_id for module in ordered_modules(plan, operation)}
+    completed = {
+        item.module_id
+        for item in evidence
+        if item.operation == operation and item.state in {"SUCCEEDED", "HEALTHY", "ABSENT"}
+    }
+    return completed == expected
 
 
 def compile_universal_execution_plan(

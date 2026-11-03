@@ -5,6 +5,9 @@ from davdeploy.domain import ArchitectureModule
 from davdeploy.universal_execution import (
     LifecycleEvidence,
     compile_universal_execution_plan,
+    lifecycle_evidence_complete,
+    lifecycle_work,
+    ordered_modules,
     verify_cleanup,
 )
 
@@ -30,6 +33,46 @@ def test_compiler_rejects_unknown_dependencies():
         assert "unknown modules" in str(error)
     else:
         raise AssertionError("unknown dependency accepted")
+
+
+def test_lifecycle_work_is_stable_and_reverses_for_cleanup():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("worker", ["api"]), module("api"), module("uploads", ["api"])],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    assert [item.module_id for item in ordered_modules(plan, "apply")] == ["api", "uploads", "worker"]
+    assert [item.module_id for item in ordered_modules(plan, "destroy")] == ["worker", "uploads", "api"]
+    assert [item["module_id"] for item in lifecycle_work(plan, "apply")] == ["api", "uploads", "worker"]
+    assert lifecycle_evidence_complete(
+        plan,
+        "apply",
+        tuple(LifecycleEvidence(item.module_id, "apply", "SUCCEEDED") for item in plan.modules),
+    )
+
+
+def test_compiler_rejects_cycles_and_unknown_operations():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api", ["worker"]), module("worker", ["api"])],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    try:
+        ordered_modules(plan, "apply")
+    except ValueError as error:
+        assert "cycle" in str(error)
+    else:
+        raise AssertionError("dependency cycle accepted")
+    try:
+        ordered_modules(plan, "unbounded-shell")
+    except ValueError as error:
+        assert "unsupported" in str(error)
+    else:
+        raise AssertionError("unknown operation accepted")
 
 
 def test_certification_factory_covers_eight_representative_workloads():

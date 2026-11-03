@@ -1,6 +1,6 @@
 # ticket264 — Universal execution contract integration
 
-PR: pending
+PR: [#264](https://github.com/Bepoadewale/davdeploy/pull/264)
 
 Branch: `feat/universal-execution-contract`
 
@@ -28,9 +28,9 @@ commands or weakening existing authorization checks.
 
 ## Acceptance criteria
 
-- [ ] The compiled graph is dependency ordered and immutable.
-- [ ] Service execution records use the graph rather than a profile-only gate.
-- [ ] Existing App Runner execution remains compatible.
+- [x] The compiled graph is dependency ordered and immutable.
+- [x] Service execution records preserve typed graph work rather than only audit metadata.
+- [x] Existing App Runner execution remains compatible.
 - [ ] Focused tests and full CI pass.
 
 ## Acceptance status
@@ -39,7 +39,7 @@ In progress.
 
 ## Validation performed
 
-Pending implementation.
+`uv run pytest tests/test_universal_execution.py tests/test_composed_deployment.py tests/test_cloud_execution.py -q` — 19 passed.
 
 ## Evidence files
 
