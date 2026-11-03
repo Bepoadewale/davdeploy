@@ -9,6 +9,11 @@ variable "static_routes_only" {
   type    = bool
   default = false
 }
+variable "remote_ipv4_network_cidr" {
+  type        = string
+  default     = null
+  description = "Customer-side CIDR for a static VPN route. Required when static routing is used for real traffic."
+}
 variable "tags" { type = map(string) }
 
 resource "aws_customer_gateway" "this" {
@@ -29,6 +34,12 @@ resource "aws_vpn_connection" "this" {
   type                = "ipsec.1"
   static_routes_only  = var.static_routes_only
   tags                = var.tags
+}
+
+resource "aws_vpn_connection_route" "remote" {
+  count                  = var.static_routes_only && var.remote_ipv4_network_cidr != null ? 1 : 0
+  destination_cidr_block = var.remote_ipv4_network_cidr
+  vpn_connection_id      = aws_vpn_connection.this.id
 }
 
 output "vpn_connection_id" { value = aws_vpn_connection.this.id }
