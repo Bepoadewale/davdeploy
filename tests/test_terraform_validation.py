@@ -17,6 +17,7 @@ EXPECTED_ROOTS = {
     "infrastructure/terraform/terraform-operations-bootstrap",
     "infrastructure/terraform/serverless-control-plane",
     "infrastructure/terraform/customer-workload-app-runner-pilot",
+    "infrastructure/terraform/customer-workload-serverless-api",
     "infrastructure/terraform/renderers/app-runner-plan",
     "infrastructure/terraform/pilot",
 }
