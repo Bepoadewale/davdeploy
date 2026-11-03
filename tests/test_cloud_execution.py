@@ -127,6 +127,11 @@ def test_codebuild_adapter_requires_certification_gate_for_serverless_renderer(m
     )
     assert '"module_id":"aws-serverless-api"' in manifest
     assert "customer-workload-serverless-api" in manifest
+    assert {
+        "name": "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION",
+        "value": "true",
+        "type": "PLAINTEXT",
+    } in calls[0]["environmentVariablesOverride"]
 
 
 def test_codebuild_adapter_constructs_only_the_fixed_app_runner_image_build_work():

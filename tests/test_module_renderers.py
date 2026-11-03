@@ -23,6 +23,7 @@ def test_only_checked_in_module_renderer_is_resolved():
         "observe": "health",
         "destroy": "destroy-saved-plan",
         "verify_cleanup": "verify-cleanup",
+        "build_artifact": "build-artifact",
     }
 
 
@@ -50,7 +51,15 @@ def test_serverless_profile_is_opt_in_for_certification_not_customer_execution(m
         raise AssertionError("serverless renderer must stay disabled before hosted certification")
 
     monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
-    for operation in ("plan", "destroy_plan", "apply", "observe", "destroy", "verify_cleanup"):
+    for operation in (
+        "plan",
+        "destroy_plan",
+        "apply",
+        "observe",
+        "destroy",
+        "verify_cleanup",
+        "build_artifact",
+    ):
         serverless = renderer_for_profile("aws-lambda-api", operation)
         assert serverless.module_id == "aws-serverless-api"
         assert serverless.execution_enabled is False
@@ -72,3 +81,4 @@ def test_runner_command_mapping_is_fixed_and_operation_specific():
     serverless = next(item for item in renderer_manifest() if item.module_id == "aws-serverless-api")
     assert renderer_command(serverless, "observe") == "health"
     assert renderer_command(serverless, "destroy_plan") == "destroy-plan"
+    assert renderer_command(serverless, "build_artifact") == "build-artifact"

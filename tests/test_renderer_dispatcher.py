@@ -24,6 +24,11 @@ def _isolated_dispatcher(tmp_path: Path) -> tuple[Path, Path]:
         f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8"
     )
     serverless_runner.chmod(0o755)
+    artifact_builder = scripts / "customer-serverless-artifact-build.py"
+    artifact_builder.write_text(
+        f"#!/usr/bin/env python3\nfrom pathlib import Path\nPath('{marker}').write_text('build-artifact')\n",
+        encoding="utf-8",
+    )
     return dispatcher, marker
 
 
@@ -163,6 +168,7 @@ def test_dispatcher_enforces_exact_serverless_operation_mapping(tmp_path: Path) 
         ("plan", "plan"),
         ("plan", "destroy-plan"),
         ("destroy_plan", "destroy-plan"),
+        ("build_artifact", "build-artifact"),
         ("apply", "apply-saved-plan"),
         ("observe", "health"),
         ("destroy", "destroy-saved-plan"),
@@ -179,7 +185,9 @@ def test_dispatcher_enforces_exact_serverless_operation_mapping(tmp_path: Path) 
             ["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
         )
         assert result.returncode == 0, result.stderr
-        assert marker.read_text(encoding="utf-8") == runner_operation
+        assert marker.read_text(encoding="utf-8") == (
+            "build-artifact" if runner_operation == "build-artifact" else runner_operation
+        )
 
     env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(
         _work("aws-serverless-api", "observe")
@@ -201,4 +209,5 @@ def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
     assert "scripts/customer-workload-app-runner-pilot.sh" in package_builder
     assert "infrastructure/terraform/customer-workload-serverless-api" in package_builder
     assert "scripts/customer-workload-serverless-api.sh" in package_builder
+    assert "scripts/customer-serverless-artifact-build.py" in package_builder
     assert "bash scripts/customer-workload-dispatcher.sh" in buildspec

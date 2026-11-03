@@ -4,6 +4,13 @@ This root is invoked only by the checked-in bounded runner. It creates one
 Lambda function and one HTTP API from a checksum-verified ZIP artifact under
 the approved customer role. It accepts no free-form Terraform or IAM input.
 
+The current certification artifact contract is deliberately small: a pinned
+public GitHub commit must contain a root `index.py` defining `handler`, with
+optional dependency files under `vendor/`. The fixed artifact builder places
+those vendored files at the ZIP root. It does not run repository build scripts
+or install dependencies. This source build operation is gated for hosted
+certification and does not make Lambda/API customer deployments available.
+
 The runner separates `plan` and `apply-saved-plan`. Planning stores a Terraform
 saved-plan file below the connection, approved-plan-digest, and operation
 prefixes and publishes its SHA-256 digest with the change summary. Apply
