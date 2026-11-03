@@ -25,7 +25,7 @@ ROOTS = {
     "kubernetes": ("eks",),
     "hybrid-network": ("vpn",),
     "multi-region": ("dns-failover",),
-    "machine-learning": (),  # SageMaker requires an approved model artifact.
+    "machine-learning": ("sagemaker",),
 }
 
 
@@ -56,11 +56,21 @@ def main() -> int:
         directory = root_base / root
         results.append(run(["terraform", f"-chdir={directory}", "init", "-input=false"], env=environment))
         if args.apply:
-            results.append(run(["terraform", f"-chdir={directory}", "apply", "-auto-approve", "-input=false", f"-var=test_id={args.test_id}"], env=environment))
-            results.append(run(["terraform", f"-chdir={directory}", "destroy", "-auto-approve", "-input=false", f"-var=test_id={args.test_id}"], env=environment))
+            if root == "sagemaker":
+                results.append(
+                    {
+                        "command": ["scripts/certify_sagemaker_endpoint.py"],
+                        "returncode": 2,
+                        "stdout": "",
+                        "stderr": "SageMaker certification requires its artifact upload and live inference probe workflow.",
+                    }
+                )
+            else:
+                results.append(run(["terraform", f"-chdir={directory}", "apply", "-auto-approve", "-input=false", f"-var=test_id={args.test_id}"], env=environment))
+                results.append(run(["terraform", f"-chdir={directory}", "destroy", "-auto-approve", "-input=false", f"-var=test_id={args.test_id}"], env=environment))
         else:
             results.append(run(["terraform", f"-chdir={directory}", "validate"], env=environment))
-    evidence = {"scenario": args.scenario, "test_id": args.test_id, "executed_at": datetime.now(UTC).isoformat(), "apply": args.apply, "roots": ROOTS[args.scenario], "results": results, "limitations": ("SageMaker requires an approved model artifact." if not ROOTS[args.scenario] else "Service-specific readiness probes are required before activation.")}
+    evidence = {"scenario": args.scenario, "test_id": args.test_id, "executed_at": datetime.now(UTC).isoformat(), "apply": args.apply, "roots": ROOTS[args.scenario], "results": results, "limitations": ("SageMaker certification uses scripts/certify_sagemaker_endpoint.py to build an owned artifact, probe a real endpoint, and clean up through the PID-based Terraform monitor." if args.scenario == "machine-learning" else "Service-specific readiness probes are required before activation.")}
     args.evidence.parent.mkdir(parents=True, exist_ok=True)
     args.evidence.write_text(json.dumps(evidence, indent=2) + "\n")
     return 0 if all(result["returncode"] == 0 for result in results) else 1
