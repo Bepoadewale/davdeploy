@@ -12,7 +12,7 @@ def test_serverless_api_renderer_is_artifact_bound_and_has_bounded_operations():
     assert "apply-saved-plan|destroy-saved-plan" in script
     assert 'terraform -chdir="$root" apply -input=false "$plan_file"' in script
     assert "terraform -chdir=\"$root\" apply -input=false -auto-approve" not in script
-    assert "saved_plan_prefix=\"${customer_state_prefix}${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}/\"" in script
+    assert "saved_plan_prefix=\"${customer_state_prefix}${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}/${saved_plan_kind}/\"" in script
     assert "customer_state_prefix=\"s3://${TF_STATE_BUCKET}/davdeploy/customer/${connection_id}/\"" in script
     assert 'artifact="/tmp/davdeploy-serverless-${connection_id}-${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}.zip"' in script
     assert "terraform apply" not in script

@@ -59,7 +59,7 @@ exit 9
             "DAVDEPLOY_EXECUTION_RUN_ID": f"digest-test-{os.getpid()}",
             "DAVDEPLOY_EXECUTION_RESULT_S3_URI": "s3://davdeploy-test-state/davdeploy/customer/connection-test/result.json",
             "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": "a" * 64,
-            "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI": f"s3://davdeploy-test-state/davdeploy/customer/connection-test/{'a' * 64}/approved.tfplan",
+            "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI": f"s3://davdeploy-test-state/davdeploy/customer/connection-test/{'a' * 64}/apply/approved.tfplan",
             "DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI": "s3://davdeploy-test-state/function.zip",
             "DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256": "0" * 64,
             "DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256": "0" * 64,

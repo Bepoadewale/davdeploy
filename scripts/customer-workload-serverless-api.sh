@@ -17,6 +17,16 @@ for name in AWS_REGION EXPECTED_AWS_ACCOUNT_ID TF_STATE_BUCKET TF_LOCK_TABLE \
   require "$name"
 done
 
+case "${1:-}" in
+  plan|apply-saved-plan) saved_plan_kind="apply" ;;
+  destroy-plan|destroy-saved-plan) saved_plan_kind="destroy" ;;
+  health|verify-cleanup) saved_plan_kind="apply" ;;
+  *)
+    echo "allowed operations: plan, apply-saved-plan, health, destroy-plan, destroy-saved-plan, verify-cleanup" >&2
+    exit 2
+    ;;
+esac
+
 connection_id="$DAVDEPLOY_CUSTOMER_CONNECTION_ID"
 run_id="$DAVDEPLOY_EXECUTION_RUN_ID"
 service_name="${DAVDEPLOY_CUSTOMER_SERVICE_NAME:-davdeploy-${connection_id}-api}"
@@ -46,7 +56,7 @@ customer_profile="davdeploy-customer"
 [[ "$result_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Execution result URI is invalid" >&2; exit 2; }
 [[ "$saved_plan_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Saved plan URI is invalid" >&2; exit 2; }
 customer_state_prefix="s3://${TF_STATE_BUCKET}/davdeploy/customer/${connection_id}/"
-saved_plan_prefix="${customer_state_prefix}${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}/"
+saved_plan_prefix="${customer_state_prefix}${DAVDEPLOY_CUSTOMER_PLAN_DIGEST}/${saved_plan_kind}/"
 [[ "$result_uri" == "$customer_state_prefix"* ]] || { echo "Execution result must be stored in the connection's state prefix" >&2; exit 2; }
 [[ "$saved_plan_uri" == "$saved_plan_prefix"* ]] || { echo "Saved plan must be stored in this plan's digest prefix" >&2; exit 2; }
 
@@ -223,7 +233,6 @@ case "$operation" in
     write_result "verify-cleanup" "SUCCEEDED" "${result_file}.cleanup"
     ;;
   *)
-    echo "allowed operations: plan, apply-saved-plan, health, destroy-plan, destroy-saved-plan, verify-cleanup" >&2
     exit 2
     ;;
 esac

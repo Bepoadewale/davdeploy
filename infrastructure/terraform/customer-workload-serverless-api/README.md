@@ -5,9 +5,10 @@ Lambda function and one HTTP API from a checksum-verified ZIP artifact under
 the approved customer role. It accepts no free-form Terraform or IAM input.
 
 The runner separates `plan` and `apply-saved-plan`. Planning stores a Terraform
-saved-plan file below the connection and approved-plan-digest prefix and
-publishes its SHA-256 digest with the change summary. Apply requires that
-digest and uses the exact saved plan; it does not generate a replacement plan.
+saved-plan file below the connection, approved-plan-digest, and operation
+prefixes and publishes its SHA-256 digest with the change summary. Apply
+requires that digest and uses the exact saved plan; it does not generate a
+replacement plan.
 If the plan object was overwritten or changed, apply fails before mutation.
 The checked artifact is restored at a stable plan-specific path on each runner,
 matching the file path embedded in Terraform's saved plan.
