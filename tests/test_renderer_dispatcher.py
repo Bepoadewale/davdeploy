@@ -101,13 +101,14 @@ def test_dispatcher_rejects_unregistered_or_mixed_work_before_script(tmp_path: P
     result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 0
     assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
+    previous_invocation = marker.read_text(encoding="utf-8")
 
     env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(_work() * 2)
     env.pop("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION")
     result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
     assert result.returncode == 2
     assert "one typed renderer entry" in result.stderr
-    assert not marker.exists()
+    assert marker.read_text(encoding="utf-8") == previous_invocation
 
 
 def test_dispatcher_rejects_unknown_fields_and_operation_mismatches(tmp_path: Path) -> None:

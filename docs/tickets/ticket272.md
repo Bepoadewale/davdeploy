@@ -34,15 +34,16 @@ Package the checked-in Lambda/API Terraform root and runner, route exact module/
 - [ ] Worker run creation and result reconciliation are profile-aware without weakening App Runner checks.
 - [ ] Customer Lambda source artifact build, immutable artifact handoff, and saved-plan bindings are implemented.
 - [ ] Hosted CodeBuild lifecycle is AWS-certified for this renderer.
-- [ ] Focused tests, the required execution lifecycle clean-room validation, and CI pass.
+- [x] Focused tests and the required isolated local clean-room validation pass.
+- [ ] CI passes for the latest PR commit.
 
 ## Acceptance status
 
-In progress. The package and dispatch boundary are implemented; durable service integration, Lambda artifact creation, hosted AWS certification, and the clean-room gate remain.
+In progress. The package and dispatch boundary are implemented, and isolated local verification passes. Durable service integration, Lambda artifact creation, hosted AWS certification, and CI for the latest test correction remain.
 
 ## Tests / validation performed
 
-`make lint` passed. `.venv/bin/python -m pytest tests/test_module_renderers.py tests/test_renderer_dispatcher.py tests/test_cloud_execution.py -q` passed: 30 tests. Full `.venv/bin/python -m pytest -q` passed: 362 tests. Shell syntax checks passed for the dispatcher, package builder, and serverless runner. The package builder produced a validation archive containing both renderer roots and scripts. `git diff --check` and documentation convention checks passed. The service run, customer artifact flow, hosted certification, and clean-room criteria remain incomplete.
+`make lint` passed. Focused renderer/dispatcher/cloud-execution tests passed: 30 tests. Full `.venv/bin/python -m pytest -q` passed: 362 tests. Shell syntax checks passed for the dispatcher, package builder, and serverless runner. The package builder produced a validation archive containing both renderer roots and scripts. The isolated local clean-room flow passed bootstrap, smoke, API contract, customer-plan E2E, seed, simple/complex/Day-2/degraded demos, policy/readiness failures, trace check, and `make verify` (362 tests plus OpenAPI and Compose checks). `git diff --check` and documentation convention checks passed. This did not exercise hosted CodeBuild or AWS customer resources.
 
 ## Evidence files produced
 
