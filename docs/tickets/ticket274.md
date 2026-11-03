@@ -49,13 +49,13 @@ Renderer-aware evidence validation and state mapping are implemented. Focused te
 
 `make verify` passed: 378 tests, OpenAPI snapshot, configuration boundary, lint, and Docker Compose config; one existing Starlette/httpx deprecation warning. Focused cloud-execution tests passed: 30 tests. `GITHUB_PR_NUMBER=274 .venv/bin/python scripts/check_doc_conventions.py` and `git diff --check` passed.
 
-The full clean-room cycle used a fresh detached worktree at commit `1da2685` in `/tmp/davdeploy-cleanroom-pr274-20261103`. `make bootstrap-local` passed, followed by `make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify`; every target passed. Compose services were stopped with `docker compose stop`; the worktree and named Postgres volume remain.
+The full clean-room cycle used a fresh detached worktree at final implementation commit `99af7a9` in `/tmp/davdeploy-cleanroom-pr274-final-20261103`. `make bootstrap-local` passed, followed by `make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify`; every target passed. Compose services were stopped with `docker compose stop`; the worktree and named Postgres volume remain.
 
-GitHub Actions run `41686804769` passed all seven checks: `cloud-contracts`, `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, and `supply-chain` on implementation commit `1da2685`. Documentation-only acceptance update is now included; CI is re-running for the final ticket revision.
+GitHub Actions run `41688249133` passed all seven checks: `cloud-contracts`, `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, and `supply-chain` on implementation commit `99af7a9`. This ticket evidence update will cause CI to run again for the final PR revision.
 
 ## Evidence files produced
 
-No AWS workload is planned for this PR. Hosted CodeBuild lifecycle certification remains a follow-up. Clean-room files remain under `/tmp/davdeploy-cleanroom-pr274-20261103`; services are stopped, not removed.
+No AWS workload is planned for this PR. Hosted CodeBuild lifecycle certification remains a follow-up. Clean-room files remain under `/tmp/davdeploy-cleanroom-pr274-final-20261103`; services are stopped, not removed.
 
 ## Boundaries
 
