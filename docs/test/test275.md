@@ -1,4 +1,16 @@
-# PR #275 validation evidence
+# test275
+
+Date: 2026-11-03
+
+Execution type: isolated local clean-room validation and static Terraform validation. No AWS workload was created.
+
+Customer repository: None.
+
+Commit: `fdd9e6c` for the clean-room cycle; documentation updates followed on the same PR branch.
+
+AWS account: Not used.
+
+AWS region: Not used.
 
 ## Scope and boundary
 
@@ -51,3 +63,28 @@ data. No AWS customer resources were created. This is local workflow evidence,
 not AWS certification of the Lambda renderer.
 
 GitHub Actions PR checks remain pending.
+
+## Resources created
+
+Only temporary local Docker containers, network and PostgreSQL volume under
+Compose project `davdeploy-pr275-20261103`.
+
+## Commands executed
+
+See the focused validation and clean-room command lists above.
+
+## Observed result
+
+All local checks passed. No AWS customer workload was deployed or certified.
+
+## Teardown
+
+`COMPOSE_PROJECT_NAME=davdeploy-pr275-20261103 make clean-local` completed
+successfully and removed the test-only Compose resources. The temporary
+worktree and its directory are retained.
+
+## Final boundary
+
+This evidence proves local project-scope contracts and repository clean-room
+behavior only. Hosted Lambda execution remains disabled pending its separate
+AWS certification.
