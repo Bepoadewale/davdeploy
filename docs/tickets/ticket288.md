@@ -36,11 +36,11 @@ compiler does not yet validate all graph and identity inputs.
 - [x] Empty or malformed graph identity is rejected before lifecycle ordering.
 - [x] Duplicate, self, and unknown dependencies are rejected.
 - [x] Valid plans preserve deterministic dependency ordering and tags.
-- [ ] Focused tests and required CI pass.
+- [x] Focused tests pass; required CI run [41741779713](https://github.com/Bepoadewale/davdeploy/actions/runs/41741779713) passes all seven jobs.
 
 ## Acceptance status
 
-Implementation and local verification pass. GitHub CI is pending.
+Implementation, local verification and all seven GitHub CI jobs pass.
 
 ## Tests / validation performed
 
