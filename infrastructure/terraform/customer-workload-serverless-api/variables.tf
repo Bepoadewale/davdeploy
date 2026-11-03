@@ -4,6 +4,11 @@ variable "connection_id" { type = string }
 variable "plan_digest" { type = string }
 variable "service_name" { type = string }
 variable "artifact_path" { type = string }
+variable "customer_profile" {
+  type        = string
+  default     = ""
+  description = "Optional named profile for customer workload resources. The Terraform backend continues to use the runner's platform credentials."
+}
 variable "handler" {
   type    = string
   default = "index.handler"

@@ -1,6 +1,6 @@
 # ticket269 — Bind serverless API execution to reviewed plans
 
-PR: pending
+PR: https://github.com/Bepoadewale/davdeploy/pull/269
 
 Branch: `feat/serverless-api-saved-plan-safety`
 
@@ -18,16 +18,17 @@ Existing `scripts/customer-workload-app-runner-pilot.sh` artifact-bound saved-pl
 
 ## Work planned for the PR
 
-Add immutable saved-plan upload and SHA-256 verification for serverless API apply and destroy. Validate required identifiers and artifact digests, write bounded execution results, strengthen cleanup verification using both Terraform state and live AWS absence checks, and add focused contract tests. Keep the renderer out of the customer dispatch registry until the hosted CodeBuild lifecycle is separately validated.
+Added plan-digest-scoped saved-plan upload and SHA-256 verification for serverless API apply and destroy. The runner checks identifiers and digests, assumes only the expected customer account role, records bounded execution results including artifact and saved-plan hashes, and checks live Lambda, IAM role, HTTP API, and Terraform state absence. Focused contract tests and runtime rejection tests for changed artifacts and saved plans were added. The renderer remains out of the customer dispatch registry until the hosted CodeBuild lifecycle is separately validated.
 
 ## Acceptance criteria
 
-- [ ] Apply consumes only the exact saved plan and rejects a digest mismatch.
-- [ ] Destroy consumes only an approved saved destroy plan.
-- [ ] Cleanup checks confirm live Lambda/API absence, not just empty local state.
-- [ ] Missing or malformed execution inputs fail before mutation.
-- [ ] Focused tests and required CI pass.
-- [ ] No customer execution enablement or unrelated AWS changes.
+- [x] Apply consumes only the exact saved plan and rejects a digest mismatch.
+- [x] Destroy consumes only an approved saved destroy plan.
+- [x] Cleanup checks confirm live Lambda/API/IAM absence and empty Terraform state.
+- [x] Missing or malformed identifiers, digests, and account/role combinations fail before Terraform mutation.
+- [x] Focused tests and Terraform validation pass.
+- [ ] Updated PR revision passes required CI.
+- [x] No customer execution enablement or unrelated AWS changes.
 
 ## Acceptance status
 
@@ -35,7 +36,12 @@ In progress.
 
 ## Tests / validation performed
 
-Not yet run.
+`bash -n scripts/customer-workload-serverless-api.sh`; focused pytest for the
+serverless renderer contract and artifact/saved-plan digest rejection (4 passed);
+Terraform `fmt -check` for both customer and validation roots; Terraform
+validation for the isolated validation root; and
+`GITHUB_PR_NUMBER=269 python3 scripts/check_doc_conventions.py` all passed.
+No AWS resources were created by this PR.
 
 ## Evidence files produced
 
