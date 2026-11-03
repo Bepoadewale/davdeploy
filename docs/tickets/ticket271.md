@@ -1,6 +1,6 @@
 # ticket271 — Reconcile deployed execution state and map renderer readiness
 
-PR: pending
+PR: https://github.com/Bepoadewale/davdeploy/pull/271
 
 Branch: `docs/execution-readiness-matrix`
 
@@ -38,22 +38,22 @@ PR #270 has deployed the typed dispatcher, but only App Runner has a hosted rend
 
 ## Acceptance criteria
 
-- [ ] Every one of the 26 architecture catalogue entries appears in the matrix.
-- [ ] Every one of the 30 Terraform implementation registry entries is mapped or identified as unmapped.
-- [ ] Isolated certification and hosted customer-runner certification are separate columns/states.
-- [ ] PR #270 deployment and migration completion are recorded with evidence.
-- [ ] Stale status documents agree with verified live state and preserve remaining blockers.
-- [ ] Documentation conventions and diff checks pass.
+- [x] Every one of the 26 architecture catalogue entries appears in the matrix.
+- [x] Every one of the 30 Terraform implementation registry entries is mapped or identified as unmapped.
+- [x] Isolated certification and hosted customer-runner certification are separate columns/states.
+- [x] PR #270 deployment and migration completion are recorded with evidence.
+- [x] Stale status documents agree with verified live state and preserve remaining blockers.
+- [x] Documentation conventions and diff checks pass.
 
 ## Tests / validation performed
 
 Read-only evidence inspected: GitHub PR #270 merged; Terraform run #41671744510 succeeded; workflow logs showed 0/7/0 resource actions and successful migrations; AWS Lambda configuration showed active/successful; CodeBuild buildspec showed typed dispatcher invocation. Direct unauthenticated API returned 401, which requires edge/auth-aware verification before interpreting API health. No customer workload was created by this documentation PR.
 
-`GITHUB_PR_NUMBER=271 python3 scripts/check_doc_conventions.py` and `git diff --check` are the required checks before review.
+`GITHUB_PR_NUMBER=271 python3 scripts/check_doc_conventions.py` passed; `git diff --check` passed; GitHub Actions run `41675756604` passed all seven checks.
 
 ## Acceptance status
 
-Documentation changes are implemented; final convention checks and PR CI are pending.
+Documentation changes and required checks are complete; PR CI run `41675756604` passed.
 
 ## Evidence files produced
 
