@@ -1,6 +1,6 @@
 # ticket268 — Real serverless API renderer certification
 
-PR: pending
+PR: https://github.com/Bepoadewale/davdeploy/pull/268
 
 Branch: `test/real-serverless-api-certification`
 
@@ -20,29 +20,39 @@ deployment evidence.
 The customer serverless API Terraform root, AWS Lambda/API Gateway modules,
 and existing disposable module validation conventions.
 
-## Work planned for the PR
+## Work completed in the PR
 
-Add a disposable certification root and evidence covering deployment, HTTP
-response, and destruction through the Terraform run monitor.
+Added a disposable certification root importing the customer serverless API
+renderer and using the repository's Lambda test package. The renderer was
+applied in AWS account `654654474502`, region `us-east-1`; its HTTPS endpoint
+returned HTTP 200 and `{"ok":true}`. The monitored destroy completed with 9
+resources destroyed. Read-only AWS checks confirmed the test Lambda, API, and
+IAM role are absent.
 
 ## Acceptance criteria
 
-- [ ] Disposable Lambda and HTTP API deploy in the controlled AWS account.
-- [ ] HTTP endpoint returns the expected test response.
-- [ ] All test resources are destroyed and absence verified.
-- [ ] Focused checks and required CI pass.
+- [x] Disposable Lambda and HTTP API deploy in the controlled AWS account.
+- [x] HTTP endpoint returns the expected test response.
+- [x] All 9 Terraform resources are destroyed; Lambda, API, and IAM role absence verified.
+- [x] Terraform formatting, initialization, and validation pass.
+- [ ] Updated PR revision passes required CI.
 
 ## Acceptance status
 
-In progress.
+Met for the isolated renderer root. This is not evidence of CodeBuild dispatcher
+integration or customer execution readiness.
 
 ## Tests / validation performed
 
-Pending AWS certification.
+`terraform fmt -check`, `terraform init`, and `terraform validate` passed for
+the validation root. A real HTTPS request returned HTTP 200 with
+`{"ok":true}`. Monitored Terraform destroy reported 9 resources destroyed;
+read-only AWS lookups returned not-found for the exact test Lambda, HTTP API,
+and IAM role. The current PR revision still needs its required CI run.
 
 ## Evidence files produced
 
-Pending `docs/test/test268.md`.
+`docs/test/test268.md`.
 
 ## Boundaries
 
@@ -51,5 +61,6 @@ or production account is used.
 
 ## Follow-up work
 
-Add saved-plan binding and integrate the renderer with CodeBuild dispatcher
-before making it available to customer execution.
+Add immutable saved-plan/artifact binding, integrate this renderer with a
+typed CodeBuild dispatcher, then validate the complete hosted customer
+lifecycle before enabling customer execution.
