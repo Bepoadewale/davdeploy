@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-03, backend main commit `ef60ac36d135b8b47242a1a7ffefa92c18d1d165` (PR #280).
+Audit as of 2026-11-03, backend main commit `2d77ee2206a425813b8169eed460aff9b5634dc2` (PR #281).
 
 ## Hosted deployment evidence
 
@@ -11,8 +11,11 @@ An unauthenticated request to `https://api.davdeploy.tech/health` returned HTTP 
 On 2026-11-03, `https://api.davdeploy.tech/healthz` returned HTTP 200 with
 `{"status":"ok","product":"davdeploy"}` through the Cloudflare edge. AWS
 reported `davdeploy-api` Active with LastUpdateStatus Successful; its deployed
-version remains the #270 release at commit `93c895e`. PRs #277, #278 and #280
-contain worker/database changes that are merged but not yet deployed.
+release is now commit `2d77ee2206a425813b8169eed460aff9b5634dc2`, deployed by
+Terraform plan run [41716352953](https://github.com/Bepoadewale/davdeploy/actions/runs/41716352953)
+and apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229).
+The plan applied 0 creates, 6 in-place Lambda package changes and 0 destroys;
+database schema version 24 is deployed. PRs #277, #278 and #280 are now deployed.
 
 ## Execution summary
 
@@ -23,8 +26,8 @@ contain worker/database changes that are merged but not yet deployed.
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` disabled | One customer renderer enabled |
 | CodeBuild dispatcher | One typed item; fixed registry mapping; unknown, disabled, malformed, dependency-bearing and multi-item work fail closed | Deployed |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
-| Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Merged and locally/CI verified; not yet deployed |
-| Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | Merged as `ef60ac3`; 50 focused tests and 397-test full verification pass; clean-room passed at code commit `3f32dc9`; CI run [41713672566](https://github.com/Bepoadewale/davdeploy/actions/runs/41713672566) passed all seven jobs; never blindly replays an uncertain apply/destroy |
+| Durable module-instance outcomes | PRs #277 and #278; module rows are persisted for the actual run graph, and the current single-renderer queue/worker/CodeBuild outcomes advance those rows with scope checks and idempotency | Deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); still not a multi-module scheduler |
+| Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | Merged as `ef60ac3` and deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); never blindly replays an uncertain apply/destroy |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md` | Isolated AWS certified; hosted execution disabled |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | typed graph and dependency ordering helpers exist; CodeBuild rejects runs with more than one module | Not implemented as durable hosted orchestration |

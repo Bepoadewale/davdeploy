@@ -98,19 +98,17 @@ Historical staging plan run `39140954204` completed successfully from `main` at 
 `3f4fe983a1b34a91e42967c1057bb723c20bdad9`, but it predates the single-production manifest
 contract and cannot be applied.
 
-Current deployed production release: plan run [41671074517](https://github.com/Bepoadewale/davdeploy/actions/runs/41671074517)
-and apply run [41671744510](https://github.com/Bepoadewale/davdeploy/actions/runs/41671744510)
-for commit `93c895e6e40e80f20b71a6f3a21e3186ca63d576`. The reviewed apply changed seven existing
-resources, created zero, and destroyed zero; database migrations completed. AWS later reported the
-API Lambda Active with a Successful update, and `https://api.davdeploy.tech/healthz` returned HTTP
-200 through the Cloudflare edge. The deployed CodeBuild buildspec invokes the typed customer
-renderer dispatcher. App Runner is still the only enabled customer renderer and multi-module runs
-are rejected.
+Current deployed production release: plan run [41716352953](https://github.com/Bepoadewale/davdeploy/actions/runs/41716352953)
+and apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229)
+for commit `2d77ee2206a425813b8169eed460aff9b5634dc2`. The reviewed apply changed six existing
+Lambda packages in place, created zero resources, and destroyed zero; database migrations completed
+through schema version 24. All six Lambda functions report the same release code hash, and
+`https://api.davdeploy.tech/healthz` returned HTTP 200 through the Cloudflare edge. App Runner
+remains the only enabled customer renderer and multi-module runs are rejected.
 
-Backend main has since advanced to `88688360f98200ed57bc253d02804d4ab6a359f9` through PR #278.
-That merged code persists module-instance outcomes for the current single-renderer path but is not
-yet in the deployed package. Create and review a fresh plan from current `main` before deploying it;
-do not reuse the older saved plan. Do not enable a new renderer as part of that deployment.
+PRs #277, #278 and #280 are deployed. Their module outcome and worker-lease state supports the
+current single-renderer execution path; it is not a graph scheduler and does not enable new
+renderers. Do not enable a new renderer as part of an unrelated deployment.
 
 The production workflow uses one remote state object at
 `serverless-control-plane/terraform.tfstate`, one canonical `davdeploy` resource namespace,
