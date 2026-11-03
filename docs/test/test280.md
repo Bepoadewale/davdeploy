@@ -31,8 +31,8 @@ Compose configuration passed; one existing Starlette deprecation warning.
 `python scripts/check_doc_conventions.py` and `git diff --check` — passed.
 
 GitHub Actions run
-[`41711545894`](https://github.com/Bepoadewale/davdeploy/actions/runs/41711545894)
-passed all seven required jobs on commit `4787798`.
+[`41712556149`](https://github.com/Bepoadewale/davdeploy/actions/runs/41712556149)
+passed all seven required jobs on the PR head after the evidence updates.
 
 Fresh clean-room at commit `3f32dc9`, isolated worktree
 `/tmp/davdeploy-cleanroom-pr280-20261103`, Compose project
@@ -40,7 +40,7 @@ Fresh clean-room at commit `3f32dc9`, isolated worktree
 customer-plan E2E, seed, simple/complex/degraded/Day-2/canonical/failure/readiness
 demos, trace check, full verification (396 tests), OPA (3/3), Terraform offline
 validation, Kubernetes render, and scoped cleanup — passed. No AWS workload was
-created. GitHub CI is pending.
+created. GitHub CI passed in run 41712556149.
 
 ## Observed result
 

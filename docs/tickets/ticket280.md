@@ -82,8 +82,8 @@ cycle and all seven required PR CI jobs pass.
   validation, Kubernetes render and scoped cleanup — passed. No AWS workload was
   created.
 - GitHub Actions run
-  [41711545894](https://github.com/Bepoadewale/davdeploy/actions/runs/41711545894)
-  passed all seven required jobs on commit `4787798`.
+  [41712556149](https://github.com/Bepoadewale/davdeploy/actions/runs/41712556149)
+  passed all seven required jobs on the PR head after the evidence updates.
 
 ## Evidence files produced
 
