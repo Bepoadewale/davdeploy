@@ -7,7 +7,6 @@ implementation.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 
@@ -64,7 +63,9 @@ _RENDERERS: dict[str, ModuleRenderer] = {
 }
 
 
-def renderer_for_profile(profile: str, operation: str) -> ModuleRenderer:
+def renderer_for_profile(
+    profile: str, operation: str, *, hosted_certification: bool = False
+) -> ModuleRenderer:
     """Resolve a selected planning profile to a bounded lifecycle renderer.
 
     This deliberately does not bypass ``execution_enabled``. A profile may be
@@ -77,7 +78,7 @@ def renderer_for_profile(profile: str, operation: str) -> ModuleRenderer:
     }.get(profile)
     if module_id is None:
         raise ValueError(f"profile {profile} has no registered execution renderer")
-    return renderer_for(module_id, operation)
+    return renderer_for(module_id, operation, hosted_certification=hosted_certification)
 
 
 def renderer_command(renderer: ModuleRenderer, operation: str) -> str:
@@ -90,7 +91,9 @@ def renderer_command(renderer: ModuleRenderer, operation: str) -> str:
     return command
 
 
-def renderer_for(module_id: str, operation: str) -> ModuleRenderer:
+def renderer_for(
+    module_id: str, operation: str, *, hosted_certification: bool = False
+) -> ModuleRenderer:
     """Resolve a checked-in renderer or reject an unbound lifecycle module.
 
     The serverless opt-in is only for controlled hosted certification. Customer
@@ -100,11 +103,7 @@ def renderer_for(module_id: str, operation: str) -> ModuleRenderer:
     renderer = _RENDERERS.get(module_id)
     if renderer is None:
         raise ValueError(f"module {module_id} has no executable renderer")
-    serverless_certification_enabled = (
-        module_id == "aws-serverless-api"
-        and os.getenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "false").lower()
-        == "true"
-    )
+    serverless_certification_enabled = module_id == "aws-serverless-api" and hosted_certification
     if not renderer.execution_enabled and not serverless_certification_enabled:
         raise ValueError(f"module {module_id} renderer is not enabled for customer execution")
     if operation not in renderer.supported_operations:

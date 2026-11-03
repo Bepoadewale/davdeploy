@@ -3912,7 +3912,9 @@ class ProductService:
                 plan_digest=revision.content_digest,
             )
         except (TypeError, ValueError) as error:
-            raise ValueError("approved revision has an invalid universal execution graph") from error
+            raise ValueError(
+                "approved revision has an invalid universal execution graph"
+            ) from error
         profile_name = revision.content.get("summary", {}).get("selected_profile")
         if profile_name != "aws-app-runner":
             raise ValueError(
@@ -4505,6 +4507,7 @@ class ProductService:
         context = {
             "run_id": run.id,
             "profile": run.profile,
+            "mode": run.mode,
             "digest": run.content_digest,
             "environment": (run.evidence or {}).get("execution_environment", {}),
             "lifecycle_work": (run.command or {}).get("universal_lifecycle_work"),
@@ -4658,9 +4661,7 @@ class ProductService:
                     "automatic_replay": False,
                 },
             }
-            self._advance_cloud_execution_module_instances(
-                run, "RECONCILIATION_REQUIRED"
-            )
+            self._advance_cloud_execution_module_instances(run, "RECONCILIATION_REQUIRED")
             self.audit(
                 Principal("system-cloud-worker", run.organization_id, "operator"),
                 "cloud_execution.lease_expired_reconciliation_required",
@@ -4697,9 +4698,7 @@ class ProductService:
                 "automatic_replay": False,
             },
         }
-        self._advance_cloud_execution_module_instances(
-            run, "RECONCILIATION_REQUIRED"
-        )
+        self._advance_cloud_execution_module_instances(run, "RECONCILIATION_REQUIRED")
         self.audit(
             Principal("system-cloud-worker", run.organization_id, "operator"),
             "cloud_execution.adapter_outcome_uncertain",
@@ -4709,9 +4708,7 @@ class ProductService:
         )
         self.db.commit()
 
-    def _complete_cloud_execution_claim(
-        self, run_id: str, lease_token: str, result
-    ) -> bool:
+    def _complete_cloud_execution_claim(self, run_id: str, lease_token: str, result) -> bool:
         now = datetime.now(UTC)
         updated = self.db.execute(
             update(CloudExecutionRun)
@@ -4765,9 +4762,7 @@ class ProductService:
         self.db.commit()
         return True
 
-    def _advance_cloud_execution_module_instances(
-        self, run: CloudExecutionRun, state: str
-    ) -> None:
+    def _advance_cloud_execution_module_instances(self, run: CloudExecutionRun, state: str) -> None:
         """Persist a trusted run transition on only its digest-bound graph nodes."""
         allowed_targets = {
             "QUEUED",
@@ -4919,9 +4914,7 @@ class ProductService:
                     expected_connection = str(
                         environment.get("DAVDEPLOY_CUSTOMER_CONNECTION_ID") or ""
                     )
-                    expected_project = str(
-                        environment.get("DAVDEPLOY_CUSTOMER_PROJECT_ID") or ""
-                    )
+                    expected_project = str(environment.get("DAVDEPLOY_CUSTOMER_PROJECT_ID") or "")
                     expected_phase = {
                         "build-artifact": "artifact-build",
                         "plan": "plan",
@@ -4960,8 +4953,7 @@ class ProductService:
                         detail.get("artifact_s3_uri") != expected_artifact_uri
                         or not re.fullmatch(r"[a-f0-9]{64}", artifact_digest)
                         or not re.fullmatch(r"[a-f0-9]{40}", expected_source_commit)
-                        or detail.get("source_commit")
-                        != expected_source_commit
+                        or detail.get("source_commit") != expected_source_commit
                     ):
                         raise ValueError("serverless artifact result is incomplete or mismatched")
                     if expected_phase in {"plan", "destroy-plan"} and (
@@ -5030,7 +5022,9 @@ class ProductService:
                     if expected_phase == "destroy" and detail.get(
                         "saved_plan_sha256"
                     ) != environment.get("DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256"):
-                        raise ValueError("serverless destroy result does not match the approved plan")
+                        raise ValueError(
+                            "serverless destroy result does not match the approved plan"
+                        )
             except (
                 BotoCoreError,
                 ClientError,

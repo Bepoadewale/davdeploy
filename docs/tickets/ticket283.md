@@ -35,16 +35,18 @@ already exist. PRs #277–#280 are deployed; worker lease schema v24 is live.
 
 ## Work planned for the PR
 
-- Add a profile-neutral, administrator-authorized run contract for one already
-  approved and certified module without accepting arbitrary commands or roots.
-- Bind each run to the immutable revision digest, project, verified connection,
-  target account/region, renderer, and exact prior artifact or saved plan.
-- Preserve phase-specific readiness, confirmation, result verification, and
-  durable module-instance transitions.
+- Make the hosted-certification exception a durable run attribute, not an
+  application-process environment switch.
+- Ensure only a persisted serverless-certification run context can dispatch the
+  checked-in serverless renderer; a caller-supplied environment value alone must
+  not grant that ability.
+- Then add the one-module certification lifecycle creation/queue contract,
+  binding every phase to the approved revision, project, verified connection,
+  target account/region, and exact prior artifact or saved plan.
+- Preserve phase-specific confirmation, result verification, and durable
+  module-instance transitions.
 - Keep the serverless API renderer disabled for ordinary customer execution
-  until the controlled hosted lifecycle passes its AWS certification.
-- Add negative tests for wrong profile, digest, connection, account, artifact,
-  operation, role, and unauthorized callers.
+  until controlled hosted lifecycle certification passes.
 - Record local and hosted certification evidence and keep the execution matrix
   accurate.
 
@@ -64,7 +66,11 @@ already exist. PRs #277–#280 are deployed; worker lease schema v24 is live.
 
 ## Acceptance status
 
-Implementation not started.
+The persisted worker mode is now forwarded into the trusted adapter context.
+The serverless renderer is accepted only when that durable mode and the
+`aws-serverless-api` profile match. API run creation and lifecycle phase
+validation remain unfinished; the PR stays draft and no customer execution is
+enabled.
 
 ## Tests / validation performed
 

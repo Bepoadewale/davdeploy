@@ -30,7 +30,9 @@ class CloudExecutionAdapter(Protocol):
     def execute(self, context: dict[str, object]) -> CloudExecutionResult: ...
 
 
-def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
+def validate_lifecycle_work(
+    value: object, *, hosted_certification: bool = False
+) -> tuple[dict[str, object], ...]:
     """Accept only durable, typed module work, never a command payload."""
     if not isinstance(value, list) or not value:
         raise ValueError("universal lifecycle work is required")
@@ -55,13 +57,15 @@ def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
             "build_artifact",
         }:
             raise ValueError("universal lifecycle work has an unsupported operation")
-        if not isinstance(dependencies, list) or not all(isinstance(value, str) for value in dependencies):
+        if not isinstance(dependencies, list) or not all(
+            isinstance(value, str) for value in dependencies
+        ):
             raise ValueError("universal lifecycle work has invalid dependencies")
         if not isinstance(resource_tags, dict) or not all(
             isinstance(key, str) and isinstance(value, str) for key, value in resource_tags.items()
         ):
             raise ValueError("universal lifecycle work has invalid resource tags")
-        renderer = renderer_for(module_id, operation)
+        renderer = renderer_for(module_id, operation, hosted_certification=hosted_certification)
         accepted.append(
             {
                 "module_id": module_id,
@@ -78,10 +82,23 @@ def validate_lifecycle_work(value: object) -> tuple[dict[str, object], ...]:
 
 
 def trusted_execution_work(context: dict[str, object]) -> tuple[dict[str, object], ...]:
-    """Resolve lifecycle work or one fixed App Runner image-build task."""
+    """Resolve durable lifecycle work or one fixed App Runner image-build task.
+
+    The hosted serverless certification exception is granted only by a run mode
+    loaded from the durable execution row, never by a caller-provided environment
+    flag.
+    """
     value = context.get("lifecycle_work")
     environment = context.get("environment") or {}
-    if value is None and isinstance(environment, dict) and environment.get("DAVDEPLOY_EXECUTION_OPERATION") == "build-push-image":
+    hosted_certification = (
+        context.get("mode") == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
+        and context.get("profile") == "aws-serverless-api"
+    )
+    if (
+        value is None
+        and isinstance(environment, dict)
+        and environment.get("DAVDEPLOY_EXECUTION_OPERATION") == "build-push-image"
+    ):
         value = [
             {
                 "module_id": "aws-managed-application",
@@ -90,7 +107,7 @@ def trusted_execution_work(context: dict[str, object]) -> tuple[dict[str, object
                 "resource_tags": {"ManagedBy": "davdeploy"},
             }
         ]
-    return validate_lifecycle_work(value)
+    return validate_lifecycle_work(value, hosted_certification=hosted_certification)
 
 
 class DisabledCloudExecutionAdapter:
@@ -107,7 +124,14 @@ class DisabledCloudExecutionAdapter:
 class AppRunnerCloudExecutionAdapter:
     """Run only the checked-in App Runner pilot script when explicitly enabled."""
 
-    operations = ("plan", "apply-foundation", "build-push-image", "apply-service", "wait-ready", "smoke")
+    operations = (
+        "plan",
+        "apply-foundation",
+        "build-push-image",
+        "apply-service",
+        "wait-ready",
+        "smoke",
+    )
 
     def __init__(self, *, root: str | Path = ".", timeout_seconds: int = 1_800):
         self.root = Path(root)
@@ -207,7 +231,10 @@ class CodeBuildCloudExecutionAdapter:
             return CloudExecutionResult("FAILED", (), {}, str(error))
         if len(lifecycle_work) != 1:
             return CloudExecutionResult(
-                "FAILED", (), {}, "CodeBuild currently accepts one certified module per execution run."
+                "FAILED",
+                (),
+                {},
+                "CodeBuild currently accepts one certified module per execution run.",
             )
         if not self.project_name:
             return DisabledCloudExecutionAdapter().execute(context)
@@ -230,7 +257,7 @@ class CodeBuildCloudExecutionAdapter:
                 "type": "PLAINTEXT",
             }
         )
-        if any(item["module_id"] == "aws-serverless-api" for item in lifecycle_work):
+        if context.get("mode") == "AUTHENTICATED_SERVERLESS_CERTIFICATION":
             overrides.append(
                 {
                     "name": "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION",
