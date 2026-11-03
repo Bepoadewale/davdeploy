@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-03, backend main commit `93c895e6e40e80f20b71a6f3a21e3186ca63d576`.
+Audit as of 2026-11-03, backend main commit `ff5103f4be8f4ddbeca3bbde0829421b4c2f8a49` (PR #275).
 
 ## Hosted deployment evidence
 
@@ -18,6 +18,7 @@ An unauthenticated request to `https://api.davdeploy.tech/health` returned HTTP 
 | CodeBuild dispatcher | One typed item; fixed registry mapping; unknown, disabled, malformed, dependency-bearing and multi-item work fail closed | Deployed |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md` | Isolated AWS certified; hosted execution disabled |
+| Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | typed graph and dependency ordering helpers exist; CodeBuild rejects runs with more than one module | Not implemented as durable hosted orchestration |
 | Browser, CLI and MCP lifecycle parity | shared APIs exist, but frontend uses App Runner-specific modes and confirmation | Partial |
 | Eight certification scenarios | test scenario catalogue plus bounded Terraform runner | Service roots exist; not all real application scenarios exercise hosted customer runner, update, recovery and absence |
@@ -92,7 +93,7 @@ These entries identify resource roots or module paths. None is automatically a c
 | `aws-site-to-site-vpn` | `modules/site-to-site-vpn` | none |
 | `aws-multi-region-dns` | `modules/multi-region-dns` | none |
 
-The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled in the hosted registry. App Runner is currently the only registered hosted renderer.
+The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled in the hosted registry. PR #275 adds project isolation and local lifecycle contract evidence; it is not hosted renderer certification. App Runner is currently the only registered hosted renderer.
 
 ## Work that remains
 
@@ -106,3 +107,6 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 8. Run the final browser, CLI and MCP AWS acceptance journey and reconcile status docs from its results.
 
 See `docs/test/test268.md`, `docs/tickets/ticket270.md`, and the active goal handoff for detailed evidence and boundaries.
+
+The step-by-step goal status and next actions are in
+[`COMPOSED_EXECUTION_GOAL.md`](COMPOSED_EXECUTION_GOAL.md).
