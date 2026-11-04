@@ -26,14 +26,14 @@ PRs #286–#291 are merged. The worker still dispatches one certified module per
 
 ## Acceptance criteria
 
-- [ ] Roadmap documents cite current merged foundations and accurately name the next integration work.
-- [ ] No documentation implies that multi-module execution or hosted Lambda/API certification is enabled.
-- [ ] Documentation convention and diff checks pass.
-- [ ] GitHub CI passes.
+- [x] Roadmap documents cite current merged foundations and accurately name the next integration work.
+- [x] No documentation implies that multi-module execution or hosted Lambda/API certification is enabled.
+- [x] Documentation convention and diff checks pass.
+- [ ] GitHub CI passes before merge.
 
 ## Acceptance status
 
-Pending implementation.
+`python3 scripts/check_doc_conventions.py` and `git diff --check` pass. GitHub CI is pending.
 
 ## Tests / validation performed
 
