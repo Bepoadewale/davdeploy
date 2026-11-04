@@ -152,6 +152,7 @@ NOVA_PLAN_MAX_EXPLICIT_RETRIES = 3
 NOVA_PLAN_UNCERTAIN_ERROR_CODES = frozenset(
     {
         "DISPATCH_UNCERTAIN",
+        "INPUT_STAGE_RECONCILIATION_REQUIRED",
         "PREPARATION_OUTCOME_UNCERTAIN",
         "PREPARATION_LEASE_EXPIRED",
         "BUILD_STATUS_UNCONFIRMED",
@@ -2344,6 +2345,170 @@ class ProductService:
             raise ValueError("Nova plan request could not be recorded safely") from None
         return run
 
+    def reconcile_generated_plan_input(
+        self, principal: Principal, run_id: str, *, abandon_attempt: bool = False
+    ) -> dict[str, Any]:
+        """Verify an ambiguous pre-build input or safely abandon its attempt."""
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+        if (
+            run.state != "RECONCILIATION_REQUIRED"
+            or run.error_code != "INPUT_STAGE_RECONCILIATION_REQUIRED"
+            or run.codebuild_build_id is not None
+            or not run.runner_run_id
+            or not run.input_key
+            or not run.input_sha256
+            or not run.proposal_sha256
+        ):
+            raise ValueError("only an ambiguous pre-build input attempt can be reconciled here")
+
+        if abandon_attempt:
+            now = datetime.now(UTC)
+            abandoned = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.codebuild_build_id.is_(None),
+                )
+                .values(
+                    state="FAILED",
+                    error_code="INPUT_ATTEMPT_ABANDONED",
+                    error_summary=(
+                        "This pre-build input attempt was abandoned. A retry will use a fresh immutable key."
+                    ),
+                    finished_at=now,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if abandoned.rowcount != 1:
+                self.db.rollback()
+                return self.generated_plan_run_detail(principal, run.id)
+            self.audit(
+                principal,
+                "generated_plan_run.input_attempt_abandoned",
+                "generated_plan_run",
+                run.id,
+                {
+                    "runner_run_id": run.runner_run_id,
+                    "input_key": run.input_key,
+                    "input_sha256": run.input_sha256,
+                    "state": "FAILED",
+                },
+            )
+            self.db.commit()
+            return self.generated_plan_run_detail(principal, run.id)
+
+        dispatcher = self.nova_plan_dispatcher
+        if dispatcher is None:
+            dispatcher = NovaPlanOnlyDispatcher.from_environment()
+        if dispatcher is None:
+            raise NovaPlanDispatchError("Nova plan runner is not enabled for input reconciliation")
+        expected_key = dispatcher.input_key(run.runner_run_id)
+        if run.input_key != expected_key:
+            raise ValueError("stored Nova input key does not match its durable attempt")
+        version_id = dispatcher.inspect_staged_input(
+            run.runner_run_id, run.input_key, run.input_sha256
+        )
+        if version_id is None:
+            now = datetime.now(UTC)
+            absent = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.codebuild_build_id.is_(None),
+                )
+                .values(
+                    state="FAILED",
+                    error_code="INPUT_NOT_STAGED",
+                    error_summary=(
+                        "No input object exists for this attempt. Retry with a fresh idempotency key."
+                    ),
+                    finished_at=now,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if absent.rowcount != 1:
+                self.db.rollback()
+                return self.generated_plan_run_detail(principal, run.id)
+            self.audit(
+                principal,
+                "generated_plan_run.input_confirmed_absent",
+                "generated_plan_run",
+                run.id,
+                {
+                    "runner_run_id": run.runner_run_id,
+                    "input_key": run.input_key,
+                    "input_sha256": run.input_sha256,
+                    "state": "FAILED",
+                },
+            )
+            self.db.commit()
+            return self.generated_plan_run_detail(principal, run.id)
+
+        now = datetime.now(UTC)
+        resumed = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+                GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.codebuild_build_id.is_(None),
+            )
+            .values(
+                input_version_id=version_id,
+                state="QUEUED",
+                error_code=None,
+                error_summary=None,
+                finished_at=None,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if resumed.rowcount != 1:
+            self.db.rollback()
+            return self.generated_plan_run_detail(principal, run.id)
+        self.audit(
+            principal,
+            "generated_plan_run.input_reconciled",
+            "generated_plan_run",
+            run.id,
+            {
+                "runner_run_id": run.runner_run_id,
+                "input_key": run.input_key,
+                "input_sha256": run.input_sha256,
+                "input_version_id": version_id,
+                "state": "QUEUED",
+            },
+        )
+        self.db.commit()
+        queued = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(GeneratedPlanRun.id == run.id)
+            .execution_options(populate_existing=True)
+        )
+        if queued:
+            self._wake_generated_plan_run(queued)
+        return self.generated_plan_run_detail(principal, run.id)
+
     def _wake_generated_plan_run(self, run: GeneratedPlanRun) -> None:
         """Wake the durable worker; repeated SQS notifications are safe."""
         if run.state != "QUEUED":
@@ -2666,6 +2831,21 @@ class ProductService:
         lease_token = run.preparation_lease_token
         if not lease_token:
             return False
+        input_stage_uncertain = bool(
+            run.input_sha256 and run.proposal_sha256 and not run.input_version_id
+        )
+        error_code = (
+            "INPUT_STAGE_RECONCILIATION_REQUIRED"
+            if input_stage_uncertain
+            else "PREPARATION_LEASE_EXPIRED"
+        )
+        error_summary = (
+            "The worker stopped while staging the input, before any build start. Verify the exact "
+            "input object or abandon this attempt before retrying."
+            if input_stage_uncertain
+            else "The worker lease expired before its runner start could be confirmed. "
+            "Reconcile the request before retrying."
+        )
         expired = self.db.execute(
             update(GeneratedPlanRun)
             .where(
@@ -2676,11 +2856,8 @@ class ProductService:
             )
             .values(
                 state="RECONCILIATION_REQUIRED",
-                error_code="PREPARATION_LEASE_EXPIRED",
-                error_summary=(
-                    "The worker lease expired before its runner start could be confirmed. "
-                    "Reconcile the request before retrying."
-                ),
+                error_code=error_code,
+                error_summary=error_summary,
                 preparation_lease_token=None,
                 preparation_lease_expires_at=None,
                 updated_at=current_time,
@@ -2695,7 +2872,7 @@ class ProductService:
             "generated_plan_run.preparation_expired",
             "generated_plan_run",
             run.id,
-            {"state": "RECONCILIATION_REQUIRED", "error_code": "PREPARATION_LEASE_EXPIRED"},
+            {"state": "RECONCILIATION_REQUIRED", "error_code": error_code},
         )
         self.db.commit()
         return True
@@ -2732,6 +2909,10 @@ class ProductService:
             target.get("environment_id"),
         )
         build = None
+        generated = None
+        proposal_sha256 = run.proposal_sha256
+        input_sha256 = run.input_sha256
+        input_version_id = run.input_version_id
         try:
             if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
                 run.id, lease_token
@@ -2739,111 +2920,175 @@ class ProductService:
                 raise NovaPlanDispatchError(
                     "Nova plan worker lease was lost before generation", outcome_uncertain=True
                 )
-            generated = self.terraform_generator.generate(
-                approved_plan=revision.content,
-                tenant=TenantScope(
-                    organization_id=principal.organization_id,
-                    workspace_id=principal.organization_id,
-                    project_id=customer_plan.project_id,
-                    actor_id=principal.subject,
-                ),
-                source_revision=revision.id,
-            )
-            proposal = generated.proposal
-            if (
-                proposal.source_revision != revision.id
-                or proposal.requirements.region != target.get("region")
-            ):
-                raise ValueError("Nova proposal did not match the trusted revision and region")
-            proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
-            request_payload = {
-                **request_document,
-                "run_id": runner_run_id,
-                "control_plane_run_id": run.id,
-                "proposal_sha256": proposal_sha256,
-                "ownership_scope": {
-                    "organization_id": ownership_scope.organization_id,
-                    "workspace_id": ownership_scope.workspace_id,
-                    "project_id": ownership_scope.project_id,
-                    "plan_id": ownership_scope.plan_id,
-                    "revision_id": ownership_scope.revision_id,
-                    "environment_id": ownership_scope.environment_id,
-                    "scope_sha256": ownership_scope.scope_sha256(),
-                    "plan_id_sha256": ownership_scope.plan_id_sha256(),
-                    "tags": ownership_scope.tags(),
-                },
-                "proposal": proposal.model_dump(mode="json"),
-                "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-            }
-            if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
-                run.id, lease_token
-            ):
-                raise NovaPlanDispatchError(
-                    "Nova plan worker lease was lost before input staging", outcome_uncertain=True
+
+            if input_version_id:
+                if not proposal_sha256 or not input_sha256:
+                    raise ValueError("durable staged Nova input is missing its digest binding")
+                inspected_version = dispatcher.inspect_staged_input(
+                    runner_run_id, run.input_key, input_sha256
                 )
-            input_key, input_sha256, input_version_id = dispatcher.stage_input(
-                runner_run_id, request_payload
-            )
-            if input_key != run.input_key:
-                raise NovaPlanDispatchError("Nova plan input key did not match its durable request")
-            staged = self.db.execute(
-                update(GeneratedPlanRun)
-                .where(
-                    GeneratedPlanRun.id == run.id,
-                    GeneratedPlanRun.state == "PREPARING",
-                    GeneratedPlanRun.preparation_lease_token == lease_token,
-                )
-                .values(
-                    proposal_sha256=proposal_sha256,
-                    input_sha256=input_sha256,
-                    input_version_id=input_version_id,
-                    updated_at=datetime.now(UTC),
-                )
-                .execution_options(synchronize_session=False)
-            )
-            if staged.rowcount != 1:
-                self.db.rollback()
-                raise NovaPlanDispatchError(
-                    "Nova plan worker lease was lost after input staging", outcome_uncertain=True
-                )
-            response_usage = generated.response.usage
-            self._record_model_usage(
-                principal,
-                {
-                    "request_id": generated.response.request.request_id,
-                    "provider": generated.response.request.provider,
-                    "model": generated.response.request.model,
-                    "prompt_version": generated.response.request.prompt_version,
-                    "usage": response_usage.model_dump(mode="json") if response_usage else {},
-                    "attempt_count": (response_usage.retry_count + 1) if response_usage else 1,
-                    "retry_count": response_usage.retry_count if response_usage else 0,
-                    "latency_ms": response_usage.latency_ms if response_usage else None,
-                    "measured_at": (
-                        response_usage.measured_at.isoformat() if response_usage else None
+                if inspected_version != input_version_id:
+                    raise NovaPlanDispatchError(
+                        "Nova plan input version no longer matches the durable attempt",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+            else:
+                generated = self.terraform_generator.generate(
+                    approved_plan=revision.content,
+                    tenant=TenantScope(
+                        organization_id=principal.organization_id,
+                        workspace_id=principal.organization_id,
+                        project_id=customer_plan.project_id,
+                        actor_id=principal.subject,
                     ),
-                    "estimated_cost_usd": (
-                        response_usage.estimated_cost_usd if response_usage else None
-                    ),
-                },
-            )
-            self.audit(
-                Principal("system-nova-plan-worker", run.organization_id, "operator"),
-                "generated_plan_run.input_staged",
-                "generated_plan_run",
-                run.id,
-                {
-                    "input_sha256": input_sha256,
-                    "input_version_id": input_version_id,
+                    source_revision=revision.id,
+                )
+                proposal = generated.proposal
+                if (
+                    proposal.source_revision != revision.id
+                    or proposal.requirements.region != target.get("region")
+                ):
+                    raise ValueError("Nova proposal did not match the trusted revision and region")
+                proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
+                request_payload = {
+                    **request_document,
+                    "run_id": runner_run_id,
+                    "control_plane_run_id": run.id,
                     "proposal_sha256": proposal_sha256,
-                    "state": run.state,
-                },
-            )
-            self.db.commit()
+                    "ownership_scope": {
+                        "organization_id": ownership_scope.organization_id,
+                        "workspace_id": ownership_scope.workspace_id,
+                        "project_id": ownership_scope.project_id,
+                        "plan_id": ownership_scope.plan_id,
+                        "revision_id": ownership_scope.revision_id,
+                        "environment_id": ownership_scope.environment_id,
+                        "scope_sha256": ownership_scope.scope_sha256(),
+                        "plan_id_sha256": ownership_scope.plan_id_sha256(),
+                        "tags": ownership_scope.tags(),
+                    },
+                    "proposal": proposal.model_dump(mode="json"),
+                    "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                }
+                expected_input_sha256 = canonical_json_digest(request_payload)
+                if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
+                    run.id, lease_token
+                ):
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost before input staging",
+                        outcome_uncertain=True,
+                    )
+                prepared = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.state == "PREPARING",
+                        GeneratedPlanRun.preparation_lease_token == lease_token,
+                    )
+                    .values(
+                        proposal_sha256=proposal_sha256,
+                        input_sha256=expected_input_sha256,
+                        input_version_id=None,
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if prepared.rowcount != 1:
+                    self.db.rollback()
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost before input staging",
+                        outcome_uncertain=True,
+                    )
+                run.proposal_sha256 = proposal_sha256
+                run.input_sha256 = expected_input_sha256
+                run.input_version_id = None
+                self.audit(
+                    Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                    "generated_plan_run.input_stage_started",
+                    "generated_plan_run",
+                    run.id,
+                    {
+                        "runner_run_id": runner_run_id,
+                        "input_key": run.input_key,
+                        "input_sha256": expected_input_sha256,
+                        "proposal_sha256": proposal_sha256,
+                    },
+                )
+                self.db.commit()
+
+                input_key, input_sha256, input_version_id = dispatcher.stage_input(
+                    runner_run_id, request_payload
+                )
+                if input_key != run.input_key or input_sha256 != expected_input_sha256:
+                    raise NovaPlanDispatchError(
+                        "Nova plan input did not match its durable digest binding",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+                staged = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.state == "PREPARING",
+                        GeneratedPlanRun.preparation_lease_token == lease_token,
+                    )
+                    .values(
+                        input_version_id=input_version_id,
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if staged.rowcount != 1:
+                    self.db.rollback()
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost after input staging",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+                run.input_version_id = input_version_id
+                response_usage = generated.response.usage
+                self._record_model_usage(
+                    principal,
+                    {
+                        "request_id": generated.response.request.request_id,
+                        "provider": generated.response.request.provider,
+                        "model": generated.response.request.model,
+                        "prompt_version": generated.response.request.prompt_version,
+                        "usage": response_usage.model_dump(mode="json") if response_usage else {},
+                        "attempt_count": (response_usage.retry_count + 1) if response_usage else 1,
+                        "retry_count": response_usage.retry_count if response_usage else 0,
+                        "latency_ms": response_usage.latency_ms if response_usage else None,
+                        "measured_at": (
+                            response_usage.measured_at.isoformat() if response_usage else None
+                        ),
+                        "estimated_cost_usd": (
+                            response_usage.estimated_cost_usd if response_usage else None
+                        ),
+                    },
+                )
+                self.audit(
+                    Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                    "generated_plan_run.input_staged",
+                    "generated_plan_run",
+                    run.id,
+                    {
+                        "input_sha256": input_sha256,
+                        "input_version_id": input_version_id,
+                        "proposal_sha256": proposal_sha256,
+                        "state": run.state,
+                    },
+                )
+                self.db.commit()
+
+            if not proposal_sha256 or not input_sha256 or not input_version_id:
+                raise ValueError("durable Nova input staging is incomplete")
             if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
                 run.id, lease_token
             ):
                 raise NovaPlanDispatchError(
-                    "Nova plan worker lease was lost before the runner start", outcome_uncertain=True
+                    "Nova plan worker lease was lost before the runner start",
+                    outcome_uncertain=True,
+                    phase="input_stage",
                 )
             build = dispatcher.start_build(runner_run_id)
             if build.project_name != run.codebuild_project:
@@ -2923,13 +3168,27 @@ class ProductService:
         except NovaPlanDispatchError as error:
             self.db.rollback()
             uncertain = error.outcome_uncertain
+            input_stage_failure = error.phase == "input_stage"
             self._finish_generated_plan_run_claim(
                 run,
                 lease_token,
                 state="RECONCILIATION_REQUIRED" if uncertain else "FAILED",
-                error_code="DISPATCH_UNCERTAIN" if uncertain else "DISPATCH_FAILED",
+                error_code=(
+                    "INPUT_STAGE_RECONCILIATION_REQUIRED"
+                    if input_stage_failure and uncertain
+                    else "INPUT_STAGE_FAILED"
+                    if input_stage_failure
+                    else "DISPATCH_UNCERTAIN"
+                    if uncertain
+                    else "DISPATCH_FAILED"
+                ),
                 error_summary=(
-                    "The build start could not be confirmed. Check the run status before retrying."
+                    "Input storage could not be confirmed. Verify the exact staged object or "
+                    "abandon this attempt before retrying."
+                    if input_stage_failure and uncertain
+                    else str(error)
+                    if input_stage_failure
+                    else "The build start could not be confirmed. Check the run status before retrying."
                     if uncertain
                     else str(error)
                 ),
@@ -2957,13 +3216,27 @@ class ProductService:
             )
         except SQLAlchemyError:
             self.db.rollback()
+            input_stage_uncertain = bool(input_sha256 and proposal_sha256 and not build)
             self._finish_generated_plan_run_claim(
                 run,
                 lease_token,
                 state="RECONCILIATION_REQUIRED",
-                error_code="PREPARATION_OUTCOME_UNCERTAIN",
-                error_summary="The request could not be fully confirmed. Check its status before retrying.",
-                action="generated_plan_run.preparation_uncertain",
+                error_code=(
+                    "INPUT_STAGE_RECONCILIATION_REQUIRED"
+                    if input_stage_uncertain
+                    else "PREPARATION_OUTCOME_UNCERTAIN"
+                ),
+                error_summary=(
+                    "Input storage could not be confirmed. Verify the exact staged object or "
+                    "abandon this attempt before retrying."
+                    if input_stage_uncertain
+                    else "The request could not be fully confirmed. Check its status before retrying."
+                ),
+                action=(
+                    "generated_plan_run.input_stage_uncertain"
+                    if input_stage_uncertain
+                    else "generated_plan_run.preparation_uncertain"
+                ),
                 codebuild_build_id=build.build_id if build else None,
             )
         return self.generated_plan_run_detail(principal, run.id)

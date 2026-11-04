@@ -385,6 +385,12 @@ class GeneratedPlanRunRequest(BaseModel):
     content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class GeneratedPlanInputReconciliationRequest(BaseModel):
+    """Resolve only an ambiguous S3 input-stage attempt before any build starts."""
+
+    abandon_attempt: bool = False
+
+
 class InfrastructurePlanDecisionRequest(BaseModel):
     decision: InfrastructurePlanDecision
     content_digest: str = Field(min_length=64, max_length=64)

@@ -17,9 +17,16 @@ from botocore.exceptions import BotoCoreError, ClientError
 class NovaPlanDispatchError(RuntimeError):
     """A plan-only request could not be safely staged or dispatched."""
 
-    def __init__(self, message: str, *, outcome_uncertain: bool = False):
+    def __init__(
+        self,
+        message: str,
+        *,
+        outcome_uncertain: bool = False,
+        phase: str | None = None,
+    ):
         super().__init__(message)
         self.outcome_uncertain = outcome_uncertain
+        self.phase = phase
 
 
 @dataclass(frozen=True)
@@ -104,29 +111,126 @@ class NovaPlanOnlyDispatcher:
             raise NovaPlanDispatchError("Nova plan input exceeds its configured size limit")
         digest = hashlib.sha256(payload).hexdigest()
         try:
-            response = self.s3.put_object(
+            response = self._put_input_object(run_id, key, payload, digest)
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+            response = None
+
+        version_id = self._version_id(response)
+        if version_id:
+            return key, digest, version_id
+
+        # A lost PutObject response can still mean S3 stored the object. Inspect
+        # the exact attempt key and accept only our matching run/digest metadata.
+        version_id = self.inspect_staged_input(run_id, key, digest)
+        if version_id:
+            return key, digest, version_id
+
+        # HeadObject confirmed absence, so retry the conditional write once. If
+        # another writer wins the race, the next inspection verifies its object.
+        try:
+            response = self._put_input_object(run_id, key, payload, digest)
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+            response = None
+        version_id = self._version_id(response)
+        if version_id:
+            return key, digest, version_id
+        version_id = self.inspect_staged_input(run_id, key, digest)
+        if version_id:
+            return key, digest, version_id
+        raise NovaPlanDispatchError(
+            "Nova plan input is confirmed absent after one conditional retry",
+            phase="input_stage",
+        )
+
+    def inspect_staged_input(self, run_id: str, key: str, digest: str) -> str | None:
+        """Return the exact stored version, None for confirmed absence, or fail closed."""
+        run_id = _validate_run_id(run_id)
+        if key != self.input_key(run_id) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+            raise NovaPlanDispatchError(
+                "Nova plan input inspection did not match the durable attempt key",
+                outcome_uncertain=True,
+                phase="input_stage",
+            )
+        try:
+            response = self.s3.head_object(
                 Bucket=self.bucket,
                 Key=key,
-                Body=payload,
-                ContentLength=len(payload),
-                ContentType="application/json",
-                ServerSideEncryption="aws:kms",
-                SSEKMSKeyId=self.kms_key_arn,
-                BucketKeyEnabled=False,
-                IfNoneMatch="*",
                 ExpectedBucketOwner=self.expected_bucket_owner,
-                Metadata={"davdeploy-run-id": run_id, "davdeploy-input-sha256": digest},
             )
-        except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+        except ClientError as error:
+            error_detail = error.response.get("Error") or {}
+            error_code = error_detail.get("Code")
+            status = (error.response.get("ResponseMetadata") or {}).get("HTTPStatusCode")
+            if error_code == "NoSuchBucket":
+                raise NovaPlanDispatchError(
+                    "Nova plan input bucket could not be inspected; reconcile this attempt",
+                    outcome_uncertain=True,
+                    phase="input_stage",
+                ) from None
+            if error_code in {"404", "NoSuchKey", "NotFound"} or status == 404:
+                return None
             raise NovaPlanDispatchError(
-                "Nova plan input storage could not be confirmed", outcome_uncertain=True
+                "Nova plan input object could not be inspected; reconcile this attempt",
+                outcome_uncertain=True,
+                phase="input_stage",
             ) from None
-        version_id = response.get("VersionId")
-        if not isinstance(version_id, str) or not version_id or version_id == "null":
+        except (BotoCoreError, OSError, TimeoutError, ValueError, TypeError):
             raise NovaPlanDispatchError(
-                "Nova plan input bucket versioning could not be confirmed", outcome_uncertain=True
+                "Nova plan input object could not be inspected; reconcile this attempt",
+                outcome_uncertain=True,
+                phase="input_stage",
+            ) from None
+
+        if not isinstance(response, dict):
+            raise NovaPlanDispatchError(
+                "Nova plan input object inspection returned invalid metadata; reconcile this attempt",
+                outcome_uncertain=True,
+                phase="input_stage",
             )
-        return key, digest, version_id
+        metadata = response.get("Metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        if (
+            metadata.get("davdeploy-run-id") != run_id
+            or metadata.get("davdeploy-input-sha256") != digest
+        ):
+            raise NovaPlanDispatchError(
+                "Nova plan input object metadata does not match this attempt; reconcile it",
+                outcome_uncertain=True,
+                phase="input_stage",
+            )
+        version_id = self._version_id(response)
+        if not version_id:
+            raise NovaPlanDispatchError(
+                "Nova plan input object has no immutable version; reconcile this attempt",
+                outcome_uncertain=True,
+                phase="input_stage",
+            )
+        return version_id
+
+    def _put_input_object(
+        self, run_id: str, key: str, payload: bytes, digest: str
+    ) -> dict[str, Any]:
+        return self.s3.put_object(
+            Bucket=self.bucket,
+            Key=key,
+            Body=payload,
+            ContentLength=len(payload),
+            ContentType="application/json",
+            ServerSideEncryption="aws:kms",
+            SSEKMSKeyId=self.kms_key_arn,
+            BucketKeyEnabled=False,
+            IfNoneMatch="*",
+            ExpectedBucketOwner=self.expected_bucket_owner,
+            Metadata={"davdeploy-run-id": run_id, "davdeploy-input-sha256": digest},
+        )
+
+    @staticmethod
+    def _version_id(response: dict[str, Any] | None) -> str | None:
+        version_id = response.get("VersionId") if isinstance(response, dict) else None
+        if not isinstance(version_id, str) or not version_id or version_id == "null":
+            return None
+        return version_id
 
     def start_build(self, run_id: str) -> NovaPlanBuild:
         run_id = _validate_run_id(run_id)

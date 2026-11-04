@@ -22,7 +22,10 @@ def test_nova_plan_storage_access_is_opt_in_and_prefix_scoped() -> None:
     assert "var.enable_nova_plan_reviews ? [{" in policy
     assert '"s3:PutObject", "s3:GetObjectVersion"' in policy
     assert "plans/nova-generated/*" in policy
+    assert 'Action   = ["s3:GetObject"]' in policy
+    assert "plans/nova-generated/requests/????????-????-????-????-????????????/input.json" in policy
     assert 'Action = ["s3:ListBucket"]' not in policy
+    assert 'Action   = ["s3:ListBucket"]' not in policy
     assert '"kms:Decrypt", "kms:GenerateDataKey"' in policy
     assert '"kms:ViaService"' in policy
     assert '"kms:EncryptionContext:aws:s3:arn"' in policy

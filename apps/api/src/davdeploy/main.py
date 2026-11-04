@@ -36,6 +36,7 @@ from davdeploy.domain import (
     DesiredStatePublicationRequest,
     DesiredStatePublicationStateRequest,
     GeneratedPlanArtifactApprovalRequest,
+    GeneratedPlanInputReconciliationRequest,
     GeneratedPlanRunRequest,
     InfrastructurePlanConstraintUpdateRequest,
     InfrastructurePlanDecisionRequest,
@@ -1241,6 +1242,23 @@ def retry_generated_plan_run(
     REQUESTS.labels("generated_plan_runs.retry").inc()
     try:
         return service.retry_generated_plan_run(principal, run_id, idempotency_key)
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/reconcile-input", status_code=202)
+def reconcile_generated_plan_input(
+    run_id: str,
+    request: GeneratedPlanInputReconciliationRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Verify a staged input or explicitly abandon that pre-build attempt."""
+    REQUESTS.labels("generated_plan_runs.reconcile_input").inc()
+    try:
+        return service.reconcile_generated_plan_input(
+            principal, run_id, abandon_attempt=request.abandon_attempt
+        )
     except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
         translate(error)
 

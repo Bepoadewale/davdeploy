@@ -262,6 +262,14 @@ resource "aws_iam_role_policy" "api" {
         Resource = "arn:aws:s3:::${var.nova_plan_artifact_bucket}/plans/nova-generated/*"
       }] : [],
       var.enable_nova_plan_reviews ? [{
+        # HeadObject on the exact staged request uses s3:GetObject. Keep it
+        # limited to input.json; no ListBucket permission is granted, so a 403
+        # for a missing key remains uncertain and requires explicit attempt abandonment.
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "arn:aws:s3:::${var.nova_plan_artifact_bucket}/plans/nova-generated/requests/????????-????-????-????-????????????/input.json"
+      }] : [],
+      var.enable_nova_plan_reviews ? [{
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
         Resource = var.nova_plan_kms_key_arn

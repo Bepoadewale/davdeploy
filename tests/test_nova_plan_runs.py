@@ -89,6 +89,14 @@ class FakeDispatcher:
         self.staged.append((run_id, document, key, digest, version))
         return key, digest, version
 
+    def inspect_staged_input(self, run_id, key, digest):
+        del digest
+        if key != self.input_key(run_id):
+            raise NovaPlanDispatchError(
+                "fixture input key mismatch", outcome_uncertain=True, phase="input_stage"
+            )
+        return "fixture-input-version"
+
     def start_build(self, run_id):
         from davdeploy.nova_plan_dispatch import NovaPlanBuild
 
@@ -355,13 +363,17 @@ def test_uncertain_build_start_requires_reconciliation_without_retrying():
 
 
 def test_uncertain_input_stage_requires_reconciliation_without_retrying():
-    service, db, _, dispatcher = service_with_dispatcher()
+    service, db, generator, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)
     original_stage = dispatcher.stage_input
 
     def stage_then_lose_confirmation(run_id, document):
         original_stage(run_id, document)
-        raise NovaPlanDispatchError("fixture lost input-stage confirmation", outcome_uncertain=True)
+        raise NovaPlanDispatchError(
+            "fixture lost input-stage confirmation",
+            outcome_uncertain=True,
+            phase="input_stage",
+        )
 
     dispatcher.stage_input = stage_then_lose_confirmation
     run = service.request_generated_plan_run(
@@ -371,12 +383,74 @@ def test_uncertain_input_stage_requires_reconciliation_without_retrying():
     assert service.run_next_generated_plan_run() is True
     uncertain = service.generated_plan_run_detail(founder(), run["id"])
     assert uncertain["state"] == "RECONCILIATION_REQUIRED"
-    assert uncertain["error_code"] == "DISPATCH_UNCERTAIN"
+    assert uncertain["error_code"] == "INPUT_STAGE_RECONCILIATION_REQUIRED"
+    stored = db.get(GeneratedPlanRun, run["id"])
+    assert stored.input_sha256
+    assert stored.proposal_sha256
+    assert stored.input_version_id is None
     with pytest.raises(ValueError, match="confirmed failed"):
         service.retry_generated_plan_run(
             founder(), run["id"], "nova-plan-request-retry-stage-uncertain-0001"
         )
     assert dispatcher.started == []
+
+    reconciled = service.reconcile_generated_plan_input(founder(), run["id"])
+    assert reconciled["state"] == "QUEUED"
+    assert db.get(GeneratedPlanRun, run["id"]).input_version_id == "fixture-input-version"
+    assert service.run_next_generated_plan_run() is True
+    resumed = service.generated_plan_run_detail(founder(), run["id"])
+    assert resumed["state"] == "BUILD_STARTED"
+    assert generator.calls == 1
+    assert len(dispatcher.staged) == 1
+    assert len(dispatcher.started) == 1
+    db.close()
+
+
+def test_input_stage_reconciliation_can_abandon_mismatch_then_retry_fresh_key():
+    service, db, _, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    original_stage = dispatcher.stage_input
+
+    def stage_then_lose_confirmation(run_id, document):
+        original_stage(run_id, document)
+        raise NovaPlanDispatchError(
+            "fixture lost input-stage confirmation",
+            outcome_uncertain=True,
+            phase="input_stage",
+        )
+
+    dispatcher.stage_input = stage_then_lose_confirmation
+    run = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-request-stage-abandon-001"
+    )
+    assert service.run_next_generated_plan_run() is True
+
+    def mismatch(*_args):
+        raise NovaPlanDispatchError(
+            "Nova plan input object metadata does not match this attempt; reconcile it",
+            outcome_uncertain=True,
+            phase="input_stage",
+        )
+
+    dispatcher.inspect_staged_input = mismatch
+    with pytest.raises(NovaPlanDispatchError, match="metadata does not match"):
+        service.reconcile_generated_plan_input(founder(), run["id"])
+    assert service.generated_plan_run_detail(founder(), run["id"])["state"] == "RECONCILIATION_REQUIRED"
+
+    abandoned = service.reconcile_generated_plan_input(
+        founder(), run["id"], abandon_attempt=True
+    )
+    assert abandoned["state"] == "FAILED"
+    assert abandoned["error_code"] == "INPUT_ATTEMPT_ABANDONED"
+    old_runner_id = db.get(GeneratedPlanRun, run["id"]).runner_run_id
+    dispatcher.stage_input = original_stage
+    retried = service.retry_generated_plan_run(
+        founder(), run["id"], "nova-plan-request-stage-abandon-retry-001"
+    )
+    assert retried["state"] == "QUEUED"
+    assert db.get(GeneratedPlanRun, run["id"]).runner_run_id != old_runner_id
+    assert service.run_next_generated_plan_run() is True
+    assert db.get(GeneratedPlanRun, run["id"]).state == "BUILD_STARTED"
     db.close()
 
 

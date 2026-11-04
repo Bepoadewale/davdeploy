@@ -15,6 +15,9 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - This PR now stores `QUEUED` requests and uses a tokenized, expiring worker lease before preparing input and starting a build.
 - Every accepted idempotency key is durably bound to its request and run. Migration 29 backfills existing run keys and stores new keys and cross-key deduplication aliases in an organization-scoped binding table.
 - A failed run can be retried explicitly up to three times with a fresh idempotency key. Every attempt gets a new durable runner ID and immutable input/result keys; replaying a retry key is idempotent, and runs with uncertain outcomes remain blocked for reconciliation.
+- The expected proposal and canonical input digests are committed before S3 staging. A lost PutObject/version response is resolved with HeadObject against the exact attempt key; only matching run ID/digest metadata with a non-null version is accepted. A confirmed absence permits one more `IfNoneMatch="*"` write.
+- Input-stage uncertainty has a specific reconciliation route. A matching stored version can resume the queued worker without regenerating; confirmed absence becomes a retryable failure; unavailable or mismatched inspection remains blocked until inspection succeeds or an operator explicitly abandons that pre-build attempt. Abandonment leaves the old key untouched and later retry uses a fresh key.
+- The API role can `GetObject` only for `plans/nova-generated/requests/<run-id>/input.json`, which authorizes HeadObject metadata checks. It receives no `ListBucket`; therefore an absent key returned as 403 is treated as uncertain and resolved through explicit abandonment plus a fresh immutable retry key.
 - Migration 30 backfills runner IDs and seeds a database-backed round-robin cursor. The worker honors `DAVDEPLOY_WORKER_MAX_JOBS_PER_WAKEUP` from 1 to 10 and remains fair across cold starts.
 - PR #324 is adding a distinct, disabled-by-default `DAVDEPLOY_NOVA_PLAN_PROJECT`; do not use `customer_executor`.
 - Protected untracked file `--only-show-errors` is not part of this PR and must remain untouched.
@@ -28,6 +31,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - `apps/api/src/davdeploy/lambda_worker.py`: hosted queue worker.
 - PR #324: dedicated plan-only CodeBuild boundary and fixed run-ID input contract.
 - AWS CodeBuild `StartBuild` and IAM condition-key documentation: https://docs.aws.amazon.com/codebuild/latest/APIReference/API_StartBuild.html and https://docs.aws.amazon.com/codebuild/latest/userguide/action-context-keys.html.
+- AWS S3 `HeadObject` permission behavior: https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html.
 
 ## Work planned for the PR
 
@@ -49,6 +53,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - [x] Worker drain order is fair across all four durable queue kinds through a shared database cursor, while respecting any configured job cap including 1.
 - [x] Duplicate/concurrent worker wake-ups and CodeBuild callbacks cannot create duplicate runs or bind another tenant's result.
 - [x] Failed, expired, or uncertain work remains visibly failed or requires reconciliation; no fake plan/artifact success is recorded.
+- [x] Lost input-stage responses cannot trigger an unsafe overwrite or duplicate write; durable reconciliation resumes a matching object, confirms absence, or requires explicit attempt abandonment before a fresh-key retry.
 - [x] Plan output remains unapprovable while complete regional pricing evidence is absent.
 - [x] Focused and full local verification pass, with no AWS mutation.
 
@@ -59,9 +64,10 @@ All implementation and local validation criteria are met. The PR remains open fo
 ## Tests / validation performed
 
 - Initial `make verify` before correcting the migration assertions: 692 passed, 4 failed. All four failures were stale expectations of schema version 26 after PR #325 had advanced it to 27.
-- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py tests/test_lambda_worker.py tests/test_db_config.py tests/test_invitation_email.py` — 38 passed after the attempt-key and durable-scheduler follow-up.
-- `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed after the attempt-key and durable-scheduler follow-up; 706 tests passed, Ruff/config/OpenAPI checks passed, and `docker compose config --quiet` passed.
-- `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated the snapshot; the final `make verify` confirms it matches.
+- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py tests/test_lambda_worker.py tests/test_db_config.py tests/test_invitation_email.py` — 45 passed after the S3 input-stage reconciliation and scoped IAM update.
+- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py` — 25 passed in the focused dispatcher/run subset after adding S3 input-stage reconciliation.
+- `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed with 711 tests, Ruff, configuration/OpenAPI checks, and `docker compose config --quiet`.
+- `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated the snapshot; the final `make verify` confirmed it matches.
 - No AWS calls or customer resources were used.
 
 ## Evidence files produced

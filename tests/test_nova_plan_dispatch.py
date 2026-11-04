@@ -5,6 +5,7 @@ import json
 import uuid
 
 import pytest
+from botocore.exceptions import ClientError
 from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
 
 PROJECT = "davdeploy-nova-plan-only"
@@ -22,7 +23,17 @@ class FakeS3:
     def put_object(self, **kwargs):
         self.calls.append(kwargs)
         self.uploaded = kwargs["Body"]
+        self.metadata = kwargs["Metadata"]
         return {"VersionId": self.version_id}
+
+    def head_object(self, **kwargs):
+        del kwargs
+        if not hasattr(self, "uploaded"):
+            raise ClientError(
+                {"Error": {"Code": "NoSuchKey"}, "ResponseMetadata": {"HTTPStatusCode": 404}},
+                "HeadObject",
+            )
+        return {"Metadata": self.metadata, "VersionId": self.version_id}
 
 
 class FakeCodeBuild:
@@ -83,22 +94,78 @@ def test_stage_input_is_encrypted_versioned_and_limited_to_run_key():
 def test_stage_input_fails_closed_without_bucket_versioning():
     configured = dispatcher(s3=FakeS3(version_id="null"))
 
-    with pytest.raises(NovaPlanDispatchError, match="versioning could not be confirmed") as error:
+    with pytest.raises(NovaPlanDispatchError, match="no immutable version") as error:
         configured.stage_input(RUN_ID, {"run_id": RUN_ID})
     assert error.value.outcome_uncertain
+    assert error.value.phase == "input_stage"
 
 
-def test_stage_input_storage_failure_is_marked_uncertain():
-    class PartiallyFailingS3(FakeS3):
+def test_stage_input_reconciles_put_success_with_lost_response_without_duplicate_put():
+    class LostResponseS3(FakeS3):
+        def put_object(self, **kwargs):
+            super().put_object(**kwargs)
+            raise OSError("fixture storage response was lost")
+
+    client = LostResponseS3()
+    configured = dispatcher(s3=client)
+    key, digest, version = configured.stage_input(RUN_ID, {"run_id": RUN_ID})
+
+    assert key == configured.input_key(RUN_ID)
+    assert digest == client.metadata["davdeploy-input-sha256"]
+    assert version == "v-input-1"
+    assert len(client.calls) == 1
+
+
+def test_stage_input_retries_once_only_after_head_confirms_absence():
+    class AbsentThenSucceedsS3(FakeS3):
+        def put_object(self, **kwargs):
+            if not self.calls:
+                self.calls.append(kwargs)
+                raise OSError("fixture first put response was lost")
+            return super().put_object(**kwargs)
+
+    client = AbsentThenSucceedsS3()
+    configured = dispatcher(s3=client)
+    key, _digest, version = configured.stage_input(RUN_ID, {"run_id": RUN_ID})
+
+    assert key == configured.input_key(RUN_ID)
+    assert version == "v-input-1"
+    assert len(client.calls) == 2
+    assert all(call["IfNoneMatch"] == "*" for call in client.calls)
+
+
+@pytest.mark.parametrize("inspection", ["mismatch", "unavailable", "forbidden"])
+def test_stage_input_fails_closed_without_retry_when_head_is_not_trustworthy(inspection):
+    class UntrustworthyHeadS3(FakeS3):
         def put_object(self, **kwargs):
             self.calls.append(kwargs)
             raise OSError("fixture storage response was lost")
 
-    configured = dispatcher(s3=PartiallyFailingS3())
+        def head_object(self, **kwargs):
+            del kwargs
+            if inspection == "unavailable":
+                raise OSError("fixture head request failed")
+            if inspection == "forbidden":
+                raise ClientError(
+                    {"Error": {"Code": "AccessDenied"}, "ResponseMetadata": {"HTTPStatusCode": 403}},
+                    "HeadObject",
+                )
+            return {
+                "Metadata": {
+                    "davdeploy-run-id": RUN_ID,
+                    "davdeploy-input-sha256": "f" * 64,
+                },
+                "VersionId": "v-foreign",
+            }
 
-    with pytest.raises(NovaPlanDispatchError, match="storage could not be confirmed") as error:
+    client = UntrustworthyHeadS3()
+    configured = dispatcher(s3=client)
+    with pytest.raises(NovaPlanDispatchError) as error:
         configured.stage_input(RUN_ID, {"run_id": RUN_ID})
+
     assert error.value.outcome_uncertain
+    assert error.value.phase == "input_stage"
+    assert len(client.calls) == 1
 
 
 def test_start_build_sets_only_server_owned_run_id_override():

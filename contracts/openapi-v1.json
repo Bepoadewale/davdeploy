@@ -519,6 +519,18 @@
         "title": "GeneratedPlanArtifactApprovalRequest",
         "type": "object"
       },
+      "GeneratedPlanInputReconciliationRequest": {
+        "description": "Resolve only an ambiguous S3 input-stage attempt before any build starts.",
+        "properties": {
+          "abandon_attempt": {
+            "default": false,
+            "title": "Abandon Attempt",
+            "type": "boolean"
+          }
+        },
+        "title": "GeneratedPlanInputReconciliationRequest",
+        "type": "object"
+      },
       "GeneratedPlanRunRequest": {
         "description": "Request a generated plan for one exact immutable customer revision.",
         "properties": {
@@ -4224,6 +4236,63 @@
           }
         },
         "summary": "Get Generated Plan Run"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/reconcile-input": {
+      "post": {
+        "description": "Verify a staged input or explicitly abandon that pre-build attempt.",
+        "operationId": "reconcile_generated_plan_input_api_v1_generated_plan_runs__run_id__reconcile_input_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanInputReconciliationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Generated Plan Input"
       }
     },
     "/api/v1/generated-plan-runs/{run_id}/retry": {
