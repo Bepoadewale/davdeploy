@@ -147,6 +147,15 @@ CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS = 60
 CLOUD_EXECUTION_LEASE_SCAN_SECONDS = 30
 NOVA_PLAN_PREPARATION_LEASE_SECONDS = 180
 NOVA_PLAN_WORKER_HEARTBEAT_SECONDS = 30
+NOVA_PLAN_MAX_EXPLICIT_RETRIES = 3
+NOVA_PLAN_UNCERTAIN_ERROR_CODES = frozenset(
+    {
+        "DISPATCH_UNCERTAIN",
+        "PREPARATION_OUTCOME_UNCERTAIN",
+        "PREPARATION_LEASE_EXPIRED",
+        "BUILD_STATUS_UNCONFIRMED",
+    }
+)
 _last_cloud_execution_lease_scan = 0.0
 _cloud_execution_lease_scan_lock = threading.Lock()
 
@@ -2092,6 +2101,152 @@ class ProductService:
 
         self._wake_generated_plan_run(run)
         return self.generated_plan_run_detail(principal, run.id)
+
+    def retry_generated_plan_run(
+        self, principal: Principal, run_id: str, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Explicitly requeue a confirmed failure with a fresh idempotency key.
+
+        The original request remains bound to its run. Retry keys are separately
+        recorded so replaying a retry request cannot start another attempt. Runs
+        requiring reconciliation are never eligible for retry.
+        """
+        if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", idempotency_key):
+            raise ValueError("Idempotency-Key must contain 16-200 safe characters")
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+
+        retry_key_sha256 = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+        retry_events = self._generated_plan_run_retry_events(principal.organization_id, run.id)
+        if any(
+            (event.detail or {}).get("idempotency_key_sha256") == retry_key_sha256
+            for event in retry_events
+        ):
+            if run.state == "QUEUED":
+                self._wake_generated_plan_run(run)
+            return self.generated_plan_run_detail(principal, run.id)
+
+        if self._generated_plan_run_for_idempotency_key(
+            principal.organization_id, retry_key_sha256
+        ):
+            raise ValueError("Idempotency-Key was already used for another request")
+        if run.state != "FAILED" or run.error_code in NOVA_PLAN_UNCERTAIN_ERROR_CODES:
+            raise ValueError(
+                "only a confirmed failed plan request can be retried; reconcile uncertain work first"
+            )
+        if len(retry_events) >= NOVA_PLAN_MAX_EXPLICIT_RETRIES:
+            raise ValueError("Nova plan retry limit reached")
+
+        now = datetime.now(UTC)
+        previous = {
+            "state": run.state,
+            "error_code": run.error_code,
+            "codebuild_build_id": run.codebuild_build_id,
+        }
+        self.db.add(
+            GeneratedPlanRunIdempotencyKey(
+                organization_id=principal.organization_id,
+                idempotency_key_sha256=retry_key_sha256,
+                request_sha256=run.request_sha256,
+                run_id=run.id,
+            )
+        )
+        try:
+            requeued = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "FAILED",
+                )
+                .values(
+                    state="QUEUED",
+                    proposal_sha256=None,
+                    input_sha256=None,
+                    input_version_id=None,
+                    result_metadata=None,
+                    codebuild_build_id=None,
+                    error_code=None,
+                    error_summary=None,
+                    preparation_lease_token=None,
+                    preparation_lease_expires_at=None,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if requeued.rowcount != 1:
+                self.db.rollback()
+                raise ValueError("plan request is no longer in a confirmed failed state")
+            self.audit(
+                principal,
+                "generated_plan_run.retry_requested",
+                "generated_plan_run",
+                run.id,
+                {
+                    "idempotency_key_sha256": retry_key_sha256,
+                    "request_sha256": run.request_sha256,
+                    "retry_number": len(retry_events) + 1,
+                    "previous": previous,
+                    "state": "QUEUED",
+                },
+            )
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            retry_events = self._generated_plan_run_retry_events(
+                principal.organization_id, run.id
+            )
+            if any(
+                (event.detail or {}).get("idempotency_key_sha256") == retry_key_sha256
+                for event in retry_events
+            ):
+                refreshed = self.db.scalar(
+                    select(GeneratedPlanRun)
+                    .where(GeneratedPlanRun.id == run.id)
+                    .execution_options(populate_existing=True)
+                )
+                if refreshed and refreshed.state == "QUEUED":
+                    self._wake_generated_plan_run(refreshed)
+                return self.generated_plan_run_detail(principal, run.id)
+            raise ValueError("Nova plan retry could not be recorded safely") from None
+
+        requeued_run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(GeneratedPlanRun.id == run.id)
+            .execution_options(populate_existing=True)
+        )
+        if requeued_run is None:
+            raise ValueError("Nova plan retry could not be recorded safely")
+        self._wake_generated_plan_run(requeued_run)
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def _generated_plan_run_retry_events(
+        self, organization_id: str, run_id: str
+    ) -> list[AuditEvent]:
+        return list(
+            self.db.scalars(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.organization_id == organization_id,
+                    AuditEvent.action == "generated_plan_run.retry_requested",
+                    AuditEvent.entity_type == "generated_plan_run",
+                    AuditEvent.entity_id == run_id,
+                )
+                .order_by(AuditEvent.created_at, AuditEvent.id)
+            )
+        )
 
     def _generated_plan_run_for_idempotency_key(
         self, organization_id: str, idempotency_key_sha256: str

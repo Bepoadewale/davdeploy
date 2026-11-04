@@ -1230,6 +1230,21 @@ def get_generated_plan_run(
         translate(error)
 
 
+@app.post("/api/v1/generated-plan-runs/{run_id}/retry", status_code=202)
+def retry_generated_plan_run(
+    run_id: str,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=16, max_length=200),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Explicitly retry a confirmed failure with a new idempotency key."""
+    REQUESTS.labels("generated_plan_runs.retry").inc()
+    try:
+        return service.retry_generated_plan_run(principal, run_id, idempotency_key)
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
 @app.post("/api/v1/generated-plan-artifacts/{artifact_id}/approve")
 def approve_generated_plan_artifact(
     artifact_id: str,

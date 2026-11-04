@@ -4226,6 +4226,64 @@
         "summary": "Get Generated Plan Run"
       }
     },
+    "/api/v1/generated-plan-runs/{run_id}/retry": {
+      "post": {
+        "description": "Explicitly retry a confirmed failure with a new idempotency key.",
+        "operationId": "retry_generated_plan_run_api_v1_generated_plan_runs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Generated Plan Run"
+      }
+    },
     "/api/v1/github/connection": {
       "get": {
         "operationId": "github_connection_status_api_v1_github_connection_get",

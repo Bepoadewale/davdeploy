@@ -222,6 +222,8 @@ def test_successful_codebuild_is_not_promoted_to_a_verified_plan():
 def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild():
     service, db, _, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)
+    wakes = []
+    service._wake_worker = lambda kind, job_id: wakes.append((kind, job_id))
 
     class FailingGenerator(StaticGenerator):
         def generate(self, **_kwargs):
@@ -240,6 +242,34 @@ def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild
     assert failed["state"] == "FAILED"
     assert failed["error_code"] == "NOVA_GENERATION_UNAVAILABLE"
     assert dispatcher.started == []
+
+    # The original request key remains replay-only after failure.
+    replayed = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-request-fixture-0005"
+    )
+    assert replayed["id"] == run["id"]
+    assert replayed["state"] == "FAILED"
+    assert len(wakes) == 1
+
+    retry_key = "nova-plan-request-retry-fixture-0005"
+    service.terraform_generator = StaticGenerator()
+    retried = service.retry_generated_plan_run(founder(), run["id"], retry_key)
+    assert retried["id"] == run["id"]
+    assert retried["state"] == "QUEUED"
+    assert wakes[-1] == ("generated_plan_run", run["id"])
+    assert service.run_next_generated_plan_run() is True
+    started = service.generated_plan_run_detail(founder(), run["id"])
+    assert started["state"] == "BUILD_STARTED"
+    assert len(dispatcher.started) == 1
+
+    # A network replay of the explicit retry key does not create another attempt.
+    retry_replay = service.retry_generated_plan_run(founder(), run["id"], retry_key)
+    assert retry_replay["state"] == "BUILD_STARTED"
+    assert len(dispatcher.started) == 1
+    retry_binding = db.query(GeneratedPlanRunIdempotencyKey).filter_by(
+        idempotency_key_sha256=hashlib.sha256(retry_key.encode()).hexdigest()
+    ).one()
+    assert retry_binding.run_id == run["id"]
     db.close()
 
 
@@ -262,6 +292,10 @@ def test_uncertain_build_start_requires_reconciliation_without_retrying():
     assert uncertain["state"] == "RECONCILIATION_REQUIRED"
     assert uncertain["error_code"] == "DISPATCH_UNCERTAIN"
     assert uncertain["finished_at"] is None
+    with pytest.raises(ValueError, match="confirmed failed"):
+        service.retry_generated_plan_run(
+            founder(), run["id"], "nova-plan-request-retry-uncertain-0006"
+        )
     assert service.run_next_generated_plan_run() is False
     assert len(dispatcher.started) == 1
     dispatcher.start_build = original_start

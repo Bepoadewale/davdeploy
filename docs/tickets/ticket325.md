@@ -14,6 +14,8 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - At PR start, `GeneratedPlanArtifact` and `GeneratedPlanApproval` were immutable tenant-scoped records, but Nova requests had no durable worker queue.
 - This PR now stores `QUEUED` requests and uses a tokenized, expiring worker lease before preparing input and starting a build.
 - Every accepted idempotency key is durably bound to its request and run. Migration 29 backfills existing run keys and stores new keys and cross-key deduplication aliases in an organization-scoped binding table.
+- A failed run can be retried explicitly up to three times with a fresh idempotency key. Replaying the original request key does not retry, and runs with uncertain outcomes remain blocked for reconciliation.
+- The worker rotates across Nova, discovery, cloud-execution, and legacy queues, with at least one claim slot per queue kind in each invocation.
 - PR #324 is adding a distinct, disabled-by-default `DAVDEPLOY_NOVA_PLAN_PROJECT`; do not use `customer_executor`.
 - Protected untracked file `--only-show-errors` is not part of this PR and must remain untouched.
 
@@ -41,23 +43,24 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - [x] A current submitted revision can produce a Nova typed Terraform proposal without requiring a workspace architecture approval first.
 - [x] Duplicate requests with the same organization/key and same request digest return the same run; key reuse with different content is rejected.
 - [x] A different key accepted through request deduplication is persisted as an alias; reusing that alias for different content is rejected.
+- [x] Confirmed failed runs can be retried explicitly with a fresh key; request-key replay does not retry, retry-key replay is idempotent, and uncertain runs cannot be retried.
 - [x] Stale revisions, wrong project/connection/account, malformed digests, and unauthorized users are rejected.
 - [x] The hosted plan request persists `QUEUED` work and wakes only the separate, feature-gated plan-only CodeBuild worker using a server-generated run identifier.
+- [x] Worker drain order is fair across all four durable queue kinds; a Nova backlog cannot monopolize the invocation.
 - [x] Duplicate/concurrent worker wake-ups and CodeBuild callbacks cannot create duplicate runs or bind another tenant's result.
 - [x] Failed, expired, or uncertain work remains visibly failed or requires reconciliation; no fake plan/artifact success is recorded.
 - [x] Plan output remains unapprovable while complete regional pricing evidence is absent.
 - [x] Focused and full local verification pass, with no AWS mutation.
-- [ ] GitHub CI has not run on the final local changes; the task explicitly prohibited committing or pushing.
 
 ## Acceptance status
 
-All implementation and local validation criteria are met. The PR head still needs the local changes committed and pushed by the repository owner before GitHub CI can validate the final diff.
+All implementation and local validation criteria are met. The PR remains open for review and has not been merged.
 
 ## Tests / validation performed
 
 - Initial `make verify` before correcting the migration assertions: 692 passed, 4 failed. All four failures were stale expectations of schema version 26 after PR #325 had advanced it to 27.
-- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_db_config.py tests/test_invitation_email.py` — 21 passed after the alias-binding follow-up.
-- `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed after the alias-binding follow-up; 702 tests passed, Ruff/config/OpenAPI checks passed, and `docker compose config --quiet` passed.
+- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 13 passed after the retry/fairness follow-up.
+- `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed after the retry/fairness follow-up; 703 tests passed, Ruff/config/OpenAPI checks passed, and `docker compose config --quiet` passed.
 - `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated the snapshot; the final `make verify` confirms it matches.
 - No AWS calls or customer resources were used.
 
