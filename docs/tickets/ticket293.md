@@ -30,24 +30,32 @@ PRs #289–#291 validate lifecycle graph inputs, compute dependency waves and pe
 
 ## Acceptance criteria
 
-- [ ] Two or more nodes may use the same module type when each has a unique instance ID.
-- [ ] Dependencies and observations bind to instance IDs; renderer selection uses module type.
-- [ ] Legacy single-instance plans remain valid without an explicit instance ID.
-- [ ] Invalid or ambiguous identities fail before dispatch.
-- [ ] Worker dispatch remains single-module and no new renderer is enabled.
+- [x] Two or more nodes may use the same module type when each has a unique instance ID.
+- [x] Dependencies and observations bind to instance IDs; renderer selection uses module type.
+- [x] Legacy single-instance plans remain valid without an explicit instance ID.
+- [x] Invalid or ambiguous identities fail before dispatch.
+- [x] Worker dispatch remains single-module and no new renderer is enabled.
 - [ ] Focused tests, full verification and required GitHub CI pass.
 
 ## Acceptance status
 
-Pending implementation.
+Implementation is complete. Instance identity is now carried from architecture compilation
+through ordered lifecycle work, runner validation, dispatch state, observation evidence,
+execution-run persistence, and per-instance idempotency keys. Existing single-module plans
+continue to use their module type as the default instance ID.
 
 ## Tests / validation performed
 
-Pending implementation.
+- `.venv/bin/python -m pytest -q tests/test_universal_execution.py tests/test_composed_deployment.py tests/test_cloud_execution.py tests/test_customer_plan_review.py` — **125 passed**.
+- `make verify` — configuration check passed; Ruff passed; **449 tests passed**; OpenAPI snapshot matched; Docker Compose configuration passed.
+- `.venv/bin/ruff check ...` on all changed Python files — passed.
+- `git diff --check` — passed.
+- Full local clean-room lifecycle cycle — pending.
+- Required GitHub PR checks — pending.
 
 ## Evidence files produced
 
-No AWS workload evidence is expected. This PR changes the local lifecycle graph and persistence contract without dispatching a customer workload.
+No AWS workload evidence is expected. This PR changes the local lifecycle graph and persistence contract without dispatching a customer workload. No AWS resources were created or changed.
 
 ## Boundaries
 

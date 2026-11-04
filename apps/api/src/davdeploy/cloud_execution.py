@@ -38,6 +38,7 @@ def validate_lifecycle_work(
     accepted: list[dict[str, object]] = []
     for item in validate_lifecycle_work_graph(value):
         module_id = str(item["module_id"])
+        instance_id = str(item["instance_id"])
         operation = str(item["operation"])
         dependencies = item["dependencies"]
         resource_tags = item["resource_tags"]
@@ -47,6 +48,7 @@ def validate_lifecycle_work(
         accepted.append(
             {
                 "module_id": module_id,
+                "instance_id": instance_id,
                 "operation": operation,
                 "dependencies": dependencies,
                 "resource_tags": resource_tags,

@@ -64,7 +64,7 @@ def dependency_dispatch_wave(
     if operation not in LIFECYCLE_OPERATIONS:
         raise ValueError(f"unsupported lifecycle operation: {operation}")
     ordered = ordered_modules(plan, operation)
-    expected = {module.module_id for module in ordered}
+    expected = {module.instance_id for module in ordered}
     if set(module_states) != expected:
         raise ValueError("module state rows do not match the execution graph")
     if any(
@@ -76,21 +76,21 @@ def dependency_dispatch_wave(
     dependents: dict[str, set[str]] = {module_id: set() for module_id in expected}
     for module in plan.modules:
         for dependency in module.dependencies:
-            dependents[dependency].add(module.module_id)
+            dependents[dependency].add(module.instance_id)
 
     prerequisites = (
         dependents if operation in REVERSE_OPERATIONS else {
-            module.module_id: set(module.dependencies) for module in plan.modules
+            module.instance_id: set(module.dependencies) for module in plan.modules
         }
     )
     terminal = _DEPENDENCY_TERMINAL_STATES[operation]
     return tuple(
         module
         for module in ordered
-        if module_states[module.module_id] == "NOT_DISPATCHED"
+        if module_states[module.instance_id] == "NOT_DISPATCHED"
         and all(
             module_states[prerequisite] in terminal
-            for prerequisite in prerequisites[module.module_id]
+            for prerequisite in prerequisites[module.instance_id]
         )
     )
 
@@ -99,6 +99,7 @@ def dependency_dispatch_wave(
 class DeploymentObservation:
     plan_digest: str
     module_id: str
+    instance_id: str
     health: str
     outputs: tuple[tuple[str, str], ...]
     cost_state: str
@@ -116,15 +117,16 @@ def collect_observations(plan: UniversalExecutionPlan, evidence: tuple[Lifecycle
     by_module: dict[str, list[LifecycleEvidence]] = {}
     for item in evidence:
         if item.operation == "observe":
-            by_module.setdefault(item.module_id, []).append(item)
+            by_module.setdefault(item.instance_id or item.module_id, []).append(item)
     observations = []
     for module in plan.modules:
-        module_evidence = by_module.get(module.module_id, [])
+        module_evidence = by_module.get(module.instance_id, [])
         observed = module_evidence[0] if len(module_evidence) == 1 else None
         observations.append(
             DeploymentObservation(
                 plan_digest=plan.plan_digest,
                 module_id=module.module_id,
+                instance_id=module.instance_id,
                 health=observed.state if observed else "UNKNOWN",
                 outputs=observed.outputs if observed else (),
                 cost_state=plan.estimated_monthly_cost_state,

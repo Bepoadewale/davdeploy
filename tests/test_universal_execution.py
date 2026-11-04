@@ -15,8 +15,21 @@ from davdeploy.universal_execution import (
 )
 
 
-def module(identifier: str, depends_on: list[str] | None = None) -> ArchitectureModule:
-    return ArchitectureModule(identifier=identifier, display_name=identifier, purpose="test", stage="test", services=["AWS"], depends_on=depends_on or [])
+def module(
+    identifier: str,
+    depends_on: list[str] | None = None,
+    *,
+    instance_id: str | None = None,
+) -> ArchitectureModule:
+    return ArchitectureModule(
+        identifier=identifier,
+        instance_id=instance_id,
+        display_name=identifier,
+        purpose="test",
+        stage="test",
+        services=["AWS"],
+        depends_on=depends_on or [],
+    )
 
 
 def test_compiled_plan_has_full_lifecycle_and_customer_scope_tags():
@@ -33,7 +46,7 @@ def test_compiler_rejects_unknown_dependencies():
     try:
         compile_universal_execution_plan([module("api", ["missing"])], workspace_id="w", project_id="p", plan_digest=digest)
     except ValueError as error:
-        assert "unknown modules" in str(error)
+        assert "unknown module" in str(error)
     else:
         raise AssertionError("unknown dependency accepted")
 
@@ -96,6 +109,77 @@ def test_lifecycle_work_is_stable_and_reverses_for_cleanup():
     )
 
 
+def test_compiler_supports_repeated_module_types_with_distinct_instances():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [
+            module("aws-storage", instance_id="uploads"),
+            module("aws-storage", instance_id="backups"),
+            module("aws-api", ["uploads", "backups"], instance_id="api"),
+        ],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+
+    assert [(item.module_id, item.instance_id) for item in plan.modules] == [
+        ("aws-storage", "uploads"),
+        ("aws-storage", "backups"),
+        ("aws-api", "api"),
+    ]
+    assert plan.modules[2].dependencies == ("uploads", "backups")
+    assert {dict(item.resource_tags)["DavDeployModuleInstance"] for item in plan.modules} == {
+        "uploads",
+        "backups",
+        "api",
+    }
+    work = lifecycle_work(plan, "apply")
+    assert [item["instance_id"] for item in work] == ["backups", "uploads", "api"]
+    assert [item["module_id"] for item in work] == [
+        "aws-storage",
+        "aws-storage",
+        "aws-api",
+    ]
+    assert len(validate_lifecycle_work_graph(list(work))) == 3
+
+
+def test_repeated_module_type_requires_explicit_unique_instance_ids():
+    digest = sha256(b"approved").hexdigest()
+    with pytest.raises(ValueError, match="requires explicit instance identifiers"):
+        compile_universal_execution_plan(
+            [module("aws-storage"), module("aws-storage")],
+            workspace_id="w",
+            project_id="p",
+            plan_digest=digest,
+        )
+
+    with pytest.raises(ValueError, match="duplicate instance identifiers"):
+        compile_universal_execution_plan(
+            [
+                module("aws-storage", instance_id="same"),
+                module("aws-storage", instance_id="same"),
+            ],
+            workspace_id="w",
+            project_id="p",
+            plan_digest=digest,
+        )
+
+
+def test_dependency_on_repeated_module_type_must_name_instance():
+    digest = sha256(b"approved").hexdigest()
+    with pytest.raises(ValueError, match="ambiguous dependency"):
+        compile_universal_execution_plan(
+            [
+                module("aws-storage", instance_id="uploads"),
+                module("aws-storage", instance_id="backups"),
+                module("aws-api", ["aws-storage"], instance_id="api"),
+            ],
+            workspace_id="w",
+            project_id="p",
+            plan_digest=digest,
+        )
+
+
 def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order():
     forward = [
         {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
@@ -124,7 +208,7 @@ def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order
                 {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
                 {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
             ],
-            "duplicate module",
+            "duplicate instance",
         ),
         (
             [{"module_id": "api", "operation": "apply", "dependencies": ["missing"], "resource_tags": {}}],
@@ -190,6 +274,26 @@ def test_dispatch_wave_starts_roots_and_independent_modules_only():
         {"api": "HEALTHY", "worker": "NOT_DISPATCHED", "uploads": "RUNNING"},
     )
     assert [item.module_id for item in next_wave] == ["worker"]
+
+
+def test_dispatch_wave_tracks_repeated_types_by_instance_id():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [
+            module("aws-storage", instance_id="uploads"),
+            module("aws-storage", instance_id="backups"),
+            module("aws-api", ["uploads", "backups"], instance_id="api"),
+        ],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    wave = dependency_dispatch_wave(
+        plan,
+        "apply",
+        {"uploads": "SUCCEEDED", "backups": "NOT_DISPATCHED", "api": "NOT_DISPATCHED"},
+    )
+    assert [item.instance_id for item in wave] == ["backups"]
 
 
 @pytest.mark.parametrize("blocked_state", ["FAILED", "RECONCILIATION_REQUIRED", "RUNNING"])
