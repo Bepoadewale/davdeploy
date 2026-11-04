@@ -45,6 +45,12 @@ case "$module_id:$terraform_root:$runner_script" in
     }
     script="scripts/customer-workload-serverless-api.sh"
     ;;
+  aws-file-storage:infrastructure/terraform/customer-workload-private-s3:scripts/customer-workload-private-s3.sh)
+    [[ "${DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION:-false}" == "true" ]] || {
+      echo "Private S3 hosted certification route is disabled" >&2; exit 2;
+    }
+    script="scripts/customer-workload-private-s3.sh"
+    ;;
   *)
     echo "Module renderer is unknown or not enabled for hosted execution: ${module_id}" >&2
     exit 2
@@ -63,6 +69,13 @@ case "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
   aws-serverless-api:observe:health|\
   aws-serverless-api:destroy:destroy-saved-plan|\
   aws-serverless-api:verify_cleanup:verify-cleanup)
+    ;;
+  aws-file-storage:plan:plan|aws-file-storage:plan:destroy-plan|\
+  aws-file-storage:destroy_plan:destroy-plan|\
+  aws-file-storage:apply:apply-saved-plan|\
+  aws-file-storage:observe:observe|\
+  aws-file-storage:destroy:destroy-saved-plan|\
+  aws-file-storage:verify_cleanup:verify-cleanup)
     ;;
   *)
     echo "Lifecycle operation does not match the approved runner operation" >&2

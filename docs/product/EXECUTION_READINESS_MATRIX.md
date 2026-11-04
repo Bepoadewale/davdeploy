@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-04, backend main commit `9d14bd1` (PR #296). The latest hosted AWS release is commit `2e39e4a` after PR #285, applied by run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958). PRs #289–#296 are merged code-only foundations and are not deployed or connected to the worker.
+Audit as of 2026-11-04, backend main commit `42200c0` (PR #298). The latest hosted AWS release is commit `2e39e4a` after PR #285, applied by run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958). PRs #289–#298 are merged code-only foundations and are not deployed to the hosted worker.
 
 ## Hosted deployment evidence
 
@@ -25,14 +25,14 @@ certification gate disabled and its workspace allowlist empty.
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
-| Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` disabled | One customer renderer enabled |
-| CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; draft PR #298 dispatches one ready graph node per durable build. | Hosted dispatcher still runs one isolated item; PR #298 is not merged or deployed |
+| Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` disabled | One customer renderer enabled; PR #299 adds a disabled private S3 binding |
+| CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling. | Code foundations are merged but not deployed to the hosted worker; #299 adds a gated S3 dispatch mapping on its feature branch |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
-| Durable module-instance outcomes | PRs #277/#278/#280 deployed; #287 adds operation-specific evidence, #289 validates serialized graphs, #290 computes dependency waves, #291 persists per-module outcomes, #293 separates type and instance identity, #294 adds typed input references, #295 validates typed outputs, #296 stores exact CodeBuild identity per module instance, and #297 persists normalized renderer outputs on the exact row | Older rows/leases deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); #287–#297 are merged code foundations, with per-module scheduling under draft PR #298 |
+| Durable module-instance outcomes | PRs #277/#278/#280 deployed; #287 adds operation-specific evidence, #289 validates serialized graphs, #290 computes dependency waves, #291 persists per-module outcomes, #293 separates type and instance identity, #294 adds typed input references, #295 validates typed outputs, #296 stores exact CodeBuild identity per module instance, #297 persists normalized renderer outputs, and #298 schedules dependency-ready work | Older rows/leases deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); #287–#298 are merged code foundations; newer scheduler/output handling is not deployed |
 | Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | Merged as `ef60ac3` and deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); never blindly replays an uncertain apply/destroy |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md`; PR #284 adds an allowlisted typed hosted-certification lifecycle | Hosted code path in progress; feature is off by default; no hosted AWS lifecycle evidence yet |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
-| Multi-module composition | Typed graph validation, operation-aware dispatch-wave selection, per-module outcomes, typed references, exact CodeBuild callback identity, and safe renderer output mapping are merged; draft PR #298 selects one dependency-ready node, records its result on that row, and queues the next node | PR #298 is still in progress and undeployed; concrete input binding, repeated renderer state isolation, and composed AWS workload evidence remain absent |
+| Multi-module composition | Typed graph validation, operation-aware dispatch-wave selection, per-module outcomes, typed references, exact CodeBuild callback identity, safe renderer output mapping, and durable one-ready-node scheduling are merged | PR #298 is merged but not deployed; concrete input binding, repeated renderer state isolation, and composed AWS workload evidence remain absent |
 | Browser, CLI and MCP lifecycle parity | shared APIs exist, but frontend uses App Runner-specific modes and confirmation | Partial |
 | Eight certification scenarios | test scenario catalogue plus bounded Terraform runner | Service roots exist; not all real application scenarios exercise hosted customer runner, update, recovery and absence |
 
@@ -54,7 +54,7 @@ The stage reflects the planner catalogue, not an execution entitlement. Except f
 | `aws-identity` | catalogued | No module renderer |
 | `aws-relational-data` | catalogued | No module renderer |
 | `aws-nosql-data` | catalogued | No module renderer |
-| `aws-file-storage` | catalogued | No module renderer |
+| `aws-file-storage` | catalogued | PR #299 adds a gated private S3 renderer on its feature branch; no AWS lifecycle evidence |
 | `aws-jobs-events` | catalogued | No module renderer |
 | `aws-realtime` | catalogued | No module renderer |
 | `aws-search` | catalogued | No module renderer |
@@ -106,15 +106,15 @@ These entries identify resource roots or module paths. None is automatically a c
 | `aws-site-to-site-vpn` | `modules/site-to-site-vpn` | none |
 | `aws-multi-region-dns` | `modules/multi-region-dns` | none |
 
-The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled for ordinary hosted customer execution. PR #275 adds project isolation; PR #284 adds a certification-only API lifecycle guarded by a disabled-by-default flag and explicit workspace allowlist. It remains unproven in hosted AWS. App Runner is currently the only enabled customer renderer.
+The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled for ordinary hosted customer execution. PR #275 adds project isolation; PR #284 adds a certification-only API lifecycle guarded by a disabled-by-default flag and explicit workspace allowlist. It remains unproven in hosted AWS. PR #299 adds a separately gated private S3 renderer on its feature branch; it is not customer-enabled and has no real AWS lifecycle evidence. App Runner is currently the only enabled customer renderer.
 
 ## Work that remains
 
-1. Complete PR #297's typed renderer-output persistence and callback validation. Then wire dispatch-wave selection and per-module outcome persistence into the worker using conditional module claims and one durable build/result identity per dispatched module.
-2. Add typed output binding between modules, authenticated reconciliation for stale CodeBuild/SQS outcomes, bounded safe retries, partial-failure compensation and reverse cleanup.
-3. Integrate the Lambda/API renderer through the hosted CodeBuild path and prove real traffic, health, update, recovery, destroy and independently verified absence before enabling it.
-4. Replace the App Runner-only service gate and single-module CodeBuild limitation as each renderer family is actually certified.
-5. Add hosted renderer families in the active execution-goal order; do not equate standalone service tests with composed renderer certification.
+1. Deploy and verify the merged dependency scheduler and typed-output code through the normal release workflow.
+2. Finish PR #299's private S3 renderer contract, tests and clean-room validation; then certify its real plan/apply/observe/destroy/absence lifecycle in an explicitly controlled AWS test before considering enablement.
+3. Deliver resolved, schema-validated typed inputs to renderer configuration; prove storage-to-API data flow with no secret values and no caller-supplied Terraform.
+4. Add authenticated worker restart/reconciliation, bounded retry rules, partial-failure recovery and exact reverse cleanup evidence.
+5. Implement and certify renderer families in the active execution-goal order. Do not equate standalone service tests with composed renderer certification.
 6. Extend the scenario harness to exercise composed applications through the hosted runner, including traffic, update/recovery and absence verification.
 7. Replace fixture pricing/inventory with timestamped provider data, and align browser, CLI and MCP with the same authorized lifecycle.
 8. Run the final hosted browser, CLI and MCP acceptance journey and reconcile closeout evidence.

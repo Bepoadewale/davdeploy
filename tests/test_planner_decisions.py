@@ -190,6 +190,10 @@ def test_universal_modules_have_typed_resource_and_policy_contracts():
     assert "aws_cognito_user_pool" in contracts["aws-identity"].resources
     assert "mfa_policy" in contracts["aws-identity"].policy_controls
     assert "aws_s3_bucket" in contracts["aws-file-storage"].resources
+    assert contracts["aws-file-storage"].destroy_supported is True
+    assert {"block_public_access", "tls_only", "versioning"} <= set(
+        contracts["aws-file-storage"].policy_controls
+    )
     assert contracts["aws-managed-application"].destroy_supported is True
 
 
@@ -214,9 +218,7 @@ def test_composed_core_module_contracts_expose_typed_ports():
         "queue_url": "aws_queue_url",
         "queue_arn": "aws_arn",
     }
-    assert {
-        item.name: item.value_type for item in contracts["aws-serverless-api"].inputs
-    } == {
+    assert {item.name: item.value_type for item in contracts["aws-serverless-api"].inputs} == {
         "uploads_bucket_name": "resource_name",
         "table_name": "resource_name",
         "work_queue_url": "aws_queue_url",

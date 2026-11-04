@@ -69,7 +69,11 @@ _RENDERER_OUTPUT_NAMES: dict[str, dict[str, str]] = {
     "aws-serverless-api": {
         "api_endpoint": "api_url",
         "lambda_arn": "lambda_arn",
-    }
+    },
+    "aws-file-storage": {
+        "bucket_name": "bucket_name",
+        "bucket_arn": "bucket_arn",
+    },
 }
 
 _RESOURCE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")

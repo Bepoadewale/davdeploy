@@ -99,11 +99,48 @@ def test_serverless_renderer_outputs_normalize_to_typed_module_ports():
             "value": "arn:aws:lambda:us-east-1:123456789012:function:davdeploy-api",
         },
     }
-
     assert normalize_renderer_outputs("aws-serverless-api", raw_outputs) == {
         "api_url": "https://api.example.test",
         "lambda_arn": "arn:aws:lambda:us-east-1:123456789012:function:davdeploy-api",
     }
+
+
+def test_private_s3_renderer_outputs_normalize_to_typed_storage_ports():
+    raw_outputs = {
+        "bucket_name": {
+            "sensitive": False,
+            "type": "string",
+            "value": "davdeploy-123456789012-us-east-1-0123456789abcdef0123",
+        },
+        "bucket_arn": {
+            "sensitive": False,
+            "type": "string",
+            "value": "arn:aws:s3:::davdeploy-123456789012-us-east-1-0123456789abcdef0123",
+        },
+    }
+
+    assert normalize_renderer_outputs("aws-file-storage", raw_outputs) == {
+        "bucket_name": raw_outputs["bucket_name"]["value"],
+        "bucket_arn": raw_outputs["bucket_arn"]["value"],
+    }
+
+
+def test_private_s3_renderer_output_mapping_rejects_sensitive_or_malformed_values():
+    raw_outputs = {
+        "bucket_name": {"sensitive": True, "type": "string", "value": "not-stored"},
+        "bucket_arn": {
+            "sensitive": False,
+            "type": "string",
+            "value": "arn:aws:s3:::davdeploy-bucket",
+        },
+    }
+    with pytest.raises(ValueError, match="marked sensitive"):
+        normalize_renderer_outputs("aws-file-storage", raw_outputs)
+
+    raw_outputs["bucket_name"]["sensitive"] = False
+    raw_outputs["bucket_arn"]["value"] = "not-an-s3-arn"
+    with pytest.raises(ValueError, match="invalid aws_arn value"):
+        normalize_renderer_outputs("aws-file-storage", raw_outputs)
 
 
 @pytest.mark.parametrize(
