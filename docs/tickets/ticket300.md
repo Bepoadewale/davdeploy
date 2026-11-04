@@ -53,7 +53,7 @@ PR #298 adds durable one-module-at-a-time scheduling. PR #299 (`982bb50`) adds a
 - [x] Failure messages and audit details do not include the resolved value.
 - [x] The API renderer remains disabled for ordinary customer execution; the S3 and API renderers are available only under the explicit hosted-certification gate.
 - [x] Focused tests, full local verification, Terraform validation and documentation checks pass.
-- [ ] Full clean-room cycle passes on this change.
+- [x] Full clean-room cycle passes on this change.
 - [ ] Final PR CI passes and review confirms the merged diff.
 - [x] Evidence states no AWS resources were used; live composed certification remains follow-up work.
 
@@ -64,7 +64,8 @@ PR #298 adds durable one-module-at-a-time scheduling. PR #299 (`982bb50`) adds a
 - `terraform fmt -check infrastructure/terraform/customer-workload-serverless-api` and `terraform -chdir=infrastructure/terraform/customer-workload-serverless-api validate`: passed.
 - `GITHUB_PR_NUMBER=300 python3.12 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Clean-room, final CI and merge checks are pending.
+- Clean-room at `c56f873`: bootstrap, smoke, API contract, customer-plan E2E, seed data, simple/complex/Day-2/degraded/policy/readiness demos, trace check and full `make verify` passed (498 tests; one existing warning).
+- Final PR CI and merge checks are pending.
 
 ## Evidence files produced
 
