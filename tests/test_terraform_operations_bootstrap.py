@@ -56,6 +56,35 @@ def test_apply_role_is_limited_to_required_control_plane_services() -> None:
     assert 'secret:rds!cluster-*' in source
 
 
+def test_apply_role_can_manage_the_nova_plan_project_and_its_exact_log_group() -> None:
+    source = bootstrap_source()
+    project_lifecycle = source.split('sid    = "CodeBuildProjectLifecycle"', 1)[1].split(
+        "statement {", 1
+    )[0]
+    nova_logs = source.split('sid    = "NovaPlanOnlyLogs"', 1)[1].split(
+        "statement {", 1
+    )[0]
+    runtime_roles = source.split('sid    = "RuntimeRoles"', 1)[1].split(
+        "statement {", 1
+    )[0]
+
+    assert '"codebuild:UpdateProject"' in project_lifecycle
+    assert '"codebuild:DeleteProject"' in project_lifecycle
+    assert 'project/davdeploy-customer-executor' in project_lifecycle
+    assert 'project/davdeploy-nova-plan-only' in project_lifecycle
+    assert 'log-group:/aws/codebuild/davdeploy-nova-plan-only"' in nova_logs
+    assert 'log-group:/aws/codebuild/davdeploy-nova-plan-only:*' in nova_logs
+    assert '"logs:CreateLogGroup"' in nova_logs
+    assert '"logs:DeleteLogGroup"' in nova_logs
+    assert '"logs:PutRetentionPolicy"' in nova_logs
+    assert '"logs:ListTagsForResource"' in nova_logs
+    assert 'log-group:/aws/codebuild/davdeploy-*' not in nova_logs
+    assert '"iam:CreateRole"' in runtime_roles
+    assert '"iam:PutRolePolicy"' in runtime_roles
+    assert '"iam:PassRole"' in runtime_roles
+    assert 'role/davdeploy-*' in runtime_roles
+
+
 def test_plan_workflow_uses_one_production_cognito_domain() -> None:
     workflow = (ROOT / ".github" / "workflows" / "terraform-plan.yml").read_text(
         encoding="utf-8"

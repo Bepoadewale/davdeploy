@@ -475,7 +475,7 @@ def test_serverless_stack_limits_sensitive_routes_before_application_work():
     assert 'resource "aws_cloudwatch_log_metric_filter" "api_throttled"' in terraform
 
 
-def test_operations_apply_role_can_manage_only_davdeploy_api_security_logs():
+def test_operations_apply_role_can_manage_scoped_davdeploy_logs():
     bootstrap = (
         ROOT / "infrastructure/terraform/terraform-operations-bootstrap/main.tf"
     ).read_text()
@@ -483,6 +483,9 @@ def test_operations_apply_role_can_manage_only_davdeploy_api_security_logs():
     assert '"logs:PutMetricFilter", "logs:DeleteMetricFilter"' in bootstrap
     assert "log-group:/aws/apigateway/davdeploy*" in bootstrap
     assert "log-group:/aws/lambda/davdeploy-*" in bootstrap
+    assert 'sid    = "NovaPlanOnlyLogs"' in bootstrap
+    assert "log-group:/aws/codebuild/davdeploy-nova-plan-only" in bootstrap
+    assert "log-group:/aws/codebuild/davdeploy-*" not in bootstrap
     assert 'sid    = "ApiGatewayAccessLogDelivery"' in bootstrap
     assert '"logs:CreateLogDelivery", "logs:GetLogDelivery", "logs:UpdateLogDelivery"' in bootstrap
     assert '"logs:DeleteLogDelivery", "logs:ListLogDeliveries"' in bootstrap
