@@ -30,12 +30,12 @@ The universal plan compiler validates module identifiers and graph references wh
 - [x] Invalid or ambiguous graphs fail before any renderer is selected or subprocess can run.
 - [x] Valid dependency-ordered work remains accepted for forward and reverse operations.
 - [x] No arbitrary command or provider input is introduced.
-- [ ] GitHub CI passes before merge.
+- [x] GitHub CI run [41743440307](https://github.com/Bepoadewale/davdeploy/actions/runs/41743440307) passes all seven jobs.
 - [x] Evidence and limitations are recorded accurately.
 
 ## Acceptance status
 
-Implementation and local verification pass. GitHub CI is pending.
+Implementation, local verification and all seven GitHub CI jobs pass.
 
 ## Tests / validation performed
 
