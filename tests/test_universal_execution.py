@@ -3,7 +3,7 @@ from hashlib import sha256
 import pytest
 from davdeploy.certification_factory import certification_scenarios, scenario_for_module
 from davdeploy.composed_deployment import dependency_dispatch_wave
-from davdeploy.domain import ArchitectureModule
+from davdeploy.domain import ArchitectureModule, ModuleInputBinding
 from davdeploy.universal_execution import (
     LifecycleEvidence,
     compile_universal_execution_plan,
@@ -20,6 +20,7 @@ def module(
     depends_on: list[str] | None = None,
     *,
     instance_id: str | None = None,
+    input_bindings: list[ModuleInputBinding] | None = None,
 ) -> ArchitectureModule:
     return ArchitectureModule(
         identifier=identifier,
@@ -29,6 +30,7 @@ def module(
         stage="test",
         services=["AWS"],
         depends_on=depends_on or [],
+        input_bindings=input_bindings or [],
     )
 
 
@@ -180,6 +182,149 @@ def test_dependency_on_repeated_module_type_must_name_instance():
         )
 
 
+def test_typed_bindings_connect_declared_outputs_without_carrying_values():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [
+            module("aws-file-storage", instance_id="uploads"),
+            module("aws-file-storage", instance_id="archives"),
+            module("aws-nosql-data", instance_id="records"),
+            module("aws-jobs-events", instance_id="work"),
+            module("aws-secrets-config", instance_id="credentials"),
+            module(
+                "aws-serverless-api",
+                ["uploads", "records", "work", "credentials"],
+                instance_id="api",
+                input_bindings=[
+                    ModuleInputBinding(
+                        input_name="uploads_bucket_name",
+                        source_instance_id="uploads",
+                        source_output="bucket_name",
+                    ),
+                    ModuleInputBinding(
+                        input_name="table_name",
+                        source_instance_id="records",
+                        source_output="table_name",
+                    ),
+                    ModuleInputBinding(
+                        input_name="work_queue_url",
+                        source_instance_id="work",
+                        source_output="queue_url",
+                    ),
+                    ModuleInputBinding(
+                        input_name="api_secret_reference",
+                        source_instance_id="credentials",
+                        source_output="secret_reference",
+                    ),
+                ],
+            ),
+            module(
+                "aws-serverless-api",
+                ["archives"],
+                instance_id="archive-api",
+                input_bindings=[
+                    ModuleInputBinding(
+                        input_name="uploads_bucket_name",
+                        source_instance_id="archives",
+                        source_output="bucket_name",
+                    )
+                ],
+            ),
+        ],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+
+    api = next(item for item in plan.modules if item.instance_id == "api")
+    assert api.input_bindings == (
+        ("uploads_bucket_name", "uploads", "bucket_name"),
+        ("table_name", "records", "table_name"),
+        ("work_queue_url", "work", "queue_url"),
+        ("api_secret_reference", "credentials", "secret_reference"),
+    )
+    api_work = next(item for item in lifecycle_work(plan, "apply") if item["instance_id"] == "api")
+    assert api_work["input_bindings"] == [
+        {
+            "input_name": input_name,
+            "source_instance_id": source_instance,
+            "source_output": source_output,
+        }
+        for input_name, source_instance, source_output in api.input_bindings
+    ]
+    archive_api = next(item for item in plan.modules if item.instance_id == "archive-api")
+    assert archive_api.input_bindings == (("uploads_bucket_name", "archives", "bucket_name"),)
+    assert len(validate_lifecycle_work_graph(list(lifecycle_work(plan, "apply")))) == 7
+
+
+@pytest.mark.parametrize(
+    ("target_input", "source_module", "source_output", "dependencies", "message"),
+    [
+        ("work_queue_url", "aws-file-storage", "bucket_name", ["uploads"], "type does not match"),
+        ("missing_input", "aws-file-storage", "bucket_name", ["uploads"], "no declared input"),
+        ("uploads_bucket_name", "aws-file-storage", "missing_output", ["uploads"], "no declared output"),
+        ("uploads_bucket_name", "aws-file-storage", "bucket_name", [], "must be declared as a dependency"),
+        ("api_secret_reference", "aws-file-storage", "bucket_arn", ["uploads"], "type does not match"),
+    ],
+)
+def test_typed_binding_rejects_unknown_mismatched_or_undeclared_ports(
+    target_input, source_module, source_output, dependencies, message
+):
+    digest = sha256(b"approved").hexdigest()
+    binding = ModuleInputBinding(
+        input_name=target_input,
+        source_instance_id="uploads",
+        source_output=source_output,
+    )
+    with pytest.raises(ValueError, match=message):
+        compile_universal_execution_plan(
+            [
+                module(source_module, instance_id="uploads"),
+                module(
+                    "aws-serverless-api",
+                    dependencies,
+                    instance_id="api",
+                    input_bindings=[binding],
+                ),
+            ],
+            workspace_id="w",
+            project_id="p",
+            plan_digest=digest,
+        )
+
+
+def test_input_binding_model_rejects_inline_values_and_duplicate_destination_inputs():
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        ModuleInputBinding(
+            input_name="api_secret_reference",
+            source_instance_id="credentials",
+            source_output="secret_reference",
+            value="do-not-serialize-secret",
+        )
+
+    digest = sha256(b"approved").hexdigest()
+    binding = ModuleInputBinding(
+        input_name="uploads_bucket_name",
+        source_instance_id="uploads",
+        source_output="bucket_name",
+    )
+    with pytest.raises(ValueError, match="binds an input more than once"):
+        compile_universal_execution_plan(
+            [
+                module("aws-file-storage", instance_id="uploads"),
+                module(
+                    "aws-serverless-api",
+                    ["uploads"],
+                    instance_id="api",
+                    input_bindings=[binding, binding],
+                ),
+            ],
+            workspace_id="w",
+            project_id="p",
+            plan_digest=digest,
+        )
+
+
 def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order():
     forward = [
         {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
@@ -197,6 +342,54 @@ def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order
         "worker",
         "api",
     ]
+
+
+def test_serialized_graph_requires_bindings_to_reference_declared_dependencies_only():
+    valid = [
+        {
+            "module_id": "aws-file-storage",
+            "instance_id": "uploads",
+            "operation": "apply",
+            "dependencies": [],
+            "input_bindings": [],
+            "resource_tags": {},
+        },
+        {
+            "module_id": "aws-serverless-api",
+            "instance_id": "api",
+            "operation": "apply",
+            "dependencies": ["uploads"],
+            "input_bindings": [
+                {
+                    "input_name": "uploads_bucket_name",
+                    "source_instance_id": "uploads",
+                    "source_output": "bucket_name",
+                }
+            ],
+            "resource_tags": {},
+        },
+    ]
+    assert validate_lifecycle_work_graph(valid)[1]["input_bindings"] == valid[1][
+        "input_bindings"
+    ]
+
+    no_dependency = [dict(item) for item in valid]
+    no_dependency[1] = {**valid[1], "dependencies": []}
+    with pytest.raises(ValueError, match="source must be a declared module dependency"):
+        validate_lifecycle_work_graph(no_dependency)
+
+    inline_value = [dict(item) for item in valid]
+    inline_value[1] = {
+        **valid[1],
+        "input_bindings": [
+            {
+                **valid[1]["input_bindings"][0],
+                "value": "must-not-cross-runner-boundary",
+            }
+        ],
+    }
+    with pytest.raises(ValueError, match="references only"):
+        validate_lifecycle_work_graph(inline_value)
 
 
 @pytest.mark.parametrize(
