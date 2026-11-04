@@ -37,6 +37,7 @@ _REVERSE_DISPATCH_OPERATIONS = frozenset((*REVERSE_OPERATIONS, "destroy_plan"))
 @dataclass(frozen=True)
 class ModuleLifecycle:
     module_id: str
+    instance_id: str
     dependencies: tuple[str, ...]
     operations: tuple[str, ...] = LIFECYCLE_OPERATIONS
     resource_tags: tuple[tuple[str, str], ...] = ()
@@ -56,6 +57,7 @@ class LifecycleEvidence:
     operation: str
     state: str
     outputs: tuple[tuple[str, str], ...] = ()
+    instance_id: str | None = None
 
 
 class LifecycleExecutor(Protocol):
@@ -71,8 +73,8 @@ def ordered_modules(plan: UniversalExecutionPlan, operation: str) -> tuple[Modul
     """
     if operation not in LIFECYCLE_OPERATIONS:
         raise ValueError(f"unsupported lifecycle operation: {operation}")
-    by_id = {module.module_id: module for module in plan.modules}
-    remaining = {module.module_id: set(module.dependencies) for module in plan.modules}
+    by_id = {module.instance_id: module for module in plan.modules}
+    remaining = {module.instance_id: set(module.dependencies) for module in plan.modules}
     ordered: list[ModuleLifecycle] = []
     while remaining:
         ready = sorted(identifier for identifier, dependencies in remaining.items() if not dependencies)
@@ -94,6 +96,7 @@ def lifecycle_work(plan: UniversalExecutionPlan, operation: str) -> tuple[dict[s
     return tuple(
         {
             "module_id": module.module_id,
+            "instance_id": module.instance_id,
             "operation": operation,
             "dependencies": list(module.dependencies),
             "resource_tags": dict(module.resource_tags),
@@ -122,13 +125,16 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
         if not isinstance(item, Mapping):
             raise TypeError("universal lifecycle work item must be an object")
         module_id = item.get("module_id")
+        instance_id = item.get("instance_id", module_id)
         operation = item.get("operation")
         dependencies = item.get("dependencies")
         resource_tags = item.get("resource_tags")
         if not isinstance(module_id, str) or not _MODULE_ID_PATTERN.fullmatch(module_id):
             raise ValueError("universal lifecycle work item has an invalid module identifier")
-        if module_id in seen:
-            raise ValueError("universal lifecycle work contains duplicate module identifiers")
+        if not isinstance(instance_id, str) or not _MODULE_ID_PATTERN.fullmatch(instance_id):
+            raise ValueError("universal lifecycle work item has an invalid instance identifier")
+        if instance_id in seen:
+            raise ValueError("universal lifecycle work contains duplicate instance identifiers")
         if not isinstance(operation, str) or operation not in _DISPATCH_OPERATIONS:
             raise ValueError("universal lifecycle work has an unsupported operation")
         if not isinstance(dependencies, list) or not all(
@@ -138,19 +144,20 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
             raise ValueError("universal lifecycle work has invalid dependencies")
         if len(dependencies) != len(set(dependencies)):
             raise ValueError(f"module {module_id} contains duplicate dependencies")
-        if module_id in dependencies:
-            raise ValueError(f"module {module_id} cannot depend on itself")
+        if instance_id in dependencies:
+            raise ValueError(f"module instance {instance_id} cannot depend on itself")
         if not isinstance(resource_tags, Mapping) or not all(
             isinstance(key, str) and isinstance(tag_value, str)
             for key, tag_value in resource_tags.items()
         ):
             raise ValueError("universal lifecycle work has invalid resource tags")
-        seen.add(module_id)
-        graph[module_id] = tuple(dependencies)
+        seen.add(instance_id)
+        graph[instance_id] = tuple(dependencies)
         operations.add(operation)
         accepted.append(
             {
                 "module_id": module_id,
+                "instance_id": instance_id,
                 "operation": operation,
                 "dependencies": list(dependencies),
                 "resource_tags": dict(resource_tags),
@@ -160,11 +167,11 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
     if len(operations) != 1:
         raise ValueError("universal lifecycle work must use one operation")
     operation = next(iter(operations))
-    for module_id, dependencies in graph.items():
+    for instance_id, dependencies in graph.items():
         missing = set(dependencies) - seen
         if missing:
             raise ValueError(
-                f"module {module_id} depends on missing modules: {sorted(missing)}"
+                f"module instance {instance_id} depends on missing modules or instances: {sorted(missing)}"
             )
 
     # A complete dependency walk also rejects cycles, including those hidden
@@ -182,19 +189,19 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
         for deps in pending.values():
             deps.difference_update(completed)
 
-    submitted_order = [str(item["module_id"]) for item in accepted]
-    positions = {module_id: index for index, module_id in enumerate(submitted_order)}
+    submitted_order = [str(item["instance_id"]) for item in accepted]
+    positions = {instance_id: index for index, instance_id in enumerate(submitted_order)}
     reverse = operation in _REVERSE_DISPATCH_OPERATIONS
-    for module_id, dependencies in graph.items():
+    for instance_id, dependencies in graph.items():
         for dependency in dependencies:
             correctly_ordered = (
-                positions[dependency] > positions[module_id]
+                positions[dependency] > positions[instance_id]
                 if reverse
-                else positions[dependency] < positions[module_id]
+                else positions[dependency] < positions[instance_id]
             )
             if not correctly_ordered:
                 raise ValueError(
-                    f"module graph is not dependency-ordered for {operation}: {module_id}"
+                    f"module graph is not dependency-ordered for {operation}: {instance_id}"
                 )
     return tuple(accepted)
 
@@ -212,12 +219,13 @@ def lifecycle_evidence_complete(
     contract has no attempt ordering, so callers must pass the current
     per-module outcome set rather than an event history.
     """
-    expected = {module.module_id for module in ordered_modules(plan, operation)}
+    expected = {module.instance_id for module in ordered_modules(plan, operation)}
     terminal_states = TERMINAL_EVIDENCE_STATES[operation]
     outcomes: dict[str, list[str]] = {module_id: [] for module_id in expected}
     for item in evidence:
-        if item.operation == operation and item.module_id in outcomes:
-            outcomes[item.module_id].append(item.state)
+        instance_id = item.instance_id or item.module_id
+        if item.operation == operation and instance_id in outcomes:
+            outcomes[instance_id].append(item.state)
     return all(
         len(states) == 1 and states[0] in terminal_states for states in outcomes.values()
     )
@@ -233,34 +241,75 @@ def compile_universal_execution_plan(
         raise ValueError("workspace and project identifiers are required")
     if not _PLAN_DIGEST_PATTERN.fullmatch(plan_digest):
         raise ValueError("plan digest must be a lowercase SHA-256 hex digest")
+    type_counts: dict[str, int] = {}
     for module in modules:
         if not _MODULE_ID_PATTERN.fullmatch(module.identifier):
             raise ValueError("module graph contains an invalid module identifier")
+        type_counts[module.identifier] = type_counts.get(module.identifier, 0) + 1
+
+    instance_ids: list[str] = []
+    for module in modules:
+        instance_id = module.instance_id or module.identifier
+        if type_counts[module.identifier] > 1 and module.instance_id is None:
+            raise ValueError(
+                f"module type {module.identifier} requires explicit instance identifiers when repeated"
+            )
+        if not _MODULE_ID_PATTERN.fullmatch(instance_id):
+            raise ValueError("module graph contains an invalid instance identifier")
+        instance_ids.append(instance_id)
         if len(module.depends_on) != len(set(module.depends_on)):
             raise ValueError(f"module {module.identifier} contains duplicate dependencies")
-        if module.identifier in module.depends_on:
-            raise ValueError(f"module {module.identifier} cannot depend on itself")
-    known = {module.identifier for module in modules}
-    if len(known) != len(modules):
-        raise ValueError("module graph contains duplicate module identifiers")
+    if len(set(instance_ids)) != len(instance_ids):
+        raise ValueError("module graph contains duplicate instance identifiers")
+    instances_by_type: dict[str, list[str]] = {}
+    for module, instance_id in zip(modules, instance_ids, strict=True):
+        instances_by_type.setdefault(module.identifier, []).append(instance_id)
+    known_instances = set(instance_ids)
+
     result: list[ModuleLifecycle] = []
-    for module in modules:
-        unknown = set(module.depends_on) - known
+    for module, instance_id in zip(modules, instance_ids, strict=True):
+        dependencies: list[str] = []
+        for dependency in module.depends_on:
+            if dependency in known_instances:
+                dependencies.append(dependency)
+                continue
+            matching_instances = instances_by_type.get(dependency, [])
+            if len(matching_instances) == 1:
+                dependencies.append(matching_instances[0])
+                continue
+            if len(matching_instances) > 1:
+                raise ValueError(
+                    f"module {module.identifier} has an ambiguous dependency on repeated module type {dependency}; use an instance identifier"
+                )
+            raise ValueError(
+                f"module {module.identifier} depends on unknown module or instance: {dependency}"
+            )
+        if instance_id in dependencies:
+            raise ValueError(f"module instance {instance_id} cannot depend on itself")
+        if len(dependencies) != len(set(dependencies)):
+            raise ValueError(f"module instance {instance_id} contains duplicate dependencies")
+        unknown = set(dependencies) - known_instances
         if unknown:
-            raise ValueError(f"module {module.identifier} depends on unknown modules: {sorted(unknown)}")
+            raise ValueError(
+                f"module instance {instance_id} depends on unknown instances: {sorted(unknown)}"
+            )
         result.append(
             ModuleLifecycle(
                 module_id=module.identifier,
-                dependencies=tuple(module.depends_on),
+                instance_id=instance_id,
+                dependencies=tuple(dependencies),
                 resource_tags=(
                     ("ManagedBy", "davdeploy"),
                     ("DavDeployWorkspace", workspace_id),
                     ("DavDeployProject", project_id),
                     ("DavDeployPlan", plan_digest),
+                    ("DavDeployModuleInstance", instance_id),
                 ),
             )
         )
-    canonical = "|".join(f"{item.module_id}:{','.join(item.dependencies)}" for item in result)
+    canonical = "|".join(
+        f"{item.instance_id}:{item.module_id}:{','.join(item.dependencies)}" for item in result
+    )
     expected = sha256(canonical.encode()).hexdigest()
     # The caller-provided digest remains the authoritative approved artifact.
     return UniversalExecutionPlan(

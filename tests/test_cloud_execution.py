@@ -8,6 +8,7 @@ from davdeploy.cloud_execution import (
     CloudExecutionResult,
     CodeBuildCloudExecutionAdapter,
     DisabledCloudExecutionAdapter,
+    validate_lifecycle_work,
 )
 from davdeploy.composed_deployment import ModuleLifecycleOutcome
 from davdeploy.models import (
@@ -34,6 +35,26 @@ def lifecycle_work(operation="apply"):
             "resource_tags": {"ManagedBy": "davdeploy"},
         }
     ]
+
+
+def test_runner_work_validation_preserves_instance_identity_and_module_type():
+    work = [
+        {
+            "module_id": "aws-managed-application",
+            "instance_id": instance_id,
+            "operation": "apply",
+            "dependencies": [],
+            "resource_tags": {"DavDeployModuleInstance": instance_id},
+        }
+        for instance_id in ("primary-app", "admin-app")
+    ]
+    accepted = validate_lifecycle_work(work)
+
+    assert [(item["module_id"], item["instance_id"]) for item in accepted] == [
+        ("aws-managed-application", "primary-app"),
+        ("aws-managed-application", "admin-app"),
+    ]
+    assert all(item["renderer"]["terraform_root"] for item in accepted)
 
 
 def allow_serverless_certification(monkeypatch, workspace_id):
@@ -1155,6 +1176,78 @@ def test_result_reconciliation_rejects_non_retryable_failure():
         assert "not eligible" in str(error)
     else:
         raise AssertionError("non-retryable execution failure was reconciled")
+
+
+def test_run_creation_persists_repeated_module_types_as_distinct_instances():
+    service, db = make_service()
+    approved = approved_app_runner_customer_review(service)
+    revision = db.get(InfrastructurePlanRevision, approved.id)
+    assert revision is not None
+    content = dict(revision.content)
+    content["architecture"] = {
+        **content["architecture"],
+        "modules": [
+            {
+                "identifier": "aws-managed-application",
+                "instance_id": "public-app",
+                "display_name": "Public application",
+                "purpose": "customer-facing application",
+                "stage": "production",
+                "services": ["App Runner"],
+                "depends_on": [],
+                "execution_supported": False,
+            },
+            {
+                "identifier": "aws-managed-application",
+                "instance_id": "admin-app",
+                "display_name": "Admin application",
+                "purpose": "administrative application",
+                "stage": "production",
+                "services": ["App Runner"],
+                "depends_on": [],
+                "execution_supported": False,
+            },
+        ],
+    }
+    revision.content = content
+    revision.content_digest = plan_hash(content)
+    decision = db.scalar(
+        select(InfrastructurePlanDecisionRecord).where(
+            InfrastructurePlanDecisionRecord.revision_id == revision.id
+        )
+    )
+    assert decision is not None
+    decision.approved_digest = revision.content_digest
+    db.commit()
+
+    run = service.create_cloud_execution_run_for_revision(
+        operator(),
+        approved.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=None,
+        expected_region=None,
+        mode="GUARDED_CLOUD_EXECUTION",
+        confirmation=None,
+    )
+
+    graph_modules = run["evidence"]["universal_execution"]["modules"]
+    persisted = run["module_instances"]
+    assert [(item["module_id"], item["instance_id"]) for item in persisted] == [
+        ("aws-managed-application", "public-app"),
+        ("aws-managed-application", "admin-app"),
+    ]
+    assert [(item["module_id"], item["instance_id"]) for item in graph_modules] == [
+        ("aws-managed-application", "public-app"),
+        ("aws-managed-application", "admin-app"),
+    ]
+    persisted_rows = db.get(CloudExecutionRun, run["id"]).module_instances
+    assert [item.idempotency_key for item in persisted_rows] == [
+        f"{run['id']}:public-app",
+        f"{run['id']}:admin-app",
+    ]
 
 
 def test_ready_cloud_run_is_queued_and_observed_by_trusted_worker():

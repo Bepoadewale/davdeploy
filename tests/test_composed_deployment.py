@@ -34,3 +34,43 @@ def test_conflicting_module_evidence_fails_closed():
     assert not lifecycle_ready(plan, evidence)
     assert not destroy_verified(plan, evidence)
     assert collect_observations(plan, evidence)[0].health == "UNKNOWN"
+
+
+def test_repeated_module_observations_are_matched_by_instance():
+    digest = sha256(b"plan").hexdigest()
+    modules = [
+        ArchitectureModule(
+            identifier="storage",
+            instance_id="uploads",
+            display_name="Uploads",
+            purpose="uploads",
+            stage="test",
+            services=["S3"],
+        ),
+        ArchitectureModule(
+            identifier="storage",
+            instance_id="backups",
+            display_name="Backups",
+            purpose="backups",
+            stage="test",
+            services=["S3"],
+        ),
+    ]
+    plan = compile_universal_execution_plan(
+        modules, workspace_id="w", project_id="p", plan_digest=digest
+    )
+    evidence = (
+        LifecycleEvidence(
+            "storage", "observe", "HEALTHY", (("bucket", "uploads-bucket"),), "uploads"
+        ),
+        LifecycleEvidence(
+            "storage", "observe", "FAILED", (("bucket", "backup-bucket"),), "backups"
+        ),
+    )
+
+    observations = collect_observations(plan, evidence)
+    assert [(item.instance_id, item.health, item.outputs) for item in observations] == [
+        ("uploads", "HEALTHY", (("bucket", "uploads-bucket"),)),
+        ("backups", "FAILED", (("bucket", "backup-bucket"),)),
+    ]
+    assert not lifecycle_ready(plan, evidence)

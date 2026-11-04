@@ -149,6 +149,7 @@ class ArchitectureModule(BaseModel):
     """
 
     identifier: str
+    instance_id: str | None = None
     display_name: str
     purpose: str
     stage: str
