@@ -29,21 +29,29 @@ PR #293 merged distinct module type and instance identities. Dependencies are in
 
 ## Acceptance criteria
 
-- [ ] Core module contracts expose typed input/output ports separately from module type identity.
-- [ ] Multiple instances bind through explicit source instance IDs.
-- [ ] Missing ports, type mismatch, ambiguous sources, undeclared edges, and inline secret values are rejected before dispatch.
-- [ ] Valid bindings are included in the immutable compiled lifecycle graph and durable work payload.
-- [ ] Legacy plans with no bindings remain valid.
-- [ ] Hosted worker remains fail-closed for multi-module execution.
+- [x] Core module contracts expose typed input/output ports separately from module type identity.
+- [x] Multiple instances bind through explicit source instance IDs.
+- [x] Missing ports, type mismatch, ambiguous sources, undeclared edges, and inline secret values are rejected before dispatch.
+- [x] Valid bindings are included in the immutable compiled lifecycle graph and durable work payload.
+- [x] Legacy plans with no bindings remain valid.
+- [x] Hosted worker remains fail-closed for multi-module execution.
 - [ ] Focused tests, full verification, clean-room cycle, and GitHub CI pass.
 
 ## Acceptance status
 
-Pending implementation.
+Implemented for the initial private storage, NoSQL data, queue, secret-reference,
+and serverless API ports. The static port registry is separate from renderer enablement;
+unknown module types expose no bindable ports and cannot become executable as a result of
+having a contract.
 
 ## Tests / validation performed
 
-Pending implementation.
+- `.venv/bin/python -m pytest -q tests/test_universal_execution.py tests/test_cloud_execution.py tests/test_planner_decisions.py` — **124 passed**.
+- `make verify` — configuration check passed; Ruff passed; **458 tests passed**; OpenAPI snapshot matched; Docker Compose configuration passed.
+- `.venv/bin/python -m ruff check ...` on changed Python files — passed.
+- `git diff --check` — passed.
+- Full isolated clean-room lifecycle cycle — pending.
+- Required GitHub PR checks — pending.
 
 ## Evidence files produced
 

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from davdeploy.contracts import EvidenceRef
 
@@ -141,6 +141,24 @@ class ArchitectureComponent(BaseModel):
     private: bool = True
 
 
+class ModuleInputBinding(BaseModel):
+    """Reference one declared output to one declared input without carrying values."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_name: str
+    source_instance_id: str
+    source_output: str
+
+
+class ModulePort(BaseModel):
+    name: str
+    value_type: Literal[
+        "resource_name", "aws_arn", "aws_queue_url", "secret_reference", "https_url"
+    ]
+    secret_reference_only: bool = False
+
+
 class ArchitectureModule(BaseModel):
     """One selected internal building block in a composed architecture.
 
@@ -155,6 +173,7 @@ class ArchitectureModule(BaseModel):
     stage: str
     services: list[str]
     depends_on: list[str] = Field(default_factory=list)
+    input_bindings: list[ModuleInputBinding] = Field(default_factory=list)
     execution_supported: bool = False
 
 
@@ -167,6 +186,8 @@ class ModuleContract(BaseModel):
     policy_controls: list[str]
     observation: list[str]
     destroy_supported: bool = False
+    inputs: list[ModulePort] = Field(default_factory=list)
+    outputs: list[ModulePort] = Field(default_factory=list)
 
 
 class ModuleExecutionContract(BaseModel):

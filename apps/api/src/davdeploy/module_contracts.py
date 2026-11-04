@@ -6,6 +6,7 @@ These are plan contracts, not free-form Terraform or live execution permission.
 from __future__ import annotations
 
 from davdeploy.domain import ArchitectureModule, ModuleContract
+from davdeploy.module_ports import module_ports
 
 _CONTRACTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], bool]] = {
     "aws-edge-https": (
@@ -177,11 +178,13 @@ def module_contracts(modules: list[ArchitectureModule]) -> list[ModuleContract]:
         result.append(
             ModuleContract(
                 module_id=module.identifier,
-                version="2026-11-1",
+                version="2026-11-2",
                 resources=list(resources),
                 policy_controls=list(controls),
                 observation=list(observation),
                 destroy_supported=destroy_supported,
+                inputs=list(module_ports(module.identifier).inputs),
+                outputs=list(module_ports(module.identifier).outputs),
             )
         )
     return result

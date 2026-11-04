@@ -14,6 +14,7 @@ from hashlib import sha256
 from typing import Protocol
 
 from davdeploy.domain import ArchitectureModule
+from davdeploy.module_ports import module_ports
 
 LIFECYCLE_OPERATIONS = ("plan", "apply", "observe", "rollback", "destroy", "verify_cleanup")
 FORWARD_OPERATIONS = ("plan", "apply", "observe")
@@ -27,6 +28,7 @@ TERMINAL_EVIDENCE_STATES = {
     "verify_cleanup": frozenset({"ABSENT", "CLEANUP_VERIFIED"}),
 }
 _MODULE_ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{0,99}\Z")
+_PORT_NAME_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,99}\Z")
 _PLAN_DIGEST_PATTERN = re.compile(r"[a-f0-9]{64}\Z")
 _DISPATCH_OPERATIONS = frozenset(
     (*LIFECYCLE_OPERATIONS, "destroy_plan", "build-push-image", "build_artifact")
@@ -39,6 +41,7 @@ class ModuleLifecycle:
     module_id: str
     instance_id: str
     dependencies: tuple[str, ...]
+    input_bindings: tuple[tuple[str, str, str], ...] = ()
     operations: tuple[str, ...] = LIFECYCLE_OPERATIONS
     resource_tags: tuple[tuple[str, str], ...] = ()
 
@@ -99,6 +102,14 @@ def lifecycle_work(plan: UniversalExecutionPlan, operation: str) -> tuple[dict[s
             "instance_id": module.instance_id,
             "operation": operation,
             "dependencies": list(module.dependencies),
+            "input_bindings": [
+                {
+                    "input_name": input_name,
+                    "source_instance_id": source_instance_id,
+                    "source_output": source_output,
+                }
+                for input_name, source_instance_id, source_output in module.input_bindings
+            ],
             "resource_tags": dict(module.resource_tags),
         }
         for module in ordered_modules(plan, operation)
@@ -128,6 +139,7 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
         instance_id = item.get("instance_id", module_id)
         operation = item.get("operation")
         dependencies = item.get("dependencies")
+        input_bindings = item.get("input_bindings", [])
         resource_tags = item.get("resource_tags")
         if not isinstance(module_id, str) or not _MODULE_ID_PATTERN.fullmatch(module_id):
             raise ValueError("universal lifecycle work item has an invalid module identifier")
@@ -144,6 +156,41 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
             raise ValueError("universal lifecycle work has invalid dependencies")
         if len(dependencies) != len(set(dependencies)):
             raise ValueError(f"module {module_id} contains duplicate dependencies")
+        if not isinstance(input_bindings, list):
+            raise TypeError("universal lifecycle work has invalid input bindings")
+        accepted_bindings: list[dict[str, str]] = []
+        bound_inputs: set[str] = set()
+        for binding in input_bindings:
+            if not isinstance(binding, Mapping) or set(binding) != {
+                "input_name",
+                "source_instance_id",
+                "source_output",
+            }:
+                raise ValueError("universal lifecycle input binding must contain references only")
+            input_name = binding["input_name"]
+            source_instance_id = binding["source_instance_id"]
+            source_output = binding["source_output"]
+            if (
+                not isinstance(input_name, str)
+                or not _PORT_NAME_PATTERN.fullmatch(input_name)
+                or not isinstance(source_instance_id, str)
+                or not _MODULE_ID_PATTERN.fullmatch(source_instance_id)
+                or not isinstance(source_output, str)
+                or not _PORT_NAME_PATTERN.fullmatch(source_output)
+            ):
+                raise ValueError("universal lifecycle input binding has an invalid reference")
+            if input_name in bound_inputs:
+                raise ValueError("universal lifecycle input binding repeats a destination input")
+            if source_instance_id not in dependencies:
+                raise ValueError("input binding source must be a declared module dependency")
+            bound_inputs.add(input_name)
+            accepted_bindings.append(
+                {
+                    "input_name": input_name,
+                    "source_instance_id": source_instance_id,
+                    "source_output": source_output,
+                }
+            )
         if instance_id in dependencies:
             raise ValueError(f"module instance {instance_id} cannot depend on itself")
         if not isinstance(resource_tags, Mapping) or not all(
@@ -160,6 +207,7 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
                 "instance_id": instance_id,
                 "operation": operation,
                 "dependencies": list(dependencies),
+                "input_bindings": accepted_bindings,
                 "resource_tags": dict(resource_tags),
             }
         )
@@ -288,6 +336,52 @@ def compile_universal_execution_plan(
             raise ValueError(f"module instance {instance_id} cannot depend on itself")
         if len(dependencies) != len(set(dependencies)):
             raise ValueError(f"module instance {instance_id} contains duplicate dependencies")
+        target_ports = {item.name: item for item in module_ports(module.identifier).inputs}
+        bound_inputs: set[str] = set()
+        compiled_bindings: list[tuple[str, str, str]] = []
+        for binding in module.input_bindings:
+            if not _PORT_NAME_PATTERN.fullmatch(binding.input_name):
+                raise ValueError("module input binding has an invalid input name")
+            if not _MODULE_ID_PATTERN.fullmatch(binding.source_instance_id):
+                raise ValueError("module input binding has an invalid source instance identifier")
+            if not _PORT_NAME_PATTERN.fullmatch(binding.source_output):
+                raise ValueError("module input binding has an invalid output name")
+            if binding.input_name in bound_inputs:
+                raise ValueError(f"module instance {instance_id} binds an input more than once")
+            if binding.source_instance_id not in known_instances:
+                raise ValueError(
+                    f"module instance {instance_id} binds from an unknown source instance"
+                )
+            if binding.source_instance_id not in dependencies:
+                raise ValueError(
+                    f"module instance {instance_id} input binding source must be declared as a dependency"
+                )
+            source_module = next(
+                item
+                for item, source_instance in zip(modules, instance_ids, strict=True)
+                if source_instance == binding.source_instance_id
+            )
+            source_ports = {item.name: item for item in module_ports(source_module.identifier).outputs}
+            target_port = target_ports.get(binding.input_name)
+            source_port = source_ports.get(binding.source_output)
+            if target_port is None:
+                raise ValueError(
+                    f"module instance {instance_id} has no declared input {binding.input_name}"
+                )
+            if source_port is None:
+                raise ValueError(
+                    f"module instance {binding.source_instance_id} has no declared output {binding.source_output}"
+                )
+            if target_port.value_type != source_port.value_type:
+                raise ValueError(
+                    f"module input {binding.input_name} type does not match source output {binding.source_output}"
+                )
+            if target_port.secret_reference_only != source_port.secret_reference_only:
+                raise ValueError("module secret references must connect only to secret-reference inputs")
+            compiled_bindings.append(
+                (binding.input_name, binding.source_instance_id, binding.source_output)
+            )
+            bound_inputs.add(binding.input_name)
         unknown = set(dependencies) - known_instances
         if unknown:
             raise ValueError(
@@ -298,6 +392,7 @@ def compile_universal_execution_plan(
                 module_id=module.identifier,
                 instance_id=instance_id,
                 dependencies=tuple(dependencies),
+                input_bindings=tuple(compiled_bindings),
                 resource_tags=(
                     ("ManagedBy", "davdeploy"),
                     ("DavDeployWorkspace", workspace_id),
@@ -308,7 +403,9 @@ def compile_universal_execution_plan(
             )
         )
     canonical = "|".join(
-        f"{item.instance_id}:{item.module_id}:{','.join(item.dependencies)}" for item in result
+        f"{item.instance_id}:{item.module_id}:{','.join(item.dependencies)}:"
+        f"{item.input_bindings}"
+        for item in result
     )
     expected = sha256(canonical.encode()).hexdigest()
     # The caller-provided digest remains the authoritative approved artifact.

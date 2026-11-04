@@ -43,7 +43,16 @@ def test_runner_work_validation_preserves_instance_identity_and_module_type():
             "module_id": "aws-managed-application",
             "instance_id": instance_id,
             "operation": "apply",
-            "dependencies": [],
+            "dependencies": [] if instance_id == "primary-app" else ["primary-app"],
+            "input_bindings": []
+            if instance_id == "primary-app"
+            else [
+                {
+                    "input_name": "service_config",
+                    "source_instance_id": "primary-app",
+                    "source_output": "config_reference",
+                }
+            ],
             "resource_tags": {"DavDeployModuleInstance": instance_id},
         }
         for instance_id in ("primary-app", "admin-app")
@@ -55,6 +64,13 @@ def test_runner_work_validation_preserves_instance_identity_and_module_type():
         ("aws-managed-application", "admin-app"),
     ]
     assert all(item["renderer"]["terraform_root"] for item in accepted)
+    assert accepted[1]["input_bindings"] == [
+        {
+            "input_name": "service_config",
+            "source_instance_id": "primary-app",
+            "source_output": "config_reference",
+        }
+    ]
 
 
 def allow_serverless_certification(monkeypatch, workspace_id):

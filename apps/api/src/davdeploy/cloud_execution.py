@@ -41,8 +41,9 @@ def validate_lifecycle_work(
         instance_id = str(item["instance_id"])
         operation = str(item["operation"])
         dependencies = item["dependencies"]
+        input_bindings = item["input_bindings"]
         resource_tags = item["resource_tags"]
-        assert isinstance(dependencies, list)
+        assert isinstance(dependencies, list) and isinstance(input_bindings, list)
         assert isinstance(resource_tags, dict)
         renderer = renderer_for(module_id, operation, hosted_certification=hosted_certification)
         accepted.append(
@@ -51,6 +52,7 @@ def validate_lifecycle_work(
                 "instance_id": instance_id,
                 "operation": operation,
                 "dependencies": dependencies,
+                "input_bindings": input_bindings,
                 "resource_tags": resource_tags,
                 "renderer": {
                     "terraform_root": renderer.terraform_root,

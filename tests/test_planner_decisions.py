@@ -193,6 +193,38 @@ def test_universal_modules_have_typed_resource_and_policy_contracts():
     assert contracts["aws-managed-application"].destroy_supported is True
 
 
+def test_composed_core_module_contracts_expose_typed_ports():
+    result = plan(
+        workload_type="document_processor",
+        event_driven=True,
+        containerized=False,
+        capability_requirements=["file_storage", "nosql_data"],
+    )
+    contracts = {contract.module_id: contract for contract in result.module_contracts}
+
+    assert {item.name: item.value_type for item in contracts["aws-file-storage"].outputs} == {
+        "bucket_name": "resource_name",
+        "bucket_arn": "aws_arn",
+    }
+    assert {item.name: item.value_type for item in contracts["aws-nosql-data"].outputs} == {
+        "table_name": "resource_name",
+        "table_arn": "aws_arn",
+    }
+    assert {item.name: item.value_type for item in contracts["aws-jobs-events"].outputs} == {
+        "queue_url": "aws_queue_url",
+        "queue_arn": "aws_arn",
+    }
+    assert {
+        item.name: item.value_type for item in contracts["aws-serverless-api"].inputs
+    } == {
+        "uploads_bucket_name": "resource_name",
+        "table_name": "resource_name",
+        "work_queue_url": "aws_queue_url",
+        "api_secret_reference": "secret_reference",
+    }
+    assert contracts["aws-secrets-config"].outputs[0].secret_reference_only is True
+
+
 def test_data_and_asynchronous_modules_have_safe_contracts():
     result = plan(
         stateful=True,

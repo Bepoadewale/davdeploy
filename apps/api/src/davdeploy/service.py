@@ -4570,6 +4570,14 @@ class ProductService:
                         "instance_id": module.instance_id,
                         "module_id": module.module_id,
                         "dependencies": list(module.dependencies),
+                        "input_bindings": [
+                            {
+                                "input_name": input_name,
+                                "source_instance_id": source_instance_id,
+                                "source_output": source_output,
+                            }
+                            for input_name, source_instance_id, source_output in module.input_bindings
+                        ],
                         "operations": list(module.operations),
                         "resource_tags": dict(module.resource_tags),
                     }
