@@ -34,6 +34,16 @@ _DISPATCH_OPERATIONS = frozenset(
     (*LIFECYCLE_OPERATIONS, "destroy_plan", "build-push-image", "build_artifact")
 )
 _REVERSE_DISPATCH_OPERATIONS = frozenset((*REVERSE_OPERATIONS, "destroy_plan"))
+_DISPATCH_SUCCESS_STATES = {
+    "plan": frozenset({"PLAN_READY_FOR_REVIEW", "DESTROY_PLAN_READY_FOR_REVIEW"}),
+    "destroy_plan": frozenset({"DESTROY_PLAN_READY_FOR_REVIEW"}),
+    "build_artifact": frozenset({"ARTIFACT_READY"}),
+    "apply": frozenset({"SUCCEEDED_AWAITING_OBSERVATION", "HEALTHY"}),
+    "observe": frozenset({"HEALTHY"}),
+    "rollback": frozenset({"ROLLED_BACK", "DESTROYED_VERIFIED"}),
+    "destroy": frozenset({"DESTROYED_VERIFIED"}),
+    "verify_cleanup": frozenset({"CLEANUP_VERIFIED", "DESTROYED_VERIFIED"}),
+}
 
 
 @dataclass(frozen=True)
@@ -64,7 +74,9 @@ class LifecycleEvidence:
 
 
 class LifecycleExecutor(Protocol):
-    def run(self, plan: UniversalExecutionPlan, operation: str) -> tuple[LifecycleEvidence, ...]: ...
+    def run(
+        self, plan: UniversalExecutionPlan, operation: str
+    ) -> tuple[LifecycleEvidence, ...]: ...
 
 
 def ordered_modules(plan: UniversalExecutionPlan, operation: str) -> tuple[ModuleLifecycle, ...]:
@@ -80,7 +92,9 @@ def ordered_modules(plan: UniversalExecutionPlan, operation: str) -> tuple[Modul
     remaining = {module.instance_id: set(module.dependencies) for module in plan.modules}
     ordered: list[ModuleLifecycle] = []
     while remaining:
-        ready = sorted(identifier for identifier, dependencies in remaining.items() if not dependencies)
+        ready = sorted(
+            identifier for identifier, dependencies in remaining.items() if not dependencies
+        )
         if not ready:
             raise ValueError("module graph contains a dependency cycle")
         for identifier in ready:
@@ -254,6 +268,49 @@ def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...
     return tuple(accepted)
 
 
+def next_dispatchable_work_item(
+    value: object, module_states: Mapping[str, str]
+) -> dict[str, object] | None:
+    """Select the first undispatched node whose lifecycle prerequisites succeeded.
+
+    This deliberately returns one node so the caller can attach a unique runner
+    build identity before any later dependency wave is submitted. Input bindings
+    remain references here; callers must resolve them through a renderer-specific
+    contract before dispatch.
+    """
+    work = validate_lifecycle_work_graph(value)
+    operation = str(work[0]["operation"])
+    success_states = _DISPATCH_SUCCESS_STATES.get(operation)
+    if success_states is None:
+        return None
+    known_instances = {str(item["instance_id"]) for item in work}
+    if set(module_states) - known_instances or any(
+        not isinstance(state, str) for state in module_states.values()
+    ):
+        raise ValueError("module state map does not match the validated lifecycle graph")
+
+    dependencies_by_instance = {
+        str(item["instance_id"]): tuple(str(dep) for dep in item["dependencies"]) for item in work
+    }
+    reverse = operation in _REVERSE_DISPATCH_OPERATIONS
+    for item in work:
+        instance_id = str(item["instance_id"])
+        state = module_states.get(instance_id, "NOT_DISPATCHED")
+        if state not in {"NOT_DISPATCHED", "QUEUED"}:
+            continue
+        if reverse:
+            prerequisites = tuple(
+                candidate
+                for candidate, dependencies in dependencies_by_instance.items()
+                if instance_id in dependencies
+            )
+        else:
+            prerequisites = dependencies_by_instance[instance_id]
+        if all(module_states.get(source) in success_states for source in prerequisites):
+            return item
+    return None
+
+
 def lifecycle_evidence_complete(
     plan: UniversalExecutionPlan,
     operation: str,
@@ -274,9 +331,7 @@ def lifecycle_evidence_complete(
         instance_id = item.instance_id or item.module_id
         if item.operation == operation and instance_id in outcomes:
             outcomes[instance_id].append(item.state)
-    return all(
-        len(states) == 1 and states[0] in terminal_states for states in outcomes.values()
-    )
+    return all(len(states) == 1 and states[0] in terminal_states for states in outcomes.values())
 
 
 def resolve_module_inputs(
@@ -307,7 +362,9 @@ def resolve_module_inputs(
         port_contract = source_contracts.get(source_output)
         if port_contract is None:
             raise ValueError("input binding references an undeclared source output")
-        source_values = validate_module_outputs(source.module_id, module_outputs.get(source_instance_id))
+        source_values = validate_module_outputs(
+            source.module_id, module_outputs.get(source_instance_id)
+        )
         if source_values is None or source_output not in source_values:
             raise ValueError("input binding source output is not available")
         resolved[input_name] = source_values[source_output]
@@ -396,7 +453,9 @@ def compile_universal_execution_plan(
                 for item, source_instance in zip(modules, instance_ids, strict=True)
                 if source_instance == binding.source_instance_id
             )
-            source_ports = {item.name: item for item in module_ports(source_module.identifier).outputs}
+            source_ports = {
+                item.name: item for item in module_ports(source_module.identifier).outputs
+            }
             target_port = target_ports.get(binding.input_name)
             source_port = source_ports.get(binding.source_output)
             if target_port is None:
@@ -412,7 +471,9 @@ def compile_universal_execution_plan(
                     f"module input {binding.input_name} type does not match source output {binding.source_output}"
                 )
             if target_port.secret_reference_only != source_port.secret_reference_only:
-                raise ValueError("module secret references must connect only to secret-reference inputs")
+                raise ValueError(
+                    "module secret references must connect only to secret-reference inputs"
+                )
             compiled_bindings.append(
                 (binding.input_name, binding.source_instance_id, binding.source_output)
             )
@@ -438,8 +499,7 @@ def compile_universal_execution_plan(
             )
         )
     canonical = "|".join(
-        f"{item.instance_id}:{item.module_id}:{','.join(item.dependencies)}:"
-        f"{item.input_bindings}"
+        f"{item.instance_id}:{item.module_id}:{','.join(item.dependencies)}:{item.input_bindings}"
         for item in result
     )
     expected = sha256(canonical.encode()).hexdigest()

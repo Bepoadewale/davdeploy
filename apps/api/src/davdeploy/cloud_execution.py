@@ -121,9 +121,16 @@ class AppRunnerCloudExecutionAdapter:
 
     def execute(self, context: dict[str, object]) -> CloudExecutionResult:
         try:
-            trusted_execution_work(context)
+            lifecycle_work = trusted_execution_work(context)
         except (TypeError, ValueError) as error:
             return CloudExecutionResult("FAILED", (), {}, str(error))
+        if len(lifecycle_work) != 1:
+            return CloudExecutionResult(
+                "FAILED",
+                (),
+                {},
+                "App Runner accepts one module instance per execution run.",
+            )
         if os.getenv("DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED", "false").lower() != "true":
             return DisabledCloudExecutionAdapter().execute(context)
         script = self.root / "scripts" / "customer-workload-app-runner-pilot.sh"
@@ -211,12 +218,35 @@ class CodeBuildCloudExecutionAdapter:
             lifecycle_work = trusted_execution_work(context)
         except (TypeError, ValueError) as error:
             return CloudExecutionResult("FAILED", (), {}, str(error))
-        if len(lifecycle_work) != 1:
+        module_types = [str(item["module_id"]) for item in lifecycle_work]
+        if len(module_types) != len(set(module_types)):
             return CloudExecutionResult(
                 "FAILED",
                 (),
                 {},
-                "CodeBuild currently accepts one certified module per execution run.",
+                "The registered renderer does not yet isolate repeated instances of one module type.",
+            )
+        renderer_roots = [str(item["renderer"]["terraform_root"]) for item in lifecycle_work]
+        if len(renderer_roots) != len(set(renderer_roots)):
+            return CloudExecutionResult(
+                "FAILED",
+                (),
+                {},
+                "The registered renderers do not yet isolate shared Terraform state roots.",
+            )
+        selected_instance_id = context.get("dispatch_instance_id")
+        selected = next(
+            (item for item in lifecycle_work if item["instance_id"] == selected_instance_id),
+            None,
+        )
+        if selected is None and len(lifecycle_work) == 1 and selected_instance_id is None:
+            selected = lifecycle_work[0]
+        if selected is None:
+            return CloudExecutionResult(
+                "FAILED",
+                (),
+                {},
+                "CodeBuild requires one selected module instance from the validated graph.",
             )
         if not self.project_name:
             return DisabledCloudExecutionAdapter().execute(context)
@@ -235,7 +265,7 @@ class CodeBuildCloudExecutionAdapter:
         overrides.append(
             {
                 "name": "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON",
-                "value": json.dumps(lifecycle_work, sort_keys=True, separators=(",", ":")),
+                "value": json.dumps([selected], sort_keys=True, separators=(",", ":")),
                 "type": "PLAINTEXT",
             }
         )

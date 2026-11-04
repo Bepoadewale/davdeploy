@@ -70,9 +70,8 @@ case "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
     ;;
 esac
 
-if [[ "$(jq '.[0].dependencies | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 || \
-  "$(jq '.[0].input_bindings // [] | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 ]]; then
-  echo "This renderer accepts no unresolved module dependencies or input bindings" >&2
+if [[ "$(jq '.[0].input_bindings // [] | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 ]]; then
+  echo "This renderer accepts no unresolved module input bindings" >&2
   exit 2
 fi
 

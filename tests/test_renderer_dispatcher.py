@@ -197,13 +197,6 @@ def test_dispatcher_rejects_unresolved_or_inline_module_inputs(tmp_path: Path) -
     dispatcher, marker = _isolated_dispatcher(tmp_path)
     work = _work()
     work[0]["dependencies"] = ["uploads"]
-    work[0]["input_bindings"] = [
-        {
-            "input_name": "uploads_bucket_name",
-            "source_instance_id": "uploads",
-            "source_output": "bucket_name",
-        }
-    ]
     env = os.environ.copy()
     env.update(
         {
@@ -219,9 +212,28 @@ def test_dispatcher_rejects_unresolved_or_inline_module_inputs(tmp_path: Path) -
         text=True,
         check=False,
     )
+    assert result.returncode == 0
+    assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
+
+    work[0]["input_bindings"] = [
+        {
+            "input_name": "uploads_bucket_name",
+            "source_instance_id": "uploads",
+            "source_output": "bucket_name",
+        }
+    ]
+    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(work)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2
-    assert "unresolved module dependencies or input bindings" in result.stderr
-    assert not marker.exists()
+    assert "unresolved module input bindings" in result.stderr
+    assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
 
     work[0]["dependencies"] = []
     work[0]["input_bindings"] = [
@@ -243,7 +255,7 @@ def test_dispatcher_rejects_unresolved_or_inline_module_inputs(tmp_path: Path) -
     )
     assert result.returncode == 2
     assert "one typed renderer entry" in result.stderr
-    assert not marker.exists()
+    assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
 
 
 def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(

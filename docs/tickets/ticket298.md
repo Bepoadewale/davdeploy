@@ -11,8 +11,8 @@ Connect the already-validated dependency graph and per-module lifecycle rows to 
 
 - PR #297 merged as `e28fa23`; Terraform outputs from the checked-in Lambda/API renderer are validated and stored as typed outputs on the exact callback module row.
 - The execution graph compiler validates dependencies and computes deterministic dependency order.
-- The CodeBuild adapter rejects graphs with more than one module; current worker transitions and callbacks still update every module row together.
-- The dispatcher accepts typed instance/reference fields but intentionally rejects unresolved dependency/input bindings.
+- The CodeBuild adapter previously rejected graphs with more than one module; this PR now selects one ready node at a time and binds the build to that instance.
+- Per-instance callbacks can enqueue the next node, while unresolved input bindings, repeated renderer types and shared Terraform state roots remain fail-closed.
 - Hosted multi-module execution remains disabled and no composed customer AWS workload is certified.
 
 ## Research / references used
@@ -36,23 +36,23 @@ Connect the already-validated dependency graph and per-module lifecycle rows to 
 
 ## Acceptance criteria
 
-- [ ] The worker selects only nodes whose dependencies have operation-appropriate terminal outcomes.
-- [ ] One CodeBuild build ID maps to one module instance, including duplicate module types with distinct instance IDs.
-- [ ] A completed callback advances only its exact module row and deterministically wakes the next eligible node.
-- [ ] Failed or uncertain work blocks dependent nodes and is not blindly retried.
-- [ ] Reverse lifecycle ordering is preserved for cleanup operations.
-- [ ] Unsupported bindings and renderer combinations remain fail-closed.
-- [ ] Existing single-module App Runner and Lambda/API lifecycle contracts remain compatible.
+- [x] The worker selects only nodes whose dependencies have operation-appropriate terminal outcomes.
+- [x] One CodeBuild build ID maps to one module instance; duplicate types remain rejected until their renderer state is instance-scoped.
+- [x] A completed callback advances only its exact module row and deterministically wakes the next eligible node.
+- [x] Failed or uncertain work blocks dependent nodes and is not blindly retried.
+- [x] Reverse lifecycle ordering is preserved for cleanup operations.
+- [x] Unsupported bindings and renderer combinations remain fail-closed.
+- [x] Existing single-module App Runner and Lambda/API lifecycle contracts remain compatible.
 - [ ] Focused tests, full verification, clean-room cycle, documentation checks, and GitHub CI pass.
-- [ ] Hosted execution remains gated; this PR alone does not claim arbitrary AWS workload deployment.
+- [x] Hosted execution remains gated; this PR alone does not claim arbitrary AWS workload deployment.
 
 ## Acceptance status
 
-Implementation has not started. Multi-module CodeBuild remains disabled while the PR adds durable per-instance scheduling and exact callback attribution.
+The worker now selects one dependency-ready module row, assigns only that row the worker state/build identity, and queues the next dependency after a successful callback. Uncertain outcomes reconcile only the active module and leave undispatched rows untouched. Renderer inputs, repeated renderer types, and shared Terraform state roots remain fail-closed. Focused tests and `make verify` pass; clean-room validation and GitHub CI are pending.
 
 ## Tests / validation performed
 
-Pending implementation.
+Focused tests: `uv run pytest -q tests/test_universal_execution.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py` passed (114 passed; one existing Starlette deprecation warning). `make verify` passed (485 tests; one existing warning). `bash -n scripts/customer-workload-dispatcher.sh`, OpenAPI snapshot, Compose configuration, Ruff, documentation conventions, and `git diff --check` passed. Clean-room validation and GitHub CI remain pending.
 
 ## Evidence files produced
 

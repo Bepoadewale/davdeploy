@@ -700,6 +700,327 @@ def test_worker_builds_certification_context_from_persisted_run_mode():
     assert node.evidence["runner_build_id"] == "serverless-1"
 
 
+def test_worker_claims_only_one_ready_module_and_binds_its_build_id():
+    service, _ = make_service()
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-module-wave",
+        project_id="project-module-wave",
+        profile="aws-app-runner",
+        state="QUEUED",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        attempt=1,
+        command={
+            "universal_lifecycle_work": [
+                {
+                    "module_id": "aws-managed-application",
+                    "instance_id": "base",
+                    "operation": "apply",
+                    "dependencies": [],
+                    "input_bindings": [],
+                    "resource_tags": {"DavDeployModuleInstance": "base"},
+                },
+                {
+                    "module_id": "aws-managed-application",
+                    "instance_id": "admin",
+                    "operation": "apply",
+                    "dependencies": ["base"],
+                    "input_bindings": [],
+                    "resource_tags": {"DavDeployModuleInstance": "admin"},
+                },
+            ]
+        },
+        evidence={},
+        outputs={},
+        content_digest="c" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    service.db.flush()
+    for instance_id, dependencies in (("base", []), ("admin", ["base"])):
+        service.db.add(
+            CloudExecutionModuleInstance(
+                organization_id=run.organization_id,
+                project_id=run.project_id,
+                execution_run_id=run.id,
+                instance_id=instance_id,
+                module_id="aws-managed-application",
+                state="NOT_DISPATCHED",
+                operation="apply",
+                attempt=0,
+                input_digest=run.content_digest,
+                idempotency_key=f"{run.id}:{instance_id}",
+                dependencies=dependencies,
+                outputs={},
+                evidence={},
+                version=1,
+            )
+        )
+    service.db.commit()
+
+    class CapturingAdapter:
+        context = None
+
+        def execute(self, context):
+            self.context = context
+            return CloudExecutionResult("SUBMITTED", (), {"codebuild_build_id": "base-build"})
+
+    adapter = CapturingAdapter()
+    service.cloud_execution = adapter
+    assert service.run_next_cloud_execution() is True
+    assert adapter.context["dispatch_instance_id"] == "base"
+    rows = {
+        item.instance_id: item
+        for item in service.db.scalars(
+            select(CloudExecutionModuleInstance).where(
+                CloudExecutionModuleInstance.execution_run_id == run.id
+            )
+        )
+    }
+    assert rows["base"].state == "SUBMITTED"
+    assert rows["base"].runner_build_id == "base-build"
+    assert rows["admin"].state == "NOT_DISPATCHED"
+    assert rows["admin"].runner_build_id is None
+
+
+def test_successful_build_callback_queues_only_the_next_dependency_ready_instance(
+    monkeypatch,
+):
+    service, _ = make_service()
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-module-callback-wave",
+        project_id="project-module-callback-wave",
+        profile="aws-app-runner",
+        state="SUBMITTED",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        attempt=1,
+        command={
+            "universal_lifecycle_work": [
+                {
+                    "module_id": "aws-managed-application",
+                    "instance_id": "base",
+                    "operation": "apply",
+                    "dependencies": [],
+                    "input_bindings": [],
+                    "resource_tags": {},
+                },
+                {
+                    "module_id": "aws-managed-application",
+                    "instance_id": "admin",
+                    "operation": "apply",
+                    "dependencies": ["base"],
+                    "input_bindings": [],
+                    "resource_tags": {},
+                },
+            ]
+        },
+        evidence={"result_s3_uri": "s3://results/run.json"},
+        outputs={"codebuild_build_id": "base-build"},
+        content_digest="f" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    service.db.flush()
+    for instance_id, state, dependencies in (
+        ("base", "SUBMITTED", []),
+        ("admin", "NOT_DISPATCHED", ["base"]),
+    ):
+        service.db.add(
+            CloudExecutionModuleInstance(
+                organization_id=run.organization_id,
+                project_id=run.project_id,
+                execution_run_id=run.id,
+                instance_id=instance_id,
+                module_id="aws-managed-application",
+                state=state,
+                operation="apply",
+                runner_build_id="base-build" if instance_id == "base" else None,
+                attempt=1 if instance_id == "base" else 0,
+                input_digest=run.content_digest,
+                idempotency_key=f"{run.id}:{instance_id}",
+                dependencies=dependencies,
+                outputs={},
+                evidence={},
+                version=1,
+            )
+        )
+    service.db.commit()
+
+    class CodeBuild:
+        def batch_get_builds(self, ids):
+            assert ids == ["base-build"]
+            return {"builds": [{"buildStatus": "SUCCEEDED", "buildComplete": "now"}]}
+
+    class Body:
+        def read(self):
+            return json.dumps({"run_id": run.id, "status": "SUCCEEDED"}).encode()
+
+    class S3:
+        def get_object(self, **kwargs):
+            assert kwargs == {"Bucket": "results", "Key": "run.json"}
+            return {"Body": Body()}
+
+    monkeypatch.setattr(
+        "davdeploy.service.boto3.client",
+        lambda service_name: CodeBuild() if service_name == "codebuild" else S3(),
+    )
+    wakeups = []
+    monkeypatch.setattr(service, "_wake_worker", lambda kind, run_id: wakeups.append(run_id))
+
+    assert service.reconcile_cloud_execution_build("base-build") is True
+    persisted = service.db.get(CloudExecutionRun, run.id)
+    assert persisted is not None and persisted.state == "QUEUED"
+    rows = {item.instance_id: item for item in persisted.module_instances}
+    assert rows["base"].state == "SUCCEEDED_AWAITING_OBSERVATION"
+    assert rows["admin"].state == "QUEUED"
+    assert wakeups == [run.id]
+
+
+def test_dependency_callback_queues_next_node_and_blocks_unresolved_inputs():
+    service, _ = make_service()
+
+    def prepared_run(with_input: bool) -> CloudExecutionRun:
+        run = CloudExecutionRun(
+            organization_id=founder().organization_id,
+            revision_id=f"revision-module-next-{with_input}",
+            project_id=f"project-module-next-{with_input}",
+            profile="aws-app-runner",
+            state="SUBMITTED",
+            mode="AUTHENTICATED_APP_RUNNER_APPLY",
+            attempt=1,
+            command={
+                "universal_lifecycle_work": [
+                    {
+                        "module_id": "aws-managed-application",
+                        "instance_id": "base",
+                        "operation": "apply",
+                        "dependencies": [],
+                        "input_bindings": [],
+                        "resource_tags": {},
+                    },
+                    {
+                        "module_id": "aws-managed-application",
+                        "instance_id": "admin",
+                        "operation": "apply",
+                        "dependencies": ["base"],
+                        "input_bindings": (
+                            [
+                                {
+                                    "input_name": "config",
+                                    "source_instance_id": "base",
+                                    "source_output": "output",
+                                }
+                            ]
+                            if with_input
+                            else []
+                        ),
+                        "resource_tags": {},
+                    },
+                ]
+            },
+            evidence={},
+            outputs={},
+            content_digest="d" * 64,
+            requested_by_subject=operator().subject,
+        )
+        service.db.add(run)
+        service.db.flush()
+        for instance_id, state, dependencies in (
+            ("base", "SUCCEEDED_AWAITING_OBSERVATION", []),
+            ("admin", "NOT_DISPATCHED", ["base"]),
+        ):
+            service.db.add(
+                CloudExecutionModuleInstance(
+                    organization_id=run.organization_id,
+                    project_id=run.project_id,
+                    execution_run_id=run.id,
+                    instance_id=instance_id,
+                    module_id="aws-managed-application",
+                    state=state,
+                    operation="apply",
+                    attempt=0,
+                    input_digest=run.content_digest,
+                    idempotency_key=f"{run.id}:{instance_id}",
+                    dependencies=dependencies,
+                    outputs={},
+                    evidence={},
+                    version=1,
+                )
+            )
+        service.db.flush()
+        return run
+
+    runnable = prepared_run(False)
+    assert service._schedule_next_cloud_execution_module(runnable) == "queued"
+    assert runnable.state == "QUEUED"
+    assert (
+        next(row for row in runnable.module_instances if row.instance_id == "admin").state
+        == "QUEUED"
+    )
+
+    blocked = prepared_run(True)
+    assert service._schedule_next_cloud_execution_module(blocked) == "blocked"
+    assert blocked.state == "BLOCKED_MODULE_INPUTS_UNSUPPORTED"
+    assert blocked.evidence["blocked_module_instance_id"] == "admin"
+
+
+def test_uncertain_module_build_does_not_mark_unstarted_dependencies_uncertain():
+    service, _ = make_service()
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-module-uncertain",
+        project_id="project-module-uncertain",
+        profile="aws-app-runner",
+        state="RUNNING",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        attempt=1,
+        worker_claim_version=1,
+        worker_lease_token="lease-token",
+        worker_lease_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        command={},
+        evidence={"active_module_instance_id": "base"},
+        outputs={},
+        content_digest="e" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    service.db.flush()
+    for instance_id, state, dependencies in (
+        ("base", "RUNNING", []),
+        ("admin", "NOT_DISPATCHED", ["base"]),
+    ):
+        service.db.add(
+            CloudExecutionModuleInstance(
+                organization_id=run.organization_id,
+                project_id=run.project_id,
+                execution_run_id=run.id,
+                instance_id=instance_id,
+                module_id="aws-managed-application",
+                state=state,
+                operation="apply",
+                attempt=0,
+                input_digest=run.content_digest,
+                idempotency_key=f"{run.id}:{instance_id}",
+                dependencies=dependencies,
+                outputs={},
+                evidence={},
+                version=1,
+            )
+        )
+    service.db.commit()
+
+    service._mark_cloud_execution_reconciliation_required(
+        run.id, "lease-token", "adapter outcome is uncertain"
+    )
+
+    persisted = service.db.get(CloudExecutionRun, run.id)
+    assert persisted is not None and persisted.state == "RECONCILIATION_REQUIRED"
+    rows = {item.instance_id: item for item in persisted.module_instances}
+    assert rows["base"].state == "RECONCILIATION_REQUIRED"
+    assert rows["admin"].state == "NOT_DISPATCHED"
+
+
 def test_serverless_certification_run_chains_pinned_artifact_and_saved_plan(monkeypatch):
     service, db = make_service()
     revision, connection = approved_serverless_customer_review(service, db)
@@ -1158,7 +1479,70 @@ def test_codebuild_adapter_rejects_untyped_lifecycle_work_without_a_cloud_call()
     assert calls == []
 
 
-def test_codebuild_adapter_rejects_composed_runs_until_all_module_states_are_supported():
+def test_codebuild_adapter_dispatches_only_the_selected_module_from_a_valid_graph(monkeypatch):
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "unexpected"}}
+
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    work = [
+        {
+            "module_id": "aws-managed-application",
+            "instance_id": "app",
+            "operation": "apply",
+            "dependencies": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+        {
+            "module_id": "aws-serverless-api",
+            "instance_id": "api",
+            "operation": "apply",
+            "dependencies": ["app"],
+            "input_bindings": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+    ]
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "dispatch_instance_id": "api",
+            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            "profile": "aws-serverless-api",
+        }
+    )
+    assert result.state == "SUBMITTED"
+    assert calls
+    manifest = next(
+        item["value"]
+        for item in calls[0]["environmentVariablesOverride"]
+        if item["name"] == "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"
+    )
+    dispatched = json.loads(manifest)
+    assert len(dispatched) == 1
+    assert dispatched[0]["instance_id"] == "api"
+    assert dispatched[0]["dependencies"] == ["app"]
+
+    calls.clear()
+    result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "dispatch_instance_id": "missing",
+            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+            "profile": "aws-serverless-api",
+        }
+    )
+    assert result.state == "FAILED"
+    assert "selected module instance" in (result.failure_reason or "")
+    assert calls == []
+
+
+def test_codebuild_adapter_rejects_repeated_renderer_types_until_state_isolation_exists():
     calls = []
 
     class CodeBuild:
@@ -1167,24 +1551,26 @@ def test_codebuild_adapter_rejects_composed_runs_until_all_module_states_are_sup
             return {"build": {"id": "unexpected"}}
 
     environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
-    work = lifecycle_work() + [
+    work = [
         {
-            "module_id": "aws-serverless-api",
+            "module_id": "aws-managed-application",
+            "instance_id": instance_id,
             "operation": "apply",
             "dependencies": [],
-            "resource_tags": {"ManagedBy": "davdeploy"},
+            "input_bindings": [],
+            "resource_tags": {},
         }
+        for instance_id in ("primary", "secondary")
     ]
     result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(
         {
             "environment": environment,
             "lifecycle_work": work,
-            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
-            "profile": "aws-serverless-api",
+            "dispatch_instance_id": "primary",
         }
     )
     assert result.state == "FAILED"
-    assert "one certified module" in (result.failure_reason or "")
+    assert "does not yet isolate repeated instances" in (result.failure_reason or "")
     assert calls == []
 
 
