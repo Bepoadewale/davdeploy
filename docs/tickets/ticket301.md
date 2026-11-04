@@ -1,6 +1,6 @@
 # ticket301 — Add a gated DynamoDB table renderer
 
-PR: pending
+PR: #301 (draft)
 Branch: `feat/gated-dynamodb-renderer`
 
 ## Problem / goal
@@ -9,18 +9,19 @@ Add one bounded, checked-in Terraform renderer for the `aws-nosql-data` module s
 
 ## Current repo state
 
-Main is at `afd6736` after PR #300. The planner has a typed `aws-nosql-data` module contract (`table_name`, `table_arn`), but no customer lifecycle renderer. App Runner is the only renderer enabled for ordinary customer execution; S3 and Lambda/API remain disabled and require a separate hosted-certification gate. The readiness docs still refer to pre-#300 main and will be reconciled in this PR.
+Main is at `afd6736` after PR #300. The planner has a typed `aws-nosql-data` module contract (`table_name`, `table_arn`), but no customer lifecycle renderer. App Runner is the only renderer enabled for ordinary customer execution; S3 and Lambda/API remain disabled and require a separate hosted-certification gate. The readiness docs are being corrected to record PR #300 as merged and to capture this PR's current scope.
 
-## Research / references
+## Research / references used
 
 - `apps/api/src/davdeploy/module_ports.py` for the existing NoSQL typed output contract.
 - `apps/api/src/davdeploy/module_renderers.py` for disabled-by-default renderer registration and certification gating.
 - `apps/api/src/davdeploy/cloud_execution.py` and `scripts/customer-workload-dispatcher.sh` for fixed renderer dispatch.
 - `infrastructure/terraform/customer-workload-private-s3/` for account guard, project-scoped state, saved-plan digest and runner patterns.
 - `infrastructure/terraform/modules/dynamodb-table/` for the existing reusable table module.
-- AWS DynamoDB Terraform provider resource documentation and AWS guidance on on-demand billing, encryption, point-in-time recovery and table deletion semantics.
+- [Terraform `aws_dynamodb_table` resource documentation](https://registry.terraform.io/providers/hashicorp/aws/5.100.0/docs/resources/dynamodb_table) for pay-per-request mode, encryption and point-in-time recovery.
+- [DynamoDB Scan API](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_Scan.html) for bounded item-presence checks and pagination behavior.
 
-## Work planned
+## Work planned for the PR
 
 - Add a customer-scoped DynamoDB root with account guard, deterministic table identity, tags, on-demand billing, encryption, point-in-time recovery, and explicit key schema.
 - Add a fixed runner for plan, saved-plan apply, observe, destroy-plan, destroy-saved-plan and cleanup verification; bind state and evidence to connection/project/plan/run scopes.
@@ -31,27 +32,37 @@ Main is at `afd6736` after PR #300. The planner has a typed `aws-nosql-data` mod
 
 ## Acceptance criteria
 
-- [ ] Terraform root enforces expected AWS account and project-scoped tags/name/state.
-- [ ] Table uses on-demand billing, encryption at rest and point-in-time recovery.
-- [ ] Runner accepts only fixed operations/fields and uses an immutable saved plan with digest verification.
-- [ ] Observe validates the live table properties and exports only declared non-sensitive outputs.
-- [ ] Destroy is blocked when the table contains any items; cleanup verification confirms both remote absence and empty Terraform state.
-- [ ] Renderer is unavailable to ordinary customer execution and only available through the explicit certification gate.
+- [x] Terraform root enforces expected AWS account and project-scoped tags/name/state.
+- [x] Table uses on-demand billing, encryption at rest and point-in-time recovery.
+- [x] Runner accepts only fixed operations/fields and uses an immutable saved plan with digest verification.
+- [x] Observe validates the live table properties and exports only declared non-sensitive outputs.
+- [x] Destroy is blocked unless a bounded check proves the table empty; cleanup verification confirms remote absence and empty Terraform state.
+- [x] Renderer is unavailable to ordinary customer execution and only available through the explicit certification gate.
 - [ ] Focused and full validation, clean-room cycle, documentation and CI pass.
-- [ ] Evidence clearly separates local configuration proof from real AWS lifecycle certification; no AWS resource is created by this PR unless an explicit controlled test is documented.
+- [x] Evidence will separate local configuration proof from real AWS lifecycle certification; this PR creates no AWS resources.
 
-## Validation performed
+## Acceptance status
 
-Bootstrap commit only; no substantive implementation yet.
+Implementation is complete; clean-room at the final implementation commit, PR CI and merge review remain.
 
-## Evidence files
+## Tests / validation performed
 
-`docs/test/test301.md` will record local/clean-room validation and any explicit AWS test boundary.
+- Focused tests — 100 passed.
+- `make verify` — 505 passed, OpenAPI snapshot and Compose configuration passed; one existing Starlette/httpx deprecation warning.
+- `scripts/terraform-validate.sh` — all configured Terraform roots initialized and validated, including the new DynamoDB root.
+- `terraform -chdir=infrastructure/terraform/customer-workload-dynamodb validate` — passed.
+- `GITHUB_PR_NUMBER=301 python3.12 scripts/check_doc_conventions.py`, shell syntax checks and `git diff --check` — passed.
+- Executor package smoke test — package contains the DynamoDB runner, Terraform root, dispatcher and locked AWS provider selection.
+- Final clean-room and CI — pending.
+
+## Evidence files produced
+
+`docs/test/test301.md` will record local/clean-room validation and the no-AWS test boundary.
 
 ## Boundaries
 
 No public enablement, arbitrary Terraform, caller-provided code/commands, cross-project state, table data ingestion, broad table permissions, destructive force deletion, hosted production apply, or live AWS customer table is in scope.
 
-## Follow-up
+## Follow-up work
 
 Run a controlled real AWS table lifecycle test with synthetic data and verified cleanup. Add typed data-source-to-API bindings only with renderer-specific environment and IAM scoping. Do not enable customer execution based on Terraform validation alone.

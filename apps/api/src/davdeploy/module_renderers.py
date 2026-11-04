@@ -83,8 +83,33 @@ _RENDERERS: dict[str, ModuleRenderer] = {
             ("verify_cleanup", "verify-cleanup"),
         ),
     ),
+    "aws-nosql-data": ModuleRenderer(
+        module_id="aws-nosql-data",
+        terraform_root="infrastructure/terraform/customer-workload-dynamodb",
+        runner_script="scripts/customer-workload-dynamodb.sh",
+        supported_operations=(
+            "plan",
+            "destroy_plan",
+            "apply",
+            "observe",
+            "destroy",
+            "verify_cleanup",
+        ),
+        certification="local contract validated; real customer lifecycle certification required",
+        execution_enabled=False,
+        operation_commands=(
+            ("plan", "plan"),
+            ("destroy_plan", "destroy-plan"),
+            ("apply", "apply-saved-plan"),
+            ("observe", "observe"),
+            ("destroy", "destroy-saved-plan"),
+            ("verify_cleanup", "verify-cleanup"),
+        ),
+    ),
 }
-_HOSTED_CERTIFICATION_MODULES = frozenset({"aws-serverless-api", "aws-file-storage"})
+_HOSTED_CERTIFICATION_MODULES = frozenset(
+    {"aws-serverless-api", "aws-file-storage", "aws-nosql-data"}
+)
 
 
 def renderer_for_profile(
@@ -120,7 +145,7 @@ def renderer_for(
 ) -> ModuleRenderer:
     """Resolve a checked-in renderer or reject an unbound lifecycle module.
 
-    The private storage and serverless opt-in is only for controlled hosted
+    The storage, database and serverless opt-in is only for controlled hosted
     certification. Customer run creation has a separate profile gate and must
     not use this flag as a rollout switch.
     """

@@ -629,6 +629,53 @@ def test_codebuild_adapter_requires_durable_certification_mode_for_serverless_re
     } in calls[0]["environmentVariablesOverride"]
 
 
+def test_codebuild_adapter_gates_dynamodb_only_in_persisted_certification_mode(monkeypatch):
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "davdeploy:dynamodb-1", "arn": "arn:dynamodb-1"}}
+
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_DYNAMODB_HOSTED_CERTIFICATION", "true")
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "plan"
+    work = [
+        {
+            "module_id": "aws-nosql-data",
+            "operation": "plan",
+            "dependencies": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        }
+    ]
+    adapter = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild())
+    blocked = adapter.execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "profile": "aws-serverless-api",
+            "mode": "AUTHENTICATED_APP_RUNNER_APPLY",
+        }
+    )
+    assert blocked.state == "FAILED"
+    assert calls == []
+
+    submitted = adapter.execute(
+        {
+            "environment": environment,
+            "lifecycle_work": work,
+            "profile": "aws-serverless-api",
+            "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        }
+    )
+    assert submitted.state == "SUBMITTED"
+    assert {
+        "name": "DAVDEPLOY_ENABLE_DYNAMODB_HOSTED_CERTIFICATION",
+        "value": "true",
+        "type": "PLAINTEXT",
+    } in calls[0]["environmentVariablesOverride"]
+
+
 def test_worker_builds_certification_context_from_persisted_run_mode():
     service, _ = make_service()
     run = CloudExecutionRun(

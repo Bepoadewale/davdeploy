@@ -36,6 +36,17 @@ def test_only_checked_in_module_renderer_is_resolved():
         "destroy": "destroy-saved-plan",
         "verify_cleanup": "verify-cleanup",
     }
+    nosql = next(item for item in manifest if item.module_id == "aws-nosql-data")
+    assert nosql.execution_enabled is False
+    assert nosql.terraform_root == "infrastructure/terraform/customer-workload-dynamodb"
+    assert dict(nosql.operation_commands) == {
+        "plan": "plan",
+        "destroy_plan": "destroy-plan",
+        "apply": "apply-saved-plan",
+        "observe": "observe",
+        "destroy": "destroy-saved-plan",
+        "verify_cleanup": "verify-cleanup",
+    }
 
 
 def test_unbound_or_unsupported_renderer_work_is_rejected():
@@ -44,6 +55,7 @@ def test_unbound_or_unsupported_renderer_work_is_rejected():
         ("aws-managed-application", "rollback"),
         ("aws-serverless-api", "apply"),
         ("aws-file-storage", "apply"),
+        ("aws-nosql-data", "apply"),
     ):
         try:
             renderer_for(module_id, operation)
@@ -109,3 +121,16 @@ def test_private_storage_renderer_requires_controlled_certification_context():
 
     certified = renderer_for("aws-file-storage", "apply", hosted_certification=True)
     assert certified.execution_enabled is False
+
+
+def test_dynamodb_renderer_requires_controlled_certification_context():
+    try:
+        renderer_for("aws-nosql-data", "apply")
+    except ValueError as error:
+        assert "not enabled for customer execution" in str(error)
+    else:
+        raise AssertionError("DynamoDB renderer must stay gated")
+
+    certified = renderer_for("aws-nosql-data", "apply", hosted_certification=True)
+    assert certified.execution_enabled is False
+    assert certified.runner_script == "scripts/customer-workload-dynamodb.sh"
