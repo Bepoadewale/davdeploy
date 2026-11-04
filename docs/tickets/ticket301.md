@@ -38,12 +38,13 @@ Main is at `afd6736` after PR #300. The planner has a typed `aws-nosql-data` mod
 - [x] Observe validates the live table properties and exports only declared non-sensitive outputs.
 - [x] Destroy is blocked unless a bounded check proves the table empty; cleanup verification confirms remote absence and empty Terraform state.
 - [x] Renderer is unavailable to ordinary customer execution and only available through the explicit certification gate.
-- [ ] Focused and full validation, clean-room cycle, documentation and CI pass.
+- [x] Focused and full local validation, clean-room cycle and documentation checks pass.
+- [ ] Final PR CI passes and merge review is clean.
 - [x] Evidence will separate local configuration proof from real AWS lifecycle certification; this PR creates no AWS resources.
 
 ## Acceptance status
 
-Implementation is complete; clean-room at the final implementation commit, PR CI and merge review remain.
+Implementation and local validation are complete; final PR CI and merge review remain.
 
 ## Tests / validation performed
 
@@ -53,11 +54,13 @@ Implementation is complete; clean-room at the final implementation commit, PR CI
 - `terraform -chdir=infrastructure/terraform/customer-workload-dynamodb validate` — passed.
 - `GITHUB_PR_NUMBER=301 python3.12 scripts/check_doc_conventions.py`, shell syntax checks and `git diff --check` — passed.
 - Executor package smoke test — package contains the DynamoDB runner, Terraform root, dispatcher and locked AWS provider selection.
-- Final clean-room and CI — pending.
+- Clean-room at `64ca498`: bootstrap, smoke, API contract, customer-plan E2E, seed data, simple/complex/Day-2/degraded/policy/readiness demos, trace check and full `make verify` passed (505 tests, one existing deprecation warning).
+- No AWS resources were created. The renderer stays disabled outside the certification gate.
+- Final PR CI and merge review — pending.
 
 ## Evidence files produced
 
-`docs/test/test301.md` will record local/clean-room validation and the no-AWS test boundary.
+`docs/test/test301.md` records local/clean-room validation and the no-AWS test boundary.
 
 ## Boundaries
 
@@ -65,4 +68,4 @@ No public enablement, arbitrary Terraform, caller-provided code/commands, cross-
 
 ## Follow-up work
 
-Run a controlled real AWS table lifecycle test with synthetic data and verified cleanup. Add typed data-source-to-API bindings only with renderer-specific environment and IAM scoping. Do not enable customer execution based on Terraform validation alone.
+Run a controlled real AWS table lifecycle test with synthetic data and verified cleanup. Add a region-aware cost estimate for table requests, data storage and point-in-time recovery before customer routing. Add typed data-source-to-API bindings only with renderer-specific environment and IAM scoping. Do not enable customer execution based on Terraform validation alone.
