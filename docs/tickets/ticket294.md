@@ -50,7 +50,7 @@ having a contract.
 - `make verify` — configuration check passed; Ruff passed; **458 tests passed**; OpenAPI snapshot matched; Docker Compose configuration passed.
 - `.venv/bin/python -m ruff check ...` on changed Python files — passed.
 - `git diff --check` — passed.
-- Full isolated clean-room lifecycle cycle — pending.
+- Full isolated clean-room cycle passed from an empty worktree and unique Compose project: clean, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. All resources created by this test were removed.
 - Required GitHub PR checks — pending.
 
 ## Evidence files produced
