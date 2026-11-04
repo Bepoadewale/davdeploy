@@ -296,7 +296,7 @@ def generated_plan_manifest(
 ) -> dict[str, Any]:
     """Build canonical, secret-free approval material for the exact plan bytes."""
     return {
-        "manifest_version": 1,
+        "manifest_version": 2,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -313,6 +313,8 @@ def generated_plan_manifest(
             "proposal_sha256": plan.proposal_sha256,
             "trusted_context_sha256": plan.context_sha256,
             "configuration_sha256": plan.configuration_sha256,
+            "ownership_scope_sha256": plan.ownership_scope_sha256,
+            "ownership_plan_id_sha256": plan.ownership_plan_id_sha256,
             "saved_plan_sha256": stored_object.sha256,
             "policy_sha256": policy_digest,
         },

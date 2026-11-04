@@ -55,6 +55,7 @@ from davdeploy.generated_plan_artifacts import (
     policy_allows_human_review,
     policy_evidence,
 )
+from davdeploy.generated_plan_ownership import PlanOwnershipScope
 from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 from davdeploy.integrations import (
     FixtureAwsDiscovery,
@@ -1912,6 +1913,13 @@ class ProductService:
             raise ValueError("approved customer revision failed integrity verification")
 
         target = (revision.content or {}).get("target") or {}
+        ownership_scope = self._generated_plan_ownership_scope(
+            principal,
+            customer_plan.project_id,
+            customer_plan.id,
+            revision.id,
+            target.get("environment_id"),
+        )
         connection_id = target.get("connection_id")
         connection = self.db.get(CloudConnection, connection_id) if connection_id else None
         if (
@@ -1941,6 +1949,8 @@ class ProductService:
             or proposal.source_revision != revision.id
             or proposal.context_digest != expected_context_sha256
             or generated_plan.context_sha256 != expected_context_sha256
+            or generated_plan.ownership_scope_sha256 != ownership_scope.scope_sha256()
+            or generated_plan.ownership_plan_id_sha256 != ownership_scope.plan_id_sha256()
             or generated_plan.saved_plan_sha256 != saved_plan_sha256
             or not policy_allows_human_review(generated_plan.policy)
         ):
@@ -2203,6 +2213,18 @@ class ProductService:
             or cloud_target.get("region") != artifact.region
         ):
             raise ValueError("generated plan target no longer matches a verified customer account")
+        ownership_scope = self._generated_plan_ownership_scope(
+            principal,
+            customer_plan.project_id,
+            customer_plan.id,
+            revision.id,
+            cloud_target.get("environment_id"),
+        )
+        if (
+            digests.get("ownership_scope_sha256") != ownership_scope.scope_sha256()
+            or digests.get("ownership_plan_id_sha256") != ownership_scope.plan_id_sha256()
+        ):
+            raise ValueError("generated plan ownership scope no longer matches this workspace")
 
         expiry = artifact.expires_at
         if expiry.tzinfo is None:
@@ -6452,6 +6474,25 @@ class ProductService:
         if not project or project.organization_id != principal.organization_id:
             raise PermissionError("project not found in this organization")
         return project
+
+    @staticmethod
+    def _generated_plan_ownership_scope(
+        principal: Principal,
+        project_id: str,
+        plan_id: str,
+        revision_id: str,
+        environment_id: str | None,
+    ) -> PlanOwnershipScope:
+        """Bind plan tags to the currently authenticated tenant and revision."""
+        # The current tenant model maps one workspace to the organization ID.
+        return PlanOwnershipScope(
+            organization_id=principal.organization_id,
+            workspace_id=principal.organization_id,
+            project_id=project_id,
+            plan_id=plan_id,
+            revision_id=revision_id,
+            environment_id=environment_id,
+        )
 
     def create_intent(
         self,

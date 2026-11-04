@@ -14,6 +14,7 @@ from davdeploy.generated_plan_inspection import (
     TerraformPlanInspectionError,
     inspect_terraform_plan,
 )
+from davdeploy.generated_plan_ownership import PlanOwnershipScope
 
 
 class PlanPolicyVerdict(StrEnum):
@@ -42,7 +43,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-04.3"
+POLICY_VERSION = "nova-generated-plan-2026-11-04.4"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -97,6 +98,7 @@ def evaluate_generated_plan_policy(
     *,
     expected_account_id: str,
     expected_region: str,
+    ownership_scope: PlanOwnershipScope,
     trusted_configuration: dict[str, Any] | None = None,
 ) -> GeneratedPlanPolicyResult:
     """Evaluate trusted context and common AWS security risks, without output values."""
@@ -106,6 +108,7 @@ def evaluate_generated_plan_policy(
             proposal,
             expected_account_id,
             expected_region,
+            ownership_scope,
             trusted_configuration,
         )
     except (
@@ -134,8 +137,11 @@ def _evaluate(
     proposal: GeneratedDeploymentProposal,
     expected_account_id: str,
     expected_region: str,
+    ownership_scope: PlanOwnershipScope,
     trusted_configuration: dict[str, Any] | None,
 ) -> GeneratedPlanPolicyResult:
+    if not isinstance(ownership_scope, PlanOwnershipScope):
+        raise GeneratedPlanPolicyError("trusted ownership scope is missing")
     if not re.fullmatch(r"\d{12}", expected_account_id):
         raise GeneratedPlanPolicyError("trusted account scope is invalid")
     if proposal.requirements.region != expected_region:
@@ -157,6 +163,7 @@ def _evaluate(
     _check_region(document, expected_region)
     resources = _planned_resources(document)
     _check_proposal_inventory(resources, document, proposal, findings)
+    _check_resource_ownership(document, resources, ownership_scope, findings)
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings)
     _check_iam(resources, findings)
@@ -191,6 +198,138 @@ def _evaluate(
         else PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     )
     return GeneratedPlanPolicyResult(verdict, POLICY_VERSION, ordered)
+
+
+def _check_resource_ownership(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    ownership_scope: PlanOwnershipScope,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Require exact known scope tags on existing and proposed AWS resources."""
+    expected_tags = ownership_scope.tags()
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        raise GeneratedPlanPolicyError("resource changes are malformed")
+    by_address: dict[str, dict[str, Any]] = {}
+    for item in changes:
+        if not isinstance(item, dict) or not isinstance(item.get("address"), str):
+            raise GeneratedPlanPolicyError("resource change is malformed")
+        if item["address"] in by_address:
+            raise GeneratedPlanPolicyError("resource change addresses are duplicated")
+        by_address[item["address"]] = item
+
+        mode = item.get("mode", "managed")
+        if mode == "data":
+            continue
+        kind = item.get("type")
+        if not isinstance(kind, str) or not kind.startswith("aws_"):
+            continue
+        if mode != "managed":
+            raise GeneratedPlanPolicyError("AWS resource mode is unsupported")
+        address = item["address"]
+        change = item.get("change")
+        actions = change.get("actions") if isinstance(change, dict) else None
+        if not isinstance(actions, list) or not all(isinstance(action, str) for action in actions):
+            raise GeneratedPlanPolicyError("resource change actions are malformed")
+        if tuple(actions) not in {
+            ("no-op",),
+            ("create",),
+            ("update",),
+            ("delete",),
+            ("delete", "create"),
+            ("create", "delete"),
+        }:
+            raise GeneratedPlanPolicyError("AWS resource change action is unsupported")
+
+        if "delete" in actions or "update" in actions or actions == ["no-op"]:
+            _check_resource_tag_values(
+                address,
+                change.get("before"),
+                expected_tags,
+                findings,
+                allow_prior_source_revision=True,
+            )
+        if "create" in actions or "update" in actions or actions == ["no-op"]:
+            after_unknown = change.get("after_unknown")
+            if not isinstance(after_unknown, dict) or not _valid_unknown_tree(after_unknown) or any(
+                _path_contains_unknown(after_unknown, ("tags", key))
+                for key in expected_tags
+            ):
+                _deny(
+                    findings,
+                    "resource_ownership_unknown",
+                    address,
+                    "DavDeploy could not verify ownership tags in the planned AWS values.",
+                )
+            else:
+                _check_resource_tag_values(address, change.get("after"), expected_tags, findings)
+
+    for resource in resources:
+        kind = resource.get("type")
+        if not isinstance(kind, str) or not kind.startswith("aws_"):
+            continue
+        address = resource.get("address")
+        values = resource.get("values")
+        if not isinstance(address, str):
+            _deny(
+                findings,
+                "resource_ownership_unknown",
+                address,
+                "DavDeploy could not verify ownership tags in the planned AWS values.",
+            )
+            continue
+        if address not in by_address:
+            _deny(
+                findings,
+                "resource_ownership_unknown",
+                address,
+                "DavDeploy could not connect this planned AWS resource to ownership evidence.",
+            )
+        _check_resource_tag_values(address, values, expected_tags, findings)
+
+
+def _check_resource_tag_values(
+    address: str,
+    values: Any,
+    expected_tags: dict[str, str],
+    findings: list[PlanPolicyFinding],
+    *,
+    allow_prior_source_revision: bool = False,
+) -> None:
+    tags = values.get("tags") if isinstance(values, dict) else None
+    required_tags = (
+        {
+            key: value
+            for key, value in expected_tags.items()
+            if key != "DavDeploySourceRevision"
+        }
+        if allow_prior_source_revision
+        else expected_tags
+    )
+    if not isinstance(tags, dict) or any(key not in tags for key in required_tags):
+        _deny(
+            findings,
+            "resource_ownership_tags_missing",
+            address,
+            "DavDeploy could not verify which workspace owns this AWS resource.",
+        )
+    elif any(tags.get(key) != value for key, value in required_tags.items()):
+        _deny(
+            findings,
+            "resource_ownership_tags_mismatch",
+            address,
+            "This AWS resource is not tagged for the workspace, project, and plan being reviewed.",
+        )
+    elif allow_prior_source_revision and not re.fullmatch(
+        r"sha256:[a-f0-9]{64}", str(tags.get("DavDeploySourceRevision", ""))
+    ):
+        _deny(
+            findings,
+            "resource_ownership_tags_mismatch",
+            address,
+            "DavDeploy could not verify the prior source revision for this AWS resource.",
+        )
 
 
 def _check_policy_critical_unknowns(

@@ -288,6 +288,8 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         proposal_sha256="c" * 64,
         context_sha256="e" * 64,
         configuration_sha256="d" * 64,
+        ownership_scope_sha256="f" * 64,
+        ownership_plan_id_sha256="9" * 64,
         saved_plan_sha256="a" * 64,
         saved_plan_path="/private/path/not-in-manifest",
     )
@@ -303,6 +305,9 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
+    assert manifest["manifest_version"] == 2
+    assert manifest["digests"]["ownership_scope_sha256"] == "f" * 64
+    assert manifest["digests"]["ownership_plan_id_sha256"] == "9" * 64
     assert "private/path" not in repr(manifest)
     assert canonical_json_digest(manifest) != canonical_json_digest(
         {**manifest, "created_at": "later"}

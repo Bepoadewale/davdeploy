@@ -4,6 +4,7 @@ import json
 
 import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_plan_ownership import PlanOwnershipScope
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
     _path_contains_unknown,
@@ -12,6 +13,17 @@ from davdeploy.generated_plan_policy import (
 
 ACCOUNT = "654654474502"
 REGION = "us-east-1"
+
+
+def ownership_scope():
+    return PlanOwnershipScope(
+        organization_id="org-test",
+        workspace_id="workspace-test",
+        project_id="project-test",
+        environment_id="production",
+        plan_id="plan-internal-id",
+        revision_id="revision-internal-id",
+    )
 
 
 def proposal(resources=None):
@@ -56,15 +68,25 @@ def proposal(resources=None):
 
 
 def resource(address, kind, values):
+    if kind.startswith("aws_"):
+        values = {**values, "tags": {**ownership_scope().tags(), **values.get("tags", {})}}
     return {"address": address, "mode": "managed", "type": kind, "values": values}
 
 
 def change(address, kind, actions=("create",), **metadata):
+    before = {"tags": ownership_scope().tags()} if any(
+        action in actions for action in ("delete", "update", "no-op")
+    ) else None
+    after = {"tags": ownership_scope().tags()} if any(
+        action in actions for action in ("create", "update", "no-op")
+    ) else None
     return {
         "address": address,
         "type": kind,
         "change": {
             "actions": list(actions),
+            "before": before,
+            "after": after,
             "before_sensitive": False,
             "after_sensitive": False,
             "after_unknown": {},
@@ -115,6 +137,7 @@ def evaluate(document=None, proposal_value=None):
         proposal_value or proposal(),
         expected_account_id=ACCOUNT,
         expected_region=REGION,
+        ownership_scope=ownership_scope(),
         trusted_configuration={
             "data": {"aws_caller_identity": {"trusted": {}}},
             "resource": {
@@ -136,6 +159,55 @@ def evaluate(document=None, proposal_value=None):
 
 def codes(result):
     return {finding.code for finding in result.findings}
+
+
+def test_resource_ownership_tags_are_required_for_every_aws_resource():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"][0]["values"]["tags"].pop(
+        "DavDeployWorkspace"
+    )
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_tags_missing" in codes(result)
+
+
+def test_resource_ownership_mismatch_is_denied():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"][0]["values"]["tags"][
+        "DavDeployProject"
+    ] = "another-project"
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_tags_mismatch" in codes(result)
+
+
+def test_unknown_resource_ownership_tag_is_denied():
+    document = plan()
+    document["resource_changes"][0]["change"]["after_unknown"] = {
+        "tags": {"DavDeployWorkspace": True}
+    }
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_unknown" in codes(result)
+
+
+def test_missing_trusted_ownership_scope_is_denied():
+    result = evaluate_generated_plan_policy(
+        plan(),
+        proposal(),
+        expected_account_id=ACCOUNT,
+        expected_region=REGION,
+        ownership_scope=None,
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "plan_policy_input_invalid" in codes(result)
 
 
 def test_secure_composed_s3_plan_is_eligible_only_for_human_review():
@@ -499,7 +571,12 @@ def test_missing_or_mismatched_trusted_account_guard_is_denied(guard):
         "resource": {"terraform_data": {"account_guard": {"lifecycle": {"precondition": {"condition": guard}}}}},
     }
     result = evaluate_generated_plan_policy(
-        plan(), proposal(), expected_account_id=ACCOUNT, expected_region=REGION, trusted_configuration=trusted
+        plan(),
+        proposal(),
+        expected_account_id=ACCOUNT,
+        expected_region=REGION,
+        ownership_scope=ownership_scope(),
+        trusted_configuration=trusted,
     )
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "plan_policy_input_invalid" in codes(result)
@@ -534,6 +611,110 @@ def test_delete_replacement_and_sensitive_change_require_human_review():
     result = evaluate(document)
     assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
     assert {"destructive_change_requires_review", "sensitive_change_requires_review"}.issubset(codes(result))
+
+
+def test_delete_requires_matching_ownership_on_the_existing_resource():
+    document = plan()
+    document["resource_changes"][0] = change(
+        "aws_s3_bucket.bucket",
+        "aws_s3_bucket",
+        ("delete",),
+        before={"tags": {**ownership_scope().tags(), "DavDeployPlanId": "another-plan"}},
+    )
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_tags_mismatch" in codes(result)
+
+
+def test_replacement_with_matching_ownership_on_both_sides_requires_review():
+    document = plan()
+    document["resource_changes"][0] = change(
+        "aws_s3_bucket.bucket",
+        "aws_s3_bucket",
+        ("delete", "create"),
+    )
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "destructive_change_requires_review" in codes(result)
+    assert "resource_ownership_tags_mismatch" not in codes(result)
+
+
+def test_replacement_requires_matching_ownership_before_and_after():
+    document = plan()
+    document["resource_changes"][0] = change(
+        "aws_s3_bucket.bucket",
+        "aws_s3_bucket",
+        ("delete", "create"),
+        before={"tags": {**ownership_scope().tags(), "DavDeployPlanId": "another-plan"}},
+        after={"tags": ownership_scope().tags()},
+    )
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_tags_mismatch" in codes(result)
+
+
+@pytest.mark.parametrize("actions", [("update",), ("delete",), ("delete", "create")])
+def test_existing_resource_accepts_prior_source_revision_for_same_plan(actions):
+    document = plan()
+    existing = change("aws_s3_bucket.bucket", "aws_s3_bucket", actions)
+    existing["change"]["before"]["tags"]["DavDeploySourceRevision"] = (
+        "sha256:" + "a" * 64
+    )
+    document["resource_changes"][0] = existing
+    if actions == ("delete",):
+        # Deleted resources may not appear in planned_values. Their before
+        # values still need to prove stable ownership and a valid prior revision.
+        document["planned_values"]["root_module"]["resources"] = document[
+            "planned_values"
+        ]["root_module"]["resources"][1:]
+
+    result = evaluate(document)
+
+    assert "resource_ownership_tags_mismatch" not in codes(result)
+    assert "resource_ownership_tags_missing" not in codes(result)
+    if actions in (("delete",), ("delete", "create")):
+        assert "destructive_change_requires_review" in codes(result)
+
+
+def test_existing_resource_requires_well_formed_prior_source_revision():
+    document = plan()
+    existing = change("aws_s3_bucket.bucket", "aws_s3_bucket", ("update",))
+    existing["change"]["before"]["tags"]["DavDeploySourceRevision"] = "old-revision"
+    document["resource_changes"][0] = existing
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_tags_mismatch" in codes(result)
+
+
+def test_desired_resource_requires_exact_current_source_revision():
+    document = plan()
+    document["resource_changes"][0]["change"]["after"]["tags"][
+        "DavDeploySourceRevision"
+    ] = "sha256:" + "a" * 64
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "resource_ownership_tags_mismatch" in codes(result)
+
+
+@pytest.mark.parametrize("actions", [("forget",), ("update", "forget")])
+def test_unknown_managed_aws_actions_are_denied(actions):
+    document = plan()
+    document["resource_changes"][0] = change("aws_s3_bucket.bucket", "aws_s3_bucket", actions)
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "plan_policy_input_invalid" in codes(result)
 
 
 def test_delete_of_resource_outside_proposal_is_denied():
