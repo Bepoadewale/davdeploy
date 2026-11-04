@@ -100,7 +100,7 @@ resolved_inputs_json="${DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON:-}"
 [[ -n "$resolved_inputs_json" ]] || resolved_inputs_json='{}'
 if ! jq -e '
   type == "object" and
-  all(keys[]; . == "uploads_bucket_name") and
+  all(keys[]; . == "uploads_bucket_name" or . == "table_name") and
   all(.[]; type == "string")
 ' <<<"$resolved_inputs_json" >/dev/null; then
   echo "Resolved renderer inputs contain unsupported or malformed values" >&2
@@ -110,7 +110,9 @@ if ! jq -e --argjson inputs "$resolved_inputs_json" '
   .[0] as $work |
   ($work.input_bindings // []) as $bindings |
   ($bindings | map(.input_name) | sort) == ($inputs | keys | sort) and
-  all($bindings[]?; .input_name == "uploads_bucket_name" and .source_output == "bucket_name") and
+  all($bindings[]?;
+    (.input_name == "uploads_bucket_name" and .source_output == "bucket_name") or
+    (.input_name == "table_name" and .source_output == "table_name")) and
   ($work.module_id == "aws-serverless-api" or ($bindings | length == 0))
 ' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON" >/dev/null; then
   echo "Resolved inputs do not match the selected renderer's declared references" >&2

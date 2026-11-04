@@ -286,6 +286,82 @@ def test_dispatcher_requires_resolved_values_matching_module_input_references(
     assert "one typed renderer entry" in result.stderr
 
 
+def test_dispatcher_accepts_only_declared_dynamodb_table_reference_for_api(
+    tmp_path: Path,
+) -> None:
+    dispatcher, marker = _isolated_dispatcher(tmp_path)
+    work = _work("aws-serverless-api", "apply")
+    work[0]["dependencies"] = ["database"]
+    work[0]["input_bindings"] = [
+        {
+            "input_name": "table_name",
+            "source_instance_id": "database",
+            "source_output": "table_name",
+        }
+    ]
+    table_name = "davdeploy-123456789012-us-east-1-0123456789abcdef0123"
+    env = os.environ.copy()
+    env.update(
+        {
+            "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON": json.dumps(work),
+            "DAVDEPLOY_EXECUTION_OPERATION": "apply-saved-plan",
+            "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION": "true",
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Resolved inputs do not match" in result.stderr
+    assert not marker.exists()
+
+    env["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"] = json.dumps({"table_name": table_name})
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
+
+    env["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"] = json.dumps(
+        {"table_name": table_name, "arbitrary": "value"}
+    )
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "unsupported or malformed" in result.stderr
+
+    work[0]["input_bindings"][0]["source_output"] = "table_arn"
+    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(work)
+    env["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"] = json.dumps({"table_name": table_name})
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Resolved inputs do not match" in result.stderr
+    assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
+
+
 def test_dispatcher_gates_dynamodb_renderer_and_routes_only_fixed_operations(
     tmp_path: Path,
 ) -> None:
