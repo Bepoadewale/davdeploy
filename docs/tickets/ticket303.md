@@ -33,7 +33,7 @@ PR #301 added the gated DynamoDB renderer. PR #302 added table-scoped Lambda IAM
 - [x] Correct S3 and DynamoDB typed references reach only the selected Lambda renderer.
 - [x] Unknown keys, incorrect output names and unresolved/mismatched references fail before runner invocation.
 - [x] DynamoDB and Lambda certification gates remain disabled by default.
-- [ ] Focused tests, full verification, documentation conventions, clean-room cycle, and CI pass.
+- [ ] Focused tests, full verification, documentation conventions, and clean-room cycle pass; PR CI is pending.
 - [ ] Hosted execution remains gated; no AWS customer workload is created by this PR.
 
 ## Acceptance status
@@ -42,7 +42,7 @@ Bootstrap only; implementation and validation pending.
 
 ## Tests / validation performed
 
-Focused dispatcher tests: 11 passed; `make verify` passed (507 tests; OpenAPI and Compose checks passed, with one existing Starlette/httpx deprecation warning). Ruff, shell syntax, documentation conventions, and diff checks passed. Clean-room cycle and PR CI are pending.
+Focused dispatcher tests: 11 passed; `make verify` passed (507 tests; OpenAPI and Compose checks passed, with one existing Starlette/httpx deprecation warning). Ruff, shell syntax, documentation conventions, and diff checks passed. Clean-room passed at implementation commit `62a027b`; PR CI is pending.
 
 ## Evidence files produced
 
