@@ -46,6 +46,35 @@ def test_quick_create_template_makes_administrator_pilot_explicit_and_separate()
     assert "GetSecretValue" not in template
 
 
+def test_quick_create_plan_role_is_separate_and_explicitly_denies_customer_actions():
+    template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
+    plan_role = template.split("\n  NovaPlanOnlyRole:\n", 1)[1].split("\n  ExecutionRole:\n", 1)[0]
+    policy = plan_role.split("Policies:", 1)[1]
+
+    assert "plan-only" in template
+    assert 'RoleName: !Sub "davdeployPlan-${ConnectionId}"' in plan_role
+    assert "Condition: CreateNovaPlanOnlyRole" in plan_role
+    assert "davdeployDiscoveryBrokerRoleArn" in plan_role
+    assert "davdeployNovaPlanBrokerRoleArn" in plan_role
+    assert "sts:ExternalId: !Ref ExternalId" in plan_role
+    assert "Effect: Deny" in policy
+    assert 'Action: "*"' in policy
+    assert 'Resource: "*"' in policy
+    assert "Effect: Allow" not in policy
+    assert "AdministratorAccess" not in plan_role
+    assert "NovaPlanOnlyRoleArn" in template
+
+
+def test_plan_role_broker_permissions_are_explicit_follow_up_not_added_to_existing_executor():
+    configuration = Path("infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    executor = configuration.split('resource "aws_iam_role_policy" "customer_executor"', 1)[
+        1
+    ].split('resource "aws_codebuild_project" "customer_executor"', 1)[0]
+
+    assert 'Resource = "arn:aws:iam::*:role/davdeployExecution-*"' in executor
+    assert "davdeployPlan-*" not in executor
+
+
 def test_public_template_host_allows_only_versioned_template_reads_and_is_confirmation_gated():
     configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
     variables = Path("infrastructure/terraform/connection-template-host/variables.tf").read_text()

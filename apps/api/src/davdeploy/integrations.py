@@ -916,6 +916,30 @@ class StsAwsDiscovery:
         )
         return str(customer.client("sts").get_caller_identity()["Account"])
 
+    def verify_plan_role(
+        self, connection_id: str, role_arn: str, external_id: str, region: str
+    ) -> str:
+        """Verify plan-role trust and account identity without retaining credentials.
+
+        This does not inspect or attest the role's effective policy. The reviewed
+        CloudFormation template installs its deny-all policy; customer changes
+        made after stack creation are outside this verification result.
+        """
+        sts = self.session.client("sts", region_name=region)
+        assumed = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName=f"davdeploy-plan-verify-{connection_id[:8]}",
+            ExternalId=external_id,
+            DurationSeconds=900,
+        )["Credentials"]
+        customer = boto3.Session(
+            aws_access_key_id=assumed["AccessKeyId"],
+            aws_secret_access_key=assumed["SecretAccessKey"],
+            aws_session_token=assumed["SessionToken"],
+            region_name=region,
+        )
+        return str(customer.client("sts").get_caller_identity()["Account"])
+
     @staticmethod
     def _pricing_cache_ttl_seconds() -> int:
         """Bound Cost Explorer calls; the API charges per request."""

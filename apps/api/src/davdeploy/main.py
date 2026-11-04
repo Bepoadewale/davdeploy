@@ -696,6 +696,8 @@ def list_cloud_connections(
             "executed": False,
             "account_id": item.account_id,
             "setup_state": item.setup_state,
+            "plan_role_arn": item.plan_role_arn,
+            "plan_role_setup_state": item.plan_role_setup_state,
         }
         for item in service.cloud_connections(principal)
     ]

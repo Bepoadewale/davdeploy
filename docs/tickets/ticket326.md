@@ -15,7 +15,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - `GeneratedTerraformPlanRunner` is backend-free and has no apply/destroy method. Its current plan configuration uses only the trusted `aws_caller_identity` data source.
 - The isolated Nova CodeBuild project and future plan-broker permissions are being handled separately. This PR must not change that infrastructure or grant AssumeRole to an existing executor.
 
-## Research / references
+## Research / references used
 
 - `infrastructure/cloudformation/customer-discovery-role.yaml`
 - `apps/api/src/davdeploy/domain.py`, `main.py`, `service.py`, `models.py`, and `integrations.py`
@@ -23,7 +23,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - `infrastructure/terraform/serverless-control-plane/main.tf` broker policy boundaries
 - PR #324 isolated Nova CodeBuild boundary; PR #325 durable Nova plan request API
 
-## Work planned
+## Work planned for the PR
 
 - Add a separate `plan_role_arn` purpose to the connection model and migration; keep it distinct from `execution_role_arn`.
 - Add `plan-only` to Quick Create and the reviewed customer CloudFormation template, creating a role with a unique name, exact ExternalId trust, API and future isolated Nova plan broker principals, and explicit deny-all customer service permissions.
@@ -32,22 +32,32 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Acceptance criteria
 
-- [ ] The `plan-only` role ARN is stored and returned separately from `execution_role_arn`.
-- [ ] The plan-only template path creates no AdministratorAccess or other service Allow permissions, and includes an explicit service-action deny.
-- [ ] Discovery and plan roles both require the exact connection ExternalId; the plan role trusts only the configured API and isolated Nova plan broker principals.
-- [ ] Verification attempts the plan-role trust/account check and never reports a plan role verified from discovery-role success alone.
-- [ ] Existing apply paths cannot use the plan role as execution access.
-- [ ] Existing discovery and administrator-pilot contracts remain compatible.
-- [ ] Focused tests pass; no AWS resources are created or changed.
-- [ ] Required broker AssumeRole policy changes are documented as a follow-up and no existing executor policy is broadened here.
+- [x] The `plan-only` role ARN is stored and returned separately from `execution_role_arn`.
+- [x] The plan-only template path creates no AdministratorAccess or other service Allow permissions, and includes an explicit service-action deny.
+- [x] Discovery and plan roles both require the exact connection ExternalId; the plan role trusts only the configured API and isolated Nova plan broker principals.
+- [x] Verification attempts the plan-role trust/account check and never reports a plan role verified from discovery-role success alone.
+- [x] Existing apply paths cannot use the plan role as execution access.
+- [x] Existing discovery and administrator-pilot contracts remain compatible.
+- [x] Focused tests pass; no AWS resources are created or changed.
+- [x] Required broker AssumeRole policy changes are documented as a follow-up and no existing executor policy is broadened here.
 
-## Validation
+## Acceptance status
 
-Pending implementation. Validation will be local/static only; no AWS account changes or live STS role assumptions are in scope.
+The criteria above are met in code and local tests. Live plan-role verification remains unavailable until a separate change grants the API verification broker permission to assume `davdeployPlan-*`; no live account verification is claimed here.
 
-## Evidence
+## Tests / validation performed
 
-No customer workload evidence is expected because this PR performs no AWS workload run.
+- `uv run --locked --extra dev pytest -q tests/test_product.py tests/test_connection_experience.py tests/test_customer_aws_connection_contract.py tests/test_db_config.py tests/test_invitation_email.py tests/test_cloud_execution.py` — 137 passed.
+- `uv run --locked --extra dev ruff check apps/api/src tests scripts` — passed.
+- `uv run --locked python scripts/export_openapi.py` — OpenAPI v1 snapshot matches.
+- `uv run --locked python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- `ruff format --check` on the changed Python files still flags existing unrelated lines in `integrations.py`, `service.py`, and `test_cloud_execution.py`; no formatting-only changes were made to those unrelated lines.
+- The full clean-room cycle was not run because its `clean-local` step deletes `.venv` and `.local` and removes Docker volumes; the repository's user deletion rule requires explicit approval for that cleanup. No AWS calls, stacks, or customer resources were created.
+
+## Evidence files produced
+
+None. This PR has no customer workload run and requires no `docs/test/test326.md` workload evidence file.
 
 ## Boundaries
 

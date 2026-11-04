@@ -87,7 +87,7 @@
         "properties": {
           "access_mode": {
             "default": "discovery",
-            "pattern": "^(discovery|administrator-pilot)$",
+            "pattern": "^(discovery|plan-only|administrator-pilot)$",
             "title": "Access Mode",
             "type": "string"
           },

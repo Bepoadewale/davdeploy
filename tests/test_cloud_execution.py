@@ -2652,6 +2652,60 @@ def test_authenticated_cloud_run_requires_verified_connection_and_execution_role
     assert "verified customer cloud connection" in " ".join(run["evidence"]["blockers"])
 
 
+def test_plan_only_role_never_unlocks_legacy_app_runner_apply(monkeypatch):
+    service, _ = make_service()
+    approved = approved_app_runner_customer_review(service)
+    monkeypatch.setenv("ALLOW_CLOUD_APPLY", "true")
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION", "true")
+    connection = service.create_cloud_connection(
+        founder(), "Verified customer cloud", "aws", "byoc_role_contract"
+    )
+    connection.setup_state = "VERIFIED"
+    connection.account_id = "654654474502"
+    connection.plan_role_arn = f"arn:aws:iam::654654474502:role/davdeployPlan-{connection.id}"
+    connection.plan_role_setup_state = "VERIFIED"
+    connection.external_id_secret_ref = "arn:aws:secretsmanager:us-east-1:654654474502:secret:test"
+    revision = service.db.get(InfrastructurePlanRevision, approved.id)
+    assert revision is not None
+    revision.content = {
+        **revision.content,
+        "target": {
+            **revision.content["target"],
+            "connection_id": connection.id,
+            "account_id": connection.account_id,
+            "region": "us-east-1",
+        },
+    }
+    revision.content_digest = plan_hash(revision.content)
+    decision = service.db.scalar(
+        select(InfrastructurePlanDecisionRecord).where(
+            InfrastructurePlanDecisionRecord.revision_id == revision.id
+        )
+    )
+    assert decision is not None
+    decision.approved_digest = revision.content_digest
+    service.db.commit()
+
+    run = service.create_cloud_execution_run_for_revision(
+        operator(),
+        approved.id,
+        content_digest=revision.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=None,
+        expected_region="us-east-1",
+        mode="AUTHENTICATED_APP_RUNNER_APPLY",
+        confirmation="EXECUTE_APP_RUNNER_WORKLOAD",
+    )
+
+    assert run["state"] != "READY_FOR_OPERATOR_APP_RUNNER_EXECUTION"
+    assert "no bounded execution role" in " ".join(run["evidence"]["blockers"])
+    assert run["evidence"]["execution_role_configured"] is False
+    assert run["evidence"]["execution_environment"] == {}
+    assert run["command"]["apply_command_available"] is False
+
+
 def test_customer_image_build_pins_source_and_requires_foundation(monkeypatch):
     service, _ = make_service()
     approved = approved_app_runner_customer_review(service)

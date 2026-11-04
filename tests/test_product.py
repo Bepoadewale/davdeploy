@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from davdeploy.contracts import TenantScope
@@ -610,6 +611,206 @@ def test_aws_verification_proves_an_optional_execution_role_belongs_to_the_custo
     )
     assert audit.action == "cloud_connection.aws_verified"
     assert audit.detail["execution_role_verified"] is True
+
+
+def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separate_role_arn(
+    monkeypatch,
+):
+    plan_broker_arn = "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only"
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-api",
+    )
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN", plan_broker_arn)
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    external_id = "reused-connection-external-id"
+    secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, external_id
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployDiscovery-{connection.id}"
+    )
+    connection.external_id_secret_ref = secret_ref
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+
+    setup = service.aws_quick_create_setup(
+        founder(), connection.id, "123456789012", access_mode="plan-only"
+    )
+
+    saved = service.db.get(type(connection), connection.id)
+    fragment_query = urlsplit(setup["quick_create_url"]).fragment.split("?", 1)[1]
+    parameters = parse_qs(fragment_query)
+    assert setup["stack_name"] == f"davdeploy-Plan-{connection.id}"
+    assert setup["plan_role_arn"] == (
+        f"arn:aws:iam::123456789012:role/davdeployPlan-{connection.id}"
+    )
+    assert parameters["param_AccessMode"] == ["plan-only"]
+    assert parameters["param_ExternalId"] == [external_id]
+    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == [plan_broker_arn]
+    assert saved.external_id_secret_ref == secret_ref
+    assert saved.setup_state == "VERIFIED"
+    assert saved.execution_role_arn is None
+    assert saved.plan_role_arn == setup["plan_role_arn"]
+    assert saved.plan_role_setup_state == "SETUP_LINK_GENERATED"
+    assert "external_id" not in setup
+
+
+def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_broker(monkeypatch):
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-api",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+
+    with pytest.raises(ValueError, match="verify the existing discovery connection"):
+        service.aws_quick_create_setup(
+            founder(), connection.id, "123456789012", access_mode="plan-only"
+        )
+
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployDiscovery-{connection.id}"
+    )
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "existing-token"
+    )
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+    with pytest.raises(RuntimeError, match="isolated Nova plan broker role ARN"):
+        service.aws_quick_create_setup(
+            founder(), connection.id, "123456789012", access_mode="plan-only"
+        )
+
+
+def test_plan_role_verification_checks_trust_and_account_without_claiming_policy_attestation(
+    monkeypatch,
+):
+    class VerifiedPlanRole:
+        def verify(self, _connection_id, _role_arn, external_id, region):
+            assert external_id == "current-external-id"
+            return CloudInventorySnapshot(
+                region=region,
+                approved_regions=[region],
+                approved_resources=["aws-account:123456789012"],
+                discovered_at=datetime.now(UTC),
+                provenance="live-read-only-sts-discovery",
+            )
+
+        def verify_plan_role(self, _connection_id, role_arn, external_id, _region):
+            assert role_arn.endswith("davdeployPlan-connection-plan")
+            assert external_id == "current-external-id"
+            return "123456789012"
+
+    monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-test"
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-connection-plan"
+    connection.plan_role_setup_state = "SETUP_LINK_GENERATED"
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "current-external-id"
+    )
+    service.db.commit()
+
+    service.verify_aws_connection(founder(), connection.id, "us-east-1", VerifiedPlanRole())
+
+    saved = service.db.get(type(connection), connection.id)
+    audit = next(
+        event
+        for event in reversed(service.audits(founder()))
+        if event.action == "cloud_connection.aws_verified"
+    )
+    detail = service.cloud_connection_detail(founder(), connection.id)
+    assert saved.setup_state == "VERIFIED"
+    assert saved.plan_role_setup_state == "VERIFIED"
+    assert saved.execution_role_arn is None
+    assert audit.detail["plan_role_verified"] is True
+    assert audit.detail["plan_role_permissions_attested"] is False
+    assert detail["plan_role_arn"] == connection.plan_role_arn
+    assert detail["plan_role_policy"].startswith("template-installed explicit deny")
+    assert any(
+        capability.startswith("initial Nova Terraform plan")
+        for capability in detail["capabilities"]
+    )
+
+
+def test_plan_role_is_not_reported_usable_when_its_trust_check_fails(monkeypatch):
+    class DiscoveryWithoutPlanTrust:
+        def verify(self, _connection_id, _role_arn, _external_id, region):
+            return CloudInventorySnapshot(
+                region=region,
+                approved_regions=[region],
+                approved_resources=["aws-account:123456789012"],
+                discovered_at=datetime.now(UTC),
+                provenance="live-read-only-sts-discovery",
+            )
+
+        def verify_plan_role(self, *_args):
+            raise PermissionError("the plan role cannot be assumed by this broker yet")
+
+    monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-test"
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-test"
+    connection.plan_role_setup_state = "SETUP_LINK_GENERATED"
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "current-external-id"
+    )
+    service.db.commit()
+
+    with pytest.raises(PermissionError, match="cannot be assumed"):
+        service.verify_aws_connection(
+            founder(), connection.id, "us-east-1", DiscoveryWithoutPlanTrust()
+        )
+
+    saved = service.db.get(type(connection), connection.id)
+    detail = service.cloud_connection_detail(founder(), connection.id)
+    assert saved.plan_role_setup_state == "VERIFICATION_FAILED"
+    assert not any("Nova Terraform plan" in capability for capability in detail["capabilities"])
+
+
+def test_manual_role_setup_does_not_promote_or_retain_a_plan_role():
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-old"
+    connection.plan_role_setup_state = "VERIFIED"
+    service.db.commit()
+
+    service.aws_existing_role_setup(
+        founder(),
+        connection.id,
+        "123456789012",
+        "arn:aws:iam::123456789012:role/customer-discovery",
+        "arn:aws:iam::123456789012:role/customer-execution",
+    )
+
+    saved = service.db.get(type(connection), connection.id)
+    assert saved.plan_role_arn is None
+    assert saved.plan_role_setup_state == "NOT_CONFIGURED"
+    assert saved.execution_role_arn == "arn:aws:iam::123456789012:role/customer-execution"
 
 
 def test_aws_verification_is_durable_and_tenant_scoped(monkeypatch):

@@ -200,7 +200,7 @@ def run_migrations(target: Engine | None = None) -> None:
         if version < 1:
             Base.metadata.create_all(bind=connection)
             _install_generated_plan_immutability(connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (27)"))
             return
         if version < 2:
             connection.execute(
@@ -366,6 +366,18 @@ def run_migrations(target: Engine | None = None) -> None:
                 },
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
+            version = 26
+        if version < 27:
+            if inspect(connection).has_table("cloud_connections"):
+                _add_columns_if_missing(
+                    connection,
+                    "cloud_connections",
+                    {
+                        "plan_role_arn": "TEXT",
+                        "plan_role_setup_state": "VARCHAR(32) NOT NULL DEFAULT 'NOT_CONFIGURED'",
+                    },
+                )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (27)"))
         _install_generated_plan_immutability(connection)
 
 

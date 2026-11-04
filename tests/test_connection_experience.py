@@ -40,6 +40,25 @@ def test_administrator_pilot_quick_create_requires_explicit_acknowledgement():
     }
 
 
+def test_plan_only_quick_create_is_not_mistaken_for_administrator_access():
+    class QuickCreateService:
+        def aws_quick_create_setup(self, *_args):
+            return {"access_mode": _args[-1], "boundary": "deny-all"}
+
+    app.dependency_overrides[product_service] = lambda: QuickCreateService()
+    app.dependency_overrides[verify_token] = founder
+    try:
+        response = TestClient(app).post(
+            "/api/v1/cloud-connections/connection-1/aws-quick-create",
+            json={"account_id": "123456789012", "access_mode": "plan-only"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["access_mode"] == "plan-only"
+
+
 def test_fixture_github_connection_lists_only_authorized_repositories_and_branches():
     service, _ = make_service()
     status = service.github_connection_status(founder())
