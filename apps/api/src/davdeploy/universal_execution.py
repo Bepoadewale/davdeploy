@@ -8,7 +8,7 @@ credentials from a model or browser.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Protocol
@@ -28,6 +28,10 @@ TERMINAL_EVIDENCE_STATES = {
 }
 _MODULE_ID_PATTERN = re.compile(r"[a-z][a-z0-9-]{0,99}\Z")
 _PLAN_DIGEST_PATTERN = re.compile(r"[a-f0-9]{64}\Z")
+_DISPATCH_OPERATIONS = frozenset(
+    (*LIFECYCLE_OPERATIONS, "destroy_plan", "build-push-image", "build_artifact")
+)
+_REVERSE_DISPATCH_OPERATIONS = frozenset((*REVERSE_OPERATIONS, "destroy_plan"))
 
 
 @dataclass(frozen=True)
@@ -96,6 +100,103 @@ def lifecycle_work(plan: UniversalExecutionPlan, operation: str) -> tuple[dict[s
         }
         for module in ordered_modules(plan, operation)
     )
+
+
+def validate_lifecycle_work_graph(value: object) -> tuple[dict[str, object], ...]:
+    """Validate the serialized dependency graph before renderer resolution.
+
+    The database and queue are durable boundaries, but their contents still
+    need complete graph validation before any runner is selected. This checks
+    identity, references, cycles, operation consistency and the dependency
+    order required by forward or cleanup work. It does not authorize a module;
+    the fixed renderer registry performs that separate check.
+    """
+    if not isinstance(value, list) or not value:
+        raise ValueError("universal lifecycle work is required")
+
+    accepted: list[dict[str, object]] = []
+    seen: set[str] = set()
+    graph: dict[str, tuple[str, ...]] = {}
+    operations: set[str] = set()
+    for item in value:
+        if not isinstance(item, Mapping):
+            raise TypeError("universal lifecycle work item must be an object")
+        module_id = item.get("module_id")
+        operation = item.get("operation")
+        dependencies = item.get("dependencies")
+        resource_tags = item.get("resource_tags")
+        if not isinstance(module_id, str) or not _MODULE_ID_PATTERN.fullmatch(module_id):
+            raise ValueError("universal lifecycle work item has an invalid module identifier")
+        if module_id in seen:
+            raise ValueError("universal lifecycle work contains duplicate module identifiers")
+        if not isinstance(operation, str) or operation not in _DISPATCH_OPERATIONS:
+            raise ValueError("universal lifecycle work has an unsupported operation")
+        if not isinstance(dependencies, list) or not all(
+            isinstance(dependency, str) and _MODULE_ID_PATTERN.fullmatch(dependency)
+            for dependency in dependencies
+        ):
+            raise ValueError("universal lifecycle work has invalid dependencies")
+        if len(dependencies) != len(set(dependencies)):
+            raise ValueError(f"module {module_id} contains duplicate dependencies")
+        if module_id in dependencies:
+            raise ValueError(f"module {module_id} cannot depend on itself")
+        if not isinstance(resource_tags, Mapping) or not all(
+            isinstance(key, str) and isinstance(tag_value, str)
+            for key, tag_value in resource_tags.items()
+        ):
+            raise ValueError("universal lifecycle work has invalid resource tags")
+        seen.add(module_id)
+        graph[module_id] = tuple(dependencies)
+        operations.add(operation)
+        accepted.append(
+            {
+                "module_id": module_id,
+                "operation": operation,
+                "dependencies": list(dependencies),
+                "resource_tags": dict(resource_tags),
+            }
+        )
+
+    if len(operations) != 1:
+        raise ValueError("universal lifecycle work must use one operation")
+    operation = next(iter(operations))
+    for module_id, dependencies in graph.items():
+        missing = set(dependencies) - seen
+        if missing:
+            raise ValueError(
+                f"module {module_id} depends on missing modules: {sorted(missing)}"
+            )
+
+    # A complete dependency walk also rejects cycles, including those hidden
+    # by an otherwise plausible submitted ordering.
+    pending = {module_id: set(dependencies) for module_id, dependencies in graph.items()}
+    emitted: list[str] = []
+    while pending:
+        ready = sorted(module_id for module_id, deps in pending.items() if not deps)
+        if not ready:
+            raise ValueError("module graph contains a dependency cycle")
+        emitted.extend(ready)
+        completed = set(ready)
+        for module_id in ready:
+            del pending[module_id]
+        for deps in pending.values():
+            deps.difference_update(completed)
+
+    submitted_order = [str(item["module_id"]) for item in accepted]
+    positions = {module_id: index for index, module_id in enumerate(submitted_order)}
+    reverse = operation in _REVERSE_DISPATCH_OPERATIONS
+    for module_id, dependencies in graph.items():
+        for dependency in dependencies:
+            correctly_ordered = (
+                positions[dependency] > positions[module_id]
+                if reverse
+                else positions[dependency] < positions[module_id]
+            )
+            if not correctly_ordered:
+                raise ValueError(
+                    f"module graph is not dependency-ordered for {operation}: {module_id}"
+                )
+    return tuple(accepted)
 
 
 def lifecycle_evidence_complete(

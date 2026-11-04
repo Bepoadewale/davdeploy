@@ -9,6 +9,7 @@ from davdeploy.universal_execution import (
     lifecycle_evidence_complete,
     lifecycle_work,
     ordered_modules,
+    validate_lifecycle_work_graph,
     verify_cleanup,
 )
 
@@ -92,6 +93,79 @@ def test_lifecycle_work_is_stable_and_reverses_for_cleanup():
         "apply",
         tuple(LifecycleEvidence(item.module_id, "apply", "SUCCEEDED") for item in plan.modules),
     )
+
+
+def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order():
+    forward = [
+        {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
+        {"module_id": "worker", "operation": "apply", "dependencies": ["api"], "resource_tags": {}},
+    ]
+    reverse = [
+        {"module_id": "worker", "operation": "destroy", "dependencies": ["api"], "resource_tags": {}},
+        {"module_id": "api", "operation": "destroy", "dependencies": [], "resource_tags": {}},
+    ]
+    assert [item["module_id"] for item in validate_lifecycle_work_graph(forward)] == [
+        "api",
+        "worker",
+    ]
+    assert [item["module_id"] for item in validate_lifecycle_work_graph(reverse)] == [
+        "worker",
+        "api",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("work", "message"),
+    [
+        ([], "required"),
+        (
+            [
+                {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
+                {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
+            ],
+            "duplicate module",
+        ),
+        (
+            [{"module_id": "api", "operation": "apply", "dependencies": ["missing"], "resource_tags": {}}],
+            "missing modules",
+        ),
+        (
+            [
+                {"module_id": "api", "operation": "apply", "dependencies": ["worker"], "resource_tags": {}},
+                {"module_id": "worker", "operation": "apply", "dependencies": ["api"], "resource_tags": {}},
+            ],
+            "cycle",
+        ),
+        (
+            [
+                {"module_id": "worker", "operation": "apply", "dependencies": ["api"], "resource_tags": {}},
+                {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
+            ],
+            "not dependency-ordered",
+        ),
+        (
+            [
+                {"module_id": "api", "operation": "destroy", "dependencies": [], "resource_tags": {}},
+                {"module_id": "worker", "operation": "destroy", "dependencies": ["api"], "resource_tags": {}},
+            ],
+            "not dependency-ordered",
+        ),
+        (
+            [
+                {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
+                {"module_id": "worker", "operation": "observe", "dependencies": ["api"], "resource_tags": {}},
+            ],
+            "one operation",
+        ),
+        (
+            [{"module_id": "API", "operation": "apply", "dependencies": [], "resource_tags": {}}],
+            "invalid module identifier",
+        ),
+    ],
+)
+def test_serialized_lifecycle_graph_rejects_invalid_or_unordered_work(work, message):
+    with pytest.raises((TypeError, ValueError), match=message):
+        validate_lifecycle_work_graph(work)
 
 
 @pytest.mark.parametrize(
