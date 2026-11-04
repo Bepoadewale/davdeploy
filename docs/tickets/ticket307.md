@@ -1,40 +1,50 @@
-# Ticket 307: Typed Nova deployment graph contract
+# ticket307 Typed Nova deployment graph contract
 
-## Goal
+PR: #307
+Branch: feat/nova-deployment-contract
 
-Define the strict resource graph accepted from Nova before deterministic
-validation and Terraform generation.
+## Problem / goal
 
-## Current state
+Define the strict resource graph accepted from Nova before deterministic validation and Terraform generation.
 
-Previously, generated resources used arbitrary argument dictionaries with
-basic forbidden-field checks. The result was plan-only and had no structured
-dependency, health, recovery or cost assumption contract. This PR adds a
-versioned typed boundary; it does not connect Nova to hosted apply.
+## Current repo state
 
-## References
+Generated resources previously used arbitrary argument dictionaries with basic forbidden-field checks. Nova generation is plan-only and not connected to hosted execution. The 26-entry catalogue and 30 Terraform roots are mapped in the readiness matrix.
+
+## Research / references used
 
 - Nova structured output: https://docs.aws.amazon.com/nova/latest/nova2-userguide/advanced-prompting-techniques.html
 - Terraform provider schema: https://developer.hashicorp.com/terraform/cli/commands/providers/schema
-- Existing typed ports: apps/api/src/davdeploy/module_ports.py.
+- Existing typed module ports: apps/api/src/davdeploy/module_ports.py
 
-## Work and acceptance
+## Work planned for the PR
 
-- [x] Versioned proposal, resource, output, reference and requirement models.
-- [x] Reject duplicate resource IDs/addresses, unresolved references, mismatched output types and dependency cycles.
-- [x] Reject raw Terraform expressions and sensitive/execution authority fields from resource arguments.
-- [x] Carry source/context digest, cost assumptions, health assertions and recovery requirements.
-- [x] Focused tests cover valid graph and malformed, cyclic, unresolved references, mismatched types and unsafe inputs.
-- [ ] Required checks pass and review is complete.
+Add strict models for proposal, resources, typed references, declared outputs, requirements, health assertions, recovery needs and cost assumptions. Validate graph identities, dependencies and references before runner dispatch.
 
-## Validation and evidence
+## Acceptance criteria
 
-Runnable Python change. .venv/bin/python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py passed: 13 tests. No AWS resources or customer workloads are involved.
+- [x] Versioned proposal and resource graph models.
+- [x] Reject duplicate IDs/addresses, invalid dependencies, unresolved references, type mismatch and dependency cycles.
+- [x] Reject raw Terraform expressions and sensitive/execution authority fields.
+- [x] Carry context digest, source revision, costs, health and recovery requirements.
+- [ ] Required CI passes and review is complete.
 
-## Boundaries and follow-up
+## Acceptance status
 
-Passing this model is not provider-schema validation, policy approval, cost
-validation, IAM authority or evidence of deployable infrastructure. Next work
-must integrate it with Nova generation, deterministic Terraform JSON output,
-actual plan inspection and the existing hosted lifecycle without enabling
-unvalidated execution. Keep the full goal and operational notes local.
+Local implementation and focused tests pass. Hosted execution is not connected. This contract does not authorize a deployment.
+
+## Tests / validation performed
+
+Ruff passed for changed files. .venv/bin/python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py: 13 passed. No AWS operations.
+
+## Evidence files produced
+
+No customer workload evidence. No test<PR_NUMBER>.md is required because this PR creates no customer workload and changes no runtime cloud environment.
+
+## Boundaries
+
+Schema/model validation is not provider validation, policy authorization, trustworthy cost, IAM authority, customer approval or AWS evidence. No runner is enabled by this PR.
+
+## Follow-up work
+
+Integrate the typed contract with Nova generation, trusted Terraform JSON generation, provider schemas, actual-plan policy checks and the existing hosted lifecycle. Keep the full goal and access details local.
