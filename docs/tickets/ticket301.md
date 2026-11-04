@@ -39,8 +39,8 @@ Main is at `afd6736` after PR #300. The planner has a typed `aws-nosql-data` mod
 - [x] Destroy is blocked unless a bounded check proves the table empty; cleanup verification confirms remote absence and empty Terraform state.
 - [x] Renderer is unavailable to ordinary customer execution and only available through the explicit certification gate.
 - [x] Focused and full local validation, clean-room cycle and documentation checks pass.
-- [x] GitHub Actions run `41776876739` passes all seven required checks.
-- [ ] Final merge review confirms no unresolved feedback and a clean merge state.
+- [x] GitHub Actions run `41777364015` passes all seven required checks on the preceding committed revision; the final documentation update is revalidated by the current PR checks.
+- [x] Final merge review confirms no unresolved feedback and a clean merge state.
 - [x] Evidence will separate local configuration proof from real AWS lifecycle certification; this PR creates no AWS resources.
 
 ## Acceptance status
@@ -58,7 +58,7 @@ Implementation and local validation are complete; final PR CI and merge review r
 - Clean-room at `64ca498`: bootstrap, smoke, API contract, customer-plan E2E, seed data, simple/complex/Day-2/degraded/policy/readiness demos, trace check and full `make verify` passed (505 tests, one existing deprecation warning).
 - No AWS resources were created. The renderer stays disabled outside the certification gate.
 - GitHub Actions run [41776876739](https://github.com/Bepoadewale/davdeploy/actions/runs/41776876739) — all seven required checks passed.
-- Final merge review — pending.
+- Final merge review — GitHub reports `CLEAN`, no reviews, and no comments.
 
 ## Evidence files produced
 
