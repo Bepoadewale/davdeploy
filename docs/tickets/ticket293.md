@@ -50,7 +50,7 @@ continue to use their module type as the default instance ID.
 - `make verify` — configuration check passed; Ruff passed; **449 tests passed**; OpenAPI snapshot matched; Docker Compose configuration passed.
 - `.venv/bin/ruff check ...` on all changed Python files — passed.
 - `git diff --check` — passed.
-- Full local clean-room lifecycle cycle — pending.
+- Full isolated clean-room cycle passed from an empty worktree with a dedicated Compose project: cleanup, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. The run ended with all test-created containers, project network, database volume and virtual environment removed.
 - Required GitHub PR checks — pending.
 
 ## Evidence files produced
