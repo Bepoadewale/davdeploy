@@ -1403,6 +1403,7 @@ def test_module_specific_outcomes_persist_only_the_selected_scoped_row():
     run = service.db.get(CloudExecutionRun, created["id"])
     assert run is not None and run.module_instances
     primary = run.module_instances[0]
+    primary.module_id = "aws-serverless-api"
     secondary = CloudExecutionModuleInstance(
         organization_id=run.organization_id,
         project_id=run.project_id,
@@ -1424,14 +1425,14 @@ def test_module_specific_outcomes_persist_only_the_selected_scoped_row():
 
     outcome = ModuleLifecycleOutcome(
         state="QUEUED",
-        outputs={"artifact_digest": "sha256:abc"},
+        outputs={"api_url": "https://api.example.test"},
         evidence={"runner": "fixed-registry"},
     )
     service._advance_cloud_execution_module_instances(
         run, module_outcomes={primary.instance_id: outcome}
     )
     assert primary.state == "QUEUED"
-    assert primary.outputs == {"artifact_digest": "sha256:abc"}
+    assert primary.outputs == {"api_url": "https://api.example.test"}
     assert primary.evidence["module_outcome"] == {"runner": "fixed-registry"}
     assert secondary.state == "NOT_DISPATCHED"
 
@@ -1445,13 +1446,23 @@ def test_module_specific_outcomes_persist_only_the_selected_scoped_row():
             run,
             module_outcomes={
                 primary.instance_id: ModuleLifecycleOutcome(
-                    state="QUEUED", outputs={"artifact_digest": "sha256:changed"}
+                    state="QUEUED", outputs={"api_url": "https://changed.example.test"}
                 )
             },
         )
     with pytest.raises(ValueError, match="outside its execution run graph"):
         service._advance_cloud_execution_module_instances(
             run, module_outcomes={"unowned-module": ModuleLifecycleOutcome(state="QUEUED")}
+        )
+
+    with pytest.raises(ValueError, match="invalid https_url value"):
+        service._advance_cloud_execution_module_instances(
+            run,
+            module_outcomes={
+                primary.instance_id: ModuleLifecycleOutcome(
+                    state="RUNNING", outputs={"api_url": "http://api.example.test"}
+                )
+            },
         )
 
 

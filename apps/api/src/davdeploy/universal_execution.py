@@ -14,7 +14,7 @@ from hashlib import sha256
 from typing import Protocol
 
 from davdeploy.domain import ArchitectureModule
-from davdeploy.module_ports import module_ports
+from davdeploy.module_ports import module_ports, validate_module_outputs
 
 LIFECYCLE_OPERATIONS = ("plan", "apply", "observe", "rollback", "destroy", "verify_cleanup")
 FORWARD_OPERATIONS = ("plan", "apply", "observe")
@@ -277,6 +277,41 @@ def lifecycle_evidence_complete(
     return all(
         len(states) == 1 and states[0] in terminal_states for states in outcomes.values()
     )
+
+
+def resolve_module_inputs(
+    plan: UniversalExecutionPlan,
+    instance_id: str,
+    module_outputs: Mapping[str, object],
+    module_states: Mapping[str, str],
+) -> dict[str, str]:
+    """Resolve declared input references from successful dependency outcomes.
+
+    This function returns only values that the source module explicitly
+    declared as outputs. A secret port resolves to a secret reference ARN; it
+    never reads the referenced secret contents.
+    """
+    modules = {module.instance_id: module for module in plan.modules}
+    consumer = modules.get(instance_id)
+    if consumer is None:
+        raise ValueError("module instance is outside the execution graph")
+    resolved: dict[str, str] = {}
+    successful_states = {"SUCCEEDED_AWAITING_OBSERVATION", "HEALTHY"}
+    for input_name, source_instance_id, source_output in consumer.input_bindings:
+        if source_instance_id not in consumer.dependencies:
+            raise ValueError("input binding source is not a declared dependency")
+        if module_states.get(source_instance_id) not in successful_states:
+            raise ValueError("input binding source has not completed successfully")
+        source = modules[source_instance_id]
+        source_contracts = {item.name: item for item in module_ports(source.module_id).outputs}
+        port_contract = source_contracts.get(source_output)
+        if port_contract is None:
+            raise ValueError("input binding references an undeclared source output")
+        source_values = validate_module_outputs(source.module_id, module_outputs.get(source_instance_id))
+        if source_values is None or source_output not in source_values:
+            raise ValueError("input binding source output is not available")
+        resolved[input_name] = source_values[source_output]
+    return resolved
 
 
 def compile_universal_execution_plan(
