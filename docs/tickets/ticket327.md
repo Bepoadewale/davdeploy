@@ -63,5 +63,4 @@ authorization, content, or infrastructure behavior.
 
 ## Follow-up work
 
-No behavior change was needed. The PR is ready for review and remains a draft; it has
-not been merged.
+No behavior change was needed. The PR is ready for review and remains unmerged.
