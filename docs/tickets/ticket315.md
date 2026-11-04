@@ -1,6 +1,6 @@
 # ticket315 Fail closed on unknown security-critical Terraform settings
 
-PR: #315 (not opened)
+PR: #315 https://github.com/Bepoadewale/davdeploy/pull/315 (draft)
 Branch: feat/nova-plan-unknown-gates-v2
 
 ## Problem / goal
