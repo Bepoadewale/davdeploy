@@ -32,22 +32,24 @@ Build deterministic plan findings for account/region, proposal-to-plan resource 
 - [x] Findings contain no raw plan values, secrets, or Terraform JSON.
 - [x] Policy errors and unsupported structures fail closed with stable plain-English messages.
 - [x] A secure composed S3 plan is eligible for human review; an unsafe plan is denied.
-- [ ] Focused tests, `make verify`, CI, clean-room checks, and review pass.
+- [x] Focused tests, `make verify`, documentation conventions, and clean-room checks pass.
+- [ ] Required CI and PR review pass.
 - [ ] Review is complete.
 
 ## Acceptance status
 
-Implementation and local verification are in progress. The generic plan runner
+Implementation and local verification are complete. The generic plan runner
 now returns a deterministic policy verdict alongside secret-safe plan summary
 and digests. The live AWS check uses plan-only Terraform with no apply or
-resource creation.
+resource creation. CI and review remain pending.
 
 ## Tests / validation performed
 
 Focused policy, plan-inspection, and Terraform-runner tests pass (62 tests).
 `make verify` passes: 590 tests, Ruff, Actions configuration, OpenAPI snapshot,
 and Compose configuration. Documentation conventions and `git diff --check`
-also pass. Clean-room verification and hosted CI are still pending.
+pass. The isolated clean-room cycle also passes; hosted CI and PR review remain
+pending.
 
 A real authenticated read-only plan in account `654654474502`, region
 `us-east-1`, Terraform `1.14.7`, and AWS provider `5.100.0` proposed three

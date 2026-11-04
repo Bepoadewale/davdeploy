@@ -11,7 +11,7 @@ Repository: `Bepoadewale/davdeploy`, PR #312 branch.
 
 Customer repository: None. All proposed resources and names are synthetic.
 
-Commit: PR #312 working tree (the exact source commit will be added after commit).
+Commit: `559353b1a2587fe98e4325a0d2726ec55f92479b` (source tested).
 
 AWS account: `654654474502`, verified before planning through STS and enforced
 again by the generated Terraform account guard.
@@ -99,3 +99,20 @@ This validates an initial policy baseline against one real composed Terraform
 plan and synthetic negative cases. It does not prove comprehensive coverage
 of every AWS service, pricing accuracy, customer approval, hosted worker
 execution, apply, health, recovery, or cleanup.
+
+## Clean-room verification
+
+The source commit above passed in the isolated worktree
+`/tmp/davdeploy-cleanroom-pr312-20261104-v2` with:
+
+```text
+make VENV=/tmp/davdeploy-pr312-venv bootstrap-local
+make VENV=/tmp/davdeploy-pr312-venv smoke api-contract customer-plan-e2e \
+  seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure \
+  demo-readiness-failure trace-check verify
+```
+
+All targets passed, including 590 tests, Ruff, Actions configuration, OpenAPI,
+and Compose configuration. The nine temporary project containers were stopped
+and removed. The named Docker volume, network, worktree, and virtual
+environment remain; they were retained.
