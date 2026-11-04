@@ -36,7 +36,8 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 - [x] Legacy runs retain their existing run-level artifact behavior.
 - [x] Multi-module CodeBuild remains fail-closed.
 - [x] PR-numbered ticket and status documentation are accurate.
-- [ ] Full isolated clean-room cycle and GitHub CI pass.
+- [x] Full isolated clean-room cycle passes.
+- [ ] GitHub CI passes.
 
 ## Acceptance status
 
@@ -52,7 +53,8 @@ Focused tests: `uv run pytest -q tests/test_module_ports.py tests/test_cloud_exe
 passed (66 passed, one existing Starlette deprecation warning). Full
 `make verify` passed (478 tests passed; one existing warning). Ruff, the PR
 documentation convention check, OpenAPI snapshot, and Compose configuration
-passed. The clean-room cycle and GitHub CI are pending.
+passed. The isolated clean-room cycle also passed; see `docs/test/test297.md`.
+GitHub CI is pending.
 
 ## Evidence files produced
 
