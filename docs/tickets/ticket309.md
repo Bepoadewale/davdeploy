@@ -28,12 +28,12 @@ Implement deterministic validation against caller-supplied provider schema data.
 - [x] Sensitive values require declared typed references.
 - [x] Provider outputs and typed references are checked against schema.
 - [x] Provider schema format version may be pinned and checked separately from provider release version.
-- [ ] Focused and required checks pass.
+- [x] Focused and full local verification pass; required CI is pending.
 - [ ] Review is complete.
 
 ## Acceptance status
 
-Implementation and focused tests pass locally. This validator is a reusable preflight component; it is not yet wired into the hosted runner or an actual Terraform plan.
+Implementation and tests pass locally. make verify passed: 528 tests, Ruff, action configuration, OpenAPI snapshot and Compose config. This validator is a reusable preflight component; it is not yet wired into the hosted runner or an actual Terraform plan.
 
 ## Tests / validation performed
 
