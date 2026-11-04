@@ -35,7 +35,7 @@ AWS region: Not applicable.
   ```
 
   All targets passed, including 498 tests. The PostgreSQL overlay used `tmpfs`; cleanup removed only containers and network for the named project. No named volume was created or deleted.
-- Pull-request CI — pending for the implementation commit; the final CI run must include the ticket and this evidence file.
+- Pull-request CI run [41773250123](https://github.com/Bepoadewale/davdeploy/actions/runs/41773250123) — all seven checks passed for the implementation, ticket and evidence file.
 
 ## Observed result
 
