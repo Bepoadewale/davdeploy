@@ -507,6 +507,25 @@ def test_worker_builds_certification_context_from_persisted_run_mode():
         requested_by_subject=operator().subject,
     )
     service.db.add(run)
+    service.db.flush()
+    service.db.add(
+        CloudExecutionModuleInstance(
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            execution_run_id=run.id,
+            instance_id="aws-serverless-api",
+            module_id="aws-serverless-api",
+            state="NOT_DISPATCHED",
+            operation="apply",
+            attempt=0,
+            input_digest=run.content_digest,
+            idempotency_key=f"{run.id}:aws-serverless-api",
+            dependencies=[],
+            outputs={},
+            evidence={},
+            version=1,
+        )
+    )
     service.db.commit()
 
     class CapturingAdapter:
@@ -523,6 +542,14 @@ def test_worker_builds_certification_context_from_persisted_run_mode():
     assert adapter.context["profile"] == "aws-serverless-api"
     assert adapter.context["mode"] == "AUTHENTICATED_SERVERLESS_CERTIFICATION"
     assert adapter.context["lifecycle_work"][0]["operation"] == "build_artifact"
+    node = service.db.scalar(
+        select(CloudExecutionModuleInstance).where(
+            CloudExecutionModuleInstance.execution_run_id == run.id
+        )
+    )
+    assert node is not None
+    assert node.runner_build_id == "serverless-1"
+    assert node.evidence["runner_build_id"] == "serverless-1"
 
 
 def test_serverless_certification_run_chains_pinned_artifact_and_saved_plan(monkeypatch):
@@ -1057,6 +1084,40 @@ def test_codebuild_completion_accepts_the_eventbridge_build_arn(monkeypatch):
         requested_by_subject=founder().subject,
     )
     service.db.add(run)
+    primary = CloudExecutionModuleInstance(
+        organization_id=run.organization_id,
+        project_id=run.project_id,
+        execution_run_id=run.id,
+        instance_id="primary-module",
+        module_id="aws-managed-application",
+        state="SUBMITTED",
+        operation="apply",
+        attempt=1,
+        input_digest=run.content_digest,
+        idempotency_key=f"{run.id}:primary-module",
+        dependencies=[],
+        outputs={},
+        evidence={},
+        version=2,
+        runner_build_id=short_id,
+    )
+    secondary = CloudExecutionModuleInstance(
+        organization_id=run.organization_id,
+        project_id=run.project_id,
+        execution_run_id=run.id,
+        instance_id="secondary-module",
+        module_id="aws-managed-application",
+        state="NOT_DISPATCHED",
+        operation="apply",
+        attempt=0,
+        input_digest=run.content_digest,
+        idempotency_key=f"{run.id}:secondary-module",
+        dependencies=[],
+        outputs={},
+        evidence={},
+        version=1,
+    )
+    run.module_instances.extend([primary, secondary])
     service.db.commit()
     calls = []
 
@@ -1069,6 +1130,8 @@ def test_codebuild_completion_accepts_the_eventbridge_build_arn(monkeypatch):
 
     assert service.reconcile_cloud_execution_build(build_arn) is True
     assert calls == [[short_id]]
+    assert service.db.get(CloudExecutionModuleInstance, primary.id).state == "FAILED"
+    assert service.db.get(CloudExecutionModuleInstance, secondary.id).state == "NOT_DISPATCHED"
 
 
 def test_admin_can_reconcile_only_the_safe_encrypted_result_read_failure(monkeypatch):

@@ -5162,6 +5162,36 @@ class ProductService:
         if run is None:
             self.db.rollback()
             return False
+        raw_build_id = (result.outputs or {}).get("codebuild_build_id")
+        raw_build_arn = (result.outputs or {}).get("codebuild_build_arn")
+        if raw_build_id is not None:
+            build_id = str(raw_build_id).rsplit("/", 1)[-1]
+            if (
+                not build_id
+                or len(build_id) > 255
+                or re.fullmatch(r"[A-Za-z0-9._:-]+", build_id) is None
+            ):
+                self.db.rollback()
+                return False
+            if raw_build_arn is not None and str(raw_build_arn).rsplit("/", 1)[-1] != build_id:
+                self.db.rollback()
+                return False
+            if len(run.module_instances) > 1:
+                # The current CodeBuild adapter is a single-module runner. Keep
+                # its callback identity unambiguous until the durable scheduler
+                # explicitly claims nodes one at a time.
+                self.db.rollback()
+                return False
+            if run.module_instances:
+                module_instance = run.module_instances[0]
+                if module_instance.runner_build_id not in {None, build_id}:
+                    self.db.rollback()
+                    return False
+                module_instance.runner_build_id = build_id
+                module_instance.evidence = {
+                    **(module_instance.evidence or {}),
+                    "runner_build_id": build_id,
+                }
         run.state = result.state
         run.worker_lease_token = None
         run.worker_lease_expires_at = None
@@ -5227,9 +5257,7 @@ class ProductService:
             if not set(module_outcomes).issubset(instance_ids):
                 raise ValueError("module outcome is outside its execution run graph")
             outcomes = dict(module_outcomes)
-            module_ids = {
-                item.instance_id: item.module_id for item in run.module_instances
-            }
+            module_ids = {item.instance_id: item.module_id for item in run.module_instances}
             for instance_id, outcome in outcomes.items():
                 if not isinstance(instance_id, str) or not isinstance(
                     outcome, ModuleLifecycleOutcome
@@ -5278,14 +5306,19 @@ class ProductService:
             if outcome is None:
                 continue
             if item.state == outcome.state:
-                same_outputs = outcome.outputs is None or dict(outcome.outputs) == (item.outputs or {})
+                same_outputs = outcome.outputs is None or dict(outcome.outputs) == (
+                    item.outputs or {}
+                )
                 same_evidence = outcome.evidence is None or dict(outcome.evidence) == (
                     (item.evidence or {}).get("module_outcome", {})
                 )
                 if same_outputs and same_evidence:
                     continue
                 raise ValueError("module outcome cannot overwrite an existing result")
-            if item.state not in allowed_sources or outcome.state not in allowed_sources[item.state]:
+            if (
+                item.state not in allowed_sources
+                or outcome.state not in allowed_sources[item.state]
+            ):
                 raise ValueError("module instance state cannot be replayed or overwritten")
             event = {
                 "from": item.state,
@@ -5332,26 +5365,61 @@ class ProductService:
     def reconcile_cloud_execution_build(self, build_id: str) -> bool:
         """Persist one CodeBuild completion received through the SQS event bridge."""
         normalized_build_id = build_id.rsplit("/", 1)[-1]
-        run = next(
-            (
-                item
-                for item in self.db.scalars(
-                    select(CloudExecutionRun).where(
-                        CloudExecutionRun.state.in_(("SUBMITTED", "FAILED"))
-                    )
+        linked_instances = list(
+            self.db.scalars(
+                select(CloudExecutionModuleInstance).where(
+                    CloudExecutionModuleInstance.runner_build_id == normalized_build_id
                 )
-                # A failed execution is replayable only when the exact bounded
-                # CodeBuild job succeeded but artifact decryption/reading failed.
-                # Other failures must remain immutable and require a new run.
-                if item.state == "SUBMITTED"
-                or (item.outputs or {}).get("failure_reason")
-                == "runner result artifact URI is missing"
-                if normalized_build_id == (item.outputs or {}).get("codebuild_build_id")
-                or build_id == (item.outputs or {}).get("codebuild_build_arn")
-            ),
-            None,
+            )
+        )
+        if len(linked_instances) > 1:
+            return False
+        linked_instance = linked_instances[0] if linked_instances else None
+        run = (
+            self.db.get(CloudExecutionRun, linked_instance.execution_run_id)
+            if linked_instance is not None
+            else next(
+                (
+                    item
+                    for item in self.db.scalars(
+                        select(CloudExecutionRun).where(
+                            CloudExecutionRun.state.in_(("SUBMITTED", "FAILED"))
+                        )
+                    )
+                    # A failed execution is replayable only when the exact bounded
+                    # CodeBuild job succeeded but artifact decryption/reading failed.
+                    # Other failures must remain immutable and require a new run.
+                    if item.state == "SUBMITTED"
+                    or (item.outputs or {}).get("failure_reason")
+                    == "runner result artifact URI is missing"
+                    if normalized_build_id == (item.outputs or {}).get("codebuild_build_id")
+                    or build_id == (item.outputs or {}).get("codebuild_build_arn")
+                ),
+                None,
+            )
         )
         if not run:
+            return False
+        if linked_instance is not None and (
+            linked_instance.execution_run_id != run.id
+            or linked_instance.organization_id != run.organization_id
+            or linked_instance.project_id != run.project_id
+            or linked_instance.input_digest != run.content_digest
+            or linked_instance.runner_build_id != normalized_build_id
+        ):
+            return False
+        if run.state not in {"SUBMITTED", "FAILED"}:
+            return False
+        if run.state == "FAILED" and (run.outputs or {}).get("failure_reason") != (
+            "runner result artifact URI is missing"
+        ):
+            return False
+        if linked_instance is not None and linked_instance.state != "SUBMITTED":
+            return False
+        if linked_instance is not None and (
+            (run.outputs or {}).get("codebuild_build_id")
+            and (run.outputs or {}).get("codebuild_build_id") != normalized_build_id
+        ):
             return False
         response = boto3.client("codebuild").batch_get_builds(ids=[normalized_build_id])
         builds = response.get("builds") or []
@@ -5598,7 +5666,23 @@ class ProductService:
         # the graph node submitted until the exact same completed build can be
         # reconciled; do not make the provisional read failure terminal.
         if artifact_error != "runner result artifact URI is missing":
-            self._advance_cloud_execution_module_instances(run, run.state)
+            if linked_instance is None:
+                # Compatibility for pre-migration single-renderer runs that
+                # have only the old run-level build identity.
+                self._advance_cloud_execution_module_instances(run, run.state)
+            else:
+                self._advance_cloud_execution_module_instances(
+                    run,
+                    module_outcomes={
+                        linked_instance.instance_id: ModuleLifecycleOutcome(
+                            state=run.state,
+                            evidence={
+                                "runner_build_id": normalized_build_id,
+                                "runner_build_status": status,
+                            },
+                        )
+                    },
+                )
         self.audit(
             Principal("system-cloud-worker", run.organization_id, "operator"),
             "cloud_execution.codebuild_completed",

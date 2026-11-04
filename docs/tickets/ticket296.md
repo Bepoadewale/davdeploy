@@ -33,21 +33,27 @@ safe per-module scheduling without applying one result to every graph node.
 
 ## Acceptance criteria
 
-- [ ] Module build identity is durable and unique; legacy rows migrate safely.
-- [ ] Reconciliation updates only the matching module instance.
-- [ ] Duplicate, stale, mismatched, or ambiguous callback results cannot
+- [x] Module build identity is durable and unique; legacy rows migrate safely.
+- [x] Reconciliation updates only the matching module instance.
+- [x] Duplicate, stale, mismatched, or ambiguous callback results cannot
   overwrite terminal module outcomes.
-- [ ] Existing single-module behavior remains compatible.
-- [ ] Multi-module work remains fail-closed until durable scheduling is complete.
-- [ ] PR-numbered tests/evidence and status documentation are accurate.
+- [x] Existing single-module behavior remains compatible, including legacy runs
+  without per-module rows.
+- [x] Multi-module work remains fail-closed until durable scheduling is complete.
+- [x] PR-numbered test/evidence and status documentation are present and accurate.
+- [ ] Full isolated clean-room cycle and GitHub CI pass.
 
 ## Validation
 
-Pending implementation.
+Focused tests: `uv run pytest -q tests/test_db_config.py tests/test_invitation_email.py tests/test_cloud_execution.py`
+passed (59 passed). Full `make verify` passed (471 tests passed; one existing
+Starlette deprecation warning). `uv run ruff check apps/api/src tests scripts`
+and `git diff --check` passed.
 
 ## Evidence
 
-Pending implementation.
+`docs/test/test296.md` will record the isolated clean-room cycle and CI once
+those gates finish. No AWS resources were created.
 
 ## Boundaries and follow-up
 

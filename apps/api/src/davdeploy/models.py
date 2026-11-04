@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -69,7 +69,9 @@ class PlanComment(Base):
     __tablename__ = "plan_comments"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    revision_id: Mapped[str] = mapped_column(ForeignKey("infrastructure_plan_revisions.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
     author_subject: Mapped[str] = mapped_column(String(160))
     body: Mapped[str] = mapped_column(Text)
     state: Mapped[str] = mapped_column(String(24), default="OPEN", index=True)
@@ -124,12 +126,16 @@ class WorkspaceSubscription(Base):
 
     __tablename__ = "workspace_subscriptions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), unique=True, index=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), unique=True, index=True
+    )
     plan_name: Mapped[str] = mapped_column(String(80), default="beta")
     state: Mapped[str] = mapped_column(String(24), default="TRIAL")
     limits: Mapped[dict] = mapped_column(JSON, default=dict)
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class SupportTicket(Base):
@@ -206,9 +212,7 @@ class GitHubAppInstallationState(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "installation_id", name="uq_github_installation_org"
-        ),
+        UniqueConstraint("organization_id", "installation_id", name="uq_github_installation_org"),
     )
 
 
@@ -225,7 +229,9 @@ class GitHubWebhookDelivery(Base):
     repository: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(40), default="PROCESSED")
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class CloudConnection(Base):
@@ -389,7 +395,9 @@ class DesiredStatePublication(Base):
     __tablename__ = "desired_state_publications"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    revision_id: Mapped[str] = mapped_column(ForeignKey("infrastructure_plan_revisions.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     repository_url: Mapped[str] = mapped_column(Text)
     branch: Mapped[str] = mapped_column(String(255))
@@ -414,7 +422,9 @@ class TerraformPlanRender(Base):
     __tablename__ = "terraform_plan_renders"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    revision_id: Mapped[str] = mapped_column(ForeignKey("infrastructure_plan_revisions.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     profile: Mapped[str] = mapped_column(String(80), index=True)
     state: Mapped[str] = mapped_column(String(40), default="PLAN_ONLY_NOT_APPLIED", index=True)
@@ -428,7 +438,12 @@ class TerraformPlanRender(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     __table_args__ = (
-        UniqueConstraint("revision_id", "content_digest", "profile", name="uq_terraform_render_revision_digest_profile"),
+        UniqueConstraint(
+            "revision_id",
+            "content_digest",
+            "profile",
+            name="uq_terraform_render_revision_digest_profile",
+        ),
     )
 
 
@@ -438,9 +453,13 @@ class CloudReadinessPreflight(Base):
     __tablename__ = "cloud_readiness_preflights"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    revision_id: Mapped[str] = mapped_column(ForeignKey("infrastructure_plan_revisions.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
-    state: Mapped[str] = mapped_column(String(40), default="BLOCKED_CLOUD_RUNTIME_NOT_CONFIGURED", index=True)
+    state: Mapped[str] = mapped_column(
+        String(40), default="BLOCKED_CLOUD_RUNTIME_NOT_CONFIGURED", index=True
+    )
     guard: Mapped[dict] = mapped_column(JSON, default=dict)
     checklist: Mapped[dict] = mapped_column(JSON, default=dict)
     would_deploy: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -458,7 +477,9 @@ class TerraformPlanReview(Base):
     __tablename__ = "terraform_plan_reviews"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
-    revision_id: Mapped[str] = mapped_column(ForeignKey("infrastructure_plan_revisions.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     terraform_render_id: Mapped[str | None] = mapped_column(
         ForeignKey("terraform_plan_renders.id"), nullable=True, index=True
@@ -527,6 +548,7 @@ class CloudExecutionModuleInstance(Base):
     __table_args__ = (
         UniqueConstraint("execution_run_id", "instance_id", name="uq_execution_module_instance"),
         UniqueConstraint("idempotency_key", name="uq_execution_module_idempotency_key"),
+        Index("uq_cloud_execution_module_runner_build_id", "runner_build_id", unique=True),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
@@ -539,6 +561,7 @@ class CloudExecutionModuleInstance(Base):
     module_id: Mapped[str] = mapped_column(String(100), index=True)
     state: Mapped[str] = mapped_column(String(40), default="NOT_DISPATCHED", index=True)
     operation: Mapped[str] = mapped_column(String(32))
+    runner_build_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attempt: Mapped[int] = mapped_column(default=0)
     input_digest: Mapped[str] = mapped_column(String(64), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(200))

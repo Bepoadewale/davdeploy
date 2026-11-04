@@ -4,6 +4,7 @@ import pytest
 from davdeploy import db
 from davdeploy.models import Base
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 
 def test_hosted_mode_rejects_sqlite_database_url(monkeypatch):
@@ -27,7 +28,9 @@ def test_local_mode_keeps_sqlite_available(monkeypatch):
 
 def test_database_url_uses_data_api_without_retrieving_database_password(monkeypatch):
     monkeypatch.setenv("DAVDEPLOY_AURORA_CLUSTER_ARN", "arn:aws:rds:us-east-1:123:cluster:db")
-    monkeypatch.setenv("DAVDEPLOY_DATABASE_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123:secret:db")
+    monkeypatch.setenv(
+        "DAVDEPLOY_DATABASE_SECRET_ARN", "arn:aws:secretsmanager:us-east-1:123:secret:db"
+    )
     monkeypatch.setenv("DAVDEPLOY_DATABASE_NAME", "davdeploy")
 
     assert db.database_url() == "postgresql+auroradataapi://:@/davdeploy"
@@ -50,7 +53,18 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
 
     assert inspect(engine).has_table("cloud_execution_module_instances")
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 24
+        assert (
+            connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+            == 25
+        )
+    columns = {
+        column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
+    }
+    assert "runner_build_id" in columns
+    indexes = {
+        index["name"] for index in inspect(engine).get_indexes("cloud_execution_module_instances")
+    }
+    assert "uq_cloud_execution_module_runner_build_id" in indexes
     engine.dispose()
 
 
@@ -59,9 +73,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
         connection.execute(text("INSERT INTO schema_migrations(version) VALUES (23)"))
-        connection.execute(
-            text("CREATE TABLE cloud_execution_runs (id VARCHAR(36) PRIMARY KEY)")
-        )
+        connection.execute(text("CREATE TABLE cloud_execution_runs (id VARCHAR(36) PRIMARY KEY)"))
 
     db.run_migrations(engine)
     db.run_migrations(engine)
@@ -75,5 +87,52 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     indexes = {index["name"] for index in inspect(engine).get_indexes("cloud_execution_runs")}
     assert "ix_cloud_execution_runs_worker_lease_expires_at" in indexes
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 24
+        assert (
+            connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+            == 25
+        )
+    engine.dispose()
+
+
+def test_module_runner_build_identity_migration_upgrades_version_24_idempotently():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (24)"))
+        connection.execute(
+            text(
+                "CREATE TABLE cloud_execution_module_instances ("
+                "id VARCHAR(36) PRIMARY KEY, runner_state VARCHAR(40))"
+            )
+        )
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    columns = {
+        column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
+    }
+    assert {"id", "runner_state", "runner_build_id"} <= columns
+    indexes = {
+        index["name"] for index in inspect(engine).get_indexes("cloud_execution_module_instances")
+    }
+    assert "uq_cloud_execution_module_runner_build_id" in indexes
+    with engine.connect() as connection:
+        assert (
+            connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+            == 25
+        )
+        connection.execute(
+            text(
+                "INSERT INTO cloud_execution_module_instances(id, runner_build_id) "
+                "VALUES ('first', 'project:build-1'), ('second', 'project:build-2')"
+            )
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text(
+                    "INSERT INTO cloud_execution_module_instances(id, runner_build_id) "
+                    "VALUES ('third', 'project:build-1')"
+                )
+            )
     engine.dispose()
