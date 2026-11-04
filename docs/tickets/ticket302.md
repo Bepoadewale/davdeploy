@@ -36,11 +36,11 @@ PR #301 merged as `5b067b0`, adding the gated DynamoDB renderer. The typed port 
 - [x] Existing S3-to-Lambda binding behavior remains valid.
 - [x] Ordinary hosted execution remains disabled.
 - [x] Ticket and test evidence distinguish local/CI proof from AWS certification.
-- [ ] Required focused validation and PR CI pass; clean-room cycle is completed because Terraform execution contracts change.
+- [x] Required focused validation and PR CI pass; clean-room cycle is completed because Terraform execution contracts change.
 
 ## Acceptance status
 
-- Implementation commit: pending.
+- Implementation commit: `18d33e9`.
 
 - `.venv/bin/pytest tests/test_serverless_renderer_contract.py tests/test_cloud_execution.py tests/test_module_ports.py -q` — 85 passed.
 - `make verify` — 506 passed; OpenAPI snapshot and Compose configuration passed; one existing Starlette/httpx deprecation warning.
@@ -50,8 +50,7 @@ PR #301 merged as `5b067b0`, adding the gated DynamoDB renderer. The typed port 
 - Clean-room cycle at `18d33e9` — bootstrap, smoke, API contract, customer-plan E2E, seed, simple/complex/Day-2/degraded/failure/readiness-failure demos, trace check and `make verify` passed; 506 tests passed.
 - Clean-room teardown removed only its project containers and network; no project containers or named volumes remain.
 - `GITHUB_PR_NUMBER=302 .venv/bin/python scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- PR CI: pending.
-- PR CI: pending.
+- PR CI run `41779922484` — all seven required checks passed on the preceding committed revision; the final evidence update is revalidated by current PR checks.
 
 ## Tests / validation performed
 

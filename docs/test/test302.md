@@ -9,12 +9,10 @@ AWS region: Not applicable.
 
 ## Resources created
 
-- No AWS resources.
 - Detached clean-room worktree at `/tmp/davdeploy-cleanroom-pr302-20261104`.
 - Dedicated virtual environment at `/tmp/davdeploy-pr302-venv`.
 - Project-scoped Docker containers and network named `davdeploy-pr302-cleanroom`; PostgreSQL used `tmpfs`, no named volume.
 - Temporary Compose file `/tmp/davdeploy-cleanroom-pr302-20261104/docker-compose.cleanroom.yml` with PostgreSQL data mounted to `tmpfs`.
-- No AWS resources.
 
 ## Commands executed
 
@@ -34,7 +32,7 @@ AWS region: Not applicable.
 
   Bootstrap and each target passed. The full suite passed 506 tests; OpenAPI and Compose configuration checks passed. An initial disposable Compose override was rejected during config validation before creating resources; the corrected worktree-local Compose file used PostgreSQL `tmpfs` and passed.
 - `GITHUB_PR_NUMBER=302 .venv/bin/python scripts/check_doc_conventions.py` — passed.
-- Pull-request CI: pending.
+- Pull-request CI run [41779922484](https://github.com/Bepoadewale/davdeploy/actions/runs/41779922484) — all seven required checks passed on the preceding committed revision; this evidence update triggers another run.
 
 ## Observed result
 
