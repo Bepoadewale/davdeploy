@@ -3,7 +3,7 @@
 Date: 2026-11-05
 Execution type: local HTTP/API test fixture only
 Customer repository: Not applicable; no customer workload was deployed.
-Commit: Regression test implementation commit is recorded in PR #327.
+Commit: `21bb6a4` (test and initial evidence).
 AWS account: Not applicable; no AWS calls were made.
 AWS region: Not applicable; no AWS calls were made.
 
