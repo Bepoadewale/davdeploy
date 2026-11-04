@@ -25,6 +25,7 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 - Define an explicit checked-in mapping from raw renderer output names/shapes to typed module output ports.
 - Validate and persist typed outputs on the exact module instance associated with a successful CodeBuild result.
 - Preserve legacy run-level output shape for compatibility and never persist secret contents.
+- Make the dispatcher accept the exact typed work shape emitted by the Python adapter while rejecting unresolved dependencies and inline values.
 - Add focused tests and update execution-status documentation.
 
 ## Acceptance criteria
@@ -35,8 +36,9 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 - [x] Sensitive Terraform outputs and rejected artifacts are not persisted.
 - [x] Legacy runs retain their existing run-level artifact behavior.
 - [x] Multi-module CodeBuild remains fail-closed.
+- [x] The dispatcher accepts the adapter's `instance_id` and `input_bindings` fields but still rejects unresolved bindings and arbitrary fields.
 - [x] PR-numbered ticket and status documentation are accurate.
-- [x] Full isolated clean-room cycle passes.
+- [ ] Full isolated clean-room cycle passes on the final implementation commit.
 - [ ] GitHub CI passes.
 
 ## Acceptance status
@@ -44,17 +46,20 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 Implemented locally. Only the checked-in Lambda/API renderer has a raw-output
 mapping. Successful CodeBuild reconciliation validates those values and stores
 them on the callback's exact module instance. Sensitive, unknown, or malformed
-outputs fail the run and are omitted from persisted artifacts. Multi-module
+outputs fail the run and are omitted from persisted artifacts. The CodeBuild
+dispatcher accepts the typed instance/reference fields emitted by the adapter
+while still rejecting unresolved dependencies and inline values. Multi-module
 execution remains disabled.
 
 ## Tests / validation performed
 
-Focused tests: `uv run pytest -q tests/test_module_ports.py tests/test_cloud_execution.py`
-passed (66 passed, one existing Starlette deprecation warning). Full
-`make verify` passed (478 tests passed; one existing warning). Ruff, the PR
-documentation convention check, OpenAPI snapshot, and Compose configuration
-passed. The isolated clean-room cycle also passed; see `docs/test/test297.md`.
-GitHub CI is pending.
+Focused dispatcher and execution tests passed (56 passed, one existing
+Starlette deprecation warning). Full `make verify` passed (479 tests passed; one
+existing warning). Ruff, the PR documentation convention check, OpenAPI
+snapshot, Compose configuration, and `git diff --check` passed. The earlier
+clean-room cycle covered the typed-output implementation before the final
+dispatcher schema alignment; rerunning it on the final implementation commit
+is still pending. GitHub CI is pending.
 
 ## Evidence files produced
 

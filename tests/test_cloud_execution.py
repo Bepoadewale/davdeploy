@@ -59,6 +59,15 @@ def test_runner_work_validation_preserves_instance_identity_and_module_type():
     ]
     accepted = validate_lifecycle_work(work)
 
+    assert set(accepted[0]) == {
+        "module_id",
+        "instance_id",
+        "operation",
+        "dependencies",
+        "input_bindings",
+        "resource_tags",
+        "renderer",
+    }
     assert [(item["module_id"], item["instance_id"]) for item in accepted] == [
         ("aws-managed-application", "primary-app"),
         ("aws-managed-application", "admin-app"),

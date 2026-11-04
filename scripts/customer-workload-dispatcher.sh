@@ -8,10 +8,18 @@ require DAVDEPLOY_EXECUTION_OPERATION
 if ! jq -e '
   type == "array" and length == 1 and
   (.[0] | type == "object" and
-    (keys | sort == ["dependencies", "module_id", "operation", "renderer", "resource_tags"]) and
+    ((keys | sort) == ["dependencies", "input_bindings", "instance_id", "module_id", "operation", "renderer", "resource_tags"] or
+      (keys | sort) == ["dependencies", "module_id", "operation", "renderer", "resource_tags"]) and
     (.module_id | type == "string") and
+    ((.instance_id // .module_id) | type == "string" and length > 0) and
     (.operation | type == "string") and
     (.dependencies | type == "array" and all(.[]; type == "string")) and
+    ((.input_bindings // []) | type == "array" and all(.[];
+      type == "object" and
+      (keys | sort == ["input_name", "source_instance_id", "source_output"]) and
+      (.input_name | type == "string" and length > 0) and
+      (.source_instance_id | type == "string" and length > 0) and
+      (.source_output | type == "string" and length > 0))) and
     (.resource_tags | type == "object" and all(.[]; type == "string")) and
     (.renderer | type == "object" and
       (keys | sort == ["runner_script", "terraform_root"]) and
@@ -62,8 +70,9 @@ case "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
     ;;
 esac
 
-if [[ "$(jq '.[0].dependencies | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 ]]; then
-  echo "This renderer accepts no unresolved module dependencies" >&2
+if [[ "$(jq '.[0].dependencies | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 || \
+  "$(jq '.[0].input_bindings // [] | length' <<<"$DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON")" -ne 0 ]]; then
+  echo "This renderer accepts no unresolved module dependencies or input bindings" >&2
   exit 2
 fi
 
