@@ -105,7 +105,11 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
 from davdeploy.terraform_generation import NovaTerraformGenerator
-from davdeploy.universal_execution import compile_universal_execution_plan, lifecycle_work
+from davdeploy.universal_execution import (
+    compile_universal_execution_plan,
+    lifecycle_work,
+    next_dispatchable_work_item,
+)
 
 BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
 CLOUD_EXECUTION_WORKER_LEASE_SECONDS = 900
@@ -4896,7 +4900,21 @@ class ProductService:
         if confirmation != expected_confirmation:
             raise ValueError("explicit confirmation for this cloud execution run is required")
         run.state = "QUEUED"
-        self._advance_cloud_execution_module_instances(run, "QUEUED")
+        work = (run.command or {}).get("universal_lifecycle_work")
+        if run.module_instances and isinstance(work, list):
+            next_item = next_dispatchable_work_item(
+                work, {item.instance_id: item.state for item in run.module_instances}
+            )
+            if next_item is None:
+                raise ValueError("cloud execution graph has no dependency-ready module")
+            self._advance_cloud_execution_module_instances(
+                run,
+                module_outcomes={
+                    str(next_item["instance_id"]): ModuleLifecycleOutcome(state="QUEUED")
+                },
+            )
+        else:
+            self._advance_cloud_execution_module_instances(run, "QUEUED")
         run.evidence = {
             **(run.evidence or {}),
             "queued_by_subject": principal.subject,
@@ -4927,7 +4945,46 @@ class ProductService:
         if claim is None:
             return False
         run, lease_token = claim
-        self._advance_cloud_execution_module_instances(run, "RUNNING")
+        work = (run.command or {}).get("universal_lifecycle_work")
+        selected_instance_id: str | None = None
+        if run.module_instances and isinstance(work, list):
+            selected = next_dispatchable_work_item(
+                work, {item.instance_id: item.state for item in run.module_instances}
+            )
+            if selected is None:
+                self._mark_cloud_execution_reconciliation_required(
+                    run.id, lease_token, "no dependency-ready module remained for a queued run"
+                )
+                return True
+            selected_instance_id = str(selected["instance_id"])
+            if selected["input_bindings"]:
+                run.state = "BLOCKED_MODULE_INPUTS_UNSUPPORTED"
+                run.worker_lease_token = None
+                run.worker_lease_expires_at = None
+                run.evidence = {
+                    **(run.evidence or {}),
+                    "blocked_module_instance_id": selected_instance_id,
+                    "failure_reason": "typed dependency inputs are not yet supported by this renderer",
+                }
+                self.audit(
+                    Principal("system-cloud-worker", run.organization_id, "operator"),
+                    "cloud_execution.module_inputs_blocked",
+                    "cloud_execution_run",
+                    run.id,
+                    {"module_instance_id": selected_instance_id},
+                )
+                self.db.commit()
+                return True
+            self._advance_cloud_execution_module_instances(
+                run,
+                module_outcomes={selected_instance_id: ModuleLifecycleOutcome(state="RUNNING")},
+            )
+            run.evidence = {
+                **(run.evidence or {}),
+                "active_module_instance_id": selected_instance_id,
+            }
+        else:
+            self._advance_cloud_execution_module_instances(run, "RUNNING")
         self.db.commit()
         context = {
             "run_id": run.id,
@@ -4936,6 +4993,7 @@ class ProductService:
             "digest": run.content_digest,
             "environment": (run.evidence or {}).get("execution_environment", {}),
             "lifecycle_work": (run.command or {}).get("universal_lifecycle_work"),
+            "dispatch_instance_id": selected_instance_id,
         }
         heartbeat_stop = threading.Event()
         heartbeat = threading.Thread(
@@ -5086,7 +5144,20 @@ class ProductService:
                     "automatic_replay": False,
                 },
             }
-            self._advance_cloud_execution_module_instances(run, "RECONCILIATION_REQUIRED")
+            active_instance_id = (run.evidence or {}).get("active_module_instance_id")
+            if active_instance_id and any(
+                item.instance_id == active_instance_id for item in run.module_instances
+            ):
+                self._advance_cloud_execution_module_instances(
+                    run,
+                    module_outcomes={
+                        str(active_instance_id): ModuleLifecycleOutcome(
+                            state="RECONCILIATION_REQUIRED"
+                        )
+                    },
+                )
+            else:
+                self._advance_cloud_execution_module_instances(run, "RECONCILIATION_REQUIRED")
             self.audit(
                 Principal("system-cloud-worker", run.organization_id, "operator"),
                 "cloud_execution.lease_expired_reconciliation_required",
@@ -5123,7 +5194,18 @@ class ProductService:
                 "automatic_replay": False,
             },
         }
-        self._advance_cloud_execution_module_instances(run, "RECONCILIATION_REQUIRED")
+        active_instance_id = (run.evidence or {}).get("active_module_instance_id")
+        if active_instance_id and any(
+            item.instance_id == active_instance_id for item in run.module_instances
+        ):
+            self._advance_cloud_execution_module_instances(
+                run,
+                module_outcomes={
+                    str(active_instance_id): ModuleLifecycleOutcome(state="RECONCILIATION_REQUIRED")
+                },
+            )
+        else:
+            self._advance_cloud_execution_module_instances(run, "RECONCILIATION_REQUIRED")
         self.audit(
             Principal("system-cloud-worker", run.organization_id, "operator"),
             "cloud_execution.adapter_outcome_uncertain",
@@ -5164,6 +5246,13 @@ class ProductService:
             return False
         raw_build_id = (result.outputs or {}).get("codebuild_build_id")
         raw_build_arn = (result.outputs or {}).get("codebuild_build_arn")
+        active_instance_id = (run.evidence or {}).get("active_module_instance_id")
+        target_instance = next(
+            (item for item in run.module_instances if item.instance_id == active_instance_id),
+            None,
+        )
+        if target_instance is None and len(run.module_instances) == 1:
+            target_instance = run.module_instances[0]
         if raw_build_id is not None:
             build_id = str(raw_build_id).rsplit("/", 1)[-1]
             if (
@@ -5176,26 +5265,35 @@ class ProductService:
             if raw_build_arn is not None and str(raw_build_arn).rsplit("/", 1)[-1] != build_id:
                 self.db.rollback()
                 return False
-            if len(run.module_instances) > 1:
-                # The current CodeBuild adapter is a single-module runner. Keep
-                # its callback identity unambiguous until the durable scheduler
-                # explicitly claims nodes one at a time.
+            if len(run.module_instances) > 1 and target_instance is None:
                 self.db.rollback()
                 return False
-            if run.module_instances:
-                module_instance = run.module_instances[0]
-                if module_instance.runner_build_id not in {None, build_id}:
+            if target_instance is not None:
+                if target_instance.runner_build_id not in {None, build_id}:
                     self.db.rollback()
                     return False
-                module_instance.runner_build_id = build_id
-                module_instance.evidence = {
-                    **(module_instance.evidence or {}),
+                target_instance.runner_build_id = build_id
+                target_instance.evidence = {
+                    **(target_instance.evidence or {}),
                     "runner_build_id": build_id,
                 }
         run.state = result.state
         run.worker_lease_token = None
         run.worker_lease_expires_at = None
-        self._advance_cloud_execution_module_instances(run, result.state)
+        if target_instance is not None:
+            self._advance_cloud_execution_module_instances(
+                run,
+                module_outcomes={
+                    target_instance.instance_id: ModuleLifecycleOutcome(state=result.state)
+                },
+            )
+        elif run.module_instances:
+            # Older single-renderer rows may not have stored an active instance
+            # identity. Preserve compatibility only when the target is unique.
+            if len(run.module_instances) != 1:
+                self.db.rollback()
+                return False
+            self._advance_cloud_execution_module_instances(run, result.state)
         run.outputs = {
             **(run.outputs or {}),
             **result.outputs,
@@ -5361,6 +5459,39 @@ class ProductService:
             item.evidence = evidence
             if outcome.outputs is not None:
                 item.outputs = dict(outcome.outputs)
+
+    def _schedule_next_cloud_execution_module(self, run: CloudExecutionRun) -> str | None:
+        """Queue one dependency-ready instance, or fail closed on unresolved inputs."""
+        work = (run.command or {}).get("universal_lifecycle_work")
+        if not isinstance(work, list) or len(run.module_instances) <= 1:
+            return None
+        next_item = next_dispatchable_work_item(
+            work, {item.instance_id: item.state for item in run.module_instances}
+        )
+        if next_item is None:
+            return None
+        instance_id = str(next_item["instance_id"])
+        if next_item["input_bindings"]:
+            run.state = "BLOCKED_MODULE_INPUTS_UNSUPPORTED"
+            run.outputs = {
+                **(run.outputs or {}),
+                "failure_reason": "typed dependency inputs are not yet supported by this renderer",
+            }
+            run.evidence = {
+                **(run.evidence or {}),
+                "blocked_module_instance_id": instance_id,
+            }
+            return "blocked"
+        self._advance_cloud_execution_module_instances(
+            run,
+            module_outcomes={instance_id: ModuleLifecycleOutcome(state="QUEUED")},
+        )
+        run.state = "QUEUED"
+        run.evidence = {
+            **(run.evidence or {}),
+            "next_module_instance_id": instance_id,
+        }
+        return "queued"
 
     def reconcile_cloud_execution_build(self, build_id: str) -> bool:
         """Persist one CodeBuild completion received through the SQS event bridge."""
@@ -5672,6 +5803,7 @@ class ProductService:
         # A missing result object is the one replayable CodeBuild case. Keep
         # the graph node submitted until the exact same completed build can be
         # reconciled; do not make the provisional read failure terminal.
+        should_wake_worker = False
         if artifact_error != "runner result artifact URI is missing":
             target_instance = linked_instance
             if (
@@ -5687,8 +5819,14 @@ class ProductService:
                 # have only the old run-level build identity.
                 self._advance_cloud_execution_module_instances(run, run.state)
             else:
+                module_state = run.state
+                if status == "SUCCEEDED" and artifact_error is None:
+                    if run.mode == "AUTHENTICATED_TERRAFORM_PLAN":
+                        module_state = "PLAN_READY_FOR_REVIEW"
+                    elif run.mode == "AUTHENTICATED_TERRAFORM_DESTROY_PLAN":
+                        module_state = "DESTROY_PLAN_READY_FOR_REVIEW"
                 outcome = ModuleLifecycleOutcome(
-                    state=run.state,
+                    state=module_state,
                     evidence={
                         "runner_build_id": normalized_build_id,
                         "runner_build_status": status,
@@ -5699,6 +5837,8 @@ class ProductService:
                     run,
                     module_outcomes={target_instance.instance_id: outcome},
                 )
+                if status == "SUCCEEDED" and artifact_error is None:
+                    should_wake_worker = self._schedule_next_cloud_execution_module(run) == "queued"
         self.audit(
             Principal("system-cloud-worker", run.organization_id, "operator"),
             "cloud_execution.codebuild_completed",
@@ -5707,6 +5847,8 @@ class ProductService:
             {"build_id": build_id, "status": status},
         )
         self.db.commit()
+        if should_wake_worker:
+            self._wake_worker("cloud_execution", run.id)
         return True
 
     def reconcile_cloud_execution_run_result(

@@ -9,6 +9,7 @@ from davdeploy.universal_execution import (
     compile_universal_execution_plan,
     lifecycle_evidence_complete,
     lifecycle_work,
+    next_dispatchable_work_item,
     ordered_modules,
     validate_lifecycle_work_graph,
     verify_cleanup,
@@ -36,17 +37,36 @@ def module(
 
 def test_compiled_plan_has_full_lifecycle_and_customer_scope_tags():
     digest = sha256(b"approved").hexdigest()
-    plan = compile_universal_execution_plan([module("api"), module("worker", ["api"])], workspace_id="workspace-1", project_id="project-1", plan_digest=digest)
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"])],
+        workspace_id="workspace-1",
+        project_id="project-1",
+        plan_digest=digest,
+    )
     assert plan.modules[1].dependencies == ("api",)
-    assert plan.modules[0].operations == ("plan", "apply", "observe", "rollback", "destroy", "verify_cleanup")
+    assert plan.modules[0].operations == (
+        "plan",
+        "apply",
+        "observe",
+        "rollback",
+        "destroy",
+        "verify_cleanup",
+    )
     assert ("DavDeployPlan", digest) in plan.modules[0].resource_tags
-    assert verify_cleanup(tuple(LifecycleEvidence(item.module_id, "verify_cleanup", "ABSENT") for item in plan.modules), plan)
+    assert verify_cleanup(
+        tuple(
+            LifecycleEvidence(item.module_id, "verify_cleanup", "ABSENT") for item in plan.modules
+        ),
+        plan,
+    )
 
 
 def test_compiler_rejects_unknown_dependencies():
     digest = sha256(b"approved").hexdigest()
     try:
-        compile_universal_execution_plan([module("api", ["missing"])], workspace_id="w", project_id="p", plan_digest=digest)
+        compile_universal_execution_plan(
+            [module("api", ["missing"])], workspace_id="w", project_id="p", plan_digest=digest
+        )
     except ValueError as error:
         assert "unknown module" in str(error)
     else:
@@ -101,13 +121,82 @@ def test_lifecycle_work_is_stable_and_reverses_for_cleanup():
         project_id="p",
         plan_digest=digest,
     )
-    assert [item.module_id for item in ordered_modules(plan, "apply")] == ["api", "uploads", "worker"]
-    assert [item.module_id for item in ordered_modules(plan, "destroy")] == ["worker", "uploads", "api"]
-    assert [item["module_id"] for item in lifecycle_work(plan, "apply")] == ["api", "uploads", "worker"]
+    assert [item.module_id for item in ordered_modules(plan, "apply")] == [
+        "api",
+        "uploads",
+        "worker",
+    ]
+    assert [item.module_id for item in ordered_modules(plan, "destroy")] == [
+        "worker",
+        "uploads",
+        "api",
+    ]
+    assert [item["module_id"] for item in lifecycle_work(plan, "apply")] == [
+        "api",
+        "uploads",
+        "worker",
+    ]
     assert lifecycle_evidence_complete(
         plan,
         "apply",
         tuple(LifecycleEvidence(item.module_id, "apply", "SUCCEEDED") for item in plan.modules),
+    )
+
+
+def test_next_dispatchable_work_waits_for_dependencies_and_reverses_cleanup():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"]), module("monitor", ["api"])],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    apply_work = list(lifecycle_work(plan, "apply"))
+    assert next_dispatchable_work_item(apply_work, {})["instance_id"] == "api"
+    assert next_dispatchable_work_item(apply_work, {"api": "FAILED"}) is None
+    assert (
+        next_dispatchable_work_item(apply_work, {"api": "SUCCEEDED_AWAITING_OBSERVATION"})[
+            "instance_id"
+        ]
+        == "monitor"
+    )
+    assert (
+        next_dispatchable_work_item(
+            apply_work,
+            {
+                "api": "SUCCEEDED_AWAITING_OBSERVATION",
+                "monitor": "SUCCEEDED_AWAITING_OBSERVATION",
+            },
+        )["instance_id"]
+        == "worker"
+    )
+    assert (
+        next_dispatchable_work_item(
+            apply_work,
+            {
+                "api": "SUCCEEDED_AWAITING_OBSERVATION",
+                "monitor": "SUCCEEDED_AWAITING_OBSERVATION",
+                "worker": "FAILED",
+            },
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="state map does not match"):
+        next_dispatchable_work_item(apply_work, {"unknown": "HEALTHY"})
+
+    destroy_work = list(lifecycle_work(plan, "destroy"))
+    assert [item["instance_id"] for item in destroy_work] == ["worker", "monitor", "api"]
+    assert next_dispatchable_work_item(destroy_work, {})["instance_id"] == "worker"
+    assert (
+        next_dispatchable_work_item(destroy_work, {"worker": "DESTROYED_VERIFIED"})["instance_id"]
+        == "monitor"
+    )
+    assert (
+        next_dispatchable_work_item(
+            destroy_work,
+            {"worker": "DESTROYED_VERIFIED", "monitor": "DESTROYED_VERIFIED"},
+        )["instance_id"]
+        == "api"
     )
 
 
@@ -262,9 +351,27 @@ def test_typed_bindings_connect_declared_outputs_without_carrying_values():
     [
         ("work_queue_url", "aws-file-storage", "bucket_name", ["uploads"], "type does not match"),
         ("missing_input", "aws-file-storage", "bucket_name", ["uploads"], "no declared input"),
-        ("uploads_bucket_name", "aws-file-storage", "missing_output", ["uploads"], "no declared output"),
-        ("uploads_bucket_name", "aws-file-storage", "bucket_name", [], "must be declared as a dependency"),
-        ("api_secret_reference", "aws-file-storage", "bucket_arn", ["uploads"], "type does not match"),
+        (
+            "uploads_bucket_name",
+            "aws-file-storage",
+            "missing_output",
+            ["uploads"],
+            "no declared output",
+        ),
+        (
+            "uploads_bucket_name",
+            "aws-file-storage",
+            "bucket_name",
+            [],
+            "must be declared as a dependency",
+        ),
+        (
+            "api_secret_reference",
+            "aws-file-storage",
+            "bucket_arn",
+            ["uploads"],
+            "type does not match",
+        ),
     ],
 )
 def test_typed_binding_rejects_unknown_mismatched_or_undeclared_ports(
@@ -331,7 +438,12 @@ def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order
         {"module_id": "worker", "operation": "apply", "dependencies": ["api"], "resource_tags": {}},
     ]
     reverse = [
-        {"module_id": "worker", "operation": "destroy", "dependencies": ["api"], "resource_tags": {}},
+        {
+            "module_id": "worker",
+            "operation": "destroy",
+            "dependencies": ["api"],
+            "resource_tags": {},
+        },
         {"module_id": "api", "operation": "destroy", "dependencies": [], "resource_tags": {}},
     ]
     assert [item["module_id"] for item in validate_lifecycle_work_graph(forward)] == [
@@ -369,9 +481,7 @@ def test_serialized_graph_requires_bindings_to_reference_declared_dependencies_o
             "resource_tags": {},
         },
     ]
-    assert validate_lifecycle_work_graph(valid)[1]["input_bindings"] == valid[1][
-        "input_bindings"
-    ]
+    assert validate_lifecycle_work_graph(valid)[1]["input_bindings"] == valid[1]["input_bindings"]
 
     no_dependency = [dict(item) for item in valid]
     no_dependency[1] = {**valid[1], "dependencies": []}
@@ -404,34 +514,71 @@ def test_serialized_graph_requires_bindings_to_reference_declared_dependencies_o
             "duplicate instance",
         ),
         (
-            [{"module_id": "api", "operation": "apply", "dependencies": ["missing"], "resource_tags": {}}],
+            [
+                {
+                    "module_id": "api",
+                    "operation": "apply",
+                    "dependencies": ["missing"],
+                    "resource_tags": {},
+                }
+            ],
             "missing modules",
         ),
         (
             [
-                {"module_id": "api", "operation": "apply", "dependencies": ["worker"], "resource_tags": {}},
-                {"module_id": "worker", "operation": "apply", "dependencies": ["api"], "resource_tags": {}},
+                {
+                    "module_id": "api",
+                    "operation": "apply",
+                    "dependencies": ["worker"],
+                    "resource_tags": {},
+                },
+                {
+                    "module_id": "worker",
+                    "operation": "apply",
+                    "dependencies": ["api"],
+                    "resource_tags": {},
+                },
             ],
             "cycle",
         ),
         (
             [
-                {"module_id": "worker", "operation": "apply", "dependencies": ["api"], "resource_tags": {}},
+                {
+                    "module_id": "worker",
+                    "operation": "apply",
+                    "dependencies": ["api"],
+                    "resource_tags": {},
+                },
                 {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
             ],
             "not dependency-ordered",
         ),
         (
             [
-                {"module_id": "api", "operation": "destroy", "dependencies": [], "resource_tags": {}},
-                {"module_id": "worker", "operation": "destroy", "dependencies": ["api"], "resource_tags": {}},
+                {
+                    "module_id": "api",
+                    "operation": "destroy",
+                    "dependencies": [],
+                    "resource_tags": {},
+                },
+                {
+                    "module_id": "worker",
+                    "operation": "destroy",
+                    "dependencies": ["api"],
+                    "resource_tags": {},
+                },
             ],
             "not dependency-ordered",
         ),
         (
             [
                 {"module_id": "api", "operation": "apply", "dependencies": [], "resource_tags": {}},
-                {"module_id": "worker", "operation": "observe", "dependencies": ["api"], "resource_tags": {}},
+                {
+                    "module_id": "worker",
+                    "operation": "observe",
+                    "dependencies": ["api"],
+                    "resource_tags": {},
+                },
             ],
             "one operation",
         ),
@@ -526,7 +673,10 @@ def test_cleanup_dispatch_wave_removes_dependents_before_dependencies():
     ("states", "message"),
     [
         ({"api": "NOT_DISPATCHED"}, "do not match"),
-        ({"api": "NOT_DISPATCHED", "worker": "NOT_DISPATCHED", "extra": "NOT_DISPATCHED"}, "do not match"),
+        (
+            {"api": "NOT_DISPATCHED", "worker": "NOT_DISPATCHED", "extra": "NOT_DISPATCHED"},
+            "do not match",
+        ),
         ({"api": "NOT_DISPATCHED", "worker": "UNKNOWN"}, "unknown lifecycle state"),
     ],
 )

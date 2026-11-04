@@ -39,14 +39,15 @@ Allowed status values: `not started`, `in progress`, `implemented`,
 - PR #280 adds versioned worker leases and refuses to replay an uncertain
   operation. It is merged, CI-verified, and deployed.
 - The Lambda/API renderer is still disabled for general hosted customer execution. PR #284's certification route remains off by default with an empty workspace allowlist. Code and disabled configuration are deployed; there is no hosted AWS workload lifecycle evidence yet.
-- App Runner remains the single hosted renderer.
+- App Runner remains the only renderer enabled for customer execution.
 - PR #293 adds distinct module-type and instance identities. PR #294 adds typed,
   reference-only ports; PR #295 validates typed outputs and resolves declared
   references in library code; and PR #296 persists an exact per-module CodeBuild
-  identity and reconciles a callback to that node. PR #297 is adding
-  renderer-specific output normalization and persistence. The
-  scheduler still does not claim per-module rows or start dependency waves, and
-  multi-module CodeBuild requests remain fail-closed.
+  identity and reconciles a callback to that node. PR #297 merged renderer
+  output validation and persistence. PR #298 is wiring durable, one-node-at-a-time
+  dependency scheduling into worker claims and callbacks. Resolved input bindings,
+  repeated/shared Terraform state roots, hosted enablement, and composed AWS
+  workload certification remain incomplete and fail closed.
 - Individual service-level AWS tests do not establish a hosted composed
   customer journey.
 - The live API endpoint returning 401 without its required origin and user
