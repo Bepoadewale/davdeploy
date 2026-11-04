@@ -63,9 +63,9 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current hosted execution status — 2026-11-03
+# Current hosted execution status — 2026-11-04
 
-The control plane remains active. The latest protected Terraform apply is run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958) for commit `2e39e4a45fee9bd69b5827a48431c052e5f772e2`. Its reviewed plan updated six Lambda packages in place with zero creates and zero destroys. Migration verification passed and `https://api.davdeploy.tech/healthz` returned HTTP 200. The serverless certification controls introduced in PRs #283–#285 are deployed but remain disabled: `DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION=false`, with an empty workspace allowlist. No customer workload was created by this release.
+The control plane remains active. The latest protected Terraform apply is run [41781326222](https://github.com/Bepoadewale/davdeploy/actions/runs/41781326222) for PR #302 commit `7d087d06aa97df4596e97b4eef7871c70c8a9cc8`. Its reviewed plan updated six Lambda packages in place with zero creates and zero destroys. Migration verification passed and `https://api.davdeploy.tech/healthz` returned `{"status":"ok","product":"davdeploy"}`. PR #303 (`ea9de3a8211b37518205300f8cfd5384c5814f20`) merged after that apply; it fixes the CodeBuild dispatcher allowlist for the typed DynamoDB `table_name` input. Its seven required checks passed in [run 41782907889](https://github.com/Bepoadewale/davdeploy/actions/runs/41782907889), but that source change is not yet deployed. No customer workload was created by the latest release.
 
 PR #283 binds renderer dispatch to persisted certification mode. PR #284 adds a typed single-module Lambda/API lifecycle, chained to exact approved runs and pinned artifact/saved-plan digests. PR #285 wires a protected workspace allowlist into Terraform. The Lambda/API route is not yet AWS-certified through the hosted control plane. App Runner remains the only generally enabled hosted renderer, and multi-module CodeBuild work remains rejected.
 
@@ -73,5 +73,11 @@ PRs #277, #278 and #280 add durable per-module run rows, outcome persistence,
 worker leases and reconciliation-required state after uncertain outcomes.
 These are deployed. They do not yet provide a dependency-aware graph scheduler,
 partial-failure recovery or multi-module cleanup proof.
+
+PRs #289–#303 add further graph, scheduler, output-binding and gated renderer
+code. The PR #302 package is deployed; PR #303 only corrects dispatcher source
+and still needs a separately reviewed Terraform deployment. These changes do
+not yet establish hosted composition, restart/resume, partial-failure recovery,
+or independent cleanup verification.
 
 The older dated sections below describe implementation and validation at their stated time. Read them as historical evidence, not as the current deployment state.
