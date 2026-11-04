@@ -1,6 +1,6 @@
 # ticket319 — Map Nova capabilities to execution evidence
 
-PR: #319 (draft)
+PR: #319 https://github.com/Bepoadewale/davdeploy/pull/319
 Branch: `docs/nova-capability-evidence-319`
 Base at start: `3fe7d07` (`docs: reconcile Nova execution status (#316)`)
 
@@ -65,9 +65,9 @@ catalogue entry or isolated AWS service test is a hosted customer capability.
 
 ## Acceptance status
 
-Draft. The matrix and its source-to-document checks are implemented locally.
-Source-to-document comparison, documentation convention checks, and whitespace
-checks passed. PR review and required CI remain pending.
+The matrix content and local validation are complete. GitHub is the source of
+truth for pull-request checks, review, and merge state. This ticket records no
+deployment or runtime behavior.
 
 ## Tests / validation performed
 
