@@ -36,7 +36,7 @@ AWS region: Not applicable.
   ```
 
   Bootstrap and every listed target passed, including 505 tests. The overlay made PostgreSQL storage ephemeral `tmpfs`; teardown removed only this named Compose project's containers and network.
-- Pull-request CI — pending.
+- Pull-request CI run [41776876739](https://github.com/Bepoadewale/davdeploy/actions/runs/41776876739) — all seven required checks passed.
 
 ## Observed result
 
