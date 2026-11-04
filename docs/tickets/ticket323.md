@@ -16,7 +16,7 @@ distinct.
 - PR #320, “add bounded Nova proposal repair loop,” merged on 2026-11-04.
 - PR #321, “deny unencrypted EBS volumes in Nova plans,” merged on 2026-11-04.
 - No Nova-generated plan has been deployed.
-- PR #318 is closed and awaits owner direction on the pricing-evidence path.
+- PR #318 is closed; its pricing approach remains unresolved.
 - The hosted plan-only runner, tenant-scoped remote state, and actual-cost gate
   remain incomplete. PR #322 is open, but its existence does not mean the gate
   is complete.
@@ -33,9 +33,9 @@ distinct.
 - Record merged source changes from #320 and #321 with clear limits on what
   they establish.
 - State consistently that no Nova-generated plan has been deployed.
-- Record that #318 is closed awaiting owner direction and that the hosted
-  plan-only runner, tenant-scoped remote state, and actual-cost gate remain
-  incomplete.
+- Record that #318 is closed with its pricing approach unresolved, and that the
+  hosted plan-only runner, tenant-scoped remote state, and actual-cost gate
+  remain incomplete.
 - Update only the three named status/backlog documents and this ticket.
 
 ## Acceptance criteria
@@ -44,9 +44,9 @@ distinct.
   deployed and validated product behavior.
 - [x] They record #320 and #321 as merged.
 - [x] They state that no Nova-generated plan has been deployed.
-- [x] They state that #318 remains closed pending owner direction and that the
-  hosted plan-only runner, tenant-scoped remote state, and actual-cost gate are
-  incomplete.
+- [x] They state that #318 is closed with its pricing approach unresolved and
+  that the hosted plan-only runner, tenant-scoped remote state, and actual-cost
+  gate are incomplete.
 - [x] No implementation code, AWS resource, or private local goal file is
   changed.
 - [x] Documentation convention and diff checks pass.
@@ -54,16 +54,17 @@ distinct.
 ## Acceptance status
 
 Documentation updates are complete. Local documentation convention and diff
-checks passed. All seven required GitHub Actions checks passed in run
-[41908518245](https://github.com/Bepoadewale/davdeploy/actions/runs/41908518245).
+checks passed. All seven required GitHub Actions checks passed on head
+`e99ef9e` in run
+[41909235682](https://github.com/Bepoadewale/davdeploy/actions/runs/41909235682).
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=323 python3 scripts/check_doc_conventions.py` passed.
 `git diff --check` passed. This is a documentation-only change; no runtime
 test, Terraform command, or AWS call is required or planned.
-All seven required CI checks passed in run
-[41908518245](https://github.com/Bepoadewale/davdeploy/actions/runs/41908518245):
+All seven required CI checks passed on head `e99ef9e` in run
+[41909235682](https://github.com/Bepoadewale/davdeploy/actions/runs/41909235682):
 cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and
 supply-chain.
 

@@ -76,7 +76,7 @@
 - [x] Correct lifecycle terminal-evidence checks (PR #287), validate serialized lifecycle graphs before renderer selection (PR #289), calculate dependency-safe dispatch waves (PR #290), and persist per-module state/output/evidence outcomes (PR #291). These code foundations are merged but are not wired into multi-module worker dispatch.
 - [x] PR #320 adds bounded semantic repair for Nova proposal validation failures; PR #321 denies generated EBS volumes unless encryption is known to be enabled. Both are merged in source only. No Nova-generated plan has been deployed.
 - [ ] Finish the hosted Nova plan-only runner and tenant-scoped remote state; neither is complete, and no Nova-generated plan has been deployed.
-- [ ] Implement and verify an actual-cost gate before Nova plan approval or execution. PR #318 is closed awaiting owner direction on its pricing-evidence approach; open PR #322 does not complete the gate.
+- [ ] Implement and verify an actual-cost gate before Nova plan approval or execution. PR #318 is closed; its pricing approach remains unresolved. Open PR #322 does not complete the gate.
 - [ ] Wire per-module conditional claims, dispatch waves, outcomes, build/result identities, typed output binding, authenticated CodeBuild/SQS reconciliation, bounded safe retries, partial-failure recovery and reverse graph cleanup into the hosted worker.
 - [ ] Dispatch compatible approved module graphs through checked-in renderers with typed outputs, dependency ordering and reverse cleanup. CodeBuild remains single-module and fail-closed until this complete path is validated.
 - [ ] Certify each hosted renderer and composed workload through the customer execution runner, including health, update/recovery, destroy and independent absence verification.
