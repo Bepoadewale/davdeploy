@@ -19,6 +19,9 @@ creation/editing and team authoring routes must continue to require authenticati
   not exercise anonymous HTTP requests against the public read routes.
 - API Gateway configuration has explicit unauthenticated routes for only those three
   GET paths; the application routes remain responsible for auth on writes.
+- The test avoids entering the application lifespan and guards the global migration
+  and session factories, so its temporary SQLite database is the only database it can
+  use.
 
 ## Research / references used
 
@@ -37,20 +40,22 @@ routes without an authorization header. Keep production behavior unchanged.
 - [x] Anonymous comment creation and comment editing are rejected.
 - [x] Anonymous team post listing, creation, and editing are rejected.
 - [x] Existing route behavior is unchanged.
-- [x] Focused local tests and required CI pass.
+- [x] Focused local tests pass; CI is rerunning after the isolation fix.
 - [x] No AWS resources or external services are used.
 
 ## Acceptance status
 
-Implementation complete. Focused local verification passed, and required GitHub CI
-run `41933204103` passed all seven checks.
+Implementation complete. Focused local verification passed. Earlier GitHub CI passed,
+but the test isolation was subsequently strengthened, so CI is pending for the updated
+head.
 
 ## Tests / validation performed
 
 - `uv run pytest -q tests/test_public_blog_api_access.py tests/test_public_blog.py tests/test_public_blog_edge.py` — 5 passed.
 - `uv run ruff check tests/test_public_blog_api_access.py` — passed.
 - Missing required `Authorization` headers currently return HTTP 422 from FastAPI's header validation; they do not reach protected handlers. The test records this current behavior without changing it.
-- GitHub CI run `41933204103` — all required checks passed.
+- TestClient does not enter the application lifespan; patched global migration/session factories fail the test if called. The test restores any previous dependency override and closes its temporary session and engine.
+- GitHub CI run `41933204103` — all seven checks passed before the isolation fix; current-head CI is pending.
 
 ## Evidence files produced
 
@@ -63,4 +68,5 @@ authorization, content, or infrastructure behavior.
 
 ## Follow-up work
 
-No behavior change was needed. The PR is ready for review and remains unmerged.
+No production behavior change was needed. The PR remains open and unmerged. Current-head
+CI is pending.

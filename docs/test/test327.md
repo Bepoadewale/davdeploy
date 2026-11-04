@@ -3,7 +3,7 @@
 Date: 2026-11-05
 Execution type: local HTTP/API test fixture only
 Customer repository: Not applicable; no customer workload was deployed.
-Commit: `21bb6a4` (test and initial evidence).
+Commit: PR #327 branch; no customer workload or AWS changes.
 AWS account: Not applicable; no AWS calls were made.
 AWS region: Not applicable; no AWS calls were made.
 
@@ -21,7 +21,8 @@ removed by pytest's temporary-directory fixture.
 
 5 tests passed. Anonymous GET requests succeeded for published post list, detail, and
 comments. Anonymous protected-route requests were rejected by required-header
-validation (HTTP 422).
+validation (HTTP 422). The test avoids the application lifespan and guards the global
+migration/session factories, so it cannot migrate or seed the configured database.
 
 ## Teardown
 
