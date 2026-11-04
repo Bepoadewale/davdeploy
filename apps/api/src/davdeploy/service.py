@@ -3102,7 +3102,11 @@ class ProductService:
             project_id=infrastructure_plan.project_id,
             actor_id=principal.subject,
         )
-        generated = self.terraform_generator.generate(approved_plan=revision.content, tenant=tenant)
+        generated = self.terraform_generator.generate(
+            approved_plan=revision.content,
+            tenant=tenant,
+            source_revision=revision.id,
+        )
         response = generated.response
         self._record_model_usage(
             principal,
