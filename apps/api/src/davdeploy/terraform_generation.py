@@ -1,9 +1,7 @@
-"""Nova-governed, revision-bound Terraform generation.
+"""Nova-governed, revision-bound Terraform proposal generation.
 
-The generator produces a *plan-only* resource graph.  It has no filesystem,
-shell, cloud credential, apply, or approval capability.  The caller must run
-the generated JSON through normal policy, Terraform validation, saved-plan and
-approval gates before an execution runner can use it.
+Generated output remains plan-only. It cannot access credentials or execute
+Terraform; trusted callers must validate a real saved plan before approval.
 """
 
 from __future__ import annotations
@@ -25,7 +23,11 @@ from davdeploy.model_gateway import (
     ModelGatewayUnavailable,
     configured_model_gateway,
     guarded_generate_structured,
-    model_input_digest,
+)
+from davdeploy.nova_contract_generation import (
+    bind_generation_context,
+    trusted_context,
+    validate_generation_context,
 )
 
 
@@ -65,21 +67,8 @@ class NovaTerraformGenerator:
         tenant: TenantScope,
         source_revision: str | None = None,
     ) -> TerraformGenerationResult:
-        """Return an untrusted typed proposal for a reviewed architecture context.
-
-        A fixture/disabled gateway is intentionally rejected: a fixture cannot
-        be represented as a real generated infrastructure definition.
-        """
-        target = approved_plan.get("target") or {}
-        requirements = approved_plan.get("requirements") or {}
-        region = str(target.get("region") or requirements.get("region") or "")
-        if not region:
-            raise ModelGatewayUnavailable("approved plan has no trusted AWS region")
-        trusted_revision = (
-            source_revision
-            or str(approved_plan.get("revision_id") or approved_plan.get("revision") or "")
-            or model_input_digest(approved_plan)
-        )
+        """Return an untrusted proposal bound to trusted revision and region."""
+        context = trusted_context(approved_plan, source_revision)
         document = {
             "task": (
                 "Generate the complete typed deployment proposal for this architecture. Use only "
@@ -88,13 +77,8 @@ class NovaTerraformGenerator:
                 "reads, credentials or secret values. Copy the trusted provenance and region below."
             ),
             "approved_plan": approved_plan,
-            "trusted_generation_context": {
-                "source_revision": trusted_revision,
-                "region": region,
-            },
         }
-        context_digest = model_input_digest(document)
-        document["trusted_generation_context"]["context_digest"] = context_digest
+        document, context_digest = bind_generation_context(document, context)
         request = ModelRequest(
             tenant=tenant,
             purpose=ModelPurpose.TERRAFORM_GENERATION,
@@ -114,17 +98,16 @@ class NovaTerraformGenerator:
             self.policy,
         )
         if response.request.provider != "bedrock":
-            raise ModelGatewayUnavailable("dynamic Terraform generation requires enabled Nova 2 Lite")
+            raise ModelGatewayUnavailable(
+                "dynamic Terraform generation requires enabled Nova 2 Lite"
+            )
         try:
             proposal = GeneratedDeploymentProposal.model_validate(response.output)
         except ValidationError as error:
-            raise ModelGatewayUnavailable("Nova Terraform proposal violated the generation schema") from error
-        if proposal.source_revision != trusted_revision:
-            raise ModelGatewayUnavailable("Nova proposal source revision did not match trusted input")
-        if proposal.context_digest != context_digest:
-            raise ModelGatewayUnavailable("Nova proposal context digest did not match trusted input")
-        if proposal.requirements.region != region:
-            raise ModelGatewayUnavailable("Nova proposal region did not match trusted input")
+            raise ModelGatewayUnavailable(
+                "Nova Terraform proposal violated the generation schema"
+            ) from error
+        validate_generation_context(proposal, context, context_digest)
         return TerraformGenerationResult(proposal=proposal, response=response)
 
     @staticmethod
@@ -132,7 +115,9 @@ class NovaTerraformGenerator:
         return {
             "terraform": {
                 "required_version": ">= 1.6.0",
-                "required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
+                "required_providers": {
+                    "aws": {"source": "hashicorp/aws", "version": "~> 5.0"}
+                },
             },
             "resource": terraform_resource_blocks(proposal),
         }
