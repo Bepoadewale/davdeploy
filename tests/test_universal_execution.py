@@ -153,6 +153,7 @@ def test_next_dispatchable_work_waits_for_dependencies_and_reverses_cleanup():
     )
     apply_work = list(lifecycle_work(plan, "apply"))
     assert next_dispatchable_work_item(apply_work, {})["instance_id"] == "api"
+    assert next_dispatchable_work_item(apply_work, {"api": "FAILED"}) is None
     assert (
         next_dispatchable_work_item(apply_work, {"api": "SUCCEEDED_AWAITING_OBSERVATION"})[
             "instance_id"

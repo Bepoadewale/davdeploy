@@ -5819,8 +5819,14 @@ class ProductService:
                 # have only the old run-level build identity.
                 self._advance_cloud_execution_module_instances(run, run.state)
             else:
+                module_state = run.state
+                if status == "SUCCEEDED" and artifact_error is None:
+                    if run.mode == "AUTHENTICATED_TERRAFORM_PLAN":
+                        module_state = "PLAN_READY_FOR_REVIEW"
+                    elif run.mode == "AUTHENTICATED_TERRAFORM_DESTROY_PLAN":
+                        module_state = "DESTROY_PLAN_READY_FOR_REVIEW"
                 outcome = ModuleLifecycleOutcome(
-                    state=run.state,
+                    state=module_state,
                     evidence={
                         "runner_build_id": normalized_build_id,
                         "runner_build_status": status,
