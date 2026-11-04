@@ -47,7 +47,10 @@ PR #301 merged as `5b067b0`, adding the gated DynamoDB renderer. The typed port 
 - `scripts/terraform-validate.sh` — passed for all configured roots.
 - `terraform -chdir=infrastructure/terraform/customer-workload-serverless-api validate` — passed; `terraform fmt -check` passed.
 - Ruff and shell syntax checks passed.
-- Clean-room cycle, doc conventions and PR CI: pending.
+- Clean-room cycle at `18d33e9` — bootstrap, smoke, API contract, customer-plan E2E, seed, simple/complex/Day-2/degraded/failure/readiness-failure demos, trace check and `make verify` passed; 506 tests passed.
+- Clean-room teardown removed only its project containers and network; no project containers or named volumes remain.
+- `GITHUB_PR_NUMBER=302 .venv/bin/python scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- PR CI: pending.
 - PR CI: pending.
 
 ## Tests / validation performed

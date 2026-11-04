@@ -25,7 +25,7 @@ certification gate disabled and its workspace allowlist empty.
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
-| Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` and `aws-file-storage` disabled | One customer renderer enabled; PR #299 adds a gated private S3 renderer; PR #300 adds the S3-to-API input; PR #301 adds a gated DynamoDB renderer |
+| Renderer registry | `aws-managed-application` enabled; `aws-serverless-api`, `aws-file-storage` and `aws-nosql-data` disabled | One customer renderer enabled; PR #299 adds a gated private S3 renderer; PR #300 adds the S3-to-API input; PR #301 adds a gated DynamoDB renderer; PR #302 is adding its typed DynamoDB-to-API binding |
 | CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling; #299 adds the gated S3 dispatch mapping; #300 adds a validated S3 bucket input for Lambda; #301 adds the gated DynamoDB dispatch route. | Code foundations are merged but not deployed to the hosted worker |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
 | Durable module-instance outcomes | PRs #277/#278/#280 deployed; #287 adds operation-specific evidence, #289 validates serialized graphs, #290 computes dependency waves, #291 persists per-module outcomes, #293 separates type and instance identity, #294 adds typed input references, #295 validates typed outputs, #296 stores exact CodeBuild identity per module instance, #297 persists normalized renderer outputs, and #298 schedules dependency-ready work | Older rows/leases deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); #287–#299 are merged code foundations; newer scheduler/renderers are not deployed |
@@ -53,7 +53,7 @@ The stage reflects the planner catalogue, not an execution entitlement. Except f
 | `aws-kubernetes-platform` | planning | No module renderer |
 | `aws-identity` | catalogued | No module renderer |
 | `aws-relational-data` | catalogued | No module renderer |
-| `aws-nosql-data` | catalogued | PR #301 adds a gated DynamoDB renderer; no AWS lifecycle evidence |
+| `aws-nosql-data` | catalogued | PR #301 adds a gated DynamoDB renderer; PR #302 adds its typed API input; no AWS lifecycle evidence |
 | `aws-file-storage` | catalogued | PR #299 adds a gated private S3 renderer; no AWS lifecycle evidence |
 | `aws-jobs-events` | catalogued | No module renderer |
 | `aws-realtime` | catalogued | No module renderer |

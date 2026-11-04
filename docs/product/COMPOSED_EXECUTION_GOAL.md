@@ -24,6 +24,10 @@ Allowed status values: `not started`, `in progress`, `implemented`,
 | 11. Hosted browser/CLI/MCP customer acceptance | `not started` | Use the deployed site/control plane and synthetic customer data. Prove intent → plan/cost → authorized decision → apply → real health → update/recovery → destroy → independently confirmed absence across browser, CLI and MCP. |
 | 12. Final evidence and closeout | `not started` | Produce the final capability matrix with commits, PRs, workflow IDs and evidence links. Reconcile docs and ensure no unexplained test resources or active processes remain. |
 
+## Active implementation
+
+- PR #302 is open and adds the missing typed DynamoDB-table input to the Lambda/API renderer, with exact-table IAM permissions. It does not enable customer execution or include AWS resources. Local tests and clean-room validation are recorded in `docs/test/test302.md`; hosted deployment and real composed AWS certification remain future steps.
+
 ## Current verified boundary
 
 - Backend main at the audit baseline includes PR #301 (`5b067b0`), #300 (`afd6736`), #299 (`982bb50`), #298 (`42200c0`), #297 (`e28fa23`), #296 (`9d14bd1`), #295 (`464dd0b`), #294 (`6e8fb3d`), and #293 (`87793a7`). These execution foundations are code-only and have not been deployed. PR #295 validates typed outputs and exposes dependency-output resolution as a library helper; PR #298 schedules one ready module at a time; PR #299 adds a gated private S3 renderer; PR #300 resolves one S3 bucket-name input into Lambda with bucket-scoped IAM; PR #301 adds a gated DynamoDB table renderer. The latest hosted control-plane release remains commit `2e39e4a` after PR #285. PR #275 (`ff5103f`) adds
