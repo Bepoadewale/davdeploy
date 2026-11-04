@@ -378,6 +378,74 @@ def test_nova_gateway_exhausted_json_repair_preserves_complete_cost_and_evidence
     ]
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected_input_tokens"),
+    [
+        (["malformed-private-response"], 0),
+        ({"usage": "malformed-private-usage"}, 0),
+        (
+            {
+                "usage": {"inputTokens": -1, "outputTokens": 2},
+                "metrics": {"latencyMs": 2},
+                "ResponseMetadata": {"RequestId": "request"},
+                "stopReason": "end_turn",
+            },
+            0,
+        ),
+        (
+            {
+                "usage": {"inputTokens": 7, "outputTokens": 3},
+                "metrics": ["malformed-private-metrics"],
+                "ResponseMetadata": {"RequestId": "request"},
+                "stopReason": "end_turn",
+            },
+            7,
+        ),
+        (
+            {
+                "usage": {"inputTokens": 7, "outputTokens": 3},
+                "metrics": {"latencyMs": "malformed-private-latency"},
+                "ResponseMetadata": {"RequestId": "request"},
+                "stopReason": "end_turn",
+            },
+            7,
+        ),
+        (
+            {
+                "usage": {"inputTokens": 7, "outputTokens": 3},
+                "metrics": {"latencyMs": 2},
+                "ResponseMetadata": ["malformed-private-metadata"],
+                "stopReason": "end_turn",
+            },
+            7,
+        ),
+    ],
+)
+def test_nova_gateway_rejects_malformed_provider_shapes_with_unknown_cost(
+    raw, expected_input_tokens
+):
+    class MalformedRuntime:
+        def converse(self, **kwargs):
+            del kwargs
+            return raw
+
+    document = {"customer_request": "deploy"}
+    gateway = BedrockNovaGateway(nova_config(), MalformedRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert "malformed structured response" in str(error.value)
+    assert "malformed-private" not in str(error.value)
+    assert error.value.usage.input_tokens == expected_input_tokens
+    assert error.value.usage.estimated_cost_usd is None
+    assert error.value.attempt_count == 1
+
+
 def test_nova_gateway_accepts_only_plain_or_exact_fenced_json_objects():
     assert decode_structured_json('{"ok":true}') == {"ok": True}
     assert decode_structured_json('```json\n{"ok":true}\n```') == {"ok": True}

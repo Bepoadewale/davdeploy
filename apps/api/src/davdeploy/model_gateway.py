@@ -263,6 +263,28 @@ class BedrockNovaGateway:
         measured_latencies: list[int] = []
         evidence: list[EvidenceRef] = []
         usage_is_complete = True
+
+        def malformed_response_failure(
+            attempt_count: int,
+            input_tokens: int,
+            output_tokens: int,
+            latencies: list[int],
+            retries: int,
+            response_evidence: list[EvidenceRef],
+        ) -> ModelGatewayUnavailable:
+            return self._structured_failure(
+                "Bedrock returned a malformed structured response",
+                request,
+                started,
+                input_tokens,
+                output_tokens,
+                latencies,
+                retries,
+                response_evidence,
+                attempt_count,
+                False,
+            )
+
         for attempt in range(2):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -313,21 +335,83 @@ class BedrockNovaGateway:
                     attempt + 1,
                     False,
                 ) from None
-            stop_reason = str(raw.get("stopReason") or "unknown")
-            usage = raw.get("usage") or {}
-            if "inputTokens" not in usage or "outputTokens" not in usage:
-                usage_is_complete = False
-            total_input_tokens += int(usage.get("inputTokens") or 0)
-            total_output_tokens += int(usage.get("outputTokens") or 0)
-            measured_latencies.append(int((raw.get("metrics") or {}).get("latencyMs") or 0))
-            request_id = str((raw.get("ResponseMetadata") or {}).get("RequestId") or "unknown")
+
+            if not isinstance(raw, dict):
+                raise malformed_response_failure(
+                    attempt + 1,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                ) from None
+            usage = raw.get("usage")
+            if not isinstance(usage, dict):
+                raise malformed_response_failure(
+                    attempt + 1,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                ) from None
+            input_tokens = usage.get("inputTokens")
+            output_tokens = usage.get("outputTokens")
+            if not _is_nonnegative_integer(input_tokens) or not _is_nonnegative_integer(
+                output_tokens
+            ):
+                raise malformed_response_failure(
+                    attempt + 1,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                ) from None
+            total_input_tokens += input_tokens
+            total_output_tokens += output_tokens
+
+            metrics = raw.get("metrics")
+            metadata = raw.get("ResponseMetadata")
+            if not isinstance(metrics, dict) or not isinstance(metadata, dict):
+                raise malformed_response_failure(
+                    attempt + 1,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                ) from None
+            latency_ms = metrics.get("latencyMs")
+            request_id = metadata.get("RequestId")
+            stop_reason = raw.get("stopReason")
+            if (
+                not _is_nonnegative_integer(latency_ms)
+                or not isinstance(request_id, str)
+                or not request_id
+                or not isinstance(stop_reason, str)
+                or not stop_reason
+            ):
+                raise malformed_response_failure(
+                    attempt + 1,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                ) from None
+            measured_latencies.append(latency_ms)
             try:
                 content = raw["output"]["message"]["content"]
-                text = next(
-                    block["text"] for block in content if isinstance(block.get("text"), str)
-                )
-            except (KeyError, StopIteration, TypeError):
-                text = ""
+            except (KeyError, TypeError):
+                content = []
+            if not isinstance(content, list):
+                content = []
+            text = next(
+                (block["text"] for block in content if isinstance(block, dict)
+                 and isinstance(block.get("text"), str)),
+                "",
+            )
             evidence.append(
                 EvidenceRef(
                     tenant=request.tenant,
@@ -652,6 +736,10 @@ def _canonical_json(value: Any) -> str:
 
 def _optional_float(value: str | None) -> float | None:
     return float(value) if value not in {None, ""} else None
+
+
+def _is_nonnegative_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _fixture_request(request: ModelRequest) -> ModelRequest:
