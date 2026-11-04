@@ -1,4 +1,5 @@
 data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
 
 locals {
   tags = {
@@ -8,9 +9,10 @@ locals {
     DavDeployPlan       = var.plan_digest
     Scope               = "customer-workload"
   }
-  lambda_environment = var.uploads_bucket_name == "" ? {} : {
-    UPLOADS_BUCKET_NAME = var.uploads_bucket_name
-  }
+  lambda_environment = merge(
+    var.uploads_bucket_name == "" ? {} : { UPLOADS_BUCKET_NAME = var.uploads_bucket_name },
+    var.table_name == "" ? {} : { DYNAMODB_TABLE_NAME = var.table_name },
+  )
 }
 
 resource "terraform_data" "account_guard" {
@@ -67,6 +69,23 @@ resource "aws_iam_role_policy" "lambda_uploads" {
   policy = data.aws_iam_policy_document.lambda_uploads[0].json
 }
 
+data "aws_iam_policy_document" "lambda_dynamodb" {
+  count = var.table_name == "" ? 0 : 1
+
+  statement {
+    sid       = "AccessConfiguredDynamoDBTable"
+    actions   = ["dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"]
+    resources = ["arn:${data.aws_partition.current.partition}:dynamodb:${var.region}:${var.expected_account_id}:table/${var.table_name}"]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  count  = var.table_name == "" ? 0 : 1
+  name   = "${var.service_name}-dynamodb"
+  role   = aws_iam_role.lambda.name
+  policy = data.aws_iam_policy_document.lambda_dynamodb[0].json
+}
+
 module "lambda" {
   source      = "../modules/lambda-service"
   name        = var.service_name
@@ -79,6 +98,7 @@ module "lambda" {
   depends_on = [
     aws_iam_role_policy_attachment.lambda_basic,
     aws_iam_role_policy.lambda_uploads,
+    aws_iam_role_policy.lambda_dynamodb,
   ]
 }
 
