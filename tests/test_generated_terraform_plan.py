@@ -87,6 +87,7 @@ def fake_terraform(tmp_path, *, applyable=True, errored=False):
                     "actions": ["create"],
                     "before_sensitive": False,
                     "after_sensitive": False,
+                    "after_unknown": {},
                 },
             }
         ],

@@ -42,7 +42,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-04.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-04.3"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -57,6 +57,38 @@ S3_PUBLIC_BLOCK_FLAGS = (
     "ignore_public_acls",
     "restrict_public_buckets",
 )
+POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "aws_s3_bucket": (("bucket",),),
+    "aws_s3_bucket_acl": (("acl",),),
+    "aws_s3_bucket_policy": (("policy",),),
+    "aws_s3_bucket_public_access_block": tuple((flag,) for flag in S3_PUBLIC_BLOCK_FLAGS),
+    "aws_s3_bucket_server_side_encryption_configuration": (
+        ("rule", "apply_server_side_encryption_by_default", "sse_algorithm"),
+    ),
+    "aws_iam_policy": (("policy",),),
+    "aws_iam_role": (("assume_role_policy",),),
+    "aws_iam_role_policy": (("policy",),),
+    "aws_db_instance": (
+        ("publicly_accessible",),
+        ("storage_encrypted",),
+        ("deletion_protection",),
+        ("skip_final_snapshot",),
+    ),
+    "aws_rds_cluster": (
+        ("publicly_accessible",),
+        ("storage_encrypted",),
+        ("deletion_protection",),
+        ("skip_final_snapshot",),
+    ),
+    "aws_rds_cluster_instance": (("publicly_accessible",),),
+    "aws_redshift_cluster": (("publicly_accessible",), ("encrypted",)),
+    "aws_ebs_volume": (("encrypted",),),
+    "aws_kms_key": (("key_usage",), ("deletion_window_in_days",)),
+    "aws_dynamodb_table": (
+        ("server_side_encryption", "enabled"),
+        ("deletion_protection_enabled",),
+    ),
+}
 
 
 def evaluate_generated_plan_policy(
@@ -125,6 +157,7 @@ def _evaluate(
     _check_region(document, expected_region)
     resources = _planned_resources(document)
     _check_proposal_inventory(resources, document, proposal, findings)
+    _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings)
     _check_iam(resources, findings)
     _check_network(resources, findings)
@@ -158,6 +191,82 @@ def _evaluate(
         else PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     )
     return GeneratedPlanPolicyResult(verdict, POLICY_VERSION, ordered)
+
+
+def _check_policy_critical_unknowns(
+    document: dict[str, Any], findings: list[PlanPolicyFinding]
+) -> None:
+    changes = document.get("resource_changes", [])
+    if not isinstance(changes, list):
+        raise GeneratedPlanPolicyError("resource changes are malformed")
+    for item in changes:
+        if not isinstance(item, dict):
+            raise GeneratedPlanPolicyError("resource change is malformed")
+        kind = item.get("type")
+        paths = POLICY_CRITICAL_UNKNOWN_PATHS.get(kind, ()) if isinstance(kind, str) else ()
+        if not paths:
+            continue
+        address = item.get("address")
+        change = item.get("change")
+        if not isinstance(change, dict):
+            raise GeneratedPlanPolicyError("resource change is malformed")
+        after_unknown = change.get("after_unknown")
+        if not isinstance(after_unknown, dict) or not _valid_unknown_tree(after_unknown):
+            _deny(
+                findings,
+                "policy_critical_unknown_structure_invalid",
+                address,
+                "DavDeploy could not verify safety-critical values in this plan.",
+            )
+            continue
+        if any(_path_contains_unknown(after_unknown, path) for path in paths):
+            _deny(
+                findings,
+                "policy_critical_value_unknown",
+                address,
+                "A safety-critical infrastructure setting is unknown in this plan, so it cannot be approved yet.",
+            )
+
+
+def _valid_unknown_tree(tree: dict[str, Any]) -> bool:
+    pending: list[Any] = [tree]
+    visited = 0
+    while pending:
+        value = pending.pop()
+        visited += 1
+        if visited > 10_000:
+            raise GeneratedPlanPolicyError("unknown-value metadata exceeds its limit")
+        if value is True:
+            continue
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        else:
+            return False
+    return True
+
+
+def _path_contains_unknown(tree: dict[str, Any], path: tuple[str, ...]) -> bool:
+    pending: list[tuple[Any, tuple[str, ...]]] = [(tree, path)]
+    visited = 0
+    while pending:
+        value, remaining = pending.pop()
+        visited += 1
+        if visited > 10_000:
+            raise GeneratedPlanPolicyError("unknown-value metadata exceeds its limit")
+        if value is True:
+            return True
+        if not remaining:
+            if isinstance(value, dict):
+                pending.extend((child, ()) for child in value.values())
+            elif isinstance(value, list):
+                pending.extend((child, ()) for child in value)
+        elif isinstance(value, dict):
+            pending.append((value.get(remaining[0]), remaining[1:]))
+        elif isinstance(value, list):
+            pending.extend((child, remaining) for child in value)
+    return False
 
 
 def _check_region(document: dict[str, Any], expected_region: str) -> None:

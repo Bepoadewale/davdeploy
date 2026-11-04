@@ -6,6 +6,7 @@ import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
+    _path_contains_unknown,
     evaluate_generated_plan_policy,
 )
 
@@ -62,7 +63,13 @@ def change(address, kind, actions=("create",), **metadata):
     return {
         "address": address,
         "type": kind,
-        "change": {"actions": list(actions), "before_sensitive": False, "after_sensitive": False, **metadata},
+        "change": {
+            "actions": list(actions),
+            "before_sensitive": False,
+            "after_sensitive": False,
+            "after_unknown": {},
+            **metadata,
+        },
     }
 
 
@@ -254,6 +261,132 @@ def test_unknown_ingress_source_fails_closed():
     )
     document["resource_changes"].append(change("aws_security_group_rule.unknown", "aws_security_group_rule"))
     assert "security_group_ingress_unknown" in codes(evaluate(document))
+
+
+def test_unknown_s3_public_access_setting_is_denied_from_plan_unknowns():
+    document = plan()
+    document["resource_changes"][1]["change"]["after_unknown"] = {"block_public_acls": True}
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_unknown_iam_policy_document_is_denied_even_when_after_values_look_safe():
+    policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {"Effect": "Allow", "Action": "s3:GetObject", "Resource": "arn:aws:s3:::private-plan-bucket/*"}
+            ],
+        }
+    )
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_iam_policy.app", "aws_iam_policy", {"policy": policy})
+    )
+    document["resource_changes"].append(
+        change(
+            "aws_iam_policy.app",
+            "aws_iam_policy",
+            after_unknown={"policy": True},
+        )
+    )
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "app-policy",
+                "resource_type": "aws_iam_policy",
+                "name": "app",
+                "arguments": {"policy": policy},
+                "rationale": "Limit application access to its own files.",
+            },
+        ]
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_unknown_database_encryption_is_denied_even_when_after_values_look_safe():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            "aws_db_instance.database",
+            "aws_db_instance",
+            {"publicly_accessible": False, "storage_encrypted": True},
+        )
+    )
+    document["resource_changes"].append(
+        change(
+            "aws_db_instance.database",
+            "aws_db_instance",
+            after_unknown={"storage_encrypted": True},
+        )
+    )
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "database",
+                "resource_type": "aws_db_instance",
+                "name": "database",
+                "arguments": {"publicly_accessible": False, "storage_encrypted": True},
+                "rationale": "Keep application data private and encrypted.",
+            },
+        ]
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_unknown_computed_identifier_does_not_block_policy_review():
+    document = plan()
+    document["resource_changes"][1]["change"]["after_unknown"] = {"id": True}
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+
+
+def test_unresolved_kms_key_reference_is_outside_encryption_algorithm_unknown_gate():
+    unknowns = {
+        "rule": [
+            {"apply_server_side_encryption_by_default": {"kms_master_key_id": True}}
+        ]
+    }
+    assert not _path_contains_unknown(
+        unknowns,
+        ("rule", "apply_server_side_encryption_by_default", "sse_algorithm"),
+    )
+
+
+def test_malformed_unknown_metadata_fails_closed():
+    document = plan()
+    document["resource_changes"][1]["change"]["after_unknown"] = ["invalid"]
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_unknown_structure_invalid" in codes(result)
+
+
+def test_non_boolean_unknown_leaf_fails_closed():
+    document = plan()
+    document["resource_changes"][1]["change"]["after_unknown"] = {"block_public_acls": False}
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_unknown_structure_invalid" in codes(result)
+
+
+@pytest.mark.parametrize("metadata", [None, "missing"])
+def test_missing_unknown_metadata_fails_closed_for_monitored_resource(metadata):
+    document = plan()
+    change_document = document["resource_changes"][1]["change"]
+    if metadata == "missing":
+        change_document.pop("after_unknown")
+    else:
+        change_document["after_unknown"] = metadata
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_unknown_structure_invalid" in codes(result)
 
 
 def test_malformed_ingress_cidr_fails_closed():
