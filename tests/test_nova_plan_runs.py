@@ -273,6 +273,58 @@ def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild
     db.close()
 
 
+def test_retry_after_input_staging_uses_a_new_durable_runner_key():
+    service, db, _, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    first_runner_id = None
+    original_start = dispatcher.start_build
+
+    def reject_first_start(run_id):
+        nonlocal first_runner_id
+        if first_runner_id is None:
+            first_runner_id = run_id
+            raise NovaPlanDispatchError("fixture rejected the first known build start")
+        return original_start(run_id)
+
+    dispatcher.start_build = reject_first_start
+    request_key = "nova-plan-request-staged-retry-0001"
+    run = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, request_key
+    )
+    assert service.run_next_generated_plan_run() is True
+    failed = db.get(GeneratedPlanRun, run["id"])
+    assert failed.state == "FAILED"
+    assert failed.input_sha256
+    assert failed.input_version_id == "fixture-input-version"
+    assert failed.runner_run_id == run["id"] == first_runner_id
+    first_input_key = failed.input_key
+
+    retry_key = "nova-plan-request-staged-retry-0002"
+    retried = service.retry_generated_plan_run(founder(), run["id"], retry_key)
+    queued = db.get(GeneratedPlanRun, run["id"])
+    assert retried["state"] == "QUEUED"
+    assert queued.runner_run_id != first_runner_id
+    assert queued.input_key != first_input_key
+    assert queued.input_key == dispatcher.input_key(queued.runner_run_id)
+    assert queued.result_key == dispatcher.result_key(queued.runner_run_id)
+    assert queued.input_sha256 is None
+    assert queued.input_version_id is None
+
+    assert service.run_next_generated_plan_run() is True
+    started = service.generated_plan_run_detail(founder(), run["id"])
+    assert started["state"] == "BUILD_STARTED"
+    assert len(dispatcher.staged) == 2
+    first_stage, retry_stage = dispatcher.staged
+    assert first_stage[0] == first_runner_id
+    assert retry_stage[0] == queued.runner_run_id
+    assert first_stage[2] != retry_stage[2]
+    assert retry_stage[1]["run_id"] == queued.runner_run_id
+    assert retry_stage[1]["control_plane_run_id"] == run["id"]
+    assert dispatcher.started[-1][0] == queued.runner_run_id
+    assert db.get(GeneratedPlanRun, run["id"]).input_key == retry_stage[2]
+    db.close()
+
+
 def test_uncertain_build_start_requires_reconciliation_without_retrying():
     service, db, _, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)
@@ -299,6 +351,32 @@ def test_uncertain_build_start_requires_reconciliation_without_retrying():
     assert service.run_next_generated_plan_run() is False
     assert len(dispatcher.started) == 1
     dispatcher.start_build = original_start
+    db.close()
+
+
+def test_uncertain_input_stage_requires_reconciliation_without_retrying():
+    service, db, _, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    original_stage = dispatcher.stage_input
+
+    def stage_then_lose_confirmation(run_id, document):
+        original_stage(run_id, document)
+        raise NovaPlanDispatchError("fixture lost input-stage confirmation", outcome_uncertain=True)
+
+    dispatcher.stage_input = stage_then_lose_confirmation
+    run = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-request-stage-uncertain-0001"
+    )
+
+    assert service.run_next_generated_plan_run() is True
+    uncertain = service.generated_plan_run_detail(founder(), run["id"])
+    assert uncertain["state"] == "RECONCILIATION_REQUIRED"
+    assert uncertain["error_code"] == "DISPATCH_UNCERTAIN"
+    with pytest.raises(ValueError, match="confirmed failed"):
+        service.retry_generated_plan_run(
+            founder(), run["id"], "nova-plan-request-retry-stage-uncertain-0001"
+        )
+    assert dispatcher.started == []
     db.close()
 
 

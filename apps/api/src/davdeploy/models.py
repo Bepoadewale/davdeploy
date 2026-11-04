@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -523,6 +524,7 @@ class GeneratedPlanRun(Base):
     idempotency_key_sha256: Mapped[str] = mapped_column(String(64))
     request_sha256: Mapped[str] = mapped_column(String(64), index=True)
     request_document: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    runner_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     revision_sha256: Mapped[str] = mapped_column(String(64))
     proposal_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -559,6 +561,7 @@ class GeneratedPlanRun(Base):
         ),
         Index("ix_generated_plan_run_tenant_revision", "organization_id", "revision_id"),
         Index("ix_generated_plan_run_preparation_lease", "state", "preparation_lease_expires_at"),
+        Index("uq_generated_plan_runs_runner_run_id", "runner_run_id", unique=True),
     )
 
 
@@ -573,6 +576,17 @@ class GeneratedPlanRunIdempotencyKey(Base):
     request_sha256: Mapped[str] = mapped_column(String(64), index=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("generated_plan_runs.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkerDispatchState(Base):
+    """Durable round-robin cursor shared by all worker Lambda containers."""
+
+    __tablename__ = "worker_dispatch_states"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    next_queue_index: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class GeneratedPlanArtifact(Base):

@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 29
+            == 30
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -89,7 +89,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 29
+            == 30
         )
     engine.dispose()
 
@@ -126,7 +126,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 29
+            == 30
         )
         connection.execute(
             text(
@@ -173,7 +173,7 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     db.run_migrations(engine)
 
     columns = {column["name"] for column in inspect(engine).get_columns("generated_plan_runs")}
-    assert {"request_document", "preparation_lease_token"} <= columns
+    assert {"request_document", "preparation_lease_token", "runner_run_id"} <= columns
     assert inspect(engine).has_table("generated_plan_run_idempotency_keys")
     with engine.connect() as connection:
         binding = connection.execute(
@@ -182,17 +182,26 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
                 "FROM generated_plan_run_idempotency_keys"
             )
         ).mappings().one()
+        runner_run_id = connection.execute(
+            text("SELECT runner_run_id FROM generated_plan_runs WHERE id = 'run-demo'")
+        ).scalar_one()
+        worker_cursor = connection.execute(
+            text("SELECT next_queue_index FROM worker_dispatch_states WHERE id = 1")
+        ).scalar_one()
     assert binding == {
         "organization_id": "org-demo",
         "idempotency_key_sha256": "key-hash-demo",
         "request_sha256": "request-hash-demo",
         "run_id": "run-demo",
     }
+    assert runner_run_id == "run-demo"
+    assert worker_cursor == 0
     indexes = {index["name"] for index in inspect(engine).get_indexes("generated_plan_runs")}
     assert "ix_generated_plan_run_preparation_lease" in indexes
+    assert "uq_generated_plan_runs_runner_run_id" in indexes
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 29
+            == 30
         )
     engine.dispose()

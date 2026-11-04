@@ -5,12 +5,26 @@ from contextlib import nullcontext
 from davdeploy import lambda_worker
 
 
+def _test_queue_cursor():
+    cursor = [0]
+
+    def next_queue(self, queue_count):
+        del self
+        index = cursor[0]
+        cursor[0] = (index + 1) % queue_count
+        return index
+
+    return next_queue
+
+
 def test_worker_wakeup_drains_a_bounded_durable_backlog(monkeypatch):
     claims = iter([True, True, True, False])
 
     class Service:
         def __init__(self, _db):
             pass
+
+        next_worker_dispatch_queue_index = _test_queue_cursor()
 
         def reconcile_cloud_execution_build(self, _build_id):
             return False
@@ -42,6 +56,8 @@ def test_worker_wakeup_clamps_an_invalid_or_excessive_drain_limit(monkeypatch):
     class Service:
         def __init__(self, _db):
             pass
+
+        next_worker_dispatch_queue_index = _test_queue_cursor()
 
         def reconcile_cloud_execution_build(self, _build_id):
             return False
@@ -77,6 +93,8 @@ def test_worker_ignores_a_malformed_wakeup_without_redriving_the_batch(monkeypat
         def __init__(self, _db):
             pass
 
+        next_worker_dispatch_queue_index = _test_queue_cursor()
+
         def reconcile_cloud_execution_build(self, _build_id):
             raise AssertionError("malformed input has no build id")
 
@@ -107,6 +125,8 @@ def test_worker_wakeup_drains_a_durable_nova_plan_request(monkeypatch):
         def __init__(self, _db):
             pass
 
+        next_worker_dispatch_queue_index = _test_queue_cursor()
+
         def reconcile_cloud_execution_build(self, _build_id):
             return False
 
@@ -131,12 +151,21 @@ def test_worker_wakeup_drains_a_durable_nova_plan_request(monkeypatch):
     assert result == {"records": 1, "processed": 1, "processed_jobs": 1}
 
 
-def test_worker_wakeup_services_each_queue_before_repeating_under_nova_backlog(monkeypatch):
+def test_worker_wakeup_uses_a_durable_cursor_with_a_one_job_cap(monkeypatch):
+    from davdeploy.db import run_migrations
+    from davdeploy.service import ProductService
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    run_migrations(engine)
     calls = []
 
     class Service:
-        def __init__(self, _db):
-            pass
+        def __init__(self, db):
+            self.db = db
+
+        next_worker_dispatch_queue_index = ProductService.next_worker_dispatch_queue_index
 
         def reconcile_cloud_execution_build(self, _build_id):
             return False
@@ -157,11 +186,17 @@ def test_worker_wakeup_services_each_queue_before_repeating_under_nova_backlog(m
             calls.append("legacy")
             return True
 
-    monkeypatch.setattr(lambda_worker, "SessionLocal", lambda: nullcontext(object()))
+    monkeypatch.setattr(lambda_worker, "SessionLocal", lambda: Session(engine))
     monkeypatch.setattr(lambda_worker, "ProductService", Service)
     monkeypatch.setenv("DAVDEPLOY_WORKER_MAX_JOBS_PER_WAKEUP", "1")
 
-    result = lambda_worker.handler({}, None)
+    results = [lambda_worker.handler({}, None) for _ in range(4)]
 
-    assert result == {"records": 0, "processed": 4, "processed_jobs": 4}
+    assert results == [
+        {"records": 0, "processed": 1, "processed_jobs": 1},
+        {"records": 0, "processed": 1, "processed_jobs": 1},
+        {"records": 0, "processed": 1, "processed_jobs": 1},
+        {"records": 0, "processed": 1, "processed_jobs": 1},
+    ]
     assert calls == ["nova", "discovery", "cloud_execution", "legacy"]
+    engine.dispose()

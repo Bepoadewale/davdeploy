@@ -28,9 +28,7 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
         maximum_jobs = int(os.getenv("DAVDEPLOY_WORKER_MAX_JOBS_PER_WAKEUP", "5"))
     except ValueError:
         maximum_jobs = 5
-    # Reserve one claim slot per durable queue kind. A large Nova backlog must
-    # not consume the whole invocation before other work gets a chance.
-    maximum_jobs = min(max(maximum_jobs, len(WORKER_QUEUE_METHODS)), 10)
+    maximum_jobs = min(max(maximum_jobs, 1), 10)
     processed_events = 0
     for record in records:
         with SessionLocal() as db:
@@ -51,17 +49,17 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
                     processed_events += 1
 
     processed_jobs = 0
-    next_queue_index = 0
     for _ in range(maximum_jobs):
         claimed = False
         with SessionLocal() as db:
             service = ProductService(db)
-            for offset in range(len(WORKER_QUEUE_METHODS)):
-                queue_index = (next_queue_index + offset) % len(WORKER_QUEUE_METHODS)
+            for _ in range(len(WORKER_QUEUE_METHODS)):
+                queue_index = service.next_worker_dispatch_queue_index(
+                    len(WORKER_QUEUE_METHODS)
+                )
                 run_next = getattr(service, WORKER_QUEUE_METHODS[queue_index])
                 if run_next():
                     processed_jobs += 1
-                    next_queue_index = (queue_index + 1) % len(WORKER_QUEUE_METHODS)
                     claimed = True
                     break
         if not claimed:

@@ -199,8 +199,14 @@ def run_migrations(target: Engine | None = None) -> None:
         ).scalar_one()
         if version < 1:
             Base.metadata.create_all(bind=connection)
+            connection.execute(
+                text(
+                    "INSERT INTO worker_dispatch_states (id, next_queue_index) "
+                    "VALUES (1, 0) ON CONFLICT (id) DO NOTHING"
+                )
+            )
             _install_generated_plan_immutability(connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (29)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (30)"))
             return
         if version < 2:
             connection.execute(
@@ -429,6 +435,30 @@ def run_migrations(target: Engine | None = None) -> None:
                     },
                 )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (29)"))
+            version = 29
+        if version < 30:
+            _add_columns_if_missing(
+                connection,
+                "generated_plan_runs",
+                {"runner_run_id": "VARCHAR(36)"},
+            )
+            connection.execute(
+                text("UPDATE generated_plan_runs SET runner_run_id = id WHERE runner_run_id IS NULL")
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_generated_plan_runs_runner_run_id "
+                    "ON generated_plan_runs(runner_run_id)"
+                )
+            )
+            Base.metadata.create_all(bind=connection)
+            connection.execute(
+                text(
+                    "INSERT INTO worker_dispatch_states (id, next_queue_index) "
+                    "VALUES (1, 0) ON CONFLICT (id) DO NOTHING"
+                )
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (30)"))
         _install_generated_plan_immutability(connection)
 
 

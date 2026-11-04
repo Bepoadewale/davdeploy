@@ -118,10 +118,14 @@ class NovaPlanOnlyDispatcher:
                 Metadata={"davdeploy-run-id": run_id, "davdeploy-input-sha256": digest},
             )
         except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
-            raise NovaPlanDispatchError("Nova plan input could not be securely stored") from None
+            raise NovaPlanDispatchError(
+                "Nova plan input storage could not be confirmed", outcome_uncertain=True
+            ) from None
         version_id = response.get("VersionId")
         if not isinstance(version_id, str) or not version_id or version_id == "null":
-            raise NovaPlanDispatchError("Nova plan input bucket versioning is unavailable")
+            raise NovaPlanDispatchError(
+                "Nova plan input bucket versioning could not be confirmed", outcome_uncertain=True
+            )
         return key, digest, version_id
 
     def start_build(self, run_id: str) -> NovaPlanBuild:

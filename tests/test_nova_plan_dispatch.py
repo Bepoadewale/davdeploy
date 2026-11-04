@@ -83,8 +83,22 @@ def test_stage_input_is_encrypted_versioned_and_limited_to_run_key():
 def test_stage_input_fails_closed_without_bucket_versioning():
     configured = dispatcher(s3=FakeS3(version_id="null"))
 
-    with pytest.raises(NovaPlanDispatchError, match="versioning is unavailable"):
+    with pytest.raises(NovaPlanDispatchError, match="versioning could not be confirmed") as error:
         configured.stage_input(RUN_ID, {"run_id": RUN_ID})
+    assert error.value.outcome_uncertain
+
+
+def test_stage_input_storage_failure_is_marked_uncertain():
+    class PartiallyFailingS3(FakeS3):
+        def put_object(self, **kwargs):
+            self.calls.append(kwargs)
+            raise OSError("fixture storage response was lost")
+
+    configured = dispatcher(s3=PartiallyFailingS3())
+
+    with pytest.raises(NovaPlanDispatchError, match="storage could not be confirmed") as error:
+        configured.stage_input(RUN_ID, {"run_id": RUN_ID})
+    assert error.value.outcome_uncertain
 
 
 def test_start_build_sets_only_server_owned_run_id_override():

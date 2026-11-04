@@ -115,6 +115,7 @@ from davdeploy.models import (
     TerraformPlanRender,
     TerraformPlanReview,
     UsageRecord,
+    WorkerDispatchState,
     WorkloadIntent,
     WorkspaceInvitation,
     WorkspaceSubscription,
@@ -2038,6 +2039,7 @@ class ProductService:
             idempotency_key_sha256=idempotency_sha256,
             request_sha256=request_sha256,
             request_document=request_document,
+            runner_run_id=run_id,
             revision_sha256=revision.content_digest,
             state="QUEUED",
             codebuild_project=dispatcher.project_name,
@@ -2148,6 +2150,7 @@ class ProductService:
             raise ValueError("Nova plan retry limit reached")
 
         now = datetime.now(UTC)
+        runner_run_id = str(uuid.uuid4())
         previous = {
             "state": run.state,
             "error_code": run.error_code,
@@ -2174,6 +2177,9 @@ class ProductService:
                     proposal_sha256=None,
                     input_sha256=None,
                     input_version_id=None,
+                    runner_run_id=runner_run_id,
+                    input_key=NovaPlanOnlyDispatcher.input_key(runner_run_id),
+                    result_key=NovaPlanOnlyDispatcher.result_key(runner_run_id),
                     result_metadata=None,
                     codebuild_build_id=None,
                     error_code=None,
@@ -2247,6 +2253,24 @@ class ProductService:
                 .order_by(AuditEvent.created_at, AuditEvent.id)
             )
         )
+
+    def next_worker_dispatch_queue_index(self, queue_count: int) -> int:
+        """Atomically claim the next queue slot from durable shared state."""
+        if not 1 <= queue_count <= 10:
+            raise ValueError("worker queue count is invalid")
+        cursor = self.db.scalar(
+            select(WorkerDispatchState)
+            .where(WorkerDispatchState.id == 1)
+            .with_for_update()
+        )
+        if cursor is None:
+            self.db.rollback()
+            raise RuntimeError("worker dispatch scheduler is not initialized")
+        selected_index = cursor.next_queue_index % queue_count
+        cursor.next_queue_index = (selected_index + 1) % queue_count
+        cursor.updated_at = datetime.now(UTC)
+        self.db.commit()
+        return selected_index
 
     def _generated_plan_run_for_idempotency_key(
         self, organization_id: str, idempotency_key_sha256: str
@@ -2695,6 +2719,10 @@ class ProductService:
             or run.preparation_lease_token != lease_token
         ):
             return self.generated_plan_run_detail(principal, run.id)
+        runner_run_id = run.runner_run_id or run.id
+        expected_input_key = dispatcher.input_key(runner_run_id)
+        if run.input_key != expected_input_key or run.result_key != dispatcher.result_key(runner_run_id):
+            raise ValueError("durable Nova plan attempt keys did not match the stored runner ID")
         target = (revision.content or {}).get("target") or {}
         ownership_scope = self._generated_plan_ownership_scope(
             principal,
@@ -2730,7 +2758,8 @@ class ProductService:
             proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
             request_payload = {
                 **request_document,
-                "run_id": run.id,
+                "run_id": runner_run_id,
+                "control_plane_run_id": run.id,
                 "proposal_sha256": proposal_sha256,
                 "ownership_scope": {
                     "organization_id": ownership_scope.organization_id,
@@ -2753,7 +2782,7 @@ class ProductService:
                     "Nova plan worker lease was lost before input staging", outcome_uncertain=True
                 )
             input_key, input_sha256, input_version_id = dispatcher.stage_input(
-                run.id, request_payload
+                runner_run_id, request_payload
             )
             if input_key != run.input_key:
                 raise NovaPlanDispatchError("Nova plan input key did not match its durable request")
@@ -2816,7 +2845,7 @@ class ProductService:
                 raise NovaPlanDispatchError(
                     "Nova plan worker lease was lost before the runner start", outcome_uncertain=True
                 )
-            build = dispatcher.start_build(run.id)
+            build = dispatcher.start_build(runner_run_id)
             if build.project_name != run.codebuild_project:
                 raise NovaPlanDispatchError(
                     "Nova plan build project did not match its durable request",
@@ -2856,6 +2885,7 @@ class ProductService:
                 {
                     "codebuild_project": run.codebuild_project,
                     "codebuild_build_id": build.build_id,
+                    "runner_run_id": runner_run_id,
                     "request_sha256": run.request_sha256,
                     "proposal_sha256": proposal_sha256,
                     "input_sha256": input_sha256,
