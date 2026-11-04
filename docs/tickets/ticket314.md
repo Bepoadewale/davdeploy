@@ -13,12 +13,12 @@ record. It must not apply or destroy infrastructure.
 
 ## Current repo state
 
-The generated Terraform runner remains plan-only and is not exposed through
-the hosted API or worker. Existing workspace approvals cover customer-authored
-plan JSON, not generated Terraform saved plans. The operations bootstrap has a
-versioned SSE-KMS encrypted plans bucket with a separate key and lifecycle
-retention. The control-plane runtime does not yet have access to a dedicated
-Nova plan prefix.
+The generated Terraform runner remains plan-only. This PR adds an internal
+persistence boundary and safe review/approval API, but it does not yet invoke
+the runner from the hosted API or worker. The operations bucket is versioned,
+SSE-KMS encrypted with S3 Bucket Keys, and expires current versions after 30
+days and noncurrent versions after 7 days. Lambda access is disabled by default
+and limited to the Nova prefix and existing plan key when explicitly enabled.
 
 ## Research / references used
 
@@ -43,29 +43,39 @@ apply behavior.
 
 ## Acceptance criteria
 
-- [ ] Saved-plan artifacts use the existing versioned SSE-KMS plan bucket with a new tenant-scoped prefix and server-generated object keys.
-- [ ] Runtime IAM is limited to that exact prefix and the plan KMS key; no bucket listing is required.
-- [ ] Uploads are size-bounded, conditional, version-pinned, and read-back verified against the runner's saved-plan digest before success is recorded.
-- [ ] The canonical manifest binds all plan, proposal, configuration, provider-lock, policy, target, and tenant identity fields.
-- [ ] Approval is immutable, administrator-authorized, tenant-scoped, and requires the exact current manifest digest.
-- [ ] DENY, missing policy evidence, stale revision, wrong tenant, expired/missing object, tampered plan, duplicate approval, and changed manifest fail closed.
-- [ ] API responses, audit records, and logs do not include raw Terraform plan values, secret material, artifact bytes, or object URLs.
-- [ ] Apply and destroy remain unavailable from this path.
-- [ ] Focused tests, `make verify`, migration tests, documentation checks, and required CI pass.
-- [ ] Review is complete.
+- [x] Saved-plan artifacts use the existing versioned SSE-KMS plan bucket with a tenant-scoped prefix and server-generated object keys.
+- [x] Runtime IAM is limited to that prefix and the plan KMS key; no bucket listing is allowed or required.
+- [x] Uploads are bounded to 128 MiB, conditional, version-pinned, and read-back verified against the runner digest before a database record is committed.
+- [x] The manifest binds the approved revision digest, Nova trusted-context digest, proposal, configuration, provider lock, policy evidence, target, tenant, and exact object version.
+- [x] Approval is immutable, requires the exact `administrator` role, is tenant-scoped, and binds the exact current manifest digest. Operators cannot approve this artifact type.
+- [x] DENY, deny-severity or unknown-severity findings, missing policy evidence, stale revision, wrong tenant, expired/missing object, tampered plan, duplicate approval, and changed manifest fail closed.
+- [x] API responses and audit records do not include raw Terraform values, secrets, bytes, bucket/key/version references, or object URLs. Database triggers reject updates/deletes to artifact and approval records.
+- [x] Apply and destroy remain unavailable from this path.
+- [x] Focused tests, `make verify`, migration tests, Terraform validation, and documentation checks pass.
+- [ ] Required GitHub CI and final PR review are pending.
 
 ## Acceptance status
 
-Draft. Implementation and validation pending.
+Draft. Implementation and local validation are complete. Hosted runner integration and customer execution are deliberately outside this PR.
 
 ## Tests / validation performed
 
-Pending.
+Validation performed:
+
+- Focused: `uv run pytest -q tests/test_generated_plan_artifacts.py tests/test_generated_plan_review.py tests/test_db_config.py tests/test_terraform_generation.py tests/test_nova_plan_artifact_infra.py tests/test_serverless_runtime.py` — 74 passed.
+- Full: `make verify` — 618 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- Fresh clean-room: `make local-proof` — bootstrap, smoke, API contract, customer-plan E2E, seed, trace check, and full verification passed; 618 tests passed. Simple, complex, Day-2, degraded, policy-failure, and readiness-failure demos passed.
+- Infrastructure: `terraform validate`, 36 focused static tests, Ruff, and Actions configuration check passed.
+- Read-only AWS check in account `654654474502`, `us-east-1`: existing plan bucket versioning is enabled, default encryption is SSE-KMS with S3 Bucket Keys, lifecycle is 30 days current / 7 days noncurrent. No object was uploaded and no AWS resource was created or modified.
+- Independent review found and prompted fixes for role overreach, contradictory deny findings, proposal-to-revision context binding, and canonical run IDs. Final re-review and GitHub CI remain pending.
 
 ## Evidence files produced
 
 This PR is a plan-storage and approval-record workflow only. It creates no AWS
-workload resources. Record tests and any storage integration evidence here.
+workload resources and does not upload a real plan. The hosted worker has no
+caller for the new internal persistence method yet; a later package must
+connect Nova generation and the pinned Terraform runner to it. Apply and
+destroy remain disabled.
 
 ## Boundaries
 

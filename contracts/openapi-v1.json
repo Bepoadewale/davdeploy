@@ -504,6 +504,21 @@
         "title": "EnvironmentName",
         "type": "string"
       },
+      "GeneratedPlanArtifactApprovalRequest": {
+        "description": "Human approval binds one immutable generated-plan manifest digest.",
+        "properties": {
+          "manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifest_sha256"
+        ],
+        "title": "GeneratedPlanArtifactApprovalRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3975,6 +3990,110 @@
           }
         },
         "summary": "Get Recommendation"
+      }
+    },
+    "/api/v1/generated-plan-artifacts/{artifact_id}": {
+      "get": {
+        "description": "Return safe review evidence only; never return saved-plan bytes or object references.",
+        "operationId": "get_generated_plan_artifact_api_v1_generated_plan_artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Generated Plan Artifact"
+      }
+    },
+    "/api/v1/generated-plan-artifacts/{artifact_id}/approve": {
+      "post": {
+        "description": "Approve one immutable generated plan by its exact manifest digest.",
+        "operationId": "approve_generated_plan_artifact_api_v1_generated_plan_artifacts__artifact_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanArtifactApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Generated Plan Artifact"
       }
     },
     "/api/v1/github/connection": {

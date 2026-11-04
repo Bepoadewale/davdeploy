@@ -62,6 +62,34 @@ variable "customer_execution_kms_key_arns" {
   default     = []
 }
 
+variable "enable_nova_plan_reviews" {
+  type        = bool
+  description = "Enable encrypted, tenant-scoped Nova saved-plan review storage. This does not enable apply or destroy."
+  default     = false
+}
+
+variable "nova_plan_artifact_bucket" {
+  type        = string
+  description = "Existing versioned SSE-KMS Terraform plan bucket used for Nova artifacts when review storage is enabled."
+  default     = ""
+
+  validation {
+    condition     = var.nova_plan_artifact_bucket == "" || can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.nova_plan_artifact_bucket))
+    error_message = "nova_plan_artifact_bucket must be an S3 bucket name."
+  }
+}
+
+variable "nova_plan_kms_key_arn" {
+  type        = string
+  description = "Exact KMS key ARN used by the existing Terraform plan bucket for Nova saved-plan artifacts."
+  default     = ""
+
+  validation {
+    condition     = var.nova_plan_kms_key_arn == "" || can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[A-Za-z0-9-]+$", var.nova_plan_kms_key_arn))
+    error_message = "nova_plan_kms_key_arn must be a concrete AWS KMS key ARN."
+  }
+}
+
 variable "enable_customer_cloud_execution" {
   type        = bool
   description = "Explicitly enable bounded authenticated customer plan/apply submissions. Defaults to false."

@@ -35,6 +35,7 @@ from davdeploy.domain import (
     DataLifecycleRequestBody,
     DesiredStatePublicationRequest,
     DesiredStatePublicationStateRequest,
+    GeneratedPlanArtifactApprovalRequest,
     InfrastructurePlanConstraintUpdateRequest,
     InfrastructurePlanDecisionRequest,
     InfrastructurePlanRevisionRequest,
@@ -1171,6 +1172,37 @@ def create_plan(
         "policy_result": plan.policy_result,
         "payload": plan.payload,
     }
+
+
+@app.get("/api/v1/generated-plan-artifacts/{artifact_id}")
+def get_generated_plan_artifact(
+    artifact_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Return safe review evidence only; never return saved-plan bytes or object references."""
+    REQUESTS.labels("generated_plan_artifacts.get").inc()
+    try:
+        return service.generated_plan_artifact_detail(principal, artifact_id)
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-artifacts/{artifact_id}/approve")
+def approve_generated_plan_artifact(
+    artifact_id: str,
+    request: GeneratedPlanArtifactApprovalRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Approve one immutable generated plan by its exact manifest digest."""
+    REQUESTS.labels("generated_plan_artifacts.approve").inc()
+    try:
+        return service.approve_generated_plan_artifact(
+            principal, artifact_id, request.manifest_sha256
+        )
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
 
 
 @app.post("/api/v1/deployment-plans/{plan_id}/customer-review", status_code=201)

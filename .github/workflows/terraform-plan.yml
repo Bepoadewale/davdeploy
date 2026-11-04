@@ -37,6 +37,9 @@ jobs:
       TF_VAR_customer_execution_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_customer_execution_lock_table: ${{ vars.TF_STATE_LOCK_TABLE }}
       TF_VAR_customer_execution_kms_key_arns: '["${{ vars.TF_RELEASE_KMS_KEY_ARN }}", "${{ vars.TF_PLAN_KMS_KEY_ARN }}"]'
+      TF_VAR_enable_nova_plan_reviews: ${{ vars.NOVA_PLAN_REVIEWS_ENABLED || 'false' }}
+      TF_VAR_nova_plan_artifact_bucket: ${{ vars.TF_PLAN_BUCKET }}
+      TF_VAR_nova_plan_kms_key_arn: ${{ vars.TF_PLAN_KMS_KEY_ARN }}
       TF_VAR_enable_customer_cloud_execution: ${{ vars.ENABLE_CUSTOMER_CLOUD_EXECUTION || 'false' }}
       TF_VAR_enable_serverless_api_hosted_certification: ${{ vars.SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED || 'false' }}
       TF_VAR_serverless_certification_workspace_ids: ${{ vars.SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON || '[]' }}

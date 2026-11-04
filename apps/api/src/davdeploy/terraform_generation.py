@@ -30,6 +30,24 @@ from davdeploy.nova_contract_generation import (
     validate_generation_context,
 )
 
+NOVA_TERRAFORM_GENERATION_TASK = (
+    "Generate the complete typed deployment proposal for this architecture. Use only "
+    "typed resource_reference objects for links. Never author Terraform expressions, "
+    "provider/backend configuration, modules, provisioners, shell commands, local file "
+    "reads, credentials or secret values. Copy the trusted provenance and region below."
+)
+
+
+def generation_context_digest(
+    approved_plan: dict[str, Any], source_revision: str | None = None
+) -> str:
+    """Recompute the exact trusted context digest expected from a Nova proposal."""
+    context = trusted_context(approved_plan, source_revision)
+    _, digest = bind_generation_context(
+        {"task": NOVA_TERRAFORM_GENERATION_TASK, "approved_plan": approved_plan}, context
+    )
+    return digest
+
 
 @dataclass(frozen=True)
 class TerraformGenerationResult:
@@ -69,15 +87,7 @@ class NovaTerraformGenerator:
     ) -> TerraformGenerationResult:
         """Return an untrusted proposal bound to trusted revision and region."""
         context = trusted_context(approved_plan, source_revision)
-        document = {
-            "task": (
-                "Generate the complete typed deployment proposal for this architecture. Use only "
-                "typed resource_reference objects for links. Never author Terraform expressions, "
-                "provider/backend configuration, modules, provisioners, shell commands, local file "
-                "reads, credentials or secret values. Copy the trusted provenance and region below."
-            ),
-            "approved_plan": approved_plan,
-        }
+        document = {"task": NOVA_TERRAFORM_GENERATION_TASK, "approved_plan": approved_plan}
         document, context_digest = bind_generation_context(document, context)
         request = ModelRequest(
             tenant=tenant,
@@ -115,9 +125,7 @@ class NovaTerraformGenerator:
         return {
             "terraform": {
                 "required_version": ">= 1.6.0",
-                "required_providers": {
-                    "aws": {"source": "hashicorp/aws", "version": "~> 5.0"}
-                },
+                "required_providers": {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}},
             },
             "resource": terraform_resource_blocks(proposal),
         }

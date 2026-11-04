@@ -255,7 +255,26 @@ resource "aws_iam_role_policy" "api" {
         Effect   = "Allow"
         Action   = ["ssm:GetParameter"]
         Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${var.edge_origin_token_parameter_name}"
-      }]
+      }],
+      var.enable_nova_plan_reviews ? [{
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObjectVersion"]
+        Resource = "arn:aws:s3:::${var.nova_plan_artifact_bucket}/plans/nova-generated/*"
+      }] : [],
+      var.enable_nova_plan_reviews ? [{
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.amazonaws.com"
+            # The existing plans bucket enables S3 Bucket Keys, whose KMS
+            # encryption context is the bucket ARN. S3 permissions above
+            # independently restrict object access to the Nova prefix.
+            "kms:EncryptionContext:aws:s3:arn" = "arn:aws:s3:::${var.nova_plan_artifact_bucket}"
+          }
+        }
+      }] : []
     )
   })
 }
@@ -565,6 +584,10 @@ locals {
     DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI         = "s3://${var.artifact_bucket}/${var.customer_execution_artifact_key}"
     DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET            = var.customer_execution_state_bucket
     DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE              = var.customer_execution_lock_table
+    DAVDEPLOY_NOVA_PLAN_REVIEWS_ENABLED                  = tostring(var.enable_nova_plan_reviews)
+    DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET                  = var.nova_plan_artifact_bucket
+    DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN                      = var.nova_plan_kms_key_arn
+    DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER                     = data.aws_caller_identity.current.account_id
     DAVDEPLOY_WORKER_QUEUE_URL                           = aws_sqs_queue.worker.id
     DAVDEPLOY_GITHUB_APP_READ_ONLY                       = tostring(var.enable_github_app_read_only)
     DAVDEPLOY_GITHUB_APP_ID                              = var.github_app_id

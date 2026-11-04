@@ -3,7 +3,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    event,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -497,6 +507,93 @@ class TerraformPlanReview(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class GeneratedPlanArtifact(Base):
+    """Immutable manifest for one encrypted, version-pinned Nova saved plan."""
+
+    __tablename__ = "generated_plan_artifacts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
+    run_id: Mapped[str] = mapped_column(String(36))
+    target_account_id: Mapped[str] = mapped_column(String(12))
+    region: Mapped[str] = mapped_column(String(64))
+    terraform_version: Mapped[str] = mapped_column(String(40))
+    aws_provider_version: Mapped[str] = mapped_column(String(40))
+    provider_lockfile_sha256: Mapped[str] = mapped_column(String(64))
+    proposal_sha256: Mapped[str] = mapped_column(String(64))
+    context_sha256: Mapped[str] = mapped_column(String(64))
+    configuration_sha256: Mapped[str] = mapped_column(String(64))
+    saved_plan_sha256: Mapped[str] = mapped_column(String(64))
+    policy_sha256: Mapped[str] = mapped_column(String(64))
+    manifest_sha256: Mapped[str] = mapped_column(String(64), index=True)
+    manifest: Mapped[dict] = mapped_column(JSON)
+    policy_version: Mapped[str] = mapped_column(String(100))
+    policy_verdict: Mapped[str] = mapped_column(String(40))
+    policy_human_approval_required: Mapped[bool] = mapped_column(default=True)
+    policy_findings: Mapped[list] = mapped_column(JSON, default=list)
+    safe_summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    artifact_bucket: Mapped[str] = mapped_column(String(255))
+    artifact_key: Mapped[str] = mapped_column(Text)
+    artifact_version_id: Mapped[str] = mapped_column(String(1024))
+    artifact_size_bytes: Mapped[int] = mapped_column()
+    created_by_subject: Mapped[str] = mapped_column(String(160))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    __table_args__ = (
+        UniqueConstraint("organization_id", "run_id", name="uq_generated_plan_org_run"),
+        UniqueConstraint(
+            "artifact_bucket",
+            "artifact_key",
+            "artifact_version_id",
+            name="uq_generated_plan_object_version",
+        ),
+        UniqueConstraint(
+            "revision_id", "manifest_sha256", name="uq_generated_plan_revision_manifest"
+        ),
+        Index("ix_generated_plan_tenant_revision", "organization_id", "revision_id"),
+    )
+
+
+class GeneratedPlanApproval(Base):
+    """Immutable workspace-admin decision bound to one exact generated plan manifest."""
+
+    __tablename__ = "generated_plan_approvals"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    artifact_id: Mapped[str] = mapped_column(
+        ForeignKey("generated_plan_artifacts.id"), unique=True, index=True
+    )
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    revision_id: Mapped[str] = mapped_column(
+        ForeignKey("infrastructure_plan_revisions.id"), index=True
+    )
+    approved_manifest_sha256: Mapped[str] = mapped_column(String(64))
+    approver_subject: Mapped[str] = mapped_column(String(160))
+    creator_subject: Mapped[str] = mapped_column(String(160))
+    is_self_approval: Mapped[bool] = mapped_column(default=False)
+    authorization_policy: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint(
+            "artifact_id", "approved_manifest_sha256", name="uq_generated_plan_approval_digest"
+        ),
+    )
+
+
+def _reject_immutable_record_change(mapper, connection, target) -> None:
+    del mapper, connection, target
+    raise ValueError("generated plan artifact and approval records are immutable")
+
+
+for _immutable_model in (GeneratedPlanArtifact, GeneratedPlanApproval):
+    event.listen(_immutable_model, "before_update", _reject_immutable_record_change)
+    event.listen(_immutable_model, "before_delete", _reject_immutable_record_change)
 
 
 class CloudExecutionRun(Base):

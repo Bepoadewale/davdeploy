@@ -7,6 +7,7 @@ import re
 import secrets
 import threading
 import time
+import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -44,6 +45,17 @@ from davdeploy.domain import (
 )
 from davdeploy.execution_profiles import execution_profile
 from davdeploy.executor import ExecutionAdapter, configured_executor
+from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_plan_artifacts import (
+    GeneratedPlanArtifactError,
+    StoredPlanObject,
+    canonical_json_digest,
+    configured_generated_plan_artifact_store,
+    generated_plan_manifest,
+    policy_allows_human_review,
+    policy_evidence,
+)
+from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 from davdeploy.integrations import (
     FixtureAwsDiscovery,
     GitHubConnection,
@@ -75,6 +87,8 @@ from davdeploy.models import (
     Environment,
     EnvironmentOutput,
     ExecutionJob,
+    GeneratedPlanApproval,
+    GeneratedPlanArtifact,
     GitHubAppInstallationState,
     GitHubWebhookDelivery,
     Incident,
@@ -108,7 +122,7 @@ from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
-from davdeploy.terraform_generation import NovaTerraformGenerator
+from davdeploy.terraform_generation import NovaTerraformGenerator, generation_context_digest
 from davdeploy.universal_execution import (
     compile_universal_execution_plan,
     lifecycle_work,
@@ -143,6 +157,7 @@ class ProductService:
         cloud_execution: CloudExecutionAdapter | None = None,
         invitation_sender: InvitationEmailSender | None = None,
         terraform_generator: NovaTerraformGenerator | None = None,
+        generated_plan_artifact_store: Any | None = None,
     ):
         self.db = db
         self.intent_provider = intent_provider or configured_intent_provider()
@@ -157,6 +172,7 @@ class ProductService:
         self.cloud_execution = cloud_execution or configured_cloud_execution_adapter()
         self.invitation_sender = invitation_sender or configured_invitation_sender()
         self.terraform_generator = terraform_generator or NovaTerraformGenerator()
+        self.generated_plan_artifact_store = generated_plan_artifact_store
 
     def _wake_worker(self, kind: str, job_id: str) -> None:
         """Send a non-sensitive wake-up after durable work has committed.
@@ -1858,6 +1874,402 @@ class ProductService:
         )
         self.db.commit()
         return revision
+
+    def persist_generated_plan_artifact(
+        self,
+        principal: Principal,
+        revision_id: str,
+        run_id: str,
+        proposal: GeneratedDeploymentProposal,
+        generated_plan: GeneratedTerraformPlan,
+    ) -> GeneratedPlanArtifact:
+        """Persist trusted runner output; this method is deliberately not an HTTP endpoint.
+
+        The customer-facing plan must already be approved. Only the trusted server
+        runner can call this boundary with a typed proposal and its real saved plan.
+        """
+        revision = self._infrastructure_revision(principal, revision_id)
+        try:
+            run_id = str(uuid.UUID(run_id))
+        except (AttributeError, ValueError) as error:
+            raise ValueError("generated-plan run identifier is invalid") from error
+        customer_plan = self._infrastructure_plan(principal, revision.infrastructure_plan_id)
+        self._project(principal, customer_plan.project_id)
+        if revision.state != InfrastructurePlanState.APPROVED:
+            raise ValueError("generated Terraform plans require an approved customer revision")
+        latest = self.db.scalar(
+            select(InfrastructurePlanRevision)
+            .where(
+                InfrastructurePlanRevision.infrastructure_plan_id == customer_plan.id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+            .order_by(InfrastructurePlanRevision.revision_number.desc())
+            .limit(1)
+        )
+        if not latest or latest.id != revision.id:
+            raise ValueError("generated Terraform plan is stale because a newer revision exists")
+        if revision.content_digest != plan_hash(revision.content):
+            raise ValueError("approved customer revision failed integrity verification")
+
+        target = (revision.content or {}).get("target") or {}
+        connection_id = target.get("connection_id")
+        connection = self.db.get(CloudConnection, connection_id) if connection_id else None
+        if (
+            not connection
+            or connection.organization_id != principal.organization_id
+            or connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or connection.account_id != generated_plan.target_account_id
+            or target.get("account_id") != generated_plan.target_account_id
+            or target.get("region") != generated_plan.region
+            or proposal.requirements.region != generated_plan.region
+        ):
+            raise ValueError("generated plan target does not match the verified customer account")
+
+        proposal_bytes = json.dumps(
+            proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        proposal_sha256 = hashlib.sha256(proposal_bytes).hexdigest()
+        expected_context_sha256 = generation_context_digest(revision.content, revision.id)
+        try:
+            with open(generated_plan.saved_plan_path, "rb") as saved_plan_file:
+                saved_plan_sha256 = hashlib.file_digest(saved_plan_file, "sha256").hexdigest()
+        except OSError as error:
+            raise ValueError("generated Terraform plan file is unavailable") from error
+        if (
+            generated_plan.proposal_sha256 != proposal_sha256
+            or proposal.source_revision != revision.id
+            or proposal.context_digest != expected_context_sha256
+            or generated_plan.context_sha256 != expected_context_sha256
+            or generated_plan.saved_plan_sha256 != saved_plan_sha256
+            or not policy_allows_human_review(generated_plan.policy)
+        ):
+            raise ValueError("generated Terraform plan failed trusted runner evidence checks")
+
+        duplicate = self.db.scalar(
+            select(GeneratedPlanArtifact).where(
+                GeneratedPlanArtifact.organization_id == principal.organization_id,
+                GeneratedPlanArtifact.run_id == run_id,
+            )
+        )
+        if duplicate:
+            raise ValueError("generated Terraform plan run identifier has already been recorded")
+
+        artifact_store = (
+            self.generated_plan_artifact_store or configured_generated_plan_artifact_store()
+        )
+        if artifact_store is None:
+            raise ValueError("generated Terraform plan review storage is not enabled")
+        try:
+            stored_object = artifact_store.store_saved_plan(
+                generated_plan.saved_plan_path,
+                organization_id=principal.organization_id,
+                project_id=customer_plan.project_id,
+                revision_id=revision.id,
+                run_id=run_id,
+                expected_sha256=generated_plan.saved_plan_sha256,
+            )
+        except GeneratedPlanArtifactError as error:
+            raise ValueError("generated Terraform plan could not be securely persisted") from error
+
+        now = datetime.now(UTC)
+        policy_doc, policy_sha256 = policy_evidence(generated_plan.policy)
+        manifest = generated_plan_manifest(
+            organization_id=principal.organization_id,
+            project_id=customer_plan.project_id,
+            revision_id=revision.id,
+            revision_sha256=revision.content_digest,
+            stored_object=stored_object,
+            plan=generated_plan,
+            policy_digest=policy_sha256,
+            created_at=now.isoformat().replace("+00:00", "Z"),
+        )
+        artifact = GeneratedPlanArtifact(
+            organization_id=principal.organization_id,
+            project_id=customer_plan.project_id,
+            revision_id=revision.id,
+            run_id=run_id,
+            target_account_id=generated_plan.target_account_id,
+            region=generated_plan.region,
+            terraform_version=generated_plan.terraform_version,
+            aws_provider_version=generated_plan.aws_provider_version,
+            provider_lockfile_sha256=generated_plan.provider_lockfile_sha256,
+            proposal_sha256=generated_plan.proposal_sha256,
+            context_sha256=generated_plan.context_sha256,
+            configuration_sha256=generated_plan.configuration_sha256,
+            saved_plan_sha256=stored_object.sha256,
+            policy_sha256=policy_sha256,
+            manifest_sha256=canonical_json_digest(manifest),
+            manifest=manifest,
+            policy_version=generated_plan.policy.policy_version,
+            policy_verdict=generated_plan.policy.verdict.value,
+            policy_human_approval_required=generated_plan.policy.human_approval_required,
+            policy_findings=policy_doc["findings"],
+            safe_summary={
+                "create_count": generated_plan.summary.create_count,
+                "update_count": generated_plan.summary.update_count,
+                "delete_count": generated_plan.summary.delete_count,
+                "replacement_count": generated_plan.summary.replacement_count,
+                "drift_count": generated_plan.summary.drift_count,
+                "contains_sensitive_changes": generated_plan.summary.contains_sensitive_changes,
+            },
+            artifact_bucket=stored_object.bucket,
+            artifact_key=stored_object.key,
+            artifact_version_id=stored_object.version_id,
+            artifact_size_bytes=stored_object.size_bytes,
+            created_by_subject=principal.subject,
+            created_at=now,
+            expires_at=now + timedelta(days=30),
+        )
+        self.db.add(artifact)
+        self.db.flush()
+        self.audit(
+            principal,
+            "generated_plan_artifact.persisted",
+            "generated_plan_artifact",
+            artifact.id,
+            {
+                "revision_id": revision.id,
+                "manifest_sha256": artifact.manifest_sha256,
+                "policy_verdict": artifact.policy_verdict,
+                "expires_at": artifact.expires_at.isoformat(),
+            },
+        )
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            # The S3 object is intentionally retained for reconciliation. Never
+            # delete an object after an uncertain database commit.
+            raise
+        return artifact
+
+    def generated_plan_artifact_detail(
+        self, principal: Principal, artifact_id: str
+    ) -> dict[str, Any]:
+        artifact = self.db.scalar(
+            select(GeneratedPlanArtifact).where(
+                GeneratedPlanArtifact.id == artifact_id,
+                GeneratedPlanArtifact.organization_id == principal.organization_id,
+            )
+        )
+        if not artifact:
+            raise PermissionError("generated plan artifact not found in this organization")
+        approval = self.db.scalar(
+            select(GeneratedPlanApproval).where(
+                GeneratedPlanApproval.artifact_id == artifact.id,
+                GeneratedPlanApproval.organization_id == principal.organization_id,
+            )
+        )
+        expires_at = artifact.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        expired = expires_at <= datetime.now(UTC)
+        state = (
+            "APPROVED_EXPIRED"
+            if approval and expired
+            else "APPROVED"
+            if approval
+            else "EXPIRED"
+            if expired
+            else "AWAITING_HUMAN_APPROVAL"
+        )
+        return {
+            "id": artifact.id,
+            "revision_id": artifact.revision_id,
+            "manifest_sha256": artifact.manifest_sha256,
+            "target": {"account_id": artifact.target_account_id, "region": artifact.region},
+            "toolchain": {
+                "terraform_version": artifact.terraform_version,
+                "aws_provider_version": artifact.aws_provider_version,
+            },
+            "policy": {
+                "version": artifact.policy_version,
+                "verdict": artifact.policy_verdict,
+                "human_approval_required": artifact.policy_human_approval_required,
+                "findings": artifact.policy_findings,
+            },
+            "summary": artifact.safe_summary,
+            "state": state,
+            "approval": None
+            if not approval
+            else {
+                "approved_manifest_sha256": approval.approved_manifest_sha256,
+                "approver_subject": approval.approver_subject,
+                "is_self_approval": approval.is_self_approval,
+                "decided_at": approval.decided_at.isoformat() if approval.decided_at else None,
+            },
+            "created_at": artifact.created_at.isoformat() if artifact.created_at else None,
+            "expires_at": expires_at.isoformat(),
+            "execution": "NOT_APPLIED_REVIEW_ONLY",
+        }
+
+    def approve_generated_plan_artifact(
+        self, principal: Principal, artifact_id: str, provided_manifest_sha256: str
+    ) -> dict[str, Any]:
+        if principal.role != "administrator":
+            raise PermissionError(
+                "workspace administrator role required for a generated plan approval"
+            )
+        artifact = self.db.scalar(
+            select(GeneratedPlanArtifact)
+            .where(
+                GeneratedPlanArtifact.id == artifact_id,
+                GeneratedPlanArtifact.organization_id == principal.organization_id,
+            )
+            .with_for_update()
+        )
+        if not artifact:
+            raise PermissionError("generated plan artifact not found in this organization")
+        if artifact.manifest_sha256 != provided_manifest_sha256:
+            raise ValueError("generated plan approval digest does not match this artifact")
+        if canonical_json_digest(artifact.manifest) != artifact.manifest_sha256:
+            raise ValueError("generated plan manifest failed integrity verification")
+        manifest = artifact.manifest
+        tenant = manifest.get("tenant") or {}
+        target = manifest.get("target") or {}
+        digests = manifest.get("digests") or {}
+        manifest_artifact = manifest.get("artifact") or {}
+        if (
+            tenant.get("organization_id") != artifact.organization_id
+            or tenant.get("project_id") != artifact.project_id
+            or tenant.get("revision_id") != artifact.revision_id
+            or target.get("account_id") != artifact.target_account_id
+            or target.get("region") != artifact.region
+            or digests.get("proposal_sha256") != artifact.proposal_sha256
+            or digests.get("trusted_context_sha256") != artifact.context_sha256
+            or digests.get("configuration_sha256") != artifact.configuration_sha256
+            or digests.get("saved_plan_sha256") != artifact.saved_plan_sha256
+            or digests.get("policy_sha256") != artifact.policy_sha256
+            or (manifest.get("toolchain") or {}).get("terraform_version")
+            != artifact.terraform_version
+            or (manifest.get("toolchain") or {}).get("aws_provider_version")
+            != artifact.aws_provider_version
+            or (manifest.get("toolchain") or {}).get("provider_lockfile_sha256")
+            != artifact.provider_lockfile_sha256
+            or (manifest.get("policy") or {}).get("version") != artifact.policy_version
+            or (manifest.get("policy") or {}).get("verdict") != artifact.policy_verdict
+            or (manifest.get("policy") or {}).get("human_approval_required")
+            != artifact.policy_human_approval_required
+            or manifest.get("summary") != artifact.safe_summary
+            or manifest_artifact.get("bucket") != artifact.artifact_bucket
+            or manifest_artifact.get("key") != artifact.artifact_key
+            or manifest_artifact.get("version_id") != artifact.artifact_version_id
+            or manifest_artifact.get("size_bytes") != artifact.artifact_size_bytes
+        ):
+            raise ValueError("generated plan manifest fields do not match their immutable record")
+        policy_doc = {
+            "version": artifact.policy_version,
+            "verdict": artifact.policy_verdict,
+            "human_approval_required": artifact.policy_human_approval_required,
+            "findings": artifact.policy_findings,
+        }
+        if (
+            canonical_json_digest(policy_doc) != artifact.policy_sha256
+            or not artifact.policy_human_approval_required
+            or artifact.policy_verdict not in {"REVIEW_REQUIRED", "ELIGIBLE_FOR_HUMAN_REVIEW"}
+        ):
+            raise ValueError("generated plan policy does not allow human approval")
+
+        revision = self._locked_infrastructure_revision(principal, artifact.revision_id)
+        customer_plan = self._infrastructure_plan(principal, revision.infrastructure_plan_id)
+        if (
+            customer_plan.project_id != artifact.project_id
+            or revision.state != InfrastructurePlanState.APPROVED
+            or revision.content_digest
+            != manifest.get("digests", {}).get("customer_revision_sha256")
+            or revision.content_digest != plan_hash(revision.content)
+        ):
+            raise ValueError("generated plan is no longer bound to the current approved revision")
+        latest = self.db.scalar(
+            select(InfrastructurePlanRevision)
+            .where(
+                InfrastructurePlanRevision.infrastructure_plan_id == customer_plan.id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+            .order_by(InfrastructurePlanRevision.revision_number.desc())
+            .limit(1)
+        )
+        if not latest or latest.id != revision.id:
+            raise ValueError("generated plan is stale because a newer revision exists")
+        cloud_target = (revision.content or {}).get("target") or {}
+        connection = self.db.get(CloudConnection, cloud_target.get("connection_id"))
+        if (
+            not connection
+            or connection.organization_id != principal.organization_id
+            or connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or connection.account_id != artifact.target_account_id
+            or cloud_target.get("region") != artifact.region
+        ):
+            raise ValueError("generated plan target no longer matches a verified customer account")
+
+        expiry = artifact.expires_at
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        if expiry <= datetime.now(UTC):
+            raise ValueError("generated plan artifact has expired")
+        if self.db.scalar(
+            select(GeneratedPlanApproval.id).where(GeneratedPlanApproval.artifact_id == artifact.id)
+        ):
+            raise ValueError("generated plan artifact has already been approved")
+
+        artifact_store = (
+            self.generated_plan_artifact_store or configured_generated_plan_artifact_store()
+        )
+        if artifact_store is None:
+            raise ValueError("generated Terraform plan review storage is not enabled")
+        try:
+            artifact_store.verify_stored_plan(
+                StoredPlanObject(
+                    artifact.artifact_bucket,
+                    artifact.artifact_key,
+                    artifact.artifact_version_id,
+                    artifact.artifact_size_bytes,
+                    artifact.saved_plan_sha256,
+                ),
+                run_id=artifact.run_id,
+                organization_id=artifact.organization_id,
+                project_id=artifact.project_id,
+                revision_id=artifact.revision_id,
+            )
+        except GeneratedPlanArtifactError as error:
+            raise ValueError(
+                "stored generated plan is missing or failed integrity verification"
+            ) from error
+
+        approval = GeneratedPlanApproval(
+            artifact_id=artifact.id,
+            organization_id=artifact.organization_id,
+            project_id=artifact.project_id,
+            revision_id=artifact.revision_id,
+            approved_manifest_sha256=provided_manifest_sha256,
+            approver_subject=principal.subject,
+            creator_subject=artifact.created_by_subject,
+            is_self_approval=principal.subject == artifact.created_by_subject,
+            authorization_policy="workspace-administrator-self-approval-allowed"
+            if principal.subject == artifact.created_by_subject
+            else "workspace-administrator",
+        )
+        self.db.add(approval)
+        self.audit(
+            principal,
+            "generated_plan_artifact.approved",
+            "generated_plan_artifact",
+            artifact.id,
+            {
+                "revision_id": artifact.revision_id,
+                "manifest_sha256": provided_manifest_sha256,
+                "is_self_approval": approval.is_self_approval,
+                "authorization_policy": approval.authorization_policy,
+            },
+        )
+        try:
+            self.db.commit()
+        except Exception as error:
+            self.db.rollback()
+            raise ValueError("generated plan artifact could not be approved once") from error
+        return self.generated_plan_artifact_detail(principal, artifact.id)
 
     def _infrastructure_plan(self, principal: Principal, plan_id: str) -> InfrastructurePlan:
         plan = self.db.get(InfrastructurePlan, plan_id)
