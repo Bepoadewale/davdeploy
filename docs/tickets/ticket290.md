@@ -33,7 +33,7 @@ The worker currently advances module rows together with one renderer run, and Co
 - [x] Cleanup operations schedule dependents before their dependencies.
 - [x] Missing/extra state rows and unknown states fail closed; failed and uncertain prerequisites remain blocked.
 - [x] The helper does not submit cloud work or alter worker behavior.
-- [ ] GitHub CI passes before merge.
+- [x] GitHub CI run [41745014343](https://github.com/Bepoadewale/davdeploy/actions/runs/41745014343) passes all seven jobs.
 
 ## Acceptance status
 
@@ -41,7 +41,7 @@ The worker currently advances module rows together with one renderer run, and Co
 
 ## Tests / validation performed
 
-Implementation and local verification pass. GitHub CI is pending.
+Implementation, local verification and all seven GitHub CI jobs pass.
 
 ## Evidence files produced
 
