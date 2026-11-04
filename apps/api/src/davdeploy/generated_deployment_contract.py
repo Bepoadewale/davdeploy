@@ -184,5 +184,11 @@ def terraform_resource_blocks(
 
     result: dict[str, dict[str, dict[str, Any]]] = {}
     for resource in proposal.resources:
-        result.setdefault(resource.resource_type, {})[resource.name] = encode(resource.arguments)
+        block = encode(resource.arguments)
+        if resource.depends_on:
+            block["depends_on"] = [
+                f"{by_id[dependency].resource_type}.{by_id[dependency].name}"
+                for dependency in resource.depends_on
+            ]
+        result.setdefault(resource.resource_type, {})[resource.name] = block
     return result
