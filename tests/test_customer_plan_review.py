@@ -45,18 +45,25 @@ class StaticTerraformGateway:
         return ModelResponse(
             request=request,
             output={
+                "contract_version": "1.0",
+                "source_revision": document["trusted_generation_context"]["source_revision"],
+                "context_digest": request.input_digest,
                 "resources": [
                     {
+                        "resource_id": "workload",
                         "resource_type": "aws_eks_cluster",
                         "name": "workload",
                         "arguments": {
                             "name": "customer-workload",
-                            "role_arn": "${var.cluster_role_arn}",
+                            "role_arn": "arn:aws:iam::123456789012:role/test",
                             "tags": {"ManagedBy": "davdeploy"},
                         },
                         "rationale": "The approved architecture requires Kubernetes scheduling.",
                     }
                 ],
+                "requirements": {
+                    "region": document["trusted_generation_context"]["region"]
+                },
                 "assumptions": ["Reviewed inputs provide the IAM role ARN."],
                 "limitations": ["Plan-only generated graph."],
             },

@@ -18,9 +18,10 @@ class RecordingGateway:
 
     def generate_structured(self, request, document, output_schema=None):
         self.calls.append((request, document, output_schema))
+        output = self.output(request, document) if callable(self.output) else self.output
         return ModelResponse(
             request=request,
-            output=self.output,
+            output=output,
             usage=ModelUsage(input_tokens=100, output_tokens=60, latency_ms=10),
         )
 
@@ -40,19 +41,24 @@ def scope():
     )
 
 
-def proposal(arguments=None):
+def proposal(request, document, *, arguments=None, source_revision="revision-123"):
     return {
+        "contract_version": "1.0",
+        "source_revision": source_revision,
+        "context_digest": request.input_digest,
         "resources": [
             {
+                "resource_id": "application",
                 "resource_type": "aws_ecs_cluster",
                 "name": "application",
                 "arguments": arguments
                 or {"name": "customer-application", "tags": {"ManagedBy": "davdeploy"}},
-                "rationale": "Runs the approved managed-container workload.",
+                "rationale": "Runs the proposed application workload.",
             }
         ],
-        "assumptions": ["VPC identifiers are supplied during reviewed planning."],
-        "limitations": ["Plan-only; provider schema validation is still required."],
+        "requirements": {"region": document["trusted_generation_context"]["region"]},
+        "assumptions": ["Application traffic is synthetic in the current plan."],
+        "limitations": ["Provider schema and live plan checks are not yet connected."],
     }
 
 
@@ -62,28 +68,59 @@ def generator(output):
     )
 
 
-def test_nova_terraform_generation_is_typed_and_plan_only():
-    instance = generator(proposal())
-    result = instance.generate(approved_plan={"summary": {"selected_profile": "aws-ecs-fargate"}}, tenant=scope())
+def test_nova_generation_uses_typed_contract_and_stays_plan_only():
+    instance = generator(proposal)
+    result = instance.generate(
+        approved_plan={
+            "summary": {"selected_profile": "aws-ecs-fargate"},
+            "target": {"region": "us-east-1"},
+        },
+        tenant=scope(),
+        source_revision="revision-123",
+    )
 
     request, document, schema = instance.gateway.calls[0]
     assert request.purpose.value == "terraform_generation"
     assert request.provider == "bedrock"
-    assert "no provider blocks" in document["task"]
+    assert request.prompt_version == "terraform-nova2-contract-v2"
+    assert document["trusted_generation_context"]["context_digest"] == request.input_digest
+    assert "provider/backend configuration" in document["task"]
     assert schema["additionalProperties"] is False
+    assert result.proposal.source_revision == "revision-123"
     assert result.proposal.resources[0].resource_type == "aws_ecs_cluster"
     rendered = instance.terraform_json(result.proposal)
     assert rendered["resource"]["aws_ecs_cluster"]["application"]["name"] == "customer-application"
 
 
 @pytest.mark.parametrize(
-    "arguments,error",
+    "arguments",
     [
-        ({"name": "x"}, "missing ManagedBy"),
-        ({"tags": {"ManagedBy": "davdeploy"}, "provisioner": {}}, "forbidden field"),
-        ({"tags": {"ManagedBy": "davdeploy"}, "value": "${file(\"secret\")}"}, "cannot read arbitrary"),
+        {"password": "plaintext"},
+        {"provisioner": {}},
+        {"value": "file(secret)"},
+        {"user_data": "unsafe"},
     ],
 )
-def test_nova_terraform_generation_rejects_unsafe_or_untagged_graphs(arguments, error):
-    with pytest.raises(ModelGatewayUnavailable, match=error):
-        generator(proposal(arguments)).generate(approved_plan={"kind": "approved"}, tenant=scope())
+def test_nova_generation_rejects_unsafe_contract_content(arguments):
+    def invalid(request, document):
+        return proposal(request, document, arguments=arguments)
+
+    with pytest.raises(ModelGatewayUnavailable, match="violated the generation schema"):
+        generator(invalid).generate(
+            approved_plan={"target": {"region": "us-east-1"}}, tenant=scope()
+        )
+
+
+def test_nova_generation_rejects_untrusted_revision_or_region():
+    def invalid_revision(request, document):
+        return proposal(request, document, source_revision="different-revision")
+
+    with pytest.raises(ModelGatewayUnavailable, match="source revision"):
+        generator(invalid_revision).generate(
+            approved_plan={"target": {"region": "us-east-1"}},
+            tenant=scope(),
+            source_revision="trusted-revision",
+        )
+
+    with pytest.raises(ModelGatewayUnavailable, match="trusted AWS region"):
+        generator(proposal).generate(approved_plan={}, tenant=scope())
