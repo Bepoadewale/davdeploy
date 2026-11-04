@@ -24,6 +24,7 @@ Add strict models for proposal, resources, typed references, declared outputs, r
 ## Acceptance criteria
 
 - [x] Versioned proposal and resource graph models.
+- [x] Compile declared typed references to Terraform expressions only in trusted code.
 - [x] Reject duplicate IDs/addresses, invalid dependencies, unresolved references, type mismatch and dependency cycles.
 - [x] Reject raw Terraform expressions and sensitive/execution authority fields.
 - [x] Carry context digest, source revision, costs, health and recovery requirements.
@@ -36,7 +37,7 @@ Local implementation and focused tests pass. Hosted execution is not connected. 
 
 ## Tests / validation performed
 
-Ruff passed for changed files. .venv/bin/python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py: 14 passed. No AWS operations.
+Ruff passed for changed files. .venv/bin/python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py: 15 passed. No AWS operations.
 
 ## Evidence files produced
 

@@ -124,3 +124,38 @@ def test_contract_emits_a_json_schema_for_nova_structured_generation() -> None:
     assert schema["title"] == "GeneratedDeploymentProposal"
     assert "resources" in schema["properties"]
     assert "requirements" in schema["properties"]
+
+
+def test_resource_blocks_compile_references_only_after_contract_validation() -> None:
+    from davdeploy.generated_deployment_contract import terraform_resource_blocks
+
+    generated = GeneratedDeploymentProposal.model_validate(
+        proposal(
+            [
+                resource(
+                    "uploads",
+                    "uploads",
+                    outputs=(
+                        {"name": "bucket_name", "value_type": "resource_name"},
+                    ),
+                ),
+                resource(
+                    "api",
+                    "api",
+                    arguments={
+                        "bucket": {
+                            "kind": "resource_reference",
+                            "resource_id": "uploads",
+                            "output_name": "bucket_name",
+                            "value_type": "resource_name",
+                        }
+                    },
+                ),
+            ]
+        )
+    )
+
+    blocks = terraform_resource_blocks(generated)
+    assert blocks["aws_s3_bucket"]["api"]["bucket"] == (
+        chr(36) + "{aws_s3_bucket.uploads.bucket_name}"
+    )

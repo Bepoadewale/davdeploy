@@ -163,3 +163,26 @@ def _references(value: Any) -> list[ResourceReference]:
     if isinstance(value, (list, tuple)):
         return [ref for child in value for ref in _references(child)]
     return []
+
+
+def terraform_resource_blocks(
+    proposal: GeneratedDeploymentProposal,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Translate validated references into Terraform resource expressions."""
+    by_id = {resource.resource_id: resource for resource in proposal.resources}
+
+    def encode(value: Any) -> Any:
+        if isinstance(value, dict) and value.get("kind") == "resource_reference":
+            reference = ResourceReference.model_validate(value)
+            target = by_id[reference.resource_id]
+            return chr(36) + "{" + target.resource_type + "." + target.name + "." + reference.output_name + "}"
+        if isinstance(value, dict):
+            return {key: encode(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [encode(child) for child in value]
+        return value
+
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    for resource in proposal.resources:
+        result.setdefault(resource.resource_type, {})[resource.name] = encode(resource.arguments)
+    return result
