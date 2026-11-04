@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 from davdeploy.generated_deployment_contract import (
     GeneratedDeploymentProposal,
@@ -210,10 +211,10 @@ class GeneratedTerraformPlanRunner:
                 check=False,
                 env=self._terraform_environment(),
             )
-        except (OSError, subprocess.TimeoutExpired) as error:
+        except (OSError, subprocess.TimeoutExpired):
             raise TerraformPlanExecutionError(
                 f"Terraform {args[0]} failed to start or exceeded its timeout"
-            ) from error
+            ) from None
         if result.returncode not in allowed_exit_codes:
             raise TerraformPlanExecutionError(
                 f"Terraform {args[0]} failed with exit code {result.returncode}"
@@ -316,8 +317,10 @@ class GeneratedTerraformPlanRunner:
     def _aws_account_id() -> str:
         try:
             response = boto3.client("sts").get_caller_identity()
-        except Exception as error:
-            raise TerraformPlanExecutionError("could not verify the active AWS account identity") from error
+        except (BotoCoreError, ClientError):
+            raise TerraformPlanExecutionError(
+                "could not verify the active AWS account identity"
+            ) from None
         account = response.get("Account")
         if not isinstance(account, str):
             raise TerraformPlanExecutionError("AWS STS returned an invalid account identity")
