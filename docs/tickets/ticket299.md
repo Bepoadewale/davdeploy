@@ -36,20 +36,21 @@ PR #298 merged durable one-module-at-a-time dependency scheduling as `42200c0`. 
 - [x] Output normalization persists only the declared non-secret storage outputs and rejects malformed or sensitive values.
 - [x] The renderer is disabled for customer execution; the CodeBuild dispatcher has a separate off-by-default certification guard.
 - [x] Unsupported operations, arbitrary Terraform/configuration, unresolved input bindings and mismatched account/project fail closed.
-- [ ] Focused tests, `make verify`, documentation checks and clean-room validation pass.
-- [ ] Ticket and evidence accurately state final validation type and limitations.
+- [x] Focused tests, `make verify`, documentation checks and clean-room validation pass.
+- [x] Ticket and evidence accurately state final validation type and limitations.
 
 ## Acceptance status
 
 The private S3 Terraform root, fixed lifecycle runner, typed output mapping,
-registry entry, dispatcher guard and tests are implemented. The renderer remains
-disabled. The local clean-room gate and GitHub CI have not completed yet.
+registry entry, dispatcher guard and tests are implemented. Focused tests,
+`make verify`, documentation checks and the isolated clean-room cycle passed.
+The renderer remains disabled. GitHub CI is pending.
 
 ## Tests / validation performed
 
 Terraform formatting, shell syntax, focused tests (61 passed), `make verify`
-(491 passed), Terraform validation and documentation conventions have passed.
-The fresh local clean-room cycle and GitHub CI remain pending.
+(491 passed), Terraform validation, documentation conventions and the fresh
+local clean-room cycle passed. GitHub CI remains pending.
 
 ## Evidence files produced
 

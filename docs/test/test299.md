@@ -1,10 +1,10 @@
 # test299 — Private S3 renderer contract
 
-Date: 2026-11-04  
-Execution type: Local tests and Terraform validation; no AWS workload.  
-Customer repository: `Bepoadewale/davdeploy`  
-Commit: pending final implementation commit  
-AWS account: Not applicable; no AWS credentials or resources used.  
+Date: 2026-11-04
+Execution type: Local tests and Terraform validation; no AWS workload.
+Customer repository: `Bepoadewale/davdeploy`
+Commit: `e42c4e2` (`feat: add gated private S3 workload renderer`)
+AWS account: Not applicable; no AWS credentials or resources used.
 AWS region: Not applicable.
 
 ## Resources created
@@ -21,7 +21,19 @@ AWS region: Not applicable.
 - `uv run ruff check ...` on changed Python and tests — passed.
 - `uv run pytest -q tests/test_module_ports.py tests/test_module_renderers.py tests/test_private_s3_renderer_contract.py tests/test_renderer_dispatcher.py tests/test_planner_decisions.py` — 61 passed.
 - `make verify` — 491 passed, one existing Starlette deprecation warning; OpenAPI snapshot and Compose config passed.
-- `GITHUB_PR_NUMBER=299 python3.12 scripts/check_doc_conventions.py` and `git diff --check` — pending after the final documentation update.
+- `GITHUB_PR_NUMBER=299 python3.12 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Clean-room cycle at commit `e42c4e2` — bootstrap, service smoke, API contract, customer-plan E2E, seed data, simple/complex/Day-2/degraded/policy/readiness demos, trace check and full `make verify` all passed (491 tests; one existing warning).
+
+Clean-room commands used a unique Compose project with a tmpfs override for
+PostgreSQL; the `/tmp` virtual environment is intentionally retained:
+
+```text
+git worktree add --detach /tmp/davdeploy-cleanroom-pr299-20261104 e42c4e2
+COMPOSE_FILE='/tmp/davdeploy-cleanroom-pr299-20261104/docker-compose.yml:/tmp/davdeploy-pr299-compose-overlay.yml' COMPOSE_PROJECT_NAME=davdeploy-pr299-cleanroom make -C /tmp/davdeploy-cleanroom-pr299-20261104 VENV=/tmp/davdeploy-pr299-venv bootstrap-local
+COMPOSE_FILE='/tmp/davdeploy-cleanroom-pr299-20261104/docker-compose.yml:/tmp/davdeploy-pr299-compose-overlay.yml' COMPOSE_PROJECT_NAME=davdeploy-pr299-cleanroom make -C /tmp/davdeploy-cleanroom-pr299-20261104 VENV=/tmp/davdeploy-pr299-venv smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify
+COMPOSE_FILE='/tmp/davdeploy-cleanroom-pr299-20261104/docker-compose.yml:/tmp/davdeploy-pr299-compose-overlay.yml' COMPOSE_PROJECT_NAME=davdeploy-pr299-cleanroom docker compose down --remove-orphans
+```
 
 ## Observed result
 
@@ -32,9 +44,11 @@ AWS region: Not applicable.
 - Output normalization accepts only declared, non-sensitive `bucket_name` and `bucket_arn` outputs.
 - The renderer is disabled in the Python registry. The dispatcher has a separate off-by-default certification gate, which the production adapter does not set.
 
+The clean-room Compose project used `tmpfs` for PostgreSQL storage; it created no named database volume. The isolated executor image builds completed successfully.
+
 ## Teardown
 
-No AWS resources were created, so no AWS teardown was needed. The generated provider cache is ignored under the module root. The required fresh local clean-room cycle has not run. The repository's `make clean-local` removes a generated PostgreSQL Docker volume plus local `.venv` and `.local` paths. The current personal `AGENTS.md` deletion rule requires explicit approval before deleting those artifacts. The PR remains draft until the clean-room requirement is satisfied.
+No AWS resources were created, so no AWS teardown was needed. The clean-room services used a unique Compose project and ephemeral PostgreSQL storage. Its project containers and network were stopped and removed with `docker compose down --remove-orphans`; no named volume was created or deleted. Docker images and the isolated `/tmp/davdeploy-pr299-venv` were retained. The validation worktree remains at `/tmp/davdeploy-cleanroom-pr299-20261104` for reproducibility. The Terraform provider cache remains ignored under the module root.
 
 ## Final boundary
 
