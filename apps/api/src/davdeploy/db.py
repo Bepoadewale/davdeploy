@@ -143,6 +143,38 @@ def _add_columns_if_missing(connection, table_name: str, additions: dict[str, st
             connection.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{name}" {definition}'))
 
 
+def _install_generated_plan_immutability(connection) -> None:
+    """Reject direct SQL edits to signed generated-plan evidence records."""
+    if connection.dialect.name == "sqlite":
+        for table in ("generated_plan_artifacts", "generated_plan_approvals"):
+            for operation in ("UPDATE", "DELETE"):
+                trigger = f"trg_{table}_{operation.lower()}_immutable"
+                connection.execute(
+                    text(
+                        f"CREATE TRIGGER IF NOT EXISTS {trigger} BEFORE {operation} ON {table} "
+                        "BEGIN SELECT RAISE(ABORT, 'generated plan evidence is immutable'); END"
+                    )
+                )
+        return
+    if connection.dialect.name == "postgresql":
+        connection.execute(
+            text(
+                "CREATE OR REPLACE FUNCTION davdeploy_reject_generated_plan_mutation() "
+                "RETURNS trigger AS $$ BEGIN "
+                "RAISE EXCEPTION 'generated plan evidence is immutable'; END; $$ LANGUAGE plpgsql"
+            )
+        )
+        for table in ("generated_plan_artifacts", "generated_plan_approvals"):
+            trigger = f"trg_{table}_immutable"
+            connection.execute(text(f'DROP TRIGGER IF EXISTS {trigger} ON "{table}"'))
+            connection.execute(
+                text(
+                    f'CREATE TRIGGER {trigger} BEFORE UPDATE OR DELETE ON "{table}" '
+                    "FOR EACH ROW EXECUTE FUNCTION davdeploy_reject_generated_plan_mutation()"
+                )
+            )
+
+
 def run_migrations(target: Engine | None = None) -> None:
     """Small versioned bootstrap for V1; replace with an expanded migration set as schemas evolve."""
     selected = target or engine
@@ -167,7 +199,8 @@ def run_migrations(target: Engine | None = None) -> None:
         ).scalar_one()
         if version < 1:
             Base.metadata.create_all(bind=connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (25)"))
+            _install_generated_plan_immutability(connection)
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
             return
         if version < 2:
             connection.execute(
@@ -321,6 +354,19 @@ def run_migrations(target: Engine | None = None) -> None:
                 )
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (25)"))
+            version = 25
+        if version < 26:
+            Base.metadata.create_all(bind=connection)
+            _add_columns_if_missing(
+                connection,
+                "generated_plan_artifacts",
+                {
+                    "context_sha256": "VARCHAR(64) NOT NULL DEFAULT ''",
+                    "policy_human_approval_required": "BOOLEAN NOT NULL DEFAULT TRUE",
+                },
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
+        _install_generated_plan_immutability(connection)
 
 
 def session() -> Generator[Session, None, None]:

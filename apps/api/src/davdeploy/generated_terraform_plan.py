@@ -50,6 +50,7 @@ class GeneratedTerraformPlan:
     aws_provider_version: str
     provider_lockfile_sha256: str
     proposal_sha256: str
+    context_sha256: str
     configuration_sha256: str
     saved_plan_sha256: str
     saved_plan_path: str
@@ -200,6 +201,7 @@ class GeneratedTerraformPlanRunner:
             aws_provider_version=lockfile_version,
             provider_lockfile_sha256=lockfile_digest,
             proposal_sha256=hashlib.sha256(proposal_bytes).hexdigest(),
+            context_sha256=proposal.context_digest,
             configuration_sha256=config_digest,
             saved_plan_sha256=hashlib.sha256(plan_bytes).hexdigest(),
             saved_plan_path=str(plan_path),

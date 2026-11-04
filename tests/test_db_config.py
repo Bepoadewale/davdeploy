@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 25
+            == 26
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -89,7 +89,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 25
+            == 26
         )
     engine.dispose()
 
@@ -113,6 +113,12 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
     }
     assert {"id", "runner_state", "runner_build_id"} <= columns
+    assert inspect(engine).has_table("generated_plan_artifacts")
+    assert inspect(engine).has_table("generated_plan_approvals")
+    artifact_columns = {
+        column["name"] for column in inspect(engine).get_columns("generated_plan_artifacts")
+    }
+    assert {"context_sha256", "manifest_sha256", "artifact_version_id"} <= artifact_columns
     indexes = {
         index["name"] for index in inspect(engine).get_indexes("cloud_execution_module_instances")
     }
@@ -120,7 +126,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 25
+            == 26
         )
         connection.execute(
             text(

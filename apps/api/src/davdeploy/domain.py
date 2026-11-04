@@ -373,6 +373,12 @@ class ApprovalRequest(BaseModel):
     plan_hash: str = Field(min_length=64, max_length=64)
 
 
+class GeneratedPlanArtifactApprovalRequest(BaseModel):
+    """Human approval binds one immutable generated-plan manifest digest."""
+
+    manifest_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class InfrastructurePlanDecisionRequest(BaseModel):
     decision: InfrastructurePlanDecision
     content_digest: str = Field(min_length=64, max_length=64)
