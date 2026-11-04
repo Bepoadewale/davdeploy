@@ -1,6 +1,6 @@
 # ticket316 Reconcile Nova execution status documentation
 
-PR: #316 (draft)
+PR: #316 https://github.com/Bepoadewale/davdeploy/pull/316
 Branch: docs/nova-execution-status-316
 
 ## Problem / goal
@@ -43,12 +43,14 @@ Nova plan, approval, hosted execution, recovery, and certification gates.
 - [x] Tickets #314 and #315 record their merge, CI, test evidence, and deployment
   boundaries.
 - [x] Documentation convention and diff checks pass.
-- [ ] Required GitHub CI passes and the PR is merged.
+- [x] All seven required GitHub Actions checks passed in run
+  [41887295787](https://github.com/Bepoadewale/davdeploy/actions/runs/41887295787).
 
 ## Acceptance status
 
-Implementation and local documentation checks are complete. GitHub CI and
-merge are pending.
+The documentation updates and local checks are complete. Required CI passed
+before merge. GitHub remains the source of truth for the PR lifecycle; this
+ticket records no deployment or runtime behavior.
 
 ## Tests / validation performed
 
