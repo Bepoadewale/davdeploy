@@ -120,14 +120,19 @@ def test_resend_invitation_sender_uses_a_bounded_transactional_message():
 def test_hosted_resend_sender_reads_the_key_from_ssm(monkeypatch):
     class SsmClient:
         def get_parameter(self, **request):
-            assert request == {"Name": "/davdeploy/runtime/resend-invitation-api-key", "WithDecryption": True}
+            assert request == {
+                "Name": "/davdeploy/runtime/resend-invitation-api-key",
+                "WithDecryption": True,
+            }
             return {"Parameter": {"Value": "resend-from-ssm"}}
 
     invitation_email._resend_api_key_from_environment.cache_clear()
     monkeypatch.delenv("DAVDEPLOY_RESEND_API_KEY", raising=False)
     monkeypatch.setenv("DAVDEPLOY_HOSTED_MODE", "true")
     monkeypatch.setenv("DAVDEPLOY_EMAIL_PROVIDER", "resend")
-    monkeypatch.setenv("DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER", "/davdeploy/runtime/resend-invitation-api-key")
+    monkeypatch.setenv(
+        "DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER", "/davdeploy/runtime/resend-invitation-api-key"
+    )
     monkeypatch.setenv("DAVDEPLOY_RESEND_FROM_ADDRESS", "DavDeploy <notify@davdeploy.tech>")
     monkeypatch.setenv("DAVDEPLOY_RESEND_REPLY_TO_ADDRESS", "support@davdeploy.tech")
     monkeypatch.setenv("DAVDEPLOY_FRONTEND_ORIGIN", "https://davdeploy.tech")
@@ -149,7 +154,7 @@ def test_fresh_schema_records_current_migration_version():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 24
+    assert version == 25
     columns = {column["name"] for column in inspect(engine).get_columns("workspace_invitations")}
     assert {"delivery_state", "send_count", "last_sent_at", "cancelled_at"} <= columns
     execution_columns = {
@@ -193,4 +198,4 @@ def test_invitation_migration_upgrades_existing_version_19_schema():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 24
+    assert version == 25

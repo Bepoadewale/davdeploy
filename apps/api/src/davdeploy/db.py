@@ -93,7 +93,9 @@ def database_url() -> str:
     if os.getenv("DAVDEPLOY_HOSTED_MODE", "false").lower() == "true" and resolved.startswith(
         "sqlite"
     ):
-        raise RuntimeError("hosted davdeploy runtime requires durable PostgreSQL; SQLite is not allowed")
+        raise RuntimeError(
+            "hosted davdeploy runtime requires durable PostgreSQL; SQLite is not allowed"
+        )
     return resolved
 
 
@@ -131,18 +133,14 @@ def _add_columns_if_missing(connection, table_name: str, additions: dict[str, st
     if connection.dialect.name == "postgresql":
         for name, definition in additions.items():
             connection.execute(
-                text(
-                    f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{name}" {definition}'
-                )
+                text(f'ALTER TABLE "{table_name}" ADD COLUMN IF NOT EXISTS "{name}" {definition}')
             )
         return
 
     columns = {column["name"] for column in inspect(connection).get_columns(table_name)}
     for name, definition in additions.items():
         if name not in columns:
-            connection.execute(
-                text(f'ALTER TABLE "{table_name}" ADD COLUMN "{name}" {definition}')
-            )
+            connection.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{name}" {definition}'))
 
 
 def run_migrations(target: Engine | None = None) -> None:
@@ -169,7 +167,7 @@ def run_migrations(target: Engine | None = None) -> None:
         ).scalar_one()
         if version < 1:
             Base.metadata.create_all(bind=connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (24)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (25)"))
             return
         if version < 2:
             connection.execute(
@@ -307,6 +305,22 @@ def run_migrations(target: Engine | None = None) -> None:
                 )
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (24)"))
+            version = 24
+        if version < 25:
+            Base.metadata.create_all(bind=connection)
+            _add_columns_if_missing(
+                connection,
+                "cloud_execution_module_instances",
+                {"runner_build_id": "VARCHAR(255)"},
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "uq_cloud_execution_module_runner_build_id "
+                    "ON cloud_execution_module_instances(runner_build_id)"
+                )
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (25)"))
 
 
 def session() -> Generator[Session, None, None]:
