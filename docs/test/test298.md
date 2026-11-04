@@ -41,7 +41,8 @@ the same warning. Ruff, shell syntax, OpenAPI snapshot, Compose configuration,
 documentation conventions, and `git diff --check` passed. The clean-room cycle
 on `baa934d` passed bootstrap, readiness, API contract, customer-plan E2E, seed,
 all simple, complex, Day-2, degraded, failure and readiness-failure demos, trace
-check, full verification, and cleanup. GitHub CI is pending.
+check, full verification, and cleanup. GitHub CI run 41767099282 passed all
+seven checks.
 
 ## Teardown
 
