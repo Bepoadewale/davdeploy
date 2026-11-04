@@ -3,7 +3,7 @@
 Date: 2026-11-04
 Execution type: Local automated tests; no customer workload
 Customer repository: N/A; no customer repository was used
-Commit: Pending final implementation commit
+Commit: `371a960` (implementation under test)
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -18,7 +18,7 @@ git diff --check
 
 ## Resources created
 
-No AWS or customer resources. Unit tests used temporary local fixtures.
+No AWS or customer resources. Unit tests used temporary local fixtures. An ignored `.venv` was created by an initial `uv run` attempt in the isolated worktree and retained; verification used the separate Python 3.12 environment listed above.
 
 ## Observed result
 
