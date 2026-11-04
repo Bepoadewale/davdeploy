@@ -48,15 +48,15 @@ Connect the already-validated dependency graph and per-module lifecycle rows to 
 
 ## Acceptance status
 
-The worker now selects one dependency-ready module row, assigns only that row the worker state/build identity, and queues the next dependency after a successful callback. Uncertain outcomes reconcile only the active module and leave undispatched rows untouched. Renderer inputs, repeated renderer types, and shared Terraform state roots remain fail-closed. Focused tests and `make verify` pass; clean-room validation and GitHub CI are pending.
+The worker now selects one dependency-ready module row, assigns only that row the worker state/build identity, and queues the next dependency after a successful callback. Uncertain outcomes reconcile only the active module and leave undispatched rows untouched. Renderer inputs, repeated renderer types, and shared Terraform state roots remain fail-closed. Focused tests, `make verify`, and the isolated clean-room cycle pass; GitHub CI is pending.
 
 ## Tests / validation performed
 
-Focused tests: `uv run pytest -q tests/test_universal_execution.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py` passed (114 passed; one existing Starlette deprecation warning). `make verify` passed (485 tests; one existing warning). `bash -n scripts/customer-workload-dispatcher.sh`, OpenAPI snapshot, Compose configuration, Ruff, documentation conventions, and `git diff --check` passed. Clean-room validation and GitHub CI remain pending.
+Focused tests: `uv run pytest -q tests/test_universal_execution.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py` passed (114 passed; one existing Starlette deprecation warning). `make verify` passed (485 tests; one existing warning). `bash -n scripts/customer-workload-dispatcher.sh`, OpenAPI snapshot, Compose configuration, Ruff, documentation conventions, and `git diff --check` passed. The clean-room validation passed on `b2f8a27`; GitHub CI is pending.
 
 ## Evidence files produced
 
-`docs/test/test298.md` will record local/clean-room validation. No real AWS resource mutation is planned for this scheduler-only change.
+`docs/test/test298.md` records local and clean-room validation. No real AWS resource mutation is planned for this scheduler-only change.
 
 ## Boundaries
 
