@@ -29,10 +29,12 @@ The pricing API endpoint region is separate from the product's AWS region. Price
 ## Work planned
 
 - Add an injectable Price List client and typed cost result/evidence in DavDeploy-owned code.
+- Read region, currency, and any monthly ceiling from the integrity-checked persisted customer revision; never treat a Nova-declared amount as authoritative. If Nova declares a conflicting budget, fail closed.
 - Add an explicit allowlist of priceable plan resource/usage combinations and exact regional/product filters.
 - Parse unique On-Demand USD price dimensions and calculate estimates only from known bounded quantities or trusted usage assumptions.
 - Treat unpriced material resources, missing variable-usage assumptions, ambiguous/missing products, stale or failed pricing lookup, and unsupported currencies as incomplete and not approval-eligible. Never treat a missing rate as zero.
-- Compare the conservative monthly high estimate with the approved budget when a budget is present.
+- Compare the estimate with the persisted customer budget when present. Label it a post-apply steady-state public On-Demand price-list estimate, not a bill forecast or spend cap; record that transition-period charges are excluded.
+- Require every planned AWS resource to have a matching change record or an explicit delete/replacement treatment. Missing final-state evidence must block review.
 - Bind cost evidence and policy outcome into the immutable plan manifest/database record and revalidate on approval.
 - Add offline Price List response fixtures; do not call AWS from tests or add customer IAM permissions.
 
@@ -49,7 +51,7 @@ The pricing API endpoint region is separate from the product's AWS region. Price
 
 ## Validation performed
 
-Not started. Planned validation uses local fixtures and injected fake AWS SDK responses. No customer cloud or pricing API calls are planned in CI.
+The isolated evaluator and offline fixture tests are in progress. `python -m pytest -q tests/test_generated_plan_pricing.py` passes locally with 38 cases; Ruff lint/format and `git diff --check` pass for those files. No AWS Price List call, customer cloud call, Cost Explorer request, or cloud mutation has been made. Runner, immutable-manifest, and approval-boundary integration are pending the in-progress ownership runner interface in PR #317.
 
 ## Evidence files
 
@@ -57,7 +59,8 @@ No customer workload run is in scope. No `docs/test/test318.md` is required unle
 
 ## Boundaries
 
-- This package estimates public On-Demand list pricing; it is not an invoice, discount-aware bill forecast, Free Tier calculation, Savings Plan estimate, or hard spend cap.
+- This package estimates post-apply steady-state public On-Demand list pricing for resources and usage it can explicitly price. Transition-period charges are excluded. It is not an invoice, complete bill forecast, discount-aware forecast, Free Tier calculation, Savings Plan estimate, or hard spend cap.
+- Nova-authored prices and budget requirements are not trusted. The persisted customer budget is authoritative; a conflicting Nova-declared budget is not reviewable.
 - It does not change customer IAM, deploy infrastructure, use Cost Explorer, or make an unpriced plan approvable by default.
 - Existing ownership-tag behavior is out of scope. Any additive runner-interface change will carry only cost evidence and must avoid ownership-policy behavior.
 
