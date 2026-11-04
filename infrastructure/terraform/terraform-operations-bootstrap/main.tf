@@ -433,8 +433,10 @@ data "aws_iam_policy_document" "apply_control_plane" {
       values   = ["davdeploy"]
     }
   }
+  # CodeBuild CreateProject does not support resource-level authorization; require
+  # the product and Terraform request tags, then scope later lifecycle calls by ARN.
   statement {
-    sid    = "CustomerExecutorCreate"
+    sid    = "CodeBuildProjectCreate"
     effect = "Allow"
     actions = [
       "codebuild:CreateProject"

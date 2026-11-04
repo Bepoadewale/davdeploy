@@ -58,6 +58,9 @@ def test_apply_role_is_limited_to_required_control_plane_services() -> None:
 
 def test_apply_role_can_manage_the_nova_plan_project_and_its_exact_log_group() -> None:
     source = bootstrap_source()
+    project_create = source.split('sid    = "CodeBuildProjectCreate"', 1)[1].split(
+        "statement {", 1
+    )[0]
     project_lifecycle = source.split('sid    = "CodeBuildProjectLifecycle"', 1)[1].split(
         "statement {", 1
     )[0]
@@ -68,6 +71,14 @@ def test_apply_role_can_manage_the_nova_plan_project_and_its_exact_log_group() -
         "statement {", 1
     )[0]
 
+    # CreateProject has no project-level resource type; AWS supports it only
+    # with Resource="*", so require the product and Terraform request tags.
+    assert '"codebuild:CreateProject"' in project_create
+    assert 'resources = ["*"]' in project_create
+    assert 'variable = "aws:RequestTag/Product"' in project_create
+    assert 'values   = ["davdeploy"]' in project_create
+    assert 'variable = "aws:RequestTag/ManagedBy"' in project_create
+    assert 'values   = ["Terraform"]' in project_create
     assert '"codebuild:UpdateProject"' in project_lifecycle
     assert '"codebuild:DeleteProject"' in project_lifecycle
     assert 'project/davdeploy-customer-executor' in project_lifecycle

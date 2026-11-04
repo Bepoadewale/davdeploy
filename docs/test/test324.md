@@ -49,3 +49,63 @@ The future trusted runner must upload request objects with S3 Bucket Keys disabl
 receives the object ARN and the prefix-scoped KMS condition can authorize the object. This PR
 does not provide that runner. IAM conditions were checked statically; no AWS IAM simulation or
 AWS API call was performed.
+
+## Review findings follow-up — commit `bddaeb92f37d306498292f5c2cba974a470aaecc`
+
+The operations apply role can now update, tag, untag, and delete the exact
+`davdeploy-nova-plan-only` project. Its log-group lifecycle permissions are limited to
+`/aws/codebuild/davdeploy-nova-plan-only`. The existing `RuntimeRoles` statement already
+covers the exact role name through `role/davdeploy-*`, including create/delete, policy
+attachment, and CodeBuild `iam:PassRole`; no duplicate IAM grant was added. AWS's current
+[CodeBuild authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_codebuild.html)
+does not define a resource type for `CreateProject`, so the action remains on `Resource="*"`
+with required `Product=davdeploy` and `ManagedBy=Terraform` request-tag conditions. The
+CodeBuild and CloudWatch Logs resource ARNs are otherwise project/group specific.
+
+Focused operations-bootstrap and serverless-runtime tests passed: 40 tests (one existing
+Starlette/httpx deprecation warning). `make verify` passed 689 tests, Ruff, Actions
+configuration, OpenAPI snapshot, and Compose validation. Recursive Terraform formatting,
+`make terraform-validate kubernetes-render`, and documentation conventions passed. All seven
+required GitHub checks passed in [run 41924494545](https://github.com/Bepoadewale/davdeploy/actions/runs/41924494545).
+
+### Fresh clean-room validation
+
+The cycle ran at commit `bddaeb9` in detached worktree
+`/private/tmp/davdeploy-cleanroom-pr324-20261104` with Compose project
+`davdeploy-pr324-cleanroom`. A fresh external virtual environment lives at
+`/private/tmp/davdeploy-pr324-venv`. A temporary Compose override replaced PostgreSQL's
+named volume with `tmpfs`; `docker compose config` confirmed an empty named-volume map. The
+initial clean check found no worktree `.venv` or `.local`, no project containers, and no
+project volumes.
+
+The following commands passed in the isolated worktree, in order:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr324-cleanroom COMPOSE_FILE=docker-compose.yml:docker-compose.cleanroom.yml make clean-local
+COMPOSE_PROJECT_NAME=davdeploy-pr324-cleanroom COMPOSE_FILE=docker-compose.yml:docker-compose.cleanroom.yml make VENV=/private/tmp/davdeploy-pr324-venv bootstrap-local
+COMPOSE_PROJECT_NAME=davdeploy-pr324-cleanroom COMPOSE_FILE=docker-compose.yml:docker-compose.cleanroom.yml make VENV=/private/tmp/davdeploy-pr324-venv smoke api-contract
+/private/tmp/davdeploy-pr324-venv/bin/python scripts/customer_plan_e2e.py --state-file /private/tmp/davdeploy-pr324-customer-plan-e2e.json
+COMPOSE_PROJECT_NAME=davdeploy-pr324-cleanroom COMPOSE_FILE=docker-compose.yml:docker-compose.cleanroom.yml make VENV=/private/tmp/davdeploy-pr324-venv seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify
+```
+
+Smoke/readiness, API contract, customer-plan E2E, seed, all demos, trace check, all Terraform
+roots, and Kubernetes rendering passed. The clean-room `make verify` passed 689 tests with
+one existing deprecation warning, Ruff, Actions configuration, OpenAPI, and Compose checks.
+No AWS calls or Terraform apply occurred.
+
+The following repository checks also passed from the PR branch worktree:
+
+```text
+/private/tmp/davdeploy-pr322-venv/bin/pytest -q tests/test_terraform_operations_bootstrap.py tests/test_serverless_runtime.py
+make VENV=/private/tmp/davdeploy-pr322-venv verify
+terraform fmt -check -recursive infrastructure/terraform
+make terraform-validate kubernetes-render
+python3.12 scripts/check_doc_conventions.py
+git diff --check
+```
+
+The run generated `.local`; to honor the instruction to preserve generated files and volumes,
+the final `make clean-local` was not run. The worktree, `.local`, external virtual environment,
+test state file, and isolated Compose stack remain intact. Compose created no named volume;
+PostgreSQL used `tmpfs`. The clean-room test sequence passed through verification, while its
+final teardown step remains unmet by design.

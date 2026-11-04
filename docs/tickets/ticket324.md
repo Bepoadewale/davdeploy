@@ -50,11 +50,33 @@ The project must fail closed until the trusted fixed runner is wired. The future
 
 ## Acceptance status
 
-Infrastructure implementation and local validation are complete. All seven required GitHub checks passed on the implementation/evidence commits in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576) and [run 41918524417](https://github.com/Bepoadewale/davdeploy/actions/runs/41918524417). The PR remains a draft and unmerged.
+The infrastructure behavior and review findings are addressed. The PR remains open,
+mergeable, and unmerged. Fresh isolated validation passed through `make verify`; the final
+clean-room teardown is intentionally incomplete because `.local` was generated and the
+instruction was to preserve files and volumes. No generated files or Docker volumes were
+deleted.
+
+### Review findings follow-up
+
+- [x] Terraform operations apply role can update/tag/untag/delete only the two named
+  CodeBuild projects (`davdeploy-customer-executor` and `davdeploy-nova-plan-only`). The
+  existing `davdeploy-*` role lifecycle grant already covers `davdeploy-nova-plan-only`, so
+  no duplicate service-role permission was added.
+- [x] Plan-only CloudWatch log-group create/delete/retention/tag lifecycle actions are scoped
+  to `/aws/codebuild/davdeploy-nova-plan-only` and its stream ARN.
+- [x] The CodeBuild project create action remains conditioned on `Product=davdeploy` and
+  `ManagedBy=Terraform` request tags. AWS's authorization reference does not expose
+  resource-level scoping for `CreateProject`.
+- [x] Fresh worktree validation passed bootstrap through all demos, trace check, and
+  `make verify` (689 tests).
+- [ ] Final clean-room teardown was not run: the fresh worktree contained generated `.local`,
+  and files and volumes were explicitly required to be preserved. The isolated Compose
+  stack, worktree, and external virtual environment remain available.
 
 ## Tests / validation performed
 
-See `docs/test/test324.md` for focused tests, full repository verification, Terraform validation, documentation checks, and the required GitHub check run.
+See `docs/test/test324.md` for focused tests, full repository verification, Terraform
+validation, documentation checks, fresh clean-room results, and GitHub check runs.
 
 ## Evidence files produced
 
