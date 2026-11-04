@@ -109,20 +109,21 @@ These entries identify resource roots or module paths. None is automatically a c
 | `aws-site-to-site-vpn` | `modules/site-to-site-vpn` | none |
 | `aws-multi-region-dns` | `modules/multi-region-dns` | none |
 
-The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled for ordinary hosted customer execution. PR #275 adds project isolation; PR #284 adds a certification-only API lifecycle guarded by a disabled-by-default flag and explicit workspace allowlist. It remains unproven in hosted AWS. PR #299 adds a separately gated private S3 renderer; it is not customer-enabled and has no real AWS lifecycle evidence. PR #300 adds a single typed S3 bucket-name input and scoped Lambda policy, but it does not enable customer execution. PR #301 adds a gated DynamoDB renderer; PR #302 adds the table-to-API binding; PR #303 fixes the dispatcher input allowlist in source but is not yet deployed. App Runner remains the only generally enabled customer renderer.
+## Legacy renderer compatibility context
 
-## Work that remains
+The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled for ordinary hosted customer execution. PR #275 adds project isolation; PR #284 adds a certification-only API lifecycle guarded by a disabled-by-default flag and explicit workspace allowlist. It remains unproven in hosted AWS. PR #299 adds a separately gated private S3 renderer; it is not customer-enabled and has no real AWS lifecycle evidence. PR #300 adds a single typed S3 bucket-name input and scoped Lambda policy, but it does not enable customer execution. PR #301 adds a gated DynamoDB renderer; PR #302 adds the table-to-API binding; PR #303 fixes the dispatcher input allowlist in source but is not deployed. App Runner remains the only generally enabled customer renderer. The #303 apply is needed only to continue that legacy renderer path; it does not block the Nova plan-only path described above.
 
-1. PRs #289–#302 are included in apply run `41781326222`; deploy the merged #303 dispatcher correction through the reviewed Terraform workflow before invoking the typed DynamoDB-to-API path.
-2. Deploy and validate PR #299's private S3 renderer in an explicitly controlled AWS test before considering enablement.
-3. Certify the PR #300 S3-to-API and PR #302 DynamoDB-to-API bindings in controlled AWS, proving real requests, cleanup and absence without caller-supplied Terraform.
-4. Add authenticated worker restart/reconciliation, bounded retry rules, partial-failure recovery and exact reverse cleanup evidence.
-5. Implement and certify renderer families in the active execution-goal order. Do not equate standalone service tests with composed renderer certification.
-6. Extend the scenario harness to exercise composed applications through the hosted runner, including traffic, update/recovery and absence verification.
-7. Replace fixture pricing/inventory with timestamped provider data, and align browser, CLI and MCP with the same authorized lifecycle.
-8. Run the final hosted browser, CLI and MCP acceptance journey and reconcile closeout evidence.
+## Active Nova-led work that remains
 
-See `docs/test/test268.md`, `docs/tickets/ticket270.md`, and the active goal handoff for detailed evidence and boundaries.
+1. Add trustworthy region-specific plan pricing, cost ranges, usage assumptions and budget checks; deny approval when material cost remains unpriced or unknown.
+2. Strengthen ownership evidence and typed-reference validation across composed proposals without rejecting safe references among resources in the same plan.
+3. Add a durable hosted plan-only job that calls Nova, validates the typed proposal, runs the pinned Terraform planner, and stores the exact saved plan. Keep apply disabled in this step.
+4. Add separately authorized apply of the exact approved saved plan, with durable run identity, leases, idempotency, restart reconciliation, bounded retries and exact state/artifact scoping.
+5. Add deterministic workload health probes, update and failure recovery, data-recovery evidence, exact destroy and independent absence checks.
+6. Run composed application scenarios through the hosted Nova path. Existing isolated AWS service tests are reusable evidence, not a substitute for those lifecycle results.
+7. Align browser, CLI and MCP with the same authorized plan/review/apply lifecycle, then run the full customer acceptance journey.
 
-The step-by-step goal status and next actions are in
-[`COMPOSED_EXECUTION_GOAL.md`](COMPOSED_EXECUTION_GOAL.md).
+See `docs/test/test268.md` and `docs/tickets/ticket270.md` for legacy pilot evidence and boundaries.
+
+The technical PR evidence is recorded in `docs/tickets/ticket311.md` through
+`docs/tickets/ticket315.md` and matching `docs/test/` files where available.

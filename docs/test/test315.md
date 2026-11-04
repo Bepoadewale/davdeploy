@@ -32,7 +32,8 @@ mutation was performed.
   and Compose configuration passed.
 - Documentation conventions and `git diff --check`: passed.
 - Independent read-only review: no remaining blocker.
-- Hosted CI: pending.
+- All seven GitHub CI checks passed in run
+  [41884458868](https://github.com/Bepoadewale/davdeploy/actions/runs/41884458868).
 
 ## Resources created
 
