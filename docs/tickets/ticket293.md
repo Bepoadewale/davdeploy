@@ -35,7 +35,7 @@ PRs #289–#291 validate lifecycle graph inputs, compute dependency waves and pe
 - [x] Legacy single-instance plans remain valid without an explicit instance ID.
 - [x] Invalid or ambiguous identities fail before dispatch.
 - [x] Worker dispatch remains single-module and no new renderer is enabled.
-- [ ] Focused tests, full verification and required GitHub CI pass.
+- [x] Focused tests, full verification and required GitHub CI pass.
 
 ## Acceptance status
 
@@ -51,7 +51,7 @@ continue to use their module type as the default instance ID.
 - `.venv/bin/ruff check ...` on all changed Python files — passed.
 - `git diff --check` — passed.
 - Full isolated clean-room cycle passed from an empty worktree with a dedicated Compose project: cleanup, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. The run ended with all test-created containers, project network, database volume and virtual environment removed.
-- Required GitHub PR checks — pending.
+- GitHub Actions run [41751372102](https://github.com/Bepoadewale/davdeploy/actions/runs/41751372102) — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain. The ticket-only follow-up commit will receive a fresh CI run before merge.
 
 ## Evidence files produced
 
