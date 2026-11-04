@@ -41,14 +41,13 @@ routes without an authorization header. Keep production behavior unchanged.
 - [x] Anonymous comment creation and comment editing are rejected.
 - [x] Anonymous team post listing, creation, and editing are rejected.
 - [x] Existing route behavior is unchanged.
-- [x] Focused local tests pass; CI is rerunning after the final isolation guards.
+- [x] Focused local tests and required CI pass.
 - [x] No AWS resources or external services are used.
 
 ## Acceptance status
 
-Implementation complete. Focused local verification passed. The most recent CI run
-passed, but cloud guard stubs were added afterward, so CI is pending for the updated
-head.
+Implementation complete. Focused local verification passed. CI run `41936968210`
+passed all seven checks on the isolation-fix commit.
 
 ## Tests / validation performed
 
@@ -56,7 +55,7 @@ head.
 - `uv run ruff check tests/test_public_blog_api_access.py` — passed.
 - Missing required `Authorization` headers currently return HTTP 422 from FastAPI's header validation; they do not reach protected handlers. The test records this current behavior without changing it.
 - TestClient does not enter the application lifespan; patched global migration/session factories fail the test if called. The edge-origin and Aurora readiness checks are deterministic local stubs, and `boto3.client` is patched to fail if any cloud call is attempted. The test restores any previous dependency override and closes its temporary session and engine.
-- GitHub CI run `41936237791` — all seven checks passed before the final cloud-boundary stubs; current-head CI is pending.
+- GitHub CI run `41936968210` — all seven checks passed on commit `731cb16`.
 
 ## Evidence files produced
 
@@ -69,5 +68,4 @@ authorization, content, or infrastructure behavior.
 
 ## Follow-up work
 
-No production behavior change was needed. The PR remains open and unmerged. Current-head
-CI is pending.
+No production behavior change was needed. The PR remains open and unmerged.
