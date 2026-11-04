@@ -27,6 +27,7 @@ Add strict models for proposal, resources, typed references, declared outputs, r
 - [x] Reject duplicate IDs/addresses, invalid dependencies, unresolved references, type mismatch and dependency cycles.
 - [x] Reject raw Terraform expressions and sensitive/execution authority fields.
 - [x] Carry context digest, source revision, costs, health and recovery requirements.
+- [x] Emit a JSON schema usable for structured Nova generation.
 - [ ] Required CI passes and review is complete.
 
 ## Acceptance status
@@ -35,7 +36,7 @@ Local implementation and focused tests pass. Hosted execution is not connected. 
 
 ## Tests / validation performed
 
-Ruff passed for changed files. .venv/bin/python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py: 13 passed. No AWS operations.
+Ruff passed for changed files. .venv/bin/python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py: 14 passed. No AWS operations.
 
 ## Evidence files produced
 

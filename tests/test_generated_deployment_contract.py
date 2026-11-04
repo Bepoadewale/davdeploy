@@ -116,3 +116,11 @@ def test_contract_rejects_unsafe_or_invalid_graphs(
 ) -> None:
     with pytest.raises(ValidationError):
         GeneratedDeploymentProposal.model_validate(proposal(resources))
+
+
+def test_contract_emits_a_json_schema_for_nova_structured_generation() -> None:
+    schema = GeneratedDeploymentProposal.model_json_schema()
+
+    assert schema["title"] == "GeneratedDeploymentProposal"
+    assert "resources" in schema["properties"]
+    assert "requirements" in schema["properties"]
