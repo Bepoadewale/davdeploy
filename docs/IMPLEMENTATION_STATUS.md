@@ -7,7 +7,7 @@
 | Capability | Evidence |
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
-| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. PRs #320 and #321 are merged source changes only: no Nova-generated plan has been deployed. PR #318 is closed; its pricing approach remains unresolved. The hosted plan-only runner, tenant-scoped remote state, and actual-cost gate remain incomplete; open PR #322 does not satisfy the actual-cost gate. |
+| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. Merged PR #322 marks regional pricing unavailable and blocks approval until complete region-bound cost evidence is present. The trusted pricing evaluator is not integrated, so generated plans remain unapprovable; no Nova-generated plan has been deployed. PR #318 is closed and its pricing approach remains unresolved. The hosted plan-only runner and tenant-scoped remote state remain incomplete. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -45,7 +45,7 @@
 
 ## Simulated
 
-- Natural-language understanding uses deterministic parsing by default. A governed Nova 2 Lite adapter is implemented and its basic live transport/response shape was verified with two synthetic cases, but it remains disabled for customers until current pricing, broader evaluation and tenant rollout gates are configured.
+- Natural-language understanding uses deterministic parsing by default. A governed Nova 2 Lite adapter is implemented and its basic live transport/response shape was verified with two synthetic cases, but it remains disabled for customers until current pricing, broader evaluation and tenant rollout gates are configured. Generated-plan pricing remains unavailable and PR #322 blocks approval until a trusted region-bound pricing evaluator supplies complete evidence.
 - The default planner inventory and pricing remain local fixtures. The separately recorded customer discovery snapshot is live, read-only evidence; it does not grant deployment permission.
 - Customer-plan dry-run deployment, destroy and Day-2 change application are bounded local fixtures, not AWS, Terraform, Docker or Kubernetes execution.
 - Deployment outputs/resource inventory are currently populated from the bounded fixture observer. Real AWS App Runner outputs were proven in PR #42 scripts/evidence, but they are not yet ingested through the product UI execution path.
