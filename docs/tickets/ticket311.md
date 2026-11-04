@@ -30,16 +30,16 @@ Generate a deterministic root from the validated proposal plus trusted AWS provi
 - [x] `init`, `validate`, `plan`, and `show -json` use fixed arguments, bounded timeouts, and no backend.
 - [x] Plan JSON values are never persisted or returned; saved plan bytes are mode `0600` in a mode `0700` workspace and digest-bound.
 - [x] Plan failures, unapplyable/errored plans, saved-plan tampering and unsafe paths fail closed.
-- [x] Focused tests, full `make verify`, and a real AWS-authenticated plan pass; required CI is pending.
+- [x] Focused tests, full `make verify`, real AWS-authenticated plan and clean-room cycle pass; required CI is pending.
 - [ ] Review is complete.
 
 ## Acceptance status
 
-Implementation and local tests pass. A real AWS-authenticated plan (no apply) passed in account `654654474502`, region `us-east-1`, using Terraform `1.14.7` and AWS provider `5.100.0`. It planned two creates: one synthetic S3 bucket and the trusted account guard. Exact digests and limitations are in `docs/test/test311.md`. `make verify` passed with 552 tests, Ruff, Actions configuration, OpenAPI and Compose checks. Documentation conventions passed; required CI is pending.
+Implementation and verification pass. A real AWS-authenticated plan (no apply) passed in account `654654474502`, region `us-east-1`, using Terraform `1.14.7` and AWS provider `5.100.0`. It planned two creates: one synthetic S3 bucket and the trusted account guard. The clean-room bootstrap, smoke, API, demo, trace and verification cycle also passed. Exact digests and limitations are in `docs/test/test311.md`. `make verify` passed with 552 tests, Ruff, Actions configuration, OpenAPI and Compose checks. Documentation conventions passed; required CI is pending.
 
 ## Tests / validation performed
 
-Focused tests: `.venv/bin/python -m pytest -q tests/test_generated_terraform_plan.py` (11 passed). A real run of `GeneratedTerraformPlanRunner.plan` completed `terraform init -backend=false`, provider schema validation, `terraform validate`, saved `terraform plan`, and `terraform show -json`; no AWS resources were created. Saved-plan tampering is detected by the digest verifier. `make verify`: 552 passed, plus Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose config. `GITHUB_PR_NUMBER=311 .venv/bin/python scripts/check_doc_conventions.py` passed. Required CI is pending.
+Focused tests: `.venv/bin/python -m pytest -q tests/test_generated_terraform_plan.py` (11 passed). A real run of `GeneratedTerraformPlanRunner.plan` completed `terraform init -backend=false`, provider schema validation, `terraform validate`, saved `terraform plan`, and `terraform show -json`; no AWS resources were created. Saved-plan tampering is detected by the digest verifier. `make verify`: 552 passed, plus Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose config. The isolated clean-room cycle passed all documented targets at commit `2bc7f31`. Documentation conventions passed. Required CI is pending.
 
 ## Evidence files produced
 

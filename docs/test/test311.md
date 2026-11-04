@@ -5,6 +5,8 @@ Date: 2026-11-04
 Execution type: real AWS-authenticated Terraform plan only. No apply, destroy,
 or AWS resource creation was run.
 
+Test ID: `pr311-read-only-plan-test`.
+
 Customer repository: None. The proposal and bucket name are synthetic.
 
 Repository: `Bepoadewale/davdeploy`.
@@ -71,3 +73,21 @@ This proves a local, authenticated, actual Terraform plan against the target
 AWS account and the pinned AWS provider. It does not prove hosted CodeBuild
 dispatch, pricing accuracy, customer approval, apply, application health,
 recovery or cleanup. No customer workload was deployed.
+
+## Clean-room verification
+
+At PR commit `2bc7f31`, an isolated worktree at
+`/tmp/davdeploy-cleanroom-pr311-20261104` passed `make bootstrap-local`, then:
+
+```text
+make VENV=/tmp/davdeploy-pr311-venv smoke api-contract customer-plan-e2e \
+  seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure \
+  demo-readiness-failure trace-check verify
+```
+
+Readiness, API contract, fixture customer-plan flow, seeded demo data, all six
+demo modes, trace check and `make verify` passed. The suite passed 552 tests;
+Ruff, Actions configuration, OpenAPI and Compose checks passed. All temporary
+containers for Docker Compose project `davdeploy-pr311-cleanroom` were stopped
+and removed. Its named Docker network and PostgreSQL volume, along with the
+worktree and virtual environment, remain for review; they were not deleted.
