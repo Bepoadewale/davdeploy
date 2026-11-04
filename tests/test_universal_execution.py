@@ -2,6 +2,7 @@ from hashlib import sha256
 
 import pytest
 from davdeploy.certification_factory import certification_scenarios, scenario_for_module
+from davdeploy.composed_deployment import dependency_dispatch_wave
 from davdeploy.domain import ArchitectureModule
 from davdeploy.universal_execution import (
     LifecycleEvidence,
@@ -166,6 +167,82 @@ def test_serialized_lifecycle_graph_accepts_forward_and_reverse_dependency_order
 def test_serialized_lifecycle_graph_rejects_invalid_or_unordered_work(work, message):
     with pytest.raises((TypeError, ValueError), match=message):
         validate_lifecycle_work_graph(work)
+
+
+def test_dispatch_wave_starts_roots_and_independent_modules_only():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"]), module("uploads")],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    wave = dependency_dispatch_wave(
+        plan,
+        "apply",
+        {"api": "NOT_DISPATCHED", "worker": "NOT_DISPATCHED", "uploads": "NOT_DISPATCHED"},
+    )
+    assert [item.module_id for item in wave] == ["api", "uploads"]
+
+    next_wave = dependency_dispatch_wave(
+        plan,
+        "apply",
+        {"api": "HEALTHY", "worker": "NOT_DISPATCHED", "uploads": "RUNNING"},
+    )
+    assert [item.module_id for item in next_wave] == ["worker"]
+
+
+@pytest.mark.parametrize("blocked_state", ["FAILED", "RECONCILIATION_REQUIRED", "RUNNING"])
+def test_dispatch_wave_blocks_dependents_until_prerequisite_is_terminal(blocked_state):
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"])],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    wave = dependency_dispatch_wave(
+        plan, "apply", {"api": blocked_state, "worker": "NOT_DISPATCHED"}
+    )
+    assert wave == ()
+
+
+def test_cleanup_dispatch_wave_removes_dependents_before_dependencies():
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"])],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    first_wave = dependency_dispatch_wave(
+        plan, "destroy", {"api": "NOT_DISPATCHED", "worker": "NOT_DISPATCHED"}
+    )
+    assert [item.module_id for item in first_wave] == ["worker"]
+    second_wave = dependency_dispatch_wave(
+        plan, "destroy", {"api": "NOT_DISPATCHED", "worker": "DESTROYED_VERIFIED"}
+    )
+    assert [item.module_id for item in second_wave] == ["api"]
+
+
+@pytest.mark.parametrize(
+    ("states", "message"),
+    [
+        ({"api": "NOT_DISPATCHED"}, "do not match"),
+        ({"api": "NOT_DISPATCHED", "worker": "NOT_DISPATCHED", "extra": "NOT_DISPATCHED"}, "do not match"),
+        ({"api": "NOT_DISPATCHED", "worker": "UNKNOWN"}, "unknown lifecycle state"),
+    ],
+)
+def test_dispatch_wave_rejects_incomplete_or_unknown_persisted_states(states, message):
+    digest = sha256(b"approved").hexdigest()
+    plan = compile_universal_execution_plan(
+        [module("api"), module("worker", ["api"])],
+        workspace_id="w",
+        project_id="p",
+        plan_digest=digest,
+    )
+    with pytest.raises(ValueError, match=message):
+        dependency_dispatch_wave(plan, "apply", states)
 
 
 @pytest.mark.parametrize(
