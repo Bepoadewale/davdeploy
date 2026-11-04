@@ -13,6 +13,7 @@ from davdeploy.generated_plan_artifacts import (
     StoredPlanObject,
     canonical_json_digest,
     generated_plan_manifest,
+    has_complete_pricing_evidence,
     policy_allows_human_review,
     policy_evidence,
 )
@@ -305,7 +306,16 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 2
+    assert manifest["manifest_version"] == 3
+    assert manifest["pricing"] == {
+        "status": "UNAVAILABLE",
+        "region": "us-east-1",
+        "currency": None,
+        "monthly_cost": None,
+        "evidence_sha256": None,
+        "reason_code": "regional_pricing_evaluator_not_integrated",
+    }
+    assert not has_complete_pricing_evidence(manifest)
     assert manifest["digests"]["ownership_scope_sha256"] == "f" * 64
     assert manifest["digests"]["ownership_plan_id_sha256"] == "9" * 64
     assert "private/path" not in repr(manifest)

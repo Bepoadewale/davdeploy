@@ -70,7 +70,7 @@ class ArtifactStoreFixture:
             raise GeneratedPlanArtifactError("not found")
 
 
-def make_approved_revision(service):
+def make_submitted_revision(service):
     project = service.create_project(
         founder(), "nova-artifact-project", "https://github.com/example/nova-artifact", "main"
     )
@@ -104,6 +104,11 @@ def make_approved_revision(service):
     revision.content_digest = plan_hash(revision.content)
     service.db.commit()
     service.submit_infrastructure_plan(founder(), revision.id)
+    return project, connection, revision
+
+
+def make_approved_revision(service):
+    project, connection, revision = make_submitted_revision(service)
     approved = service.decide_infrastructure_plan(
         operator(), revision.id, InfrastructurePlanDecision.APPROVED, revision.content_digest
     )
@@ -195,10 +200,10 @@ def service_with_file_database(store, database_path):
     return service, db
 
 
-def test_generated_plan_manifest_persists_and_admin_approves_exact_artifact(tmp_path):
+def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path):
     store = ArtifactStoreFixture()
     service, db = service_with_artifact_store(store)
-    project, _, revision = make_approved_revision(service)
+    project, _, revision = make_submitted_revision(service)
     proposal, generated = generated_runner_result(tmp_path, revision, project)
 
     artifact = service.persist_generated_plan_artifact(
@@ -206,7 +211,16 @@ def test_generated_plan_manifest_persists_and_admin_approves_exact_artifact(tmp_
     )
     detail = service.generated_plan_artifact_detail(founder(), artifact.id)
 
-    assert detail["state"] == "AWAITING_HUMAN_APPROVAL"
+    assert detail["state"] == "WAITING_FOR_COST_EVIDENCE"
+    assert detail["pricing"] == {
+        "status": "UNAVAILABLE",
+        "region": "us-east-1",
+        "currency": None,
+        "monthly_cost": None,
+        "reason_code": "regional_pricing_evaluator_not_integrated",
+        "approval_allowed": False,
+        "message": "Waiting for complete regional cost evidence.",
+    }
     assert detail["execution"] == "NOT_APPLIED_REVIEW_ONLY"
     assert detail["manifest_sha256"] == canonical_json_digest(artifact.manifest)
     assert "artifact_bucket" not in detail
@@ -222,9 +236,7 @@ def test_generated_plan_manifest_persists_and_admin_approves_exact_artifact(tmp_
         )
     db.rollback()
     with pytest.raises(IntegrityError, match="generated plan evidence is immutable"):
-        db.execute(
-            delete(GeneratedPlanArtifact).where(GeneratedPlanArtifact.id == artifact.id)
-        )
+        db.execute(delete(GeneratedPlanArtifact).where(GeneratedPlanArtifact.id == artifact.id))
     db.rollback()
 
     with pytest.raises(PermissionError, match="administrator role"):
@@ -233,29 +245,26 @@ def test_generated_plan_manifest_persists_and_admin_approves_exact_artifact(tmp_
     with pytest.raises(PermissionError, match="administrator role"):
         service.approve_generated_plan_artifact(operator(), artifact.id, artifact.manifest_sha256)
 
-    approved = service.approve_generated_plan_artifact(
-        administrator(), artifact.id, artifact.manifest_sha256
-    )
-    record = db.scalar(
-        select(GeneratedPlanApproval).where(GeneratedPlanApproval.artifact_id == artifact.id)
-    )
-    assert approved["state"] == "APPROVED"
-    assert record.approved_manifest_sha256 == artifact.manifest_sha256
-    assert record.is_self_approval is False
-    assert store.verified[0][1] == RUN_ID
-    assert (
-        service.infrastructure_plan_revision_detail(founder(), revision.id)["state"] == "APPROVED"
-    )
-    with pytest.raises(ValueError, match="already been approved"):
+    with pytest.raises(ValueError, match="complete regional cost evidence is unavailable"):
         service.approve_generated_plan_artifact(
             administrator(), artifact.id, artifact.manifest_sha256
         )
+    assert (
+        db.scalar(
+            select(GeneratedPlanApproval.id).where(GeneratedPlanApproval.artifact_id == artifact.id)
+        )
+        is None
+    )
+    assert (
+        service.infrastructure_plan_revision_detail(founder(), revision.id)["state"] == "SUBMITTED"
+    )
+    assert store.verified == []
 
 
-def test_generated_plan_approval_rejects_tampering_expiry_and_missing_object(tmp_path):
-    store = ArtifactStoreFixture(missing_on_verify=True)
+def test_generated_plan_approval_rejects_manifest_digest_tampering(tmp_path):
+    store = ArtifactStoreFixture()
     service, _ = service_with_artifact_store(store)
-    project, _, revision = make_approved_revision(service)
+    project, _, revision = make_submitted_revision(service)
     proposal, generated = generated_runner_result(tmp_path, revision, project)
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, RUN_ID, proposal, generated
@@ -264,13 +273,52 @@ def test_generated_plan_approval_rejects_tampering_expiry_and_missing_object(tmp
     with pytest.raises(ValueError, match="digest does not match"):
         service.approve_generated_plan_artifact(administrator(), artifact.id, "0" * 64)
 
-    with pytest.raises(ValueError, match="missing or failed integrity"):
-        service.approve_generated_plan_artifact(
-            administrator(), artifact.id, artifact.manifest_sha256
-        )
+    original_digest = artifact.manifest_sha256
+    artifact.manifest["pricing"]["status"] = "COMPLETE"
+    with pytest.raises(ValueError, match="manifest failed integrity"):
+        service.approve_generated_plan_artifact(administrator(), artifact.id, original_digest)
     assert not service.db.scalar(
         select(GeneratedPlanApproval.id).where(GeneratedPlanApproval.artifact_id == artifact.id)
     )
+
+
+def test_submitted_generated_plan_rejects_stale_revision(tmp_path):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    project, _, revision = make_submitted_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+
+    parent_plan = service._infrastructure_plan(founder(), revision.infrastructure_plan_id)
+    service._new_infrastructure_plan_revision(
+        parent_plan,
+        founder(),
+        revision.content,
+        revision.revision_number + 1,
+    )
+    service.db.commit()
+
+    with pytest.raises(ValueError, match="stale because a newer revision exists"):
+        service.persist_generated_plan_artifact(
+            founder(), revision.id, str(uuid.uuid4()), proposal, generated
+        )
+    assert store.saved == []
+
+
+def test_submitted_generated_plan_rejects_customer_revision_tampering(tmp_path):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    project, _, revision = make_submitted_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+    revision.content = {
+        **revision.content,
+        "target": {**revision.content["target"], "region": "eu-west-1"},
+    }
+
+    with pytest.raises(ValueError, match="revision failed integrity verification"):
+        service.persist_generated_plan_artifact(
+            founder(), revision.id, str(uuid.uuid4()), proposal, generated
+        )
+    assert store.saved == []
 
 
 def test_generated_plan_persistence_rejects_denied_policy_and_wrong_parent_state(tmp_path):
@@ -380,7 +428,7 @@ def test_generated_plan_persistence_binds_proposal_to_exact_customer_revision(tm
 def test_generated_plan_review_routes_are_tenant_scoped_and_admin_only(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_file_database(store, tmp_path / "api-test.db")
-    project, _, revision = make_approved_revision(service)
+    project, _, revision = make_submitted_revision(service)
     proposal, generated = generated_runner_result(tmp_path, revision, project)
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, str(uuid.uuid4()), proposal, generated
@@ -410,13 +458,16 @@ def test_generated_plan_review_routes_are_tenant_scoped_and_admin_only(tmp_path)
             )
             assert operator_attempt.status_code == 403
 
-            approved = client.post(
+            approval_blocked = client.post(
                 f"/api/v1/generated-plan-artifacts/{artifact.id}/approve",
                 json={"manifest_sha256": artifact.manifest_sha256},
                 headers={"Authorization": f"Bearer {issue_local_token('administrator')}"},
             )
-            assert approved.status_code == 200
-            assert approved.json()["state"] == "APPROVED"
-            assert approved.json()["execution"] == "NOT_APPLIED_REVIEW_ONLY"
+            assert approval_blocked.status_code == 409
+            assert "complete regional cost evidence is unavailable" in approval_blocked.text
+            assert (
+                service.infrastructure_plan_revision_detail(founder(), revision.id)["state"]
+                == "SUBMITTED"
+            )
     finally:
         app.dependency_overrides.pop(product_service, None)

@@ -52,6 +52,7 @@ from davdeploy.generated_plan_artifacts import (
     canonical_json_digest,
     configured_generated_plan_artifact_store,
     generated_plan_manifest,
+    has_complete_pricing_evidence,
     policy_allows_human_review,
     policy_evidence,
 )
@@ -1901,8 +1902,10 @@ class ProductService:
     ) -> GeneratedPlanArtifact:
         """Persist trusted runner output; this method is deliberately not an HTTP endpoint.
 
-        The customer-facing plan must already be approved. Only the trusted server
-        runner can call this boundary with a typed proposal and its real saved plan.
+        The current customer-facing revision must be submitted or explicitly
+        approved. Only the trusted server runner can call this boundary with a
+        typed proposal and its real saved plan. Regional pricing is recorded as
+        unavailable until a trusted evaluator is integrated.
         """
         revision = self._infrastructure_revision(principal, revision_id)
         try:
@@ -1911,8 +1914,11 @@ class ProductService:
             raise ValueError("generated-plan run identifier is invalid") from error
         customer_plan = self._infrastructure_plan(principal, revision.infrastructure_plan_id)
         self._project(principal, customer_plan.project_id)
-        if revision.state != InfrastructurePlanState.APPROVED:
-            raise ValueError("generated Terraform plans require an approved customer revision")
+        if revision.state not in {
+            InfrastructurePlanState.SUBMITTED,
+            InfrastructurePlanState.APPROVED,
+        }:
+            raise ValueError("generated Terraform plans require a submitted customer revision")
         latest = self.db.scalar(
             select(InfrastructurePlanRevision)
             .where(
@@ -1925,7 +1931,7 @@ class ProductService:
         if not latest or latest.id != revision.id:
             raise ValueError("generated Terraform plan is stale because a newer revision exists")
         if revision.content_digest != plan_hash(revision.content):
-            raise ValueError("approved customer revision failed integrity verification")
+            raise ValueError("customer revision failed integrity verification")
 
         target = (revision.content or {}).get("target") or {}
         ownership_scope = self._generated_plan_ownership_scope(
@@ -2057,6 +2063,7 @@ class ProductService:
                 "revision_id": revision.id,
                 "manifest_sha256": artifact.manifest_sha256,
                 "policy_verdict": artifact.policy_verdict,
+                "pricing_status": (artifact.manifest.get("pricing") or {}).get("status"),
                 "expires_at": artifact.expires_at.isoformat(),
             },
         )
@@ -2090,13 +2097,32 @@ class ProductService:
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=UTC)
         expired = expires_at <= datetime.now(UTC)
+        pricing_complete = has_complete_pricing_evidence(artifact.manifest)
+        manifest_pricing = artifact.manifest.get("pricing")
+        manifest_pricing = manifest_pricing if isinstance(manifest_pricing, dict) else {}
+        pricing = {
+            "status": manifest_pricing.get("status", "UNAVAILABLE"),
+            "region": manifest_pricing.get("region", artifact.region),
+            "currency": manifest_pricing.get("currency"),
+            "monthly_cost": manifest_pricing.get("monthly_cost"),
+            "reason_code": manifest_pricing.get(
+                "reason_code", "regional_pricing_evaluator_not_integrated"
+            ),
+            "approval_allowed": pricing_complete,
+        }
+        if not pricing_complete:
+            pricing["message"] = "Waiting for complete regional cost evidence."
         state = (
             "APPROVED_EXPIRED"
             if approval and expired
             else "APPROVED"
+            if approval and pricing_complete
+            else "APPROVED_COST_EVIDENCE_MISSING"
             if approval
             else "EXPIRED"
             if expired
+            else "WAITING_FOR_COST_EVIDENCE"
+            if not pricing_complete
             else "AWAITING_HUMAN_APPROVAL"
         )
         return {
@@ -2115,6 +2141,7 @@ class ProductService:
                 "findings": artifact.policy_findings,
             },
             "summary": artifact.safe_summary,
+            "pricing": pricing,
             "state": state,
             "approval": None
             if not approval
@@ -2151,6 +2178,10 @@ class ProductService:
         if canonical_json_digest(artifact.manifest) != artifact.manifest_sha256:
             raise ValueError("generated plan manifest failed integrity verification")
         manifest = artifact.manifest
+        if not has_complete_pricing_evidence(manifest):
+            raise ValueError(
+                "complete regional cost evidence is unavailable; generated plan cannot be approved"
+            )
         tenant = manifest.get("tenant") or {}
         target = manifest.get("target") or {}
         digests = manifest.get("digests") or {}
