@@ -1,7 +1,11 @@
 # ticket313 Store generated plans and bind immutable review approval
 
-PR: #313 (draft)
+PR: #313 https://github.com/Bepoadewale/davdeploy/pull/313 (closed unmerged)
 Branch: feat/nova-saved-plan-approval
+
+Status: Closed without merge. The saved-plan storage and approval
+work was superseded and implemented through PR #314; use
+[`ticket314.md`](ticket314.md) for merged code and validation evidence.
 
 ## Problem / goal
 
@@ -52,16 +56,18 @@ apply behavior.
 
 ## Acceptance status
 
-Draft. Implementation and validation pending.
+Closed unmerged; this PR did not deliver implementation. Its objective was
+superseded by PR #314.
 
 ## Tests / validation performed
 
-Pending.
+No implementation was merged through PR #313. The final implementation and
+verification evidence are recorded under PR #314.
 
 ## Evidence files produced
 
-This PR is a plan-storage and approval-record workflow only. It creates no AWS
-workload resources. Record tests and any storage integration evidence here.
+PR #313 produced no merged artifact or AWS workload. See
+[`ticket314.md`](ticket314.md) for the replacement implementation evidence.
 
 ## Boundaries
 

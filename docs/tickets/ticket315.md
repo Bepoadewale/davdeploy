@@ -1,7 +1,9 @@
 # ticket315 Fail closed on unknown security-critical Terraform settings
 
-PR: #315 https://github.com/Bepoadewale/davdeploy/pull/315 (draft)
+PR: #315 https://github.com/Bepoadewale/davdeploy/pull/315 (merged 2026-11-04)
 Branch: feat/nova-plan-unknown-gates-v2
+
+Merge commit: `c2c6279086d3c812c179956b83e04fa50165b2bb`.
 
 ## Problem / goal
 
@@ -57,12 +59,12 @@ Bump the policy version and add focused tests and test evidence.
 - [x] Policy version changes when its evaluation semantics change.
 - [x] `make verify` and documentation convention checks pass.
 - [x] Independent read-only review found no remaining blocker.
-- [ ] Required GitHub CI passes.
+- [x] All seven required GitHub Actions checks passed and the PR was merged.
 
 ## Acceptance status
 
-Implementation, local verification, and independent review are complete.
-Required GitHub CI is pending.
+Merged. Implementation, local verification, independent review, and required
+GitHub CI are complete. This change was not deployed to AWS.
 
 ## Tests / validation performed
 
@@ -71,6 +73,8 @@ Required GitHub CI is pending.
 - `make verify`: 599 passed, plus Ruff, Actions configuration, OpenAPI snapshot,
   and Compose configuration checks passed.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` passed.
+- All seven GitHub checks passed in run
+  [41884458868](https://github.com/Bepoadewale/davdeploy/actions/runs/41884458868).
 
 ## Evidence files produced
 
