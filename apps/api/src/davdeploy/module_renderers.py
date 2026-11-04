@@ -60,6 +60,29 @@ _RENDERERS: dict[str, ModuleRenderer] = {
             ("build_artifact", "build-artifact"),
         ),
     ),
+    "aws-file-storage": ModuleRenderer(
+        module_id="aws-file-storage",
+        terraform_root="infrastructure/terraform/customer-workload-private-s3",
+        runner_script="scripts/customer-workload-private-s3.sh",
+        supported_operations=(
+            "plan",
+            "destroy_plan",
+            "apply",
+            "observe",
+            "destroy",
+            "verify_cleanup",
+        ),
+        certification="local contract validated; real customer lifecycle certification required",
+        execution_enabled=False,
+        operation_commands=(
+            ("plan", "plan"),
+            ("destroy_plan", "destroy-plan"),
+            ("apply", "apply-saved-plan"),
+            ("observe", "observe"),
+            ("destroy", "destroy-saved-plan"),
+            ("verify_cleanup", "verify-cleanup"),
+        ),
+    ),
 }
 
 

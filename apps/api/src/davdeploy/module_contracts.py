@@ -46,10 +46,16 @@ _CONTRACTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], b
         False,
     ),
     "aws-file-storage": (
-        ("aws_s3_bucket", "aws_s3_bucket_public_access_block"),
-        ("encryption", "private_objects", "signed_uploads"),
+        (
+            "aws_s3_bucket",
+            "aws_s3_bucket_public_access_block",
+            "aws_s3_bucket_server_side_encryption_configuration",
+            "aws_s3_bucket_versioning",
+            "aws_s3_bucket_policy",
+        ),
+        ("encryption", "private_objects", "block_public_access", "tls_only", "versioning"),
         ("storage_bytes", "upload_failures"),
-        False,
+        True,
     ),
     "aws-observability": (
         ("aws_cloudwatch_log_group", "aws_cloudwatch_metric_alarm"),

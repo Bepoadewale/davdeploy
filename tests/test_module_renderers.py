@@ -25,6 +25,17 @@ def test_only_checked_in_module_renderer_is_resolved():
         "verify_cleanup": "verify-cleanup",
         "build_artifact": "build-artifact",
     }
+    storage = next(item for item in manifest if item.module_id == "aws-file-storage")
+    assert storage.execution_enabled is False
+    assert storage.terraform_root == "infrastructure/terraform/customer-workload-private-s3"
+    assert dict(storage.operation_commands) == {
+        "plan": "plan",
+        "destroy_plan": "destroy-plan",
+        "apply": "apply-saved-plan",
+        "observe": "observe",
+        "destroy": "destroy-saved-plan",
+        "verify_cleanup": "verify-cleanup",
+    }
 
 
 def test_unbound_or_unsupported_renderer_work_is_rejected():
@@ -32,6 +43,7 @@ def test_unbound_or_unsupported_renderer_work_is_rejected():
         ("aws-relational-data", "apply"),
         ("aws-managed-application", "rollback"),
         ("aws-serverless-api", "apply"),
+        ("aws-file-storage", "apply"),
     ):
         try:
             renderer_for(module_id, operation)
@@ -82,3 +94,6 @@ def test_runner_command_mapping_is_fixed_and_operation_specific():
     assert renderer_command(serverless, "observe") == "health"
     assert renderer_command(serverless, "destroy_plan") == "destroy-plan"
     assert renderer_command(serverless, "build_artifact") == "build-artifact"
+    storage = next(item for item in renderer_manifest() if item.module_id == "aws-file-storage")
+    assert renderer_command(storage, "destroy_plan") == "destroy-plan"
+    assert renderer_command(storage, "verify_cleanup") == "verify-cleanup"

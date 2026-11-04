@@ -24,6 +24,11 @@ def _isolated_dispatcher(tmp_path: Path) -> tuple[Path, Path]:
         f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8"
     )
     serverless_runner.chmod(0o755)
+    storage_runner = scripts / "customer-workload-private-s3.sh"
+    storage_runner.write_text(
+        f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8"
+    )
+    storage_runner.chmod(0o755)
     artifact_builder = scripts / "customer-serverless-artifact-build.py"
     artifact_builder.write_text(
         f"#!/usr/bin/env python3\nfrom pathlib import Path\nPath('{marker}').write_text('build-artifact')\n",
@@ -283,6 +288,66 @@ def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(
     assert result.returncode == 0
     assert marker.read_text(encoding="utf-8") == "health"
 
+
+def test_dispatcher_routes_private_storage_only_when_its_certification_gate_is_set(
+    tmp_path: Path,
+):
+    dispatcher, marker = _isolated_dispatcher(tmp_path)
+    work = _work()
+    work[0].update(
+        {
+            "module_id": "aws-file-storage",
+            "instance_id": "uploads",
+            "operation": "observe",
+            "renderer": {
+                "terraform_root": "infrastructure/terraform/customer-workload-private-s3",
+                "runner_script": "scripts/customer-workload-private-s3.sh",
+            },
+        }
+    )
+    env = os.environ.copy()
+    env.update(
+        {
+            "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON": json.dumps(work),
+            "DAVDEPLOY_EXECUTION_OPERATION": "observe",
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "Private S3 hosted certification route is disabled" in result.stderr
+    assert not marker.exists()
+
+    env["DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION"] = "true"
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert marker.read_text(encoding="utf-8") == "observe"
+
+    env["DAVDEPLOY_EXECUTION_OPERATION"] = "health"
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "does not match" in result.stderr
+
     env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(
         _work("aws-managed-application", "observe")
     )
@@ -357,5 +422,7 @@ def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
     assert "scripts/customer-workload-app-runner-pilot.sh" in package_builder
     assert "infrastructure/terraform/customer-workload-serverless-api" in package_builder
     assert "scripts/customer-workload-serverless-api.sh" in package_builder
+    assert "infrastructure/terraform/customer-workload-private-s3" in package_builder
+    assert "scripts/customer-workload-private-s3.sh" in package_builder
     assert "scripts/customer-serverless-artifact-build.py" in package_builder
     assert "bash scripts/customer-workload-dispatcher.sh" in buildspec
