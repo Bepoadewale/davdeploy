@@ -89,13 +89,16 @@ pending.
 
 ## Tests / validation performed
 
-Validation performed on rebased code commit 02e4ca0:
+Validation performed on rebased code commit a5c501e:
 
 - uv run pytest -q tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_queue_and_model_gateway.py tests/test_nova_intent.py tests/test_generated_plan_review.py — 75 passed.
 - make PY=/tmp/davdeploy320py312/bin/python verify — 671 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
 - GITHUB_PR_NUMBER=320 uv run python scripts/check_doc_conventions.py — passed.
 - git diff --check — passed.
 - No live Bedrock call, AWS API call, or AWS resource mutation was made.
+- The obsolete DAVDEPLOY_MODEL_MAX_ATTEMPTS setting was removed from the model
+  config and App Runner template; the Nova operations guide now documents the
+  fixed one-attempt SDK behavior and bounded JSON/semantic repair loop.
 
 ## Evidence files produced
 
