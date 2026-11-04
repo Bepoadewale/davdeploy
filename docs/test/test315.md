@@ -11,7 +11,7 @@ Repository: `Bepoadewale/davdeploy`, branch `feat/nova-plan-unknown-gates-v2`.
 
 Customer repository: None. Test plans are synthetic fixtures.
 
-Commit: pending PR commit.
+Commit: `69f2647` (source code under test; verification ran before a final documentation-only status update).
 
 AWS account: None. No AWS session was used.
 
