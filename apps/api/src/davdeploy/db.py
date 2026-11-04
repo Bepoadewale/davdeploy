@@ -200,7 +200,7 @@ def run_migrations(target: Engine | None = None) -> None:
         if version < 1:
             Base.metadata.create_all(bind=connection)
             _install_generated_plan_immutability(connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (29)"))
             return
         if version < 2:
             connection.execute(
@@ -366,6 +366,69 @@ def run_migrations(target: Engine | None = None) -> None:
                 },
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
+        if version < 27:
+            Base.metadata.create_all(bind=connection)
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (27)"))
+            version = 27
+        if version < 28:
+            _add_columns_if_missing(
+                connection,
+                "generated_plan_runs",
+                {
+                    "request_document": "JSON",
+                    "preparation_lease_token": "VARCHAR(64)",
+                },
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_generated_plan_run_preparation_lease "
+                    "ON generated_plan_runs(state, preparation_lease_expires_at)"
+                )
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (28)"))
+            version = 28
+        if version < 29:
+            Base.metadata.create_all(bind=connection)
+            existing_runs = connection.execute(
+                text(
+                    "SELECT organization_id, idempotency_key_sha256, request_sha256, id "
+                    "FROM generated_plan_runs"
+                )
+            ).mappings().all()
+            for run in existing_runs:
+                existing_key = connection.execute(
+                    text(
+                        "SELECT request_sha256, run_id "
+                        "FROM generated_plan_run_idempotency_keys "
+                        "WHERE organization_id = :organization_id "
+                        "AND idempotency_key_sha256 = :idempotency_key_sha256"
+                    ),
+                    {
+                        "organization_id": run["organization_id"],
+                        "idempotency_key_sha256": run["idempotency_key_sha256"],
+                    },
+                ).mappings().first()
+                if existing_key:
+                    if (
+                        existing_key["request_sha256"] != run["request_sha256"]
+                        or existing_key["run_id"] != run["id"]
+                    ):
+                        raise RuntimeError("Nova plan idempotency key migration found a conflict")
+                    continue
+                connection.execute(
+                    text(
+                        "INSERT INTO generated_plan_run_idempotency_keys "
+                        "(organization_id, idempotency_key_sha256, request_sha256, run_id) "
+                        "VALUES (:organization_id, :idempotency_key_sha256, :request_sha256, :run_id)"
+                    ),
+                    {
+                        "organization_id": run["organization_id"],
+                        "idempotency_key_sha256": run["idempotency_key_sha256"],
+                        "request_sha256": run["request_sha256"],
+                        "run_id": run["id"],
+                    },
+                )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (29)"))
         _install_generated_plan_immutability(connection)
 
 

@@ -34,15 +34,20 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
                 # repeatedly redrive an otherwise healthy durable worker backlog.
                 message = {}
             build_id = ((message.get("detail") or {}).get("build-id")) if isinstance(message, dict) else None
-            if build_id and service.reconcile_cloud_execution_build(str(build_id)):
-                processed_events += 1
+            if build_id:
+                reconciled = service.reconcile_cloud_execution_build(str(build_id))
+                if not reconciled:
+                    reconciled = service.reconcile_generated_plan_build(str(build_id))
+                if reconciled:
+                    processed_events += 1
 
     processed_jobs = 0
     for _ in range(maximum_jobs):
         with SessionLocal() as db:
             service = ProductService(db)
             if (
-                service.run_next_discovery_job()
+                service.run_next_generated_plan_run()
+                or service.run_next_discovery_job()
                 or service.run_next_cloud_execution()
                 or service.run_next_job()
             ):

@@ -18,6 +18,9 @@ def test_worker_wakeup_drains_a_bounded_durable_backlog(monkeypatch):
         def run_next_discovery_job(self):
             return next(claims)
 
+        def run_next_generated_plan_run(self):
+            return False
+
         def run_next_cloud_execution(self):
             raise AssertionError("discovery work should have claimed each fixture job")
 
@@ -47,6 +50,9 @@ def test_worker_wakeup_clamps_an_invalid_or_excessive_drain_limit(monkeypatch):
             calls.append("claim")
             return False
 
+        def run_next_generated_plan_run(self):
+            return False
+
         def run_next_cloud_execution(self):
             return False
 
@@ -74,6 +80,9 @@ def test_worker_ignores_a_malformed_wakeup_without_redriving_the_batch(monkeypat
         def run_next_discovery_job(self):
             return False
 
+        def run_next_generated_plan_run(self):
+            return False
+
         def run_next_cloud_execution(self):
             return False
 
@@ -86,3 +95,34 @@ def test_worker_ignores_a_malformed_wakeup_without_redriving_the_batch(monkeypat
     result = lambda_worker.handler({"Records": [{"body": "not-json"}]}, None)
 
     assert result == {"records": 1, "processed": 0, "processed_jobs": 0}
+
+
+def test_worker_wakeup_drains_a_durable_nova_plan_request(monkeypatch):
+    claims = iter([True, False])
+
+    class Service:
+        def __init__(self, _db):
+            pass
+
+        def reconcile_cloud_execution_build(self, _build_id):
+            return False
+
+        def run_next_generated_plan_run(self):
+            return next(claims)
+
+        def run_next_discovery_job(self):
+            raise AssertionError("Nova plan work should be attempted first")
+
+        def run_next_cloud_execution(self):
+            raise AssertionError("Nova plan work should be attempted first")
+
+        def run_next_job(self):
+            raise AssertionError("Nova plan work should be attempted first")
+
+    monkeypatch.setattr(lambda_worker, "SessionLocal", lambda: nullcontext(object()))
+    monkeypatch.setattr(lambda_worker, "ProductService", Service)
+    monkeypatch.setenv("DAVDEPLOY_WORKER_MAX_JOBS_PER_WAKEUP", "1")
+
+    result = lambda_worker.handler({"Records": [{"body": '{"version":1,"kind":"generated_plan_run"}'}]}, None)
+
+    assert result == {"records": 1, "processed": 1, "processed_jobs": 1}

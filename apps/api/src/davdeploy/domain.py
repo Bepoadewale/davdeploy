@@ -379,6 +379,12 @@ class GeneratedPlanArtifactApprovalRequest(BaseModel):
     manifest_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class GeneratedPlanRunRequest(BaseModel):
+    """Request a generated plan for one exact immutable customer revision."""
+
+    content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class InfrastructurePlanDecisionRequest(BaseModel):
     decision: InfrastructurePlanDecision
     content_digest: str = Field(min_length=64, max_length=64)

@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -36,6 +36,7 @@ from davdeploy.domain import (
     DesiredStatePublicationRequest,
     DesiredStatePublicationStateRequest,
     GeneratedPlanArtifactApprovalRequest,
+    GeneratedPlanRunRequest,
     InfrastructurePlanConstraintUpdateRequest,
     InfrastructurePlanDecisionRequest,
     InfrastructurePlanRevisionRequest,
@@ -55,6 +56,7 @@ from davdeploy.domain import (
 from davdeploy.edge_origin import edge_origin_is_authorized
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
+from davdeploy.nova_plan_dispatch import NovaPlanDispatchError
 from davdeploy.product_readiness import security_headers
 from davdeploy.rate_limit import SlidingWindowRateLimiter
 from davdeploy.security import (
@@ -197,6 +199,8 @@ def translate(error: Exception) -> None:
     if isinstance(error, (ValueError, KeyError)):
         raise HTTPException(409, str(error)) from error
     if isinstance(error, ModelGatewayUnavailable):
+        raise HTTPException(503, str(error)) from error
+    if isinstance(error, NovaPlanDispatchError):
         raise HTTPException(503, str(error)) from error
     if isinstance(error, InvitationDeliveryUnavailable):
         raise HTTPException(503, str(error)) from error
@@ -1184,6 +1188,44 @@ def get_generated_plan_artifact(
     REQUESTS.labels("generated_plan_artifacts.get").inc()
     try:
         return service.generated_plan_artifact_detail(principal, artifact_id)
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.post(
+    "/api/v1/customer-plan-revisions/{revision_id}/generated-plan-runs",
+    status_code=202,
+)
+def request_generated_plan_run(
+    revision_id: str,
+    request: GeneratedPlanRunRequest,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=16, max_length=200),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Queue one exact submitted revision through the separate plan-only project."""
+    REQUESTS.labels("generated_plan_runs.create").inc()
+    try:
+        return service.request_generated_plan_run(
+            principal,
+            revision_id,
+            request.content_digest,
+            idempotency_key,
+        )
+    except (PermissionError, ValueError, KeyError, ModelGatewayUnavailable, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.get("/api/v1/generated-plan-runs/{run_id}")
+def get_generated_plan_run(
+    run_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Return safe status for one organization-owned Nova plan request."""
+    REQUESTS.labels("generated_plan_runs.get").inc()
+    try:
+        return service.generated_plan_run_detail(principal, run_id)
     except (PermissionError, ValueError, KeyError) as error:
         translate(error)
 
