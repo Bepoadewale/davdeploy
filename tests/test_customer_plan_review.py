@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from davdeploy.contracts import ModelResponse, ModelUsage
+from davdeploy.contracts import EvidenceKind, EvidenceRef, ModelResponse, ModelUsage
 from davdeploy.domain import (
     InfrastructurePlanDecision,
     InfrastructurePlanState,
@@ -12,8 +12,12 @@ from davdeploy.models import (
     DesiredStatePublication,
     GitHubAppInstallationState,
     RepositoryConnection,
+    UsageRecord,
 )
-from davdeploy.terraform_generation import NovaTerraformGenerator
+from davdeploy.terraform_generation import (
+    NovaTerraformGenerationFailed,
+    NovaTerraformGenerator,
+)
 from sqlalchemy import select
 from test_product import complete_prompt, founder, make_service, operator
 
@@ -47,7 +51,7 @@ class StaticTerraformGateway:
             output={
                 "contract_version": "1.0",
                 "source_revision": document["trusted_generation_context"]["source_revision"],
-                "context_digest": request.input_digest,
+                "context_digest": document["trusted_generation_context"]["context_digest"],
                 "resources": [
                     {
                         "resource_id": "workload",
@@ -537,6 +541,90 @@ def test_eks_plan_uses_nova_generated_plan_only_renderer_not_an_app_runner_modul
     assert render["render"]["module_path"] == "generated-by-nova-no-preexisting-module"
     assert render["render"]["apply_command_available"] is False
     assert render["render"]["generation"]["resource_addresses"] == ["aws_eks_cluster.workload"]
+
+
+def test_failed_nova_generation_persists_only_aggregated_usage_and_safe_evidence():
+    class InvalidProposalGateway:
+        provider = "bedrock"
+
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, request, document):
+            raise AssertionError("structured output is required")
+
+        def generate_structured(self, request, document, output_schema=None):
+            self.calls += 1
+            return ModelResponse(
+                request=request,
+                output={"credential_value_must_not_persist": "private-value"},
+                usage=ModelUsage(
+                    input_tokens=12,
+                    output_tokens=6,
+                    estimated_cost_usd=0.001,
+                    latency_ms=5,
+                    retry_count=1,
+                ),
+                evidence=(
+                    EvidenceRef(
+                        tenant=request.tenant,
+                        kind=EvidenceKind.MODEL_INFERENCE,
+                        source="fixture-invalid-response",
+                        content_digest=f"{self.calls:064x}",
+                        location=f"bedrock-request-{self.calls}",
+                    ),
+                ),
+            )
+
+        def estimate_cost(self, request):
+            return 0.0
+
+        def validate_output(self, output):
+            return False
+
+    gateway = InvalidProposalGateway()
+    service, db = make_service(
+        terraform_generator=NovaTerraformGenerator(gateway=gateway)
+    )
+    approved = approved_customer_review(
+        service,
+        "Deploy this multi-service AI inference API in AWS. Kubernetes is required for scheduling. "
+        "Support 20 requests per second and peak at 100 requests per second. Keep monthly "
+        "infrastructure under $1500. Create staging and production.",
+    )
+
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        service.create_terraform_plan_render_for_revision(
+            founder(), approved.id, approved.content_digest
+        )
+
+    assert gateway.calls == 2
+    assert failure.value.usage.input_tokens == 24
+    assert failure.value.usage.output_tokens == 12
+    assert failure.value.usage.estimated_cost_usd == 0.002
+    assert failure.value.usage.retry_count == 3
+    assert len(failure.value.evidence) == 2
+    assert "private-value" not in str(failure.value)
+    records = db.scalars(select(UsageRecord)).all()
+    model_records = [
+        record
+        for record in records
+        if record.detail.get("prompt_version") == "terraform-nova2-contract-v3"
+    ]
+    by_metric = {record.metric: record for record in model_records}
+    assert by_metric["model_calls"].quantity == 1
+    assert by_metric["model_input_tokens"].quantity == 24
+    assert by_metric["model_output_tokens"].quantity == 12
+    detail = by_metric["model_calls"].detail
+    assert detail["failure"] == "generation_failed"
+    assert detail["attempt_count"] == 2
+    assert detail["retry_count"] == 3
+    assert detail["estimated_cost_usd"] == 0.002
+    assert detail["latency_ms"] == 10
+    assert detail["measured_at"]
+    assert len(detail["evidence"]) == 2
+    assert "credential_value_must_not_persist" not in str(detail)
+    assert "private-value" not in str(detail)
 
 
 def test_terraform_renderer_fails_closed_for_stale_digest_and_unapproved_revision():

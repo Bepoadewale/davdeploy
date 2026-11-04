@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -28,6 +29,19 @@ NOVA_2_LITE_MODEL_ID = "us.amazon.nova-2-lite-v1:0"
 
 class ModelGatewayUnavailable(RuntimeError):
     """Raised when a model provider cannot safely satisfy a request."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        usage: ModelUsage | None = None,
+        evidence: tuple[EvidenceRef, ...] = (),
+        attempt_count: int = 0,
+    ):
+        super().__init__(message)
+        self.usage = usage
+        self.evidence = evidence
+        self.attempt_count = attempt_count
 
 
 class ModelCallPolicy(BaseModel):
@@ -208,16 +222,10 @@ class BedrockNovaGateway:
         self.config = config or NovaGatewayConfig.from_environment()
         self.config.validate()
         self.model = self.config.model_id
-        self.client = client or boto3.client(
-            "bedrock-runtime",
-            region_name=self.config.region,
-            config=Config(
-                connect_timeout=self.config.connect_timeout_seconds,
-                read_timeout=self.config.read_timeout_seconds,
-                retries={"mode": "standard", "total_max_attempts": self.config.max_attempts},
-                user_agent_extra="davdeploy/model-gateway-v1",
-            ),
-        )
+        # Tests can inject a deterministic client. Production clients are
+        # created per request so transport timeouts can honor the caller's
+        # remaining time budget.
+        self.client = client
 
     def complete(self, request: ModelRequest, document: dict[str, Any]) -> ModelResponse:
         raise ModelGatewayUnavailable("Nova calls require an explicit structured-output schema")
@@ -250,62 +258,155 @@ class BedrockNovaGateway:
             }
         )
         started = time.monotonic()
+        deadline = started + request.timeout_seconds
         raw: dict[str, Any] = {}
         output: dict[str, Any] | None = None
         retry_count = 0
         total_input_tokens = 0
         total_output_tokens = 0
+        measured_latencies: list[int] = []
+        evidence: list[EvidenceRef] = []
+        usage_is_complete = True
         for attempt in range(2):
-            raw = self._converse(request, prompt, schema, repair=attempt == 1)
-            stop_reason = str(raw.get("stopReason") or "unknown")
-            if stop_reason not in {"end_turn", "stop_sequence"}:
-                raise ModelGatewayUnavailable(
-                    f"Bedrock model response was incomplete ({stop_reason})"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise self._structured_failure(
+                    "Bedrock structured generation exceeded its time limit",
+                    request,
+                    started,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                    attempt,
+                    usage_is_complete,
+                ) from None
+            timeout_seconds = math.ceil(remaining)
+            if timeout_seconds < 2:
+                raise self._structured_failure(
+                    "Bedrock structured generation has insufficient time for a bounded request",
+                    request,
+                    started,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                    attempt,
+                    usage_is_complete,
+                ) from None
+            try:
+                raw = self._converse(
+                    request,
+                    prompt,
+                    schema,
+                    repair=attempt == 1,
+                    timeout_seconds=timeout_seconds,
                 )
+            except ModelGatewayUnavailable:
+                raise self._structured_failure(
+                    "Bedrock model call failed within its time limit",
+                    request,
+                    started,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                    attempt + 1,
+                    False,
+                ) from None
+            stop_reason = str(raw.get("stopReason") or "unknown")
             usage = raw.get("usage") or {}
+            if "inputTokens" not in usage or "outputTokens" not in usage:
+                usage_is_complete = False
             total_input_tokens += int(usage.get("inputTokens") or 0)
             total_output_tokens += int(usage.get("outputTokens") or 0)
+            measured_latencies.append(int((raw.get("metrics") or {}).get("latencyMs") or 0))
+            request_id = str((raw.get("ResponseMetadata") or {}).get("RequestId") or "unknown")
             try:
                 content = raw["output"]["message"]["content"]
                 text = next(
                     block["text"] for block in content if isinstance(block.get("text"), str)
                 )
-                output = decode_structured_json(text)
-                break
-            except (KeyError, StopIteration, TypeError, ValueError):
-                pass
-            retry_count += 1
-        if output is None:
-            raise ModelGatewayUnavailable("Bedrock returned invalid JSON after one repair attempt")
-
-        latency_ms = int((time.monotonic() - started) * 1_000)
-        estimated_cost = self._actual_cost(
-            total_input_tokens,
-            total_output_tokens,
-        )
-        output_digest = hashlib.sha256(_canonical_json(output).encode()).hexdigest()
-        provider_request_id = str((raw.get("ResponseMetadata") or {}).get("RequestId") or "unknown")
-        return ModelResponse(
-            request=request,
-            output=output,
-            evidence=(
+            except (KeyError, StopIteration, TypeError):
+                text = ""
+            evidence.append(
                 EvidenceRef(
                     tenant=request.tenant,
                     kind=EvidenceKind.MODEL_INFERENCE,
                     source=f"amazon-bedrock:{self.model}",
-                    content_digest=output_digest,
-                    location=f"bedrock-request:{provider_request_id}",
+                    content_digest=hashlib.sha256(text.encode()).hexdigest(),
+                    location=f"bedrock-request:{request_id}",
                     limitations=(
+                        "model response digest only; raw response is not retained here",
                         "model proposal; not approval or execution authority",
                         "current AWS facts require independent evidence",
                     ),
-                ),
-            ),
+                )
+            )
+            if time.monotonic() > deadline:
+                raise self._structured_failure(
+                    "Bedrock structured generation exceeded its time limit",
+                    request,
+                    started,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                    attempt + 1,
+                    usage_is_complete,
+                ) from None
+            if stop_reason not in {"end_turn", "stop_sequence"}:
+                raise self._structured_failure(
+                    "Bedrock returned an incomplete structured response",
+                    request,
+                    started,
+                    total_input_tokens,
+                    total_output_tokens,
+                    measured_latencies,
+                    retry_count,
+                    evidence,
+                    attempt + 1,
+                    usage_is_complete,
+                ) from None
+            try:
+                output = decode_structured_json(text)
+                break
+            except (TypeError, ValueError):
+                if attempt == 0:
+                    retry_count += 1
+        if output is None:
+            raise self._structured_failure(
+                "Bedrock returned invalid JSON after one bounded repair attempt",
+                request,
+                started,
+                total_input_tokens,
+                total_output_tokens,
+                measured_latencies,
+                retry_count,
+                evidence,
+                2,
+                usage_is_complete,
+            ) from None
+
+        latency_ms = int((time.monotonic() - started) * 1_000)
+        estimated_cost = (
+            self._actual_cost(total_input_tokens, total_output_tokens)
+            if usage_is_complete
+            else None
+        )
+        return ModelResponse(
+            request=request,
+            output=output,
+            evidence=tuple(evidence),
             usage=ModelUsage(
                 input_tokens=total_input_tokens,
                 output_tokens=total_output_tokens,
                 estimated_cost_usd=estimated_cost,
-                latency_ms=int((raw.get("metrics") or {}).get("latencyMs") or latency_ms),
+                latency_ms=sum(measured_latencies) if all(measured_latencies) else latency_ms,
                 retry_count=retry_count,
             ),
             finish_reason=stop_reason,
@@ -319,6 +420,7 @@ class BedrockNovaGateway:
         schema: dict[str, Any],
         *,
         repair: bool,
+        timeout_seconds: int,
     ) -> dict[str, Any]:
         if repair:
             prompt = _canonical_json(
@@ -332,7 +434,10 @@ class BedrockNovaGateway:
                 }
             )
         try:
-            return self.client.converse(
+            request_id = (
+                f"{request.request_id}:json-repair" if repair else request.request_id
+            )
+            return self._client_for_timeout(timeout_seconds).converse(
                 modelId=self.model,
                 system=[
                     {
@@ -351,7 +456,7 @@ class BedrockNovaGateway:
                     "topP": 0.9,
                 },
                 requestMetadata={
-                    "request_id": request.request_id,
+                    "request_id": request_id,
                     "purpose": request.purpose.value,
                     "prompt_version": request.prompt_version,
                     "schema_digest": hashlib.sha256(_canonical_json(schema).encode()).hexdigest()[
@@ -367,6 +472,61 @@ class BedrockNovaGateway:
             if isinstance(error, ClientError):
                 code = str(error.response.get("Error", {}).get("Code") or code)
             raise ModelGatewayUnavailable(f"Bedrock model call failed ({code})") from error
+
+    def _client_for_timeout(self, timeout_seconds: int) -> BedrockRuntimeClient:
+        if self.client is not None:
+            return self.client
+        if timeout_seconds < 2:
+            raise ModelGatewayUnavailable("model request timeout is too short for transport")
+        connect_timeout = min(
+            self.config.connect_timeout_seconds,
+            max(1, timeout_seconds // 2),
+        )
+        read_timeout = max(1, timeout_seconds - connect_timeout)
+        return boto3.client(
+            "bedrock-runtime",
+            region_name=self.config.region,
+            config=Config(
+                connect_timeout=connect_timeout,
+                read_timeout=read_timeout,
+                # SDK retries could exceed the caller's bounded request time.
+                retries={"mode": "standard", "total_max_attempts": 1},
+                user_agent_extra="davdeploy/model-gateway-v1",
+            ),
+        )
+
+    def _structured_failure(
+        self,
+        message: str,
+        request: ModelRequest,
+        started: float,
+        input_tokens: int,
+        output_tokens: int,
+        measured_latencies: list[int],
+        retry_count: int,
+        evidence: list[EvidenceRef],
+        attempt_count: int,
+        usage_is_complete: bool,
+    ) -> ModelGatewayUnavailable:
+        usage = ModelUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            estimated_cost_usd=(
+                self._actual_cost(input_tokens, output_tokens)
+                if usage_is_complete
+                else None
+            ),
+            latency_ms=sum(measured_latencies) if measured_latencies else int(
+                (time.monotonic() - started) * 1_000
+            ),
+            retry_count=retry_count,
+        )
+        return ModelGatewayUnavailable(
+            message,
+            usage=usage,
+            evidence=tuple(evidence),
+            attempt_count=attempt_count,
+        )
 
     def estimate_cost(self, request: ModelRequest) -> float:
         if self.config.output_price_per_million_usd is None:

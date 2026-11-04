@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from botocore.exceptions import ClientError
 from davdeploy.contracts import JobEnvelope, JobKind, ModelPurpose, ModelRequest, TenantScope
 from davdeploy.db import run_migrations
 from davdeploy.model_gateway import (
@@ -212,6 +213,169 @@ def test_nova_gateway_requests_json_schema_and_records_safe_usage():
     assert response.usage.estimated_cost_usd == 0.000018
     assert response.evidence[0].kind.value == "model_inference"
     assert response.safety_result == "bedrock-json-locally-schema-validated"
+    assert len(response.evidence) == 1
+    assert response.evidence[0].location == "bedrock-request:bedrock-request-1"
+
+
+def test_nova_gateway_shares_request_timeout_across_json_repair_calls(monkeypatch):
+    document = {"customer_request": "deploy"}
+    clock = {"now": 10.0}
+    configs = []
+    calls = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    class AdvancingRuntime:
+        def converse(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                clock["now"] += 3
+                response_text = "not-json"
+            else:
+                response_text = '{"workload_type":"api"}'
+            return {
+                "output": {"message": {"content": [{"text": response_text}]}},
+                "stopReason": "end_turn",
+                "usage": {"inputTokens": 10, "outputTokens": 5},
+                "metrics": {"latencyMs": 3},
+                "ResponseMetadata": {"RequestId": f"request-{len(calls)}"},
+            }
+
+    runtime = AdvancingRuntime()
+
+    def fake_boto_client(service_name, *, region_name, config):
+        assert service_name == "bedrock-runtime"
+        assert region_name == "us-east-1"
+        configs.append(config)
+        return runtime
+
+    monkeypatch.setattr("davdeploy.model_gateway.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("davdeploy.model_gateway.boto3.client", fake_boto_client)
+    gateway = BedrockNovaGateway(nova_config())
+    response = gateway.generate_structured(
+        nova_request(document, timeout_seconds=10),
+        document,
+        {
+            "type": "object",
+            "properties": {"workload_type": {"type": "string"}},
+            "required": ["workload_type"],
+            "additionalProperties": False,
+        },
+    )
+
+    assert response.output == {"workload_type": "api"}
+    assert [config.connect_timeout + config.read_timeout for config in configs] == [10, 7]
+    assert all(config.retries["total_max_attempts"] == 1 for config in configs)
+    request_ids = [call["requestMetadata"]["request_id"] for call in calls]
+    assert request_ids == [
+        response.request.request_id,
+        f"{response.request.request_id}:json-repair",
+    ]
+    assert [item.location for item in response.evidence] == [
+        "bedrock-request:request-1",
+        "bedrock-request:request-2",
+    ]
+
+
+def test_nova_gateway_timeout_failure_preserves_partial_safe_usage_evidence(monkeypatch):
+    document = {"customer_request": "deploy"}
+    clock = {"now": 10.0}
+    call_count = 0
+
+    class PartialFailureRuntime:
+        def converse(self, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return {
+                    "output": {"message": {"content": [{"text": "not-json"}]}},
+                    "stopReason": "end_turn",
+                    "usage": {"inputTokens": 17, "outputTokens": 6},
+                    "metrics": {"latencyMs": 4},
+                    "ResponseMetadata": {"RequestId": "first-request"},
+                }
+            raise ClientError(
+                {"Error": {"Code": "ThrottlingException", "Message": "ignored"}},
+                "Converse",
+            )
+
+    monkeypatch.setattr("davdeploy.model_gateway.time.monotonic", lambda: clock["now"])
+    monkeypatch.setattr(
+        "davdeploy.model_gateway.boto3.client",
+        lambda service_name, *, region_name, config: PartialFailureRuntime(),
+    )
+    gateway = BedrockNovaGateway(nova_config())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document, timeout_seconds=10),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.usage is not None
+    assert error.value.usage.input_tokens == 17
+    assert error.value.usage.output_tokens == 6
+    assert error.value.usage.estimated_cost_usd is None
+    assert error.value.usage.retry_count == 1
+    assert len(error.value.evidence) == 1
+    assert error.value.evidence[0].location == "bedrock-request:first-request"
+    assert "ignored" not in str(error.value)
+
+
+def test_nova_gateway_exhausted_json_repair_preserves_complete_cost_and_evidence():
+    document = {"customer_request": "deploy"}
+    client = FakeBedrockRuntime(output={})
+    client.responses = iter(
+        [
+            {
+                "output": {"message": {"content": [{"text": "invalid-one"}]}},
+                "stopReason": "end_turn",
+                "usage": {"inputTokens": 17, "outputTokens": 6},
+                "metrics": {"latencyMs": 4},
+                "ResponseMetadata": {"RequestId": "invalid-request-1"},
+            },
+            {
+                "output": {"message": {"content": [{"text": "invalid-two"}]}},
+                "stopReason": "end_turn",
+                "usage": {"inputTokens": 19, "outputTokens": 7},
+                "metrics": {"latencyMs": 5},
+                "ResponseMetadata": {"RequestId": "invalid-request-2"},
+            },
+        ]
+    )
+
+    def sequence_converse(**kwargs):
+        client.calls.append(kwargs)
+        return next(client.responses)
+
+    client.converse = sequence_converse
+    config = nova_config(
+        input_price_per_million_usd=1.0,
+        output_price_per_million_usd=2.0,
+        pricing_catalog_version="test-repair-catalog",
+    )
+    gateway = BedrockNovaGateway(config, client)
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.usage.input_tokens == 36
+    assert error.value.usage.output_tokens == 13
+    assert error.value.usage.estimated_cost_usd == pytest.approx(0.000062)
+    # One provider JSON repair was made; the final malformed response was not
+    # counted as another retry because there was no third call.
+    assert error.value.usage.retry_count == 1
+    assert len(error.value.evidence) == 2
+    assert [item.location for item in error.value.evidence] == [
+        "bedrock-request:invalid-request-1",
+        "bedrock-request:invalid-request-2",
+    ]
 
 
 def test_nova_gateway_accepts_only_plain_or_exact_fenced_json_objects():

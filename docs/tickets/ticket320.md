@@ -61,26 +61,35 @@ added.
 
 ## Acceptance criteria
 
-- [ ] Semantic repair has a strict small maximum attempt count and time bound.
-- [ ] Repair input contains only allowlisted validation codes and canonical
+- [x] Semantic repair has a strict small maximum attempt count and time bound.
+- [x] Repair input contains only allowlisted validation codes and canonical
   schema paths, never unsafe error contents.
-- [ ] Original trusted source revision and context digest remain fixed across
+- [x] Original trusted source revision and context digest remain fixed across
   all semantic attempts and are validated on final output.
-- [ ] Invalid output stops at the attempt cap with a safe actionable error.
-- [ ] Fixture fallback output is rejected and never accepted as repaired
+- [x] Invalid output stops at the attempt cap with a safe actionable error.
+- [x] Fixture fallback output is rejected and never accepted as repaired
   output.
-- [ ] Aggregated response usage includes all semantic calls and their
+- [x] Aggregated response usage includes all semantic calls and their
   gateway-reported JSON repairs; unknown cost remains unknown.
-- [ ] Bedrock validates the digest of the complete serialized request document
+- [x] Bedrock validates the digest of the complete serialized request document
   while proposal binding keeps the existing trusted-context digest.
+- [x] ProductService persists aggregate tokens, retry count, known cost,
+  elapsed time, and digest-only model evidence for both successful and failed
+  Nova generation.
 - [ ] Focused tests, formatting/lint, docs conventions, and required GitHub CI
-  pass; no AWS calls or mutations occur.
+  pass on the final rebased commit; no AWS calls or mutations occur.
 
-## Validation performed
+## Acceptance status
+
+Implementation and local validation are complete on the pre-rebase base.
+Rebase onto #317, rerun the full gate, independent review, and GitHub CI are
+pending.
+
+## Tests / validation performed
 
 Pending implementation.
 
-## Evidence files
+## Evidence files produced
 
 - `docs/test/test320.md` (fixture/local validation only; no real Bedrock or AWS
   execution)

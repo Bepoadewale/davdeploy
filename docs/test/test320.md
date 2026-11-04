@@ -1,8 +1,11 @@
-# Test evidence for PR #320
+# test320 — Bounded Nova Terraform proposal repair evidence
 
-Status: implementation in progress. This record is reserved for deterministic
-local fixture tests and static validation only. No real Bedrock invocation or
-AWS resource mutation is in scope.
+Date: 2026-11-04
+Execution type: local deterministic fixtures and service tests
+Customer repository: Bepoadewale/davdeploy
+Commit: pending
+AWS account: none; no AWS calls were made
+AWS region: not applicable
 
 ## Planned cases
 
@@ -20,11 +23,24 @@ AWS resource mutation is in scope.
 - The generator's complete-document input digest passes the Bedrock adapter's
   integrity guard, while document tampering is rejected before a provider call.
 
-## Commands and results
+## Resources created
+
+No AWS or other external resources were created.
+
+## Commands executed
 
 Pending implementation.
 
-## Limits
+## Observed result
 
-This is not AWS deployment evidence, a live Nova test, a saved-plan test, or
-customer execution validation.
+Pending implementation.
+
+## Teardown
+
+No external resources required teardown.
+
+## Final boundary
+
+This evidence covers local fixture and service behavior only. It is not AWS
+deployment evidence, a live Nova test, a saved-plan test, or customer execution
+validation.

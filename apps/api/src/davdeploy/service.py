@@ -30,7 +30,7 @@ from davdeploy.connection_secrets import (
     ConnectionSecretStore,
     configured_connection_secret_store,
 )
-from davdeploy.contracts import TenantScope
+from davdeploy.contracts import EvidenceRef, TenantScope
 from davdeploy.day2 import FixtureDay2Advisor
 from davdeploy.domain import (
     ArchitectureModule,
@@ -123,7 +123,11 @@ from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
-from davdeploy.terraform_generation import NovaTerraformGenerator, generation_context_digest
+from davdeploy.terraform_generation import (
+    NovaTerraformGenerationFailed,
+    NovaTerraformGenerator,
+    generation_context_digest,
+)
 from davdeploy.universal_execution import (
     compile_universal_execution_plan,
     lifecycle_work,
@@ -143,6 +147,17 @@ def plan_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _model_evidence_summary(evidence: EvidenceRef) -> dict[str, Any]:
+    """Persist only model evidence metadata, never request or response content."""
+    return {
+        "evidence_id": evidence.evidence_id,
+        "kind": evidence.kind.value,
+        "source": evidence.source,
+        "content_digest": evidence.content_digest,
+        "location": evidence.location,
+    }
 
 
 class ProductService:
@@ -3536,11 +3551,32 @@ class ProductService:
             project_id=infrastructure_plan.project_id,
             actor_id=principal.subject,
         )
-        generated = self.terraform_generator.generate(
-            approved_plan=revision.content,
-            tenant=tenant,
-            source_revision=revision.id,
-        )
+        try:
+            generated = self.terraform_generator.generate(
+                approved_plan=revision.content,
+                tenant=tenant,
+                source_revision=revision.id,
+            )
+        except NovaTerraformGenerationFailed as error:
+            self._record_model_usage(
+                principal,
+                {
+                    "request_id": None,
+                    "provider": "bedrock",
+                    "model": self.terraform_generator.model_id,
+                    "prompt_version": "terraform-nova2-contract-v3",
+                    "usage": error.usage.model_dump(mode="json"),
+                    "attempt_count": error.attempt_count,
+                    "retry_count": error.usage.retry_count,
+                    "latency_ms": error.usage.latency_ms,
+                    "measured_at": error.usage.measured_at.isoformat(),
+                    "estimated_cost_usd": error.usage.estimated_cost_usd,
+                    "failure": "generation_failed",
+                    "evidence": [_model_evidence_summary(item) for item in error.evidence],
+                },
+            )
+            self.db.commit()
+            raise
         response = generated.response
         self._record_model_usage(
             principal,
@@ -3550,6 +3586,16 @@ class ProductService:
                 "model": response.request.model,
                 "prompt_version": response.request.prompt_version,
                 "usage": response.usage.model_dump(mode="json") if response.usage else {},
+                "attempt_count": (response.usage.retry_count + 1) if response.usage else 1,
+                "retry_count": response.usage.retry_count if response.usage else 0,
+                "latency_ms": response.usage.latency_ms if response.usage else None,
+                "measured_at": (
+                    response.usage.measured_at.isoformat() if response.usage else None
+                ),
+                "estimated_cost_usd": (
+                    response.usage.estimated_cost_usd if response.usage else None
+                ),
+                "evidence": [_model_evidence_summary(item) for item in response.evidence],
             },
         )
         resource_addresses = [
@@ -6613,6 +6659,17 @@ class ProductService:
             "model": metadata.get("model"),
             "prompt_version": metadata.get("prompt_version"),
         }
+        for field in (
+            "attempt_count",
+            "retry_count",
+            "latency_ms",
+            "measured_at",
+            "estimated_cost_usd",
+            "failure",
+            "evidence",
+        ):
+            if field in metadata:
+                detail[field] = metadata[field]
         for metric, quantity in (
             ("model_calls", 1),
             ("model_input_tokens", int(usage.get("input_tokens") or 0)),
