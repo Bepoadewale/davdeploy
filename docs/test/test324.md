@@ -16,6 +16,7 @@ terraform fmt -check -recursive infrastructure/terraform
 make terraform-validate kubernetes-render
 /private/tmp/davdeploy-pr322-venv/bin/python scripts/check_doc_conventions.py
 git diff --check
+gh pr checks 324 --watch --interval 120
 ```
 
 ## Resources created
@@ -28,8 +29,10 @@ Focused infrastructure contract tests passed: 5 tests. `make verify` passed: 688
 Ruff, GitHub Actions variable/secret classification, the OpenAPI snapshot check, and Docker
 Compose configuration validation. Recursive Terraform formatting passed; `make
 terraform-validate` initialized and validated all configured Terraform roots; Kubernetes
-rendering passed. Documentation conventions and `git diff --check` passed. GitHub PR checks
-are pending the branch push.
+rendering passed. Documentation conventions and `git diff --check` passed. All seven required
+GitHub checks passed in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576)
+on branch commit `a5e8214` (the evidence-only commit after implementation commit
+`8890acf11d6025b188f82b6697d0dbf777880b75`).
 
 ## Teardown
 
