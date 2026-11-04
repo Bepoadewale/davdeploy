@@ -59,21 +59,24 @@ merged. Keep source changes, deployed state, and unproven launch gates distinct.
 ## Acceptance status
 
 Documentation updates are complete. Local documentation convention and diff
-checks passed. All seven required GitHub Actions checks passed on the current
-PR head `1f1aecdb4ce943f3917409dd9425f3ffecdb1239` in run
+checks passed. All seven required GitHub Actions checks passed on implementation
+commit `1f1aecdb4ce943f3917409dd9425f3ffecdb1239` in run
 [41914451860](https://github.com/Bepoadewale/davdeploy/actions/runs/41914451860).
+The later ticket-evidence correction also passed all seven checks in run
+[41916286812](https://github.com/Bepoadewale/davdeploy/actions/runs/41916286812).
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=323 python3 scripts/check_doc_conventions.py` passed.
 `git diff --check` passed. This is a documentation-only change; no runtime
 test, Terraform command, or AWS call is required or planned.
-All seven required CI checks passed on the current PR head
+All seven required CI checks passed on implementation commit
 `1f1aecdb4ce943f3917409dd9425f3ffecdb1239` in run
 [41914451860](https://github.com/Bepoadewale/davdeploy/actions/runs/41914451860):
 cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and
 supply-chain. The current PR head includes the merged PR #322 status update;
-all required checks are complete.
+the later ticket-only evidence correction also passed the same required checks
+in run `41916286812`.
 
 ## Evidence files produced
 
