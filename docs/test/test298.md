@@ -3,7 +3,7 @@
 Date: 2026-11-04
 Execution type: Local tests and clean-room integration; no AWS customer workload.
 Customer repository: `Bepoadewale/davdeploy`
-Commit: `b2f8a27` (`feat: schedule durable module dependency waves`)
+Commit: `baa934d` (`fix: preserve failed module plan outcomes`)
 AWS account: Not applicable; no cloud credentials were used.
 AWS region: Not applicable; no cloud credentials were used.
 
@@ -24,6 +24,7 @@ make verify
 GITHUB_PR_NUMBER=298 python3.12 scripts/check_doc_conventions.py
 git diff --check
 git worktree add --detach /tmp/davdeploy-cleanroom-pr298-20261104 b2f8a27
+git -C /tmp/davdeploy-cleanroom-pr298-20261104 checkout --detach baa934d
 cd /tmp/davdeploy-cleanroom-pr298-20261104
 COMPOSE_PROJECT_NAME=davdeploy-pr298-20261104 make clean-local
 COMPOSE_PROJECT_NAME=davdeploy-pr298-20261104 make bootstrap-local
@@ -38,7 +39,7 @@ fail-closed input binding, and renderer dispatch tests passed: 114 passed with
 one existing Starlette deprecation warning. `make verify` passed: 485 tests with
 the same warning. Ruff, shell syntax, OpenAPI snapshot, Compose configuration,
 documentation conventions, and `git diff --check` passed. The clean-room cycle
-on `b2f8a27` passed bootstrap, readiness, API contract, customer-plan E2E, seed,
+on `baa934d` passed bootstrap, readiness, API contract, customer-plan E2E, seed,
 all simple, complex, Day-2, degraded, failure and readiness-failure demos, trace
 check, full verification, and cleanup. GitHub CI is pending.
 

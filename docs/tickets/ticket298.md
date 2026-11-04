@@ -48,11 +48,11 @@ Connect the already-validated dependency graph and per-module lifecycle rows to 
 
 ## Acceptance status
 
-The worker now selects one dependency-ready module row, assigns only that row the worker state/build identity, and queues the next dependency after a successful callback. Uncertain outcomes reconcile only the active module and leave undispatched rows untouched. Renderer inputs, repeated renderer types, and shared Terraform state roots remain fail-closed. Focused tests, `make verify`, and the isolated clean-room cycle pass; GitHub CI is pending.
+The worker now selects one dependency-ready module row, assigns only that row the worker state/build identity, and queues the next dependency after a successful callback. Uncertain outcomes reconcile only the active module and leave undispatched rows untouched. Renderer inputs, repeated renderer types, and shared Terraform state roots remain fail-closed. Focused tests, `make verify`, and the isolated clean-room cycle pass on `baa934d`; GitHub CI is pending.
 
 ## Tests / validation performed
 
-Focused tests: `uv run pytest -q tests/test_universal_execution.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py` passed (114 passed; one existing Starlette deprecation warning). `make verify` passed (485 tests; one existing warning). `bash -n scripts/customer-workload-dispatcher.sh`, OpenAPI snapshot, Compose configuration, Ruff, documentation conventions, and `git diff --check` passed. The clean-room validation passed on `b2f8a27`; GitHub CI is pending.
+Focused tests: `uv run pytest -q tests/test_universal_execution.py tests/test_cloud_execution.py tests/test_renderer_dispatcher.py` passed (114 passed; one existing Starlette deprecation warning). `make verify` passed (485 tests; one existing warning). `bash -n scripts/customer-workload-dispatcher.sh`, OpenAPI snapshot, Compose configuration, Ruff, documentation conventions, and `git diff --check` passed. The clean-room validation passed on `baa934d`; GitHub CI is pending.
 
 ## Evidence files produced
 
