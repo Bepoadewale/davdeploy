@@ -31,7 +31,7 @@ Per-module rows already exist with independent state, outputs, evidence, depende
 - [x] Outputs and evidence are persisted with the state transition.
 - [x] Identical repeated outcomes are idempotent; conflicting state or payload replay is rejected.
 - [x] Existing run-wide transitions continue to pass.
-- [x] Focused and full local verification pass; GitHub CI is required before merge.
+- [x] GitHub CI run [41746604603](https://github.com/Bepoadewale/davdeploy/actions/runs/41746604603) passes all seven jobs after local verification.
 - [x] No worker scheduling, CodeBuild behavior, or renderer enablement changes.
 
 ## Acceptance status
@@ -40,7 +40,7 @@ Per-module rows already exist with independent state, outputs, evidence, depende
 
 ## Tests / validation performed
 
-Implementation and local verification pass. GitHub CI is pending.
+Implementation, local verification and all seven GitHub CI jobs pass.
 
 ## Evidence files produced
 
