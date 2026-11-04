@@ -48,6 +48,7 @@ def test_contract_accepts_a_typed_reference_and_infers_dependency() -> None:
                 resource(
                     "api",
                     "api",
+                    depends_on=("uploads",),
                     arguments={
                         "bucket": {
                             "kind": "resource_reference",
@@ -142,6 +143,7 @@ def test_resource_blocks_compile_references_only_after_contract_validation() -> 
                 resource(
                     "api",
                     "api",
+                    depends_on=("uploads",),
                     arguments={
                         "bucket": {
                             "kind": "resource_reference",
@@ -159,3 +161,6 @@ def test_resource_blocks_compile_references_only_after_contract_validation() -> 
     assert blocks["aws_s3_bucket"]["api"]["bucket"] == (
         chr(36) + "{aws_s3_bucket.uploads.bucket_name}"
     )
+    assert blocks["aws_s3_bucket"]["api"]["depends_on"] == [
+        "aws_s3_bucket.uploads"
+    ]
