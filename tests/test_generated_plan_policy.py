@@ -161,6 +161,73 @@ def codes(result):
     return {finding.code for finding in result.findings}
 
 
+def ebs_volume_policy_case(encryption_state):
+    address = "aws_ebs_volume.data"
+    tags = ownership_scope().tags()
+    values = {"tags": tags}
+    planned_after = {"tags": tags}
+    after_unknown = {}
+    if encryption_state == "false":
+        values["encrypted"] = False
+        planned_after["encrypted"] = False
+    elif encryption_state == "true":
+        values["encrypted"] = True
+        planned_after["encrypted"] = True
+    elif encryption_state == "unknown":
+        values["encrypted"] = None
+        planned_after["encrypted"] = None
+        after_unknown = {"encrypted": True}
+
+    resources = [
+        resource(address, "aws_ebs_volume", values),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    changes = [
+        change(
+            address,
+            "aws_ebs_volume",
+            after=planned_after,
+            after_unknown=after_unknown,
+        ),
+        change("terraform_data.account_guard", "terraform_data"),
+    ]
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "data-volume",
+                "resource_type": "aws_ebs_volume",
+                "name": "data",
+                "arguments": {"type": "gp3", "size": 8, "encrypted": encryption_state == "true"},
+                "rationale": "Store application data on an encrypted EBS volume.",
+            }
+        ]
+    )
+    return evaluate(plan(resources, changes), proposal_value)
+
+
+@pytest.mark.parametrize(
+    "encryption_state,expected_finding",
+    [
+        ("false", "ebs_encryption_required"),
+        ("missing", "ebs_encryption_required"),
+        ("unknown", "policy_critical_value_unknown"),
+        ("true", None),
+    ],
+)
+def test_ebs_volume_requires_known_encryption_enabled(encryption_state, expected_finding):
+    result = ebs_volume_policy_case(encryption_state)
+
+    if expected_finding is None:
+        assert "ebs_encryption_required" not in codes(result)
+        assert result.verdict != PlanPolicyVerdict.DENY
+    else:
+        assert result.verdict == PlanPolicyVerdict.DENY
+        assert expected_finding in codes(result)
+        if expected_finding == "ebs_encryption_required":
+            finding = next(item for item in result.findings if item.code == expected_finding)
+            assert finding.message == "EBS volumes must have encryption enabled."
+
+
 def test_resource_ownership_tags_are_required_for_every_aws_resource():
     document = plan()
     document["planned_values"]["root_module"]["resources"][0]["values"]["tags"].pop(
