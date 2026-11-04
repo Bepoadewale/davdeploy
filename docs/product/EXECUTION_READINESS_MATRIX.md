@@ -1,6 +1,6 @@
 # Execution readiness matrix
 
-Audit as of 2026-11-04, backend main commit `464dd0b` (PR #295). The latest hosted AWS release is commit `2e39e4a` after PR #285, applied by run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958). PRs #289–#295 are merged code-only foundations and are not deployed or connected to the worker.
+Audit as of 2026-11-04, backend main commit `9d14bd1` (PR #296). The latest hosted AWS release is commit `2e39e4a` after PR #285, applied by run [41730396958](https://github.com/Bepoadewale/davdeploy/actions/runs/41730396958). PRs #289–#296 are merged code-only foundations and are not deployed or connected to the worker.
 
 ## Hosted deployment evidence
 
@@ -28,11 +28,11 @@ certification gate disabled and its workspace allowlist empty.
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api` disabled | One customer renderer enabled |
 | CodeBuild dispatcher | One typed item; fixed registry mapping; unknown, disabled, malformed, dependency-bearing and multi-item work fail closed | Deployed |
 | Customer workload execution | Existing App Runner plan/apply/observe/destroy path | Controlled pilot; not a general composed engine |
-| Durable module-instance outcomes | PRs #277/#278/#280 deployed; #287 adds operation-specific evidence, #289 validates serialized graphs, #290 computes dependency waves, #291 persists per-module outcomes, #293 separates type and instance identity, #294 adds typed input references, and #295 validates typed outputs and resolves declared references | Older rows/leases deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); #287–#295 are merged code foundations not wired into hosted scheduling |
+| Durable module-instance outcomes | PRs #277/#278/#280 deployed; #287 adds operation-specific evidence, #289 validates serialized graphs, #290 computes dependency waves, #291 persists per-module outcomes, #293 separates type and instance identity, #294 adds typed input references, #295 validates typed outputs, and #296 stores exact CodeBuild identity per module instance | Older rows/leases deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); #287–#296 are merged code foundations not wired into hosted scheduling |
 | Worker claim and recovery | PR #280 adds conditional one-owner claims, persisted lease version/token/expiry, heartbeats, and `RECONCILIATION_REQUIRED` after uncertain outcomes | Merged as `ef60ac3` and deployed by apply run [41716835229](https://github.com/Bepoadewale/davdeploy/actions/runs/41716835229); never blindly replays an uncertain apply/destroy |
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md`; PR #284 adds an allowlisted typed hosted-certification lifecycle | Hosted code path in progress; feature is off by default; no hosted AWS lifecycle evidence yet |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
-| Multi-module composition | Typed graph validation, operation-aware dispatch-wave selection, per-module outcome persistence, and typed input/output references exist; draft PR #296 adds a unique build identity to one module and exact callback targeting | Local foundations only; CodeBuild still rejects runs with more than one module, and the worker does not yet claim dependency waves |
+| Multi-module composition | Typed graph validation, operation-aware dispatch-wave selection, per-module outcomes, typed references, and exact CodeBuild callback identity exist; PR #297 maps Lambda/API Terraform output JSON into typed module outputs | Local foundations only; CodeBuild still rejects runs with more than one module, and the worker does not yet claim dependency waves |
 | Browser, CLI and MCP lifecycle parity | shared APIs exist, but frontend uses App Runner-specific modes and confirmation | Partial |
 | Eight certification scenarios | test scenario catalogue plus bounded Terraform runner | Service roots exist; not all real application scenarios exercise hosted customer runner, update, recovery and absence |
 
@@ -110,7 +110,7 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 
 ## Work that remains
 
-1. Complete PR #296's unique per-module build identity and exact callback reconciliation. Then wire dispatch-wave selection and per-module outcome persistence into the worker using conditional module claims and one durable build/result identity per dispatched module.
+1. Complete PR #297's typed renderer-output persistence and callback validation. Then wire dispatch-wave selection and per-module outcome persistence into the worker using conditional module claims and one durable build/result identity per dispatched module.
 2. Add typed output binding between modules, authenticated reconciliation for stale CodeBuild/SQS outcomes, bounded safe retries, partial-failure compensation and reverse cleanup.
 3. Integrate the Lambda/API renderer through the hosted CodeBuild path and prove real traffic, health, update, recovery, destroy and independently verified absence before enabling it.
 4. Replace the App Runner-only service gate and single-module CodeBuild limitation as each renderer family is actually certified.

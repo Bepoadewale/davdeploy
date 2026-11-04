@@ -99,7 +99,7 @@ from davdeploy.models import (
     WorkspaceInvitation,
     WorkspaceSubscription,
 )
-from davdeploy.module_ports import validate_module_outputs
+from davdeploy.module_ports import normalize_renderer_outputs, validate_module_outputs
 from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
@@ -5430,6 +5430,7 @@ class ProductService:
         if status in {"IN_PROGRESS", "QUEUED"}:
             return False
         artifact: dict[str, Any] = {}
+        typed_module_outputs: dict[str, str] | None = None
         artifact_error: str | None = None
         evidence = run.evidence or {}
         # Runs created before ticket147 stored the generated URI only inside
@@ -5529,6 +5530,10 @@ class ProductService:
                         or not isinstance(detail.get("outputs"), dict)
                     ):
                         raise ValueError("serverless apply result is incomplete")
+                    if expected_phase == "apply":
+                        typed_module_outputs = normalize_renderer_outputs(
+                            "aws-serverless-api", detail["outputs"]
+                        )
                     if expected_phase == "health" and (
                         not isinstance(detail.get("endpoint"), str)
                         or not detail["endpoint"].startswith("https://")
@@ -5648,11 +5653,13 @@ class ProductService:
             **(run.outputs or {}),
             "codebuild_status": status,
             "codebuild_completed_at": str(build.get("buildComplete") or ""),
-            "runner_artifact": artifact or None,
+            "runner_artifact": (artifact or None) if artifact_error is None else None,
             "terraform_outputs": (artifact.get("detail") or {})
             if run.mode == "AUTHENTICATED_APP_RUNNER_APPLY"
             else (artifact.get("detail") or {}).get("outputs")
-            if run.profile == "aws-serverless-api" and artifact.get("phase") == "apply"
+            if run.profile == "aws-serverless-api"
+            and artifact.get("phase") == "apply"
+            and artifact_error is None
             else None,
             "image_build": (artifact.get("detail") or {})
             if run.mode == "AUTHENTICATED_APP_RUNNER_IMAGE_BUILD"
@@ -5666,22 +5673,31 @@ class ProductService:
         # the graph node submitted until the exact same completed build can be
         # reconciled; do not make the provisional read failure terminal.
         if artifact_error != "runner result artifact URI is missing":
-            if linked_instance is None:
+            target_instance = linked_instance
+            if (
+                target_instance is None
+                and len(run.module_instances) == 1
+                and (run.outputs or {}).get("codebuild_build_id") == normalized_build_id
+            ):
+                # Legacy single-module runs can still bind the callback using
+                # their unique run-level CodeBuild identity.
+                target_instance = run.module_instances[0]
+            if target_instance is None:
                 # Compatibility for pre-migration single-renderer runs that
                 # have only the old run-level build identity.
                 self._advance_cloud_execution_module_instances(run, run.state)
             else:
+                outcome = ModuleLifecycleOutcome(
+                    state=run.state,
+                    evidence={
+                        "runner_build_id": normalized_build_id,
+                        "runner_build_status": status,
+                    },
+                    outputs=typed_module_outputs,
+                )
                 self._advance_cloud_execution_module_instances(
                     run,
-                    module_outcomes={
-                        linked_instance.instance_id: ModuleLifecycleOutcome(
-                            state=run.state,
-                            evidence={
-                                "runner_build_id": normalized_build_id,
-                                "runner_build_status": status,
-                            },
-                        )
-                    },
+                    module_outcomes={target_instance.instance_id: outcome},
                 )
         self.audit(
             Principal("system-cloud-worker", run.organization_id, "operator"),

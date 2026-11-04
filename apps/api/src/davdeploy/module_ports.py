@@ -63,6 +63,15 @@ _PORTS: dict[str, ModulePorts] = {
     ),
 }
 
+_RENDERER_OUTPUT_NAMES: dict[str, dict[str, str]] = {
+    # Terraform's external names stay renderer-specific; persisted values use
+    # the stable module contract exposed to dependent modules.
+    "aws-serverless-api": {
+        "api_endpoint": "api_url",
+        "lambda_arn": "lambda_arn",
+    }
+}
+
 _RESOURCE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
 _PARTITIONS = {"aws", "aws-us-gov", "aws-cn"}
 
@@ -131,6 +140,44 @@ def validate_module_outputs(module_id: str, outputs: object) -> dict[str, str] |
     normalized: dict[str, str] = {}
     for name, value in outputs.items():
         if not _valid_port_value(allowed[name], value):
-            raise ValueError(f"typed module output {name} has an invalid {allowed[name].value_type} value")
+            raise ValueError(
+                f"typed module output {name} has an invalid {allowed[name].value_type} value"
+            )
         normalized[name] = value
     return normalized
+
+
+def normalize_renderer_outputs(module_id: str, renderer_outputs: object) -> dict[str, str] | None:
+    """Convert a checked-in renderer's Terraform JSON outputs to typed ports.
+
+    Sensitive Terraform outputs are rejected even if the output name happens
+    to match a reference port. Consumers receive only the non-secret string
+    values declared by the module contract.
+    """
+    contracts = module_ports(module_id).outputs
+    if not contracts:
+        return None
+    name_mapping = _RENDERER_OUTPUT_NAMES.get(module_id)
+    if name_mapping is None:
+        raise ValueError("typed module has no checked-in renderer output mapping")
+    if not isinstance(renderer_outputs, dict) or any(
+        not isinstance(name, str) for name in renderer_outputs
+    ):
+        raise TypeError("renderer outputs must be a JSON object")
+    if set(renderer_outputs) != set(name_mapping):
+        raise ValueError("renderer outputs do not match the checked-in output mapping")
+
+    normalized: dict[str, str] = {}
+    for renderer_name, port_name in name_mapping.items():
+        record = renderer_outputs[renderer_name]
+        if (
+            not isinstance(record, dict)
+            or set(record) - {"value", "type", "sensitive"}
+            or "value" not in record
+            or record.get("type", "string") != "string"
+            or record.get("sensitive", False) is not False
+            or not isinstance(record["value"], str)
+        ):
+            raise ValueError("renderer output is malformed or marked sensitive")
+        normalized[port_name] = record["value"]
+    return validate_module_outputs(module_id, normalized)

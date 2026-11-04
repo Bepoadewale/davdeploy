@@ -1,6 +1,6 @@
 # ticket297 — Persist typed renderer outputs on module instances
 
-PR: Pending draft creation
+PR: https://github.com/Bepoadewale/davdeploy/pull/297
 Branch: `feat/persist-typed-renderer-outputs`
 
 ## Problem / goal
@@ -9,7 +9,7 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 
 ## Current repo state
 
-- Main includes PR #296 (`9d14bd1`), which persists a unique CodeBuild build ID on a single module row and targets callbacks to that row.
+- Main includes PR #296 (`9d14bd1`), which persists a unique CodeBuild build ID on a single module row and targets callbacks to that row. CI run [41760912071](https://github.com/Bepoadewale/davdeploy/actions/runs/41760912071) passed all seven jobs.
 - The Lambda/API Terraform root emits `api_endpoint` and `lambda_arn`, while the typed contract exposes `api_url` and `lambda_arn`.
 - The worker does not yet schedule dependency waves; multi-module CodeBuild remains fail-closed.
 
@@ -29,21 +29,30 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 
 ## Acceptance criteria
 
-- [ ] Raw Lambda/API outputs normalize to the declared `api_url` and `lambda_arn` ports.
-- [ ] Unknown/missing/malformed raw output values fail closed before module outputs are persisted.
-- [ ] A successful callback persists typed outputs only on its matched module instance.
-- [ ] Legacy runs retain their existing run-level artifact behavior.
-- [ ] Multi-module CodeBuild remains fail-closed.
-- [ ] PR-numbered ticket/evidence and status documentation are accurate.
-- [ ] Focused, full, clean-room and GitHub CI checks pass.
+- [x] Raw Lambda/API outputs normalize to the declared `api_url` and `lambda_arn` ports.
+- [x] Unknown/missing/malformed raw output values fail closed before module outputs are persisted.
+- [x] A successful callback persists typed outputs only on its matched module instance.
+- [x] Sensitive Terraform outputs and rejected artifacts are not persisted.
+- [x] Legacy runs retain their existing run-level artifact behavior.
+- [x] Multi-module CodeBuild remains fail-closed.
+- [x] PR-numbered ticket and status documentation are accurate.
+- [ ] Full isolated clean-room cycle and GitHub CI pass.
 
 ## Acceptance status
 
-Pending implementation.
+Implemented locally. Only the checked-in Lambda/API renderer has a raw-output
+mapping. Successful CodeBuild reconciliation validates those values and stores
+them on the callback's exact module instance. Sensitive, unknown, or malformed
+outputs fail the run and are omitted from persisted artifacts. Multi-module
+execution remains disabled.
 
 ## Tests / validation performed
 
-Pending implementation.
+Focused tests: `uv run pytest -q tests/test_module_ports.py tests/test_cloud_execution.py`
+passed (66 passed, one existing Starlette deprecation warning). Full
+`make verify` passed (478 tests passed; one existing warning). Ruff, the PR
+documentation convention check, OpenAPI snapshot, and Compose configuration
+passed. The clean-room cycle and GitHub CI are pending.
 
 ## Evidence files produced
 

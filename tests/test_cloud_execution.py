@@ -168,7 +168,18 @@ def approved_serverless_customer_review(service, db):
             {
                 "saved_plan_sha256": "c" * 64,
                 "artifact_sha256": "a" * 64,
-                "outputs": {"api_endpoint": {"value": "https://api.example"}},
+                "outputs": {
+                    "api_endpoint": {
+                        "sensitive": False,
+                        "type": "string",
+                        "value": "https://api.example",
+                    },
+                    "lambda_arn": {
+                        "sensitive": False,
+                        "type": "string",
+                        "value": "arn:aws:lambda:us-east-1:123456789012:function:davdeploy-api",
+                    },
+                },
             },
             "SUCCEEDED_AWAITING_OBSERVATION",
         ),
@@ -225,6 +236,25 @@ def test_serverless_results_are_bound_to_the_typed_operation_and_get_truthful_st
         requested_by_subject=operator().subject,
     )
     service.db.add(run)
+    service.db.flush()
+    module_instance = CloudExecutionModuleInstance(
+        organization_id=run.organization_id,
+        project_id=run.project_id,
+        execution_run_id=run.id,
+        instance_id="aws-serverless-api",
+        module_id="aws-serverless-api",
+        state="SUBMITTED",
+        operation="apply",
+        attempt=1,
+        input_digest=run.content_digest,
+        idempotency_key=f"{run.id}:aws-serverless-api",
+        dependencies=[],
+        outputs={},
+        evidence={},
+        version=2,
+        runner_build_id=build_id,
+    )
+    service.db.add(module_instance)
     if phase == "health":
         service.db.add(
             CloudExecutionRun(
@@ -281,6 +311,115 @@ def test_serverless_results_are_bound_to_the_typed_operation_and_get_truthful_st
     reconciled = service.db.get(CloudExecutionRun, run.id)
     assert reconciled.state == expected_state, reconciled.outputs.get("failure_reason")
     assert service.db.get(CloudExecutionRun, run.id).outputs["runner_artifact"] == payload
+    if phase == "apply":
+        persisted_module = service.db.get(CloudExecutionModuleInstance, module_instance.id)
+        assert persisted_module is not None
+        assert persisted_module.outputs == {
+            "api_url": "https://api.example",
+            "lambda_arn": "arn:aws:lambda:us-east-1:123456789012:function:davdeploy-api",
+        }
+
+
+def test_serverless_sensitive_renderer_output_is_rejected_and_not_persisted(monkeypatch):
+    service, _ = make_service()
+    build_id = "davdeploy:serverless-sensitive-output"
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-sensitive-output",
+        project_id="project-sensitive-output",
+        profile="aws-serverless-api",
+        state="SUBMITTED",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        attempt=1,
+        command={"operation": "apply-saved-plan"},
+        evidence={
+            "result_s3_uri": "s3://runner-results/sensitive/result.json",
+            "execution_environment": {
+                "DAVDEPLOY_CUSTOMER_CONNECTION_ID": "connection-sensitive",
+                "DAVDEPLOY_CUSTOMER_PROJECT_ID": "project-sensitive-output",
+                "DAVDEPLOY_EXECUTION_OPERATION": "apply-saved-plan",
+                "DAVDEPLOY_SERVERLESS_ARTIFACT_SHA256": "a" * 64,
+                "DAVDEPLOY_EXECUTION_SAVED_PLAN_SHA256": "c" * 64,
+            },
+        },
+        outputs={"codebuild_build_id": build_id},
+        content_digest="d" * 64,
+        requested_by_subject=operator().subject,
+    )
+    service.db.add(run)
+    service.db.flush()
+    node = CloudExecutionModuleInstance(
+        organization_id=run.organization_id,
+        project_id=run.project_id,
+        execution_run_id=run.id,
+        instance_id="aws-serverless-api",
+        module_id="aws-serverless-api",
+        state="SUBMITTED",
+        operation="apply",
+        attempt=1,
+        input_digest=run.content_digest,
+        idempotency_key=f"{run.id}:aws-serverless-api",
+        dependencies=[],
+        outputs={},
+        evidence={},
+        version=2,
+        runner_build_id=build_id,
+    )
+    service.db.add(node)
+    service.db.commit()
+    payload = {
+        "schema_version": "davdeploy.customer_execution_result.v1",
+        "run_id": run.id,
+        "status": "SUCCEEDED",
+        "connection_id": "connection-sensitive",
+        "project_id": "project-sensitive-output",
+        "plan_digest": run.content_digest,
+        "phase": "apply",
+        "detail": {
+            "saved_plan_sha256": "c" * 64,
+            "artifact_sha256": "a" * 64,
+            "outputs": {
+                "api_endpoint": {
+                    "sensitive": False,
+                    "type": "string",
+                    "value": "https://api.example.test",
+                },
+                "lambda_arn": {
+                    "sensitive": True,
+                    "type": "string",
+                    "value": "sensitive-value-must-not-be-persisted",
+                },
+            },
+        },
+    }
+
+    class Body:
+        def read(self):
+            return json.dumps(payload).encode()
+
+    class CodeBuild:
+        def batch_get_builds(self, *, ids):
+            assert ids == [build_id]
+            return {"builds": [{"buildStatus": "SUCCEEDED", "buildComplete": True}]}
+
+    class S3:
+        def get_object(self, *, Bucket, Key):
+            assert (Bucket, Key) == ("runner-results", "sensitive/result.json")
+            return {"Body": Body()}
+
+    monkeypatch.setattr(
+        "davdeploy.service.boto3.client",
+        lambda service_name: CodeBuild() if service_name == "codebuild" else S3(),
+    )
+
+    assert service.reconcile_cloud_execution_build(build_id) is True
+    persisted_run = service.db.get(CloudExecutionRun, run.id)
+    persisted_node = service.db.get(CloudExecutionModuleInstance, node.id)
+    assert persisted_run is not None and persisted_run.state == "FAILED"
+    assert persisted_run.outputs["runner_artifact"] is None
+    assert persisted_run.outputs["terraform_outputs"] is None
+    assert "sensitive-value-must-not-be-persisted" not in json.dumps(persisted_run.outputs)
+    assert persisted_node is not None and persisted_node.outputs == {}
 
 
 @pytest.mark.parametrize(
