@@ -3,7 +3,7 @@
 Date: 2026-11-04
 Execution type: Local static and automated validation; no customer workload
 Customer repository: N/A; no customer repository was used
-Commit: Implementation commit for PR #324 (exact SHA recorded after commit)
+Commit: `8890acf11d6025b188f82b6697d0dbf777880b75` (implementation under test)
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
