@@ -45,12 +45,11 @@ be eligible for human review.
 - [x] Findings do not expose raw plan values and policy version changes.
 - [x] Focused policy tests, `make verify`, and documentation conventions pass.
 - [x] No AWS calls or resource mutations are performed.
-- [ ] Required GitHub CI passes on this PR head.
+- [x] All seven required GitHub Actions checks pass on the current implementation.
 
 ## Acceptance status
 
-Implementation and local verification are complete. Required GitHub CI remains
-pending.
+Implemented and verified locally and in GitHub CI.
 
 ## Tests / validation performed
 
@@ -60,6 +59,8 @@ Validation performed:
 - `make verify` — **662 passed**; Ruff, Actions configuration, OpenAPI snapshot,
   and Compose configuration checks passed.
 - `python3.12 scripts/check_doc_conventions.py` and `git diff --check` passed.
+- All seven required GitHub Actions checks passed in run
+  [41903332283](https://github.com/Bepoadewale/davdeploy/actions/runs/41903332283).
 - No AWS calls or resource mutations were performed.
 
 ## Evidence files produced
