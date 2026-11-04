@@ -3,7 +3,7 @@
 Date: 2026-11-04
 Execution type: Local tests and clean-room integration; no AWS customer workload.
 Customer repository: `Bepoadewale/davdeploy`
-Commit: `0bb426f` (`feat: persist typed renderer outputs per module`)
+Commit: `d2ca805` (`fix: accept typed module work in dispatcher`)
 AWS account: Not applicable; no cloud credentials were used.
 AWS region: Not applicable; no cloud credentials were used.
 
@@ -18,19 +18,24 @@ AWS region: Not applicable; no cloud credentials were used.
 ## Commands executed
 
 ```text
-uv run pytest -q tests/test_module_ports.py tests/test_cloud_execution.py
+uv run ruff format tests/test_renderer_dispatcher.py tests/test_cloud_execution.py
+bash -n scripts/customer-workload-dispatcher.sh
+uv run pytest -q tests/test_renderer_dispatcher.py tests/test_cloud_execution.py
 make verify
-git worktree add --detach /tmp/davdeploy-cleanroom-pr297-20261104 0bb426f
+git -C /tmp/davdeploy-cleanroom-pr297-20261104 checkout --detach d2ca805
+COMPOSE_PROJECT_NAME=davdeploy-pr297-20261104 make clean-local
 COMPOSE_PROJECT_NAME=davdeploy-pr297-20261104 make bootstrap-local
 COMPOSE_PROJECT_NAME=davdeploy-pr297-20261104 make smoke api-contract customer-plan-e2e seed-demo-data demo-simple demo-complex demo-day2 demo-degraded demo-failure demo-readiness-failure trace-check verify
 COMPOSE_PROJECT_NAME=davdeploy-pr297-20261104 make clean-local
+GITHUB_PR_NUMBER=297 python3.12 scripts/check_doc_conventions.py
+git diff --check
 ```
 
 ## Observed result
 
-- Focused tests: 66 passed, one existing Starlette deprecation warning.
-- Full `make verify`: 478 passed, one existing Starlette deprecation warning.
-- The clean-room cycle passed bootstrap, readiness, API contract, customer-plan
+- Focused dispatcher and execution tests: 56 passed, one existing Starlette deprecation warning.
+- Full `make verify`: 479 passed, one existing Starlette deprecation warning.
+- The clean-room cycle at `d2ca805` passed bootstrap, readiness, API contract, customer-plan
   E2E, seed, simple/complex/Day-2/degraded demos, policy and readiness failures,
   trace check, lint, full tests, OpenAPI snapshot, and Compose config.
 - Tests confirm Terraform `api_endpoint` maps to typed `api_url`, the Lambda ARN

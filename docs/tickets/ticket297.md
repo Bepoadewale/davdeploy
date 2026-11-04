@@ -38,7 +38,7 @@ PR #295 validates typed outputs and resolves declared references, but the hosted
 - [x] Multi-module CodeBuild remains fail-closed.
 - [x] The dispatcher accepts the adapter's `instance_id` and `input_bindings` fields but still rejects unresolved bindings and arbitrary fields.
 - [x] PR-numbered ticket and status documentation are accurate.
-- [ ] Full isolated clean-room cycle passes on the final implementation commit.
+- [x] Full isolated clean-room cycle passes on the final implementation commit.
 - [ ] GitHub CI passes.
 
 ## Acceptance status
@@ -55,11 +55,10 @@ execution remains disabled.
 
 Focused dispatcher and execution tests passed (56 passed, one existing
 Starlette deprecation warning). Full `make verify` passed (479 tests passed; one
-existing warning). Ruff, the PR documentation convention check, OpenAPI
-snapshot, Compose configuration, and `git diff --check` passed. The earlier
-clean-room cycle covered the typed-output implementation before the final
-dispatcher schema alignment; rerunning it on the final implementation commit
-is still pending. GitHub CI is pending.
+existing warning). The isolated clean-room cycle passed on final implementation
+commit `d2ca805`; see `docs/test/test297.md`. Ruff, the PR documentation
+convention check, OpenAPI snapshot, Compose configuration, and `git diff --check`
+passed. GitHub CI is pending.
 
 ## Evidence files produced
 
