@@ -43,7 +43,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-04.4"
+POLICY_VERSION = "nova-generated-plan-2026-11-04.5"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -169,6 +169,7 @@ def _evaluate(
     _check_iam(resources, findings)
     _check_network(resources, findings)
     _check_databases(resources, findings)
+    _check_ebs_volumes(resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -697,6 +698,22 @@ def _check_databases(resources: tuple[dict[str, Any], ...], findings: list[PlanP
             _deny(findings, "database_encryption_required", address, "The plan does not confirm encryption at rest for this database.")
         if kind == "aws_redshift_cluster" and values.get("encrypted") is not True:
             _deny(findings, "database_encryption_required", address, "The plan does not confirm encryption at rest for this database.")
+
+
+def _check_ebs_volumes(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_ebs_volume":
+            continue
+        values = item.get("values")
+        if not isinstance(values, dict) or values.get("encrypted") is not True:
+            _deny(
+                findings,
+                "ebs_encryption_required",
+                item.get("address"),
+                "EBS volumes must have encryption enabled.",
+            )
 
 
 def _json_document(value: Any, findings: list[PlanPolicyFinding], address: Any) -> dict[str, Any] | None:
