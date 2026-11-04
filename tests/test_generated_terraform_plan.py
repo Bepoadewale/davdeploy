@@ -7,6 +7,7 @@ import textwrap
 
 import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_plan_ownership import PlanOwnershipScope
 from davdeploy.generated_terraform_plan import (
     GeneratedTerraformPlanRunner,
     TerraformPlanExecutionError,
@@ -19,6 +20,17 @@ LOCKFILE = '''provider "registry.terraform.io/hashicorp/aws" {
   hashes = ["h1:trusted"]
 }
 '''
+
+
+def ownership_scope():
+    return PlanOwnershipScope(
+        organization_id="org-test",
+        workspace_id="workspace-test",
+        project_id="project-test",
+        environment_id="production",
+        plan_id="plan-internal-id",
+        revision_id="revision-internal-id",
+    )
 
 
 def proposal():
@@ -42,7 +54,7 @@ def proposal():
     )
 
 
-def fake_terraform(tmp_path, *, applyable=True, errored=False):
+def fake_terraform(tmp_path, *, applyable=True, errored=False, taggable=True):
     executable = tmp_path / "terraform-fake"
     schema = {
         "provider_schemas": {
@@ -63,6 +75,13 @@ def fake_terraform(tmp_path, *, applyable=True, errored=False):
             }
         }
     }
+    if taggable:
+        schema["provider_schemas"]["registry.terraform.io/hashicorp/aws"]["resource_schemas"][
+            "aws_s3_bucket"
+        ]["block"]["attributes"]["tags"] = {
+            "type": ["map", "string"],
+            "optional": True,
+        }
     plan_doc = {
         "format_version": "1.2",
         "applyable": applyable,
@@ -74,7 +93,7 @@ def fake_terraform(tmp_path, *, applyable=True, errored=False):
         "planned_values": {
             "root_module": {
                 "resources": [
-                    {"address": "aws_s3_bucket.bucket", "mode": "managed", "type": "aws_s3_bucket", "values": {"bucket": "davdeploy-plan-test-unique"}},
+                    {"address": "aws_s3_bucket.bucket", "mode": "managed", "type": "aws_s3_bucket", "values": {"bucket": "davdeploy-plan-test-unique", "tags": ownership_scope().tags()}},
                     {"address": "terraform_data.account_guard", "mode": "managed", "type": "terraform_data", "values": {"input": None}},
                 ]
             }
@@ -85,6 +104,8 @@ def fake_terraform(tmp_path, *, applyable=True, errored=False):
                 "type": "aws_s3_bucket",
                 "change": {
                     "actions": ["create"],
+                    "before": None,
+                    "after": {"tags": ownership_scope().tags()},
                     "before_sensitive": False,
                     "after_sensitive": False,
                     "after_unknown": {},
@@ -141,6 +162,7 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
         proposal(),
         expected_account_id="654654474502",
         region="us-east-1",
+        ownership_scope=ownership_scope(),
         workspace=workspace,
     )
     assert result.summary.create_count == 1
@@ -159,6 +181,7 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
     generated = json.loads((workspace / "main.tf.json").read_text())
     assert "backend" not in generated["terraform"]
     assert generated["provider"]["aws"]["region"] == "us-east-1"
+    assert generated["resource"]["aws_s3_bucket"]["bucket"]["tags"] == ownership_scope().tags()
     assert "data.aws_caller_identity.trusted.account_id" in json.dumps(generated)
     assert "654654474502" in json.dumps(generated)
     commands = (workspace / ".terraform-command-log").read_text().splitlines()
@@ -181,6 +204,7 @@ def test_target_account_mismatch_blocks_before_creating_workspace(tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=workspace,
         )
     assert not workspace.exists()
@@ -192,6 +216,7 @@ def test_proposal_region_must_match_trusted_region(tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="eu-west-1",
+            ownership_scope=ownership_scope(),
             workspace=tmp_path / "workspace",
         )
 
@@ -204,6 +229,7 @@ def test_provider_lockfile_version_must_match_exact_pin(tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=tmp_path / "workspace",
         )
 
@@ -217,6 +243,7 @@ def test_workspace_must_have_private_permissions(tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=workspace,
         )
 
@@ -228,6 +255,7 @@ def test_custom_aws_endpoint_is_rejected(monkeypatch, tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=tmp_path / "workspace",
         )
 
@@ -240,6 +268,7 @@ def test_failed_or_non_applyable_changed_plan_fails_closed(tmp_path, applyable, 
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=tmp_path / "workspace",
         )
 
@@ -253,8 +282,23 @@ def test_invalid_provider_schema_stops_before_terraform_plan(tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=tmp_path / "workspace",
         )
+
+
+def test_untaggable_aws_resource_stops_before_terraform_plan(tmp_path):
+    fake = fake_terraform(tmp_path, taggable=False)
+    with pytest.raises(TerraformPlanExecutionError, match="schema validation or ownership validation"):
+        runner(tmp_path, fake=fake).plan(
+            proposal(),
+            expected_account_id="654654474502",
+            region="us-east-1",
+            ownership_scope=ownership_scope(),
+            workspace=tmp_path / "workspace",
+        )
+    commands = (tmp_path / "workspace" / ".terraform-command-log").read_text().splitlines()
+    assert not any(command.startswith("plan ") for command in commands)
 
 
 def test_stale_saved_plan_path_is_rejected(tmp_path):
@@ -266,6 +310,7 @@ def test_stale_saved_plan_path_is_rejected(tmp_path):
             proposal(),
             expected_account_id="654654474502",
             region="us-east-1",
+            ownership_scope=ownership_scope(),
             workspace=workspace,
         )
 

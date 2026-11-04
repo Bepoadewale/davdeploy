@@ -26,6 +26,11 @@ from davdeploy.generated_plan_inspection import (
     TerraformPlanSummary,
     inspect_terraform_plan,
 )
+from davdeploy.generated_plan_ownership import (
+    PlanOwnershipError,
+    PlanOwnershipScope,
+    inject_trusted_ownership_tags,
+)
 from davdeploy.generated_plan_policy import (
     GeneratedPlanPolicyResult,
     evaluate_generated_plan_policy,
@@ -52,6 +57,8 @@ class GeneratedTerraformPlan:
     proposal_sha256: str
     context_sha256: str
     configuration_sha256: str
+    ownership_scope_sha256: str
+    ownership_plan_id_sha256: str
     saved_plan_sha256: str
     saved_plan_path: str
 
@@ -93,9 +100,12 @@ class GeneratedTerraformPlanRunner:
         *,
         expected_account_id: str,
         region: str,
+        ownership_scope: PlanOwnershipScope,
         workspace: str | Path,
     ) -> GeneratedTerraformPlan:
         """Validate and plan; never apply, destroy, or return resource values."""
+        if not isinstance(ownership_scope, PlanOwnershipScope):
+            raise TerraformPlanExecutionError("trusted plan ownership scope is required")
         if not re.fullmatch(r"\d{12}", expected_account_id):
             raise TerraformPlanExecutionError("trusted AWS account ID is invalid")
         if not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
@@ -129,7 +139,6 @@ class GeneratedTerraformPlanRunner:
         config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self._write_private(working_root / "main.tf.json", config_bytes)
         self._write_private(working_root / ".terraform.lock.hcl", lockfile_bytes)
-        config_digest = hashlib.sha256(config_bytes).hexdigest()
 
         version_output = self._run(["version", "-json"], working_root)
         try:
@@ -144,8 +153,15 @@ class GeneratedTerraformPlanRunner:
         try:
             schema = json.loads(schema_output.stdout)
             validate_generated_proposal(proposal, schema)
-        except (json.JSONDecodeError, GeneratedProviderSchemaError) as error:
-            raise TerraformPlanExecutionError("proposal failed pinned AWS provider schema validation") from error
+            inject_trusted_ownership_tags(config, schema, ownership_scope)
+        except (json.JSONDecodeError, GeneratedProviderSchemaError, PlanOwnershipError) as error:
+            raise TerraformPlanExecutionError(
+                "proposal failed pinned AWS provider schema validation or ownership validation"
+            ) from error
+
+        config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self._rewrite_private(working_root / "main.tf.json", config_bytes)
+        config_digest = hashlib.sha256(config_bytes).hexdigest()
 
         self._run(["validate", "-no-color"], working_root)
         self._run(
@@ -189,6 +205,7 @@ class GeneratedTerraformPlanRunner:
             proposal,
             expected_account_id=expected_account_id,
             expected_region=region,
+            ownership_scope=ownership_scope,
             trusted_configuration=config,
         )
 
@@ -203,6 +220,8 @@ class GeneratedTerraformPlanRunner:
             proposal_sha256=hashlib.sha256(proposal_bytes).hexdigest(),
             context_sha256=proposal.context_digest,
             configuration_sha256=config_digest,
+            ownership_scope_sha256=ownership_scope.scope_sha256(),
+            ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=hashlib.sha256(plan_bytes).hexdigest(),
             saved_plan_path=str(plan_path),
         )
@@ -307,6 +326,22 @@ class GeneratedTerraformPlanRunner:
                 file.write(content)
         except FileExistsError as error:
             raise TerraformPlanExecutionError("Terraform workspace already contains generated files") from error
+
+    @staticmethod
+    def _rewrite_private(path: Path, content: bytes) -> None:
+        flags = os.O_WRONLY | os.O_TRUNC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            descriptor = os.open(path, flags)
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077:
+                os.close(descriptor)
+                raise TerraformPlanExecutionError("generated Terraform file is not private")
+            with os.fdopen(descriptor, "wb") as file:
+                file.write(content)
+        except (FileNotFoundError, OSError) as error:
+            raise TerraformPlanExecutionError("generated Terraform configuration is unavailable") from error
 
     @staticmethod
     def _terraform_environment() -> dict[str, str]:

@@ -63,6 +63,12 @@ class GeneratedResource(StrictContract):
                 for child in value:
                     visit(child)
         visit(self.arguments)
+        proposed_tags = self.arguments.get("tags")
+        if isinstance(proposed_tags, dict) and any(
+            isinstance(key, str) and key.casefold().startswith("davdeploy")
+            for key in proposed_tags
+        ):
+            raise ValueError("generated arguments cannot set reserved DavDeploy ownership tags")
         return self
 
 

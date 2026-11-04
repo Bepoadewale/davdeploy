@@ -16,6 +16,7 @@ from davdeploy.generated_deployment_contract import (
 )
 from davdeploy.generated_plan_artifacts import StoredPlanObject, canonical_json_digest
 from davdeploy.generated_plan_inspection import TerraformPlanSummary
+from davdeploy.generated_plan_ownership import PlanOwnershipScope
 from davdeploy.generated_plan_policy import (
     GeneratedPlanPolicyResult,
     PlanPolicyFinding,
@@ -109,7 +110,7 @@ def make_approved_revision(service):
     return project, connection, approved
 
 
-def generated_runner_result(tmp_path, revision):
+def generated_runner_result(tmp_path, revision, project):
     plan_file = tmp_path / "saved.tfplan"
     plan_file.write_bytes(PLAN_BYTES)
     os.chmod(plan_file, 0o600)
@@ -148,6 +149,13 @@ def generated_runner_result(tmp_path, revision):
         drift_count=0,
         contains_sensitive_changes=False,
     )
+    ownership_scope = PlanOwnershipScope(
+        organization_id=founder().organization_id,
+        workspace_id=founder().organization_id,
+        project_id=project.id,
+        plan_id=revision.infrastructure_plan_id,
+        revision_id=revision.id,
+    )
     generated = GeneratedTerraformPlan(
         summary=summary,
         policy=policy,
@@ -159,6 +167,8 @@ def generated_runner_result(tmp_path, revision):
         proposal_sha256=proposal_digest,
         context_sha256=proposal.context_digest,
         configuration_sha256="c" * 64,
+        ownership_scope_sha256=ownership_scope.scope_sha256(),
+        ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
         saved_plan_sha256=hashlib.sha256(PLAN_BYTES).hexdigest(),
         saved_plan_path=str(plan_file),
     )
@@ -188,8 +198,8 @@ def service_with_file_database(store, database_path):
 def test_generated_plan_manifest_persists_and_admin_approves_exact_artifact(tmp_path):
     store = ArtifactStoreFixture()
     service, db = service_with_artifact_store(store)
-    _, _, revision = make_approved_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
 
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, RUN_ID, proposal, generated
@@ -245,8 +255,8 @@ def test_generated_plan_manifest_persists_and_admin_approves_exact_artifact(tmp_
 def test_generated_plan_approval_rejects_tampering_expiry_and_missing_object(tmp_path):
     store = ArtifactStoreFixture(missing_on_verify=True)
     service, _ = service_with_artifact_store(store)
-    _, _, revision = make_approved_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, RUN_ID, proposal, generated
     )
@@ -266,8 +276,8 @@ def test_generated_plan_approval_rejects_tampering_expiry_and_missing_object(tmp
 def test_generated_plan_persistence_rejects_denied_policy_and_wrong_parent_state(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_artifact_store(store)
-    _, _, revision = make_approved_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
     denied = GeneratedPlanPolicyResult(PlanPolicyVerdict.DENY, "generated-plan-policy-test", ())
     generated = GeneratedTerraformPlan(**(generated.__dict__ | {"policy": denied}))
 
@@ -278,11 +288,52 @@ def test_generated_plan_persistence_rejects_denied_policy_and_wrong_parent_state
     assert store.saved == []
 
 
+@pytest.mark.parametrize(
+    "scope_change",
+    [
+        {"workspace_id": "another-workspace"},
+        {"project_id": "another-project"},
+        {"plan_id": "another-plan"},
+        {"revision_id": "another-revision"},
+    ],
+)
+def test_generated_plan_persistence_rejects_cross_scope_ownership(tmp_path, scope_change):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+    scope_values = {
+        "organization_id": founder().organization_id,
+        "workspace_id": founder().organization_id,
+        "project_id": project.id,
+        "plan_id": revision.infrastructure_plan_id,
+        "revision_id": revision.id,
+    }
+    scope_values.update(scope_change)
+    other_scope = PlanOwnershipScope(**scope_values)
+    generated = GeneratedTerraformPlan(
+        **(
+            generated.__dict__
+            | {
+                "ownership_scope_sha256": other_scope.scope_sha256(),
+                "ownership_plan_id_sha256": other_scope.plan_id_sha256(),
+            }
+        )
+    )
+
+    with pytest.raises(ValueError, match="trusted runner evidence"):
+        service.persist_generated_plan_artifact(
+            founder(), revision.id, str(uuid.uuid4()), proposal, generated
+        )
+
+    assert store.saved == []
+
+
 def test_generated_plan_policy_rejects_deny_finding_even_with_reviewable_verdict(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_artifact_store(store)
-    _, _, revision = make_approved_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
     contradictory_policy = GeneratedPlanPolicyResult(
         PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW,
         "generated-plan-policy-test",
@@ -300,8 +351,8 @@ def test_generated_plan_policy_rejects_deny_finding_even_with_reviewable_verdict
 def test_generated_plan_persistence_binds_proposal_to_exact_customer_revision(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_artifact_store(store)
-    _, _, revision = make_approved_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
     detached_proposal = proposal.model_copy(update={"context_digest": "f" * 64})
     generated = GeneratedTerraformPlan(
         **(
@@ -329,8 +380,8 @@ def test_generated_plan_persistence_binds_proposal_to_exact_customer_revision(tm
 def test_generated_plan_review_routes_are_tenant_scoped_and_admin_only(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_file_database(store, tmp_path / "api-test.db")
-    _, _, revision = make_approved_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision)
+    project, _, revision = make_approved_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, str(uuid.uuid4()), proposal, generated
     )

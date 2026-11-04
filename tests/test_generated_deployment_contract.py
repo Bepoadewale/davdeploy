@@ -110,6 +110,13 @@ def test_contract_accepts_a_typed_reference_and_infers_dependency() -> None:
         ],
         [resource("one", "one", arguments={"name": "file(unsafe)"})],
         [resource("one", "one", arguments={"user_data": "unsafe"})],
+        [
+            resource(
+                "one",
+                "one",
+                arguments={"tags": {"davdeployworkspace": "spoofed-owner"}},
+            )
+        ],
     ],
 )
 def test_contract_rejects_unsafe_or_invalid_graphs(
