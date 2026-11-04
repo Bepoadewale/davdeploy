@@ -84,6 +84,7 @@ _RENDERERS: dict[str, ModuleRenderer] = {
         ),
     ),
 }
+_HOSTED_CERTIFICATION_MODULES = frozenset({"aws-serverless-api", "aws-file-storage"})
 
 
 def renderer_for_profile(
@@ -119,15 +120,15 @@ def renderer_for(
 ) -> ModuleRenderer:
     """Resolve a checked-in renderer or reject an unbound lifecycle module.
 
-    The serverless opt-in is only for controlled hosted certification. Customer
-    run creation has a separate profile gate and must not use this flag as a
-    rollout switch.
+    The private storage and serverless opt-in is only for controlled hosted
+    certification. Customer run creation has a separate profile gate and must
+    not use this flag as a rollout switch.
     """
     renderer = _RENDERERS.get(module_id)
     if renderer is None:
         raise ValueError(f"module {module_id} has no executable renderer")
-    serverless_certification_enabled = module_id == "aws-serverless-api" and hosted_certification
-    if not renderer.execution_enabled and not serverless_certification_enabled:
+    certification_enabled = module_id in _HOSTED_CERTIFICATION_MODULES and hosted_certification
+    if not renderer.execution_enabled and not certification_enabled:
         raise ValueError(f"module {module_id} renderer is not enabled for customer execution")
     if operation not in renderer.supported_operations:
         raise ValueError(f"module {module_id} does not support {operation}")

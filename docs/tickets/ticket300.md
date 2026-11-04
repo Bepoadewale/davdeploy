@@ -9,7 +9,7 @@ PR #299 adds a gated private S3 renderer and typed bucket outputs. The dependenc
 
 ## Current repo state
 
-PR #298 adds durable one-module-at-a-time scheduling. PR #299 (`982bb50`) adds a gated private S3 root/runner and typed outputs, but does not enable customer execution. `resolve_module_inputs` validates references in the graph library; the worker still blocks every input-bound module and the dispatcher rejects all bindings. Lambda's Terraform module supports a generic environment map but the customer API root does not yet configure bucket access.
+PR #298 adds durable one-module-at-a-time scheduling. PR #299 (`982bb50`) adds a gated private S3 root/runner and typed outputs, but does not enable customer execution. The graph resolver already validates declared references; this PR extends the durable worker, fixed CodeBuild adapter and renderer runner to deliver the selected module's validated values ephemerally. The API Terraform root now accepts the one approved bucket-name input and scopes Lambda access to that bucket.
 
 ## Research / references used
 
@@ -46,15 +46,29 @@ PR #298 adds durable one-module-at-a-time scheduling. PR #299 (`982bb50`) adds a
 
 ## Acceptance status
 
-Bootstrap only. Substantive implementation and validation have not started.
+- [x] The worker queues an input-bound module after its dependencies succeed, resolves only declared typed outputs, and validates the result before dispatch.
+- [x] CodeBuild passes validated values only to the selected module through a reserved environment variable; caller-supplied values for that variable are filtered.
+- [x] Dispatcher, adapter and runner reject unsupported, malformed, mismatched, or wrong-scope inputs.
+- [x] Lambda receives the bucket name and only bucket/object permissions scoped to that bucket.
+- [x] Failure messages and audit details do not include the resolved value.
+- [x] The API renderer remains disabled for ordinary customer execution; the S3 and API renderers are available only under the explicit hosted-certification gate.
+- [x] Focused tests, full local verification, Terraform validation and documentation checks pass.
+- [ ] Full clean-room cycle passes on this change.
+- [ ] Final PR CI passes and review confirms the merged diff.
+- [x] Evidence states no AWS resources were used; live composed certification remains follow-up work.
 
 ## Tests / validation performed
 
-Bootstrap ticket and draft PR only.
+- Focused Python tests: 96 passed.
+- `make verify`: 498 passed; OpenAPI snapshot matched and Compose configuration passed, with one existing Starlette/httpx deprecation warning.
+- `terraform fmt -check infrastructure/terraform/customer-workload-serverless-api` and `terraform -chdir=infrastructure/terraform/customer-workload-serverless-api validate`: passed.
+- `GITHUB_PR_NUMBER=300 python3.12 scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- Clean-room, final CI and merge checks are pending.
 
 ## Evidence files produced
 
-`docs/test/test300.md` will record local and clean-room verification. No AWS customer workload is planned in this PR.
+`docs/test/test300.md` records local and clean-room verification. No AWS customer workload is planned in this PR.
 
 ## Boundaries
 

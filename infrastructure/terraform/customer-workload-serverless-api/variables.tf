@@ -19,3 +19,9 @@ variable "runtime" {
   type    = string
   default = "python3.12"
 }
+
+variable "uploads_bucket_name" {
+  type        = string
+  default     = ""
+  description = "Optional project-scoped private S3 bucket name supplied through a validated typed module reference."
+}
