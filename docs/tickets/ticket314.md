@@ -1,7 +1,9 @@
 # ticket314 Store generated plans and bind immutable review approval
 
-PR: #314 (draft)
+PR: #314 https://github.com/Bepoadewale/davdeploy/pull/314 (merged 2026-11-04)
 Branch: feat/nova-saved-plan-approval
+
+Merge commit: `8cf1db2250a6a07481ad4184a81419b8ac52490a`.
 
 ## Problem / goal
 
@@ -52,11 +54,14 @@ apply behavior.
 - [x] API responses and audit records do not include raw Terraform values, secrets, bytes, bucket/key/version references, or object URLs. Database triggers reject updates/deletes to artifact and approval records.
 - [x] Apply and destroy remain unavailable from this path.
 - [x] Focused tests, `make verify`, migration tests, Terraform validation, and documentation checks pass.
-- [ ] Required GitHub CI and final PR review are pending.
+- [x] All seven required GitHub Actions checks passed, independent review found
+  no remaining blocker, and the PR was merged.
 
 ## Acceptance status
 
-Draft. Implementation and local validation are complete. Hosted runner integration and customer execution are deliberately outside this PR.
+Merged. Implementation and local validation are complete. Hosted runner
+integration, deployment of the source changes, and customer execution are
+deliberately outside this PR.
 
 ## Tests / validation performed
 
@@ -67,15 +72,18 @@ Validation performed:
 - Fresh clean-room: `make local-proof` — bootstrap, smoke, API contract, customer-plan E2E, seed, trace check, and full verification passed; 618 tests passed. Simple, complex, Day-2, degraded, policy-failure, and readiness-failure demos passed.
 - Infrastructure: `terraform validate`, 36 focused static tests, Ruff, and Actions configuration check passed.
 - Read-only AWS check in account `654654474502`, `us-east-1`: existing plan bucket versioning is enabled, default encryption is SSE-KMS with S3 Bucket Keys, lifecycle is 30 days current / 7 days noncurrent. No object was uploaded and no AWS resource was created or modified.
-- Independent review found and prompted fixes for role overreach, contradictory deny findings, proposal-to-revision context binding, and canonical run IDs. Final re-review and GitHub CI remain pending.
+- Independent review found and prompted fixes for role overreach, contradictory deny findings, proposal-to-revision context binding, canonical run IDs, and malformed policy evidence. Final review found no remaining blocker.
+- All seven CI checks passed in run [41879258328](https://github.com/Bepoadewale/davdeploy/actions/runs/41879258328). PR #314 merged as `8cf1db2250a6a07481ad4184a81419b8ac52490a`.
 
 ## Evidence files produced
 
-This PR is a plan-storage and approval-record workflow only. It creates no AWS
-workload resources and does not upload a real plan. The hosted worker has no
-caller for the new internal persistence method yet; a later package must
-connect Nova generation and the pinned Terraform runner to it. Apply and
-destroy remain disabled.
+This PR is a plan-storage and approval-record workflow only. It created no AWS
+workload resources and uploaded no real plan. A read-only AWS query on
+2026-11-04 found `davdeploy-api` Active with last modification at 07:41 UTC;
+the Nova plan-review enable flag and plan-artifact bucket variables were
+absent. The PR merged at 18:00 UTC, so its source changes are not deployed.
+The hosted worker has no caller for the persistence method. Apply and destroy
+remain disabled on this Nova path.
 
 ## Boundaries
 
