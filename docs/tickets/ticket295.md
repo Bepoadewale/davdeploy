@@ -34,7 +34,7 @@ PR #293 separates module type from instance identity. PR #294 declares typed por
 - [x] Existing untyped App Runner outcomes remain backward compatible and are not mislabeled as typed.
 - [x] Resolution never fetches or accepts secret contents.
 - [x] The execution handoff reflects merged #293/#294 and current remaining work.
-- [ ] Focused tests, full verification, clean-room cycle, and GitHub CI pass.
+- [x] Focused tests, full verification, clean-room cycle, and GitHub CI pass.
 
 ## Acceptance status
 
@@ -50,7 +50,7 @@ the validated boundary needed before worker scheduling is wired.
 - `.venv/bin/python -m ruff check ...` on changed Python files — passed.
 - `git diff --check` — passed.
 - Full isolated clean-room cycle passed from an empty worktree and unique Compose project: clean, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. All resources created by this test were removed.
-- Required GitHub PR checks — pending.
+- GitHub Actions run [41756441895](https://github.com/Bepoadewale/davdeploy/actions/runs/41756441895) — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain. The ticket-only follow-up commit will receive a fresh CI run before merge.
 
 ## Evidence files produced
 
