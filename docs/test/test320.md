@@ -3,7 +3,7 @@
 Date: 2026-11-04
 Execution type: local deterministic fixtures and service tests
 Customer repository: Bepoadewale/davdeploy
-Commit: a5c501e (rebased on fd75135)
+Commit: 2ae229e (rebased on fd75135)
 AWS account: none; no AWS calls were made
 AWS region: not applicable
 
@@ -29,8 +29,8 @@ No AWS or other external resources were created.
 
 ## Commands executed
 
-- uv run pytest -q tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_queue_and_model_gateway.py tests/test_nova_intent.py tests/test_generated_plan_review.py — 75 passed.
-- make PY=/tmp/davdeploy320py312/bin/python verify — 671 passed; lint, configuration, OpenAPI and Compose checks passed.
+- Focused generation/service/gateway tests, including malformed Bedrock response cases — 68 passed.
+- make PY=/tmp/davdeploy320py312/bin/python verify — 677 passed; lint, configuration, OpenAPI and Compose checks passed.
 - GITHUB_PR_NUMBER=320 uv run python scripts/check_doc_conventions.py — passed.
 - git diff --check — passed.
 

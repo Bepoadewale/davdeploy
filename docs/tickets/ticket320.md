@@ -73,6 +73,8 @@ added.
   gateway-reported JSON repairs; unknown cost remains unknown.
 - [x] Bedrock validates the digest of the complete serialized request document
   while proposal binding keeps the existing trusted-context digest.
+- [x] Malformed Bedrock response shapes and invalid token/latency counters fail
+  through a redacted typed error with unknown cost.
 - [x] ProductService persists aggregate tokens, retry count, known cost,
   elapsed time, and digest-only model evidence for both successful and failed
   Nova generation.
@@ -89,16 +91,19 @@ pending.
 
 ## Tests / validation performed
 
-Validation performed on rebased code commit a5c501e:
+Validation performed on rebased code commit 2ae229e:
 
-- uv run pytest -q tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_queue_and_model_gateway.py tests/test_nova_intent.py tests/test_generated_plan_review.py — 75 passed.
-- make PY=/tmp/davdeploy320py312/bin/python verify — 671 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- uv run pytest -q tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_queue_and_model_gateway.py tests/test_nova_intent.py tests/test_generated_plan_review.py — 75 passed before the malformed-response cases were added.
+- Focused malformed-response follow-up: tests/test_queue_and_model_gateway.py, tests/test_terraform_generation.py, and tests/test_customer_plan_review.py — 68 passed.
+- make PY=/tmp/davdeploy320py312/bin/python verify — 677 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
 - GITHUB_PR_NUMBER=320 uv run python scripts/check_doc_conventions.py — passed.
 - git diff --check — passed.
 - No live Bedrock call, AWS API call, or AWS resource mutation was made.
 - The obsolete DAVDEPLOY_MODEL_MAX_ATTEMPTS setting was removed from the model
   config and App Runner template; the Nova operations guide now documents the
   fixed one-attempt SDK behavior and bounded JSON/semantic repair loop.
+- Malformed provider response fixtures confirmed that invalid raw/usage/metrics/
+  metadata shapes are contained as safe failures with unknown cost.
 
 ## Evidence files produced
 
