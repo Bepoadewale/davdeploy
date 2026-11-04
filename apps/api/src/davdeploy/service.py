@@ -99,7 +99,11 @@ from davdeploy.models import (
     WorkspaceInvitation,
     WorkspaceSubscription,
 )
-from davdeploy.module_ports import normalize_renderer_outputs, validate_module_outputs
+from davdeploy.module_ports import (
+    normalize_renderer_outputs,
+    validate_module_inputs,
+    validate_module_outputs,
+)
 from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
@@ -109,6 +113,7 @@ from davdeploy.universal_execution import (
     compile_universal_execution_plan,
     lifecycle_work,
     next_dispatchable_work_item,
+    resolve_lifecycle_work_inputs,
 )
 
 BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
@@ -4947,6 +4952,7 @@ class ProductService:
         run, lease_token = claim
         work = (run.command or {}).get("universal_lifecycle_work")
         selected_instance_id: str | None = None
+        resolved_module_inputs: dict[str, str] = {}
         if run.module_instances and isinstance(work, list):
             selected = next_dispatchable_work_item(
                 work, {item.instance_id: item.state for item in run.module_instances}
@@ -4957,21 +4963,37 @@ class ProductService:
                 )
                 return True
             selected_instance_id = str(selected["instance_id"])
-            if selected["input_bindings"]:
+            try:
+                resolved_module_inputs = validate_module_inputs(
+                    str(selected["module_id"]),
+                    resolve_lifecycle_work_inputs(
+                        work,
+                        selected_instance_id,
+                        {item.instance_id: item.outputs or {} for item in run.module_instances},
+                        {item.instance_id: item.state for item in run.module_instances},
+                        plan_digest=run.content_digest,
+                    ),
+                )
+            except (TypeError, ValueError):
                 run.state = "BLOCKED_MODULE_INPUTS_UNSUPPORTED"
                 run.worker_lease_token = None
                 run.worker_lease_expires_at = None
                 run.evidence = {
                     **(run.evidence or {}),
                     "blocked_module_instance_id": selected_instance_id,
-                    "failure_reason": "typed dependency inputs are not yet supported by this renderer",
+                    "failure_reason": "typed dependency inputs failed validation",
                 }
                 self.audit(
                     Principal("system-cloud-worker", run.organization_id, "operator"),
                     "cloud_execution.module_inputs_blocked",
                     "cloud_execution_run",
                     run.id,
-                    {"module_instance_id": selected_instance_id},
+                    {
+                        "module_instance_id": selected_instance_id,
+                        "input_names": sorted(
+                            str(binding["input_name"]) for binding in selected["input_bindings"]
+                        ),
+                    },
                 )
                 self.db.commit()
                 return True
@@ -4994,6 +5016,7 @@ class ProductService:
             "environment": (run.evidence or {}).get("execution_environment", {}),
             "lifecycle_work": (run.command or {}).get("universal_lifecycle_work"),
             "dispatch_instance_id": selected_instance_id,
+            "resolved_module_inputs": resolved_module_inputs,
         }
         heartbeat_stop = threading.Event()
         heartbeat = threading.Thread(
@@ -5471,17 +5494,6 @@ class ProductService:
         if next_item is None:
             return None
         instance_id = str(next_item["instance_id"])
-        if next_item["input_bindings"]:
-            run.state = "BLOCKED_MODULE_INPUTS_UNSUPPORTED"
-            run.outputs = {
-                **(run.outputs or {}),
-                "failure_reason": "typed dependency inputs are not yet supported by this renderer",
-            }
-            run.evidence = {
-                **(run.evidence or {}),
-                "blocked_module_instance_id": instance_id,
-            }
-            return "blocked"
         self._advance_cloud_execution_module_instances(
             run,
             module_outcomes={instance_id: ModuleLifecycleOutcome(state="QUEUED")},

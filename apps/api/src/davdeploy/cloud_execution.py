@@ -11,10 +11,11 @@ import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import boto3
 
+from davdeploy.module_ports import validate_module_inputs
 from davdeploy.module_renderers import renderer_for
 from davdeploy.universal_execution import validate_lifecycle_work_graph
 
@@ -207,6 +208,10 @@ class CodeBuildCloudExecutionAdapter:
             "DAVDEPLOY_EXECUTION_RESULT_S3_URI",
         }
     )
+    renderer_input_allowlist: ClassVar[dict[str, frozenset[str]]] = {
+        "aws-serverless-api": frozenset({"uploads_bucket_name"}),
+        "aws-file-storage": frozenset(),
+    }
 
     def __init__(self, project_name: str | None = None, client=None):
         self.project_name = project_name or os.getenv("DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT")
@@ -248,6 +253,21 @@ class CodeBuildCloudExecutionAdapter:
                 {},
                 "CodeBuild requires one selected module instance from the validated graph.",
             )
+        raw_inputs = context.get("resolved_module_inputs", {})
+        try:
+            if not isinstance(raw_inputs, dict):
+                raise TypeError("resolved renderer inputs must be an object")
+            resolved_inputs = validate_module_inputs(str(selected["module_id"]), raw_inputs)
+            allowed_inputs = self.renderer_input_allowlist.get(
+                str(selected["module_id"]), frozenset()
+            )
+            if set(resolved_inputs) - allowed_inputs:
+                raise ValueError("renderer input is not enabled")
+            binding_names = {str(binding["input_name"]) for binding in selected["input_bindings"]}
+            if set(resolved_inputs) != binding_names:
+                raise ValueError("resolved inputs do not match the declared references")
+        except (TypeError, ValueError, KeyError) as error:
+            return CloudExecutionResult("FAILED", (), {}, str(error))
         if not self.project_name:
             return DisabledCloudExecutionAdapter().execute(context)
         if not isinstance(environment, dict) or not self.required_environment.issubset(environment):
@@ -260,7 +280,9 @@ class CodeBuildCloudExecutionAdapter:
         overrides = [
             {"name": key, "value": str(value), "type": "PLAINTEXT"}
             for key, value in sorted(environment.items())
-            if isinstance(key, str) and isinstance(value, str)
+            if isinstance(key, str)
+            and isinstance(value, str)
+            and key != "DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"
         ]
         overrides.append(
             {
@@ -269,14 +291,23 @@ class CodeBuildCloudExecutionAdapter:
                 "type": "PLAINTEXT",
             }
         )
-        if context.get("mode") == "AUTHENTICATED_SERVERLESS_CERTIFICATION":
+        if resolved_inputs:
             overrides.append(
                 {
-                    "name": "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION",
-                    "value": "true",
+                    "name": "DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON",
+                    "value": json.dumps(resolved_inputs, sort_keys=True, separators=(",", ":")),
                     "type": "PLAINTEXT",
                 }
             )
+        if context.get("mode") == "AUTHENTICATED_SERVERLESS_CERTIFICATION":
+            certification_environment = {
+                "aws-serverless-api": "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION",
+                "aws-file-storage": "DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION",
+            }.get(str(selected["module_id"]))
+            if certification_environment:
+                overrides.append(
+                    {"name": certification_environment, "value": "true", "type": "PLAINTEXT"}
+                )
         response = self.client.start_build(
             projectName=self.project_name,
             environmentVariablesOverride=overrides,

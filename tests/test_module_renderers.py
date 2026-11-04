@@ -97,3 +97,15 @@ def test_runner_command_mapping_is_fixed_and_operation_specific():
     storage = next(item for item in renderer_manifest() if item.module_id == "aws-file-storage")
     assert renderer_command(storage, "destroy_plan") == "destroy-plan"
     assert renderer_command(storage, "verify_cleanup") == "verify-cleanup"
+
+
+def test_private_storage_renderer_requires_controlled_certification_context():
+    try:
+        renderer_for("aws-file-storage", "apply")
+    except ValueError as error:
+        assert "not enabled for customer execution" in str(error)
+    else:
+        raise AssertionError("private storage renderer must remain gated")
+
+    certified = renderer_for("aws-file-storage", "apply", hosted_certification=True)
+    assert certified.execution_enabled is False

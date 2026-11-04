@@ -2,8 +2,16 @@ from hashlib import sha256
 
 import pytest
 from davdeploy.domain import ArchitectureModule, ModuleInputBinding
-from davdeploy.module_ports import normalize_renderer_outputs, validate_module_outputs
-from davdeploy.universal_execution import compile_universal_execution_plan, resolve_module_inputs
+from davdeploy.module_ports import (
+    normalize_renderer_outputs,
+    validate_module_inputs,
+    validate_module_outputs,
+)
+from davdeploy.universal_execution import (
+    compile_universal_execution_plan,
+    resolve_lifecycle_work_inputs,
+    resolve_module_inputs,
+)
 
 
 def module(identifier: str, *, instance_id: str, depends_on=None, bindings=None):
@@ -79,6 +87,17 @@ def test_typed_module_outputs_accept_values_matching_the_declared_ports(module_i
 def test_typed_module_outputs_reject_unknown_or_malformed_values(module_id, outputs, message):
     with pytest.raises(ValueError, match=message):
         validate_module_outputs(module_id, outputs)
+
+
+def test_typed_module_inputs_accept_only_declared_valid_references():
+    assert validate_module_inputs(
+        "aws-serverless-api",
+        {"uploads_bucket_name": "davdeploy-123456789012-us-east-1-0123456789abcdef0123"},
+    ) == {"uploads_bucket_name": "davdeploy-123456789012-us-east-1-0123456789abcdef0123"}
+    with pytest.raises(ValueError, match="undeclared input ports"):
+        validate_module_inputs("aws-serverless-api", {"arbitrary": "value"})
+    with pytest.raises(ValueError, match="invalid resource_name value"):
+        validate_module_inputs("aws-serverless-api", {"uploads_bucket_name": "../bucket"})
 
 
 def test_untyped_legacy_module_outputs_remain_unchanged():
@@ -261,4 +280,50 @@ def test_resolver_uses_only_successful_dependency_outputs_and_secret_references(
             "api",
             {**outputs, "credentials": {"secret_reference": "plaintext-secret"}},
             {"uploads": "HEALTHY", "credentials": "HEALTHY"},
+        )
+
+
+def test_worker_resolver_reads_only_successful_typed_outputs_from_durable_graph():
+    work = [
+        {
+            "module_id": "aws-file-storage",
+            "instance_id": "uploads",
+            "operation": "apply",
+            "dependencies": [],
+            "input_bindings": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+        {
+            "module_id": "aws-serverless-api",
+            "instance_id": "api",
+            "operation": "apply",
+            "dependencies": ["uploads"],
+            "input_bindings": [
+                {
+                    "input_name": "uploads_bucket_name",
+                    "source_instance_id": "uploads",
+                    "source_output": "bucket_name",
+                }
+            ],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+    ]
+    bucket_name = "davdeploy-123456789012-us-east-1-0123456789abcdef0123"
+    digest = sha256(b"approved").hexdigest()
+
+    assert resolve_lifecycle_work_inputs(
+        work,
+        "api",
+        {"uploads": {"bucket_name": bucket_name}},
+        {"uploads": "SUCCEEDED_AWAITING_OBSERVATION", "api": "QUEUED"},
+        plan_digest=digest,
+    ) == {"uploads_bucket_name": bucket_name}
+
+    with pytest.raises(ValueError, match="has not completed successfully"):
+        resolve_lifecycle_work_inputs(
+            work,
+            "api",
+            {"uploads": {"bucket_name": bucket_name}},
+            {"uploads": "FAILED", "api": "QUEUED"},
+            plan_digest=digest,
         )

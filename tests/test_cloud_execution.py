@@ -700,6 +700,107 @@ def test_worker_builds_certification_context_from_persisted_run_mode():
     assert node.evidence["runner_build_id"] == "serverless-1"
 
 
+def test_worker_resolves_successful_storage_output_for_selected_api_module():
+    service, _ = make_service()
+    bucket_name = "davdeploy-654654474502-us-east-1-0123456789abcdef0123"
+    run = CloudExecutionRun(
+        organization_id=founder().organization_id,
+        revision_id="revision-storage-api-binding",
+        project_id="project-storage-api-binding",
+        profile="aws-serverless-api",
+        state="QUEUED",
+        mode="AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        attempt=1,
+        command={
+            "universal_lifecycle_work": [
+                {
+                    "module_id": "aws-file-storage",
+                    "instance_id": "uploads",
+                    "operation": "apply",
+                    "dependencies": [],
+                    "input_bindings": [],
+                    "resource_tags": {"ManagedBy": "davdeploy"},
+                },
+                {
+                    "module_id": "aws-serverless-api",
+                    "instance_id": "api",
+                    "operation": "apply",
+                    "dependencies": ["uploads"],
+                    "input_bindings": [
+                        {
+                            "input_name": "uploads_bucket_name",
+                            "source_instance_id": "uploads",
+                            "source_output": "bucket_name",
+                        }
+                    ],
+                    "resource_tags": {"ManagedBy": "davdeploy"},
+                },
+            ]
+        },
+        evidence={"execution_environment": {}},
+        outputs={},
+        content_digest="f" * 64,
+        requested_by_subject=founder().subject,
+    )
+    service.db.add(run)
+    service.db.flush()
+    for instance_id, module_id, state, dependencies, outputs in (
+        (
+            "uploads",
+            "aws-file-storage",
+            "SUCCEEDED_AWAITING_OBSERVATION",
+            [],
+            {"bucket_name": bucket_name},
+        ),
+        ("api", "aws-serverless-api", "NOT_DISPATCHED", ["uploads"], {}),
+    ):
+        service.db.add(
+            CloudExecutionModuleInstance(
+                organization_id=run.organization_id,
+                project_id=run.project_id,
+                execution_run_id=run.id,
+                instance_id=instance_id,
+                module_id=module_id,
+                state=state,
+                operation="apply",
+                attempt=0,
+                input_digest=run.content_digest,
+                idempotency_key=f"{run.id}:{instance_id}",
+                dependencies=dependencies,
+                outputs=outputs,
+                evidence={},
+                version=1,
+            )
+        )
+    service.db.commit()
+
+    class CapturingAdapter:
+        context = None
+
+        def execute(self, context):
+            self.context = context
+            return CloudExecutionResult(
+                "SUBMITTED",
+                (
+                    {
+                        "operation": "apply",
+                        "state": "SUBMITTED",
+                        "executor": "test",
+                        "build_id": "api-build",
+                    },
+                ),
+                {"codebuild_build_id": "api-build"},
+            )
+
+    adapter = CapturingAdapter()
+    service.cloud_execution = adapter
+    assert service.run_next_cloud_execution() is True
+    assert adapter.context["dispatch_instance_id"] == "api"
+    assert adapter.context["resolved_module_inputs"] == {"uploads_bucket_name": bucket_name}
+    assert bucket_name not in json.dumps(service.db.get(CloudExecutionRun, run.id).evidence)
+    assert run.state == "SUBMITTED"
+
+
 def test_worker_claims_only_one_ready_module_and_binds_its_build_id():
     service, _ = make_service()
     run = CloudExecutionRun(
@@ -959,10 +1060,13 @@ def test_dependency_callback_queues_next_node_and_blocks_unresolved_inputs():
         == "QUEUED"
     )
 
-    blocked = prepared_run(True)
-    assert service._schedule_next_cloud_execution_module(blocked) == "blocked"
-    assert blocked.state == "BLOCKED_MODULE_INPUTS_UNSUPPORTED"
-    assert blocked.evidence["blocked_module_instance_id"] == "admin"
+    with_input = prepared_run(True)
+    assert service._schedule_next_cloud_execution_module(with_input) == "queued"
+    assert with_input.state == "QUEUED"
+    assert (
+        next(row for row in with_input.module_instances if row.instance_id == "admin").state
+        == "QUEUED"
+    )
 
 
 def test_uncertain_module_build_does_not_mark_unstarted_dependencies_uncertain():
@@ -1526,6 +1630,85 @@ def test_codebuild_adapter_dispatches_only_the_selected_module_from_a_valid_grap
     assert len(dispatched) == 1
     assert dispatched[0]["instance_id"] == "api"
     assert dispatched[0]["dependencies"] == ["app"]
+
+
+def test_codebuild_adapter_passes_only_resolved_typed_inputs_to_the_selected_renderer(
+    monkeypatch,
+):
+    calls = []
+
+    class CodeBuild:
+        def start_build(self, **kwargs):
+            calls.append(kwargs)
+            return {"build": {"id": "executor:typed-input-build"}}
+
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION", "true")
+    environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
+    environment["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-saved-plan"
+    bucket_name = "davdeploy-123456789012-us-east-1-0123456789abcdef0123"
+    work = [
+        {
+            "module_id": "aws-file-storage",
+            "instance_id": "uploads",
+            "operation": "apply",
+            "dependencies": [],
+            "input_bindings": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+        {
+            "module_id": "aws-serverless-api",
+            "instance_id": "api",
+            "operation": "apply",
+            "dependencies": ["uploads"],
+            "input_bindings": [
+                {
+                    "input_name": "uploads_bucket_name",
+                    "source_instance_id": "uploads",
+                    "source_output": "bucket_name",
+                }
+            ],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+    ]
+    adapter = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild())
+    context = {
+        "environment": environment,
+        "lifecycle_work": work,
+        "dispatch_instance_id": "api",
+        "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
+        "profile": "aws-serverless-api",
+        "resolved_module_inputs": {"uploads_bucket_name": bucket_name},
+    }
+    result = adapter.execute(context)
+    assert result.state == "SUBMITTED"
+    overrides = {item["name"]: item["value"] for item in calls[0]["environmentVariablesOverride"]}
+    assert json.loads(overrides["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"]) == {
+        "uploads_bucket_name": bucket_name
+    }
+    assert overrides["DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION"] == "true"
+    assert "DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION" not in overrides
+
+    calls.clear()
+    context["dispatch_instance_id"] = "uploads"
+    context["resolved_module_inputs"] = {}
+    result = adapter.execute(context)
+    assert result.state == "SUBMITTED"
+    storage_overrides = {
+        item["name"]: item["value"] for item in calls[0]["environmentVariablesOverride"]
+    }
+    assert storage_overrides["DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION"] == "true"
+    assert "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION" not in storage_overrides
+
+    calls.clear()
+    context["dispatch_instance_id"] = "api"
+    context["resolved_module_inputs"] = {
+        "uploads_bucket_name": bucket_name,
+        "arbitrary": "must-not-be-forwarded",
+    }
+    result = adapter.execute(context)
+    assert result.state == "FAILED"
+    assert calls == []
 
     calls.clear()
     result = CodeBuildCloudExecutionAdapter("executor", client=CodeBuild()).execute(

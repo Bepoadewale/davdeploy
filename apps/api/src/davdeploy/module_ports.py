@@ -151,6 +151,25 @@ def validate_module_outputs(module_id: str, outputs: object) -> dict[str, str] |
     return normalized
 
 
+def validate_module_inputs(module_id: str, inputs: object) -> dict[str, str]:
+    """Validate resolved reference values against a module's declared inputs."""
+    if not isinstance(inputs, dict) or any(not isinstance(name, str) for name in inputs):
+        raise TypeError("typed module inputs must be an object")
+    contracts = {item.name: item for item in module_ports(module_id).inputs}
+    unknown = set(inputs) - set(contracts)
+    if unknown:
+        raise ValueError(f"typed module has undeclared input ports: {sorted(unknown)}")
+    normalized: dict[str, str] = {}
+    for name, value in inputs.items():
+        contract = contracts[name]
+        if not _valid_port_value(contract, value):
+            raise ValueError(
+                f"typed module input {name} has an invalid {contract.value_type} value"
+            )
+        normalized[name] = value
+    return normalized
+
+
 def normalize_renderer_outputs(module_id: str, renderer_outputs: object) -> dict[str, str] | None:
     """Convert a checked-in renderer's Terraform JSON outputs to typed ports.
 

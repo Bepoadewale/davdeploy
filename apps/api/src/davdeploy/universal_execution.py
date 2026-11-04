@@ -371,6 +371,44 @@ def resolve_module_inputs(
     return resolved
 
 
+def resolve_lifecycle_work_inputs(
+    work: object,
+    instance_id: str,
+    module_outputs: Mapping[str, object],
+    module_states: Mapping[str, str],
+    *,
+    plan_digest: str,
+) -> dict[str, str]:
+    """Resolve typed references from the durable, serialized worker graph."""
+    accepted = validate_lifecycle_work_graph(work)
+    modules = tuple(
+        ModuleLifecycle(
+            module_id=str(item["module_id"]),
+            instance_id=str(item["instance_id"]),
+            dependencies=tuple(str(value) for value in item["dependencies"]),
+            input_bindings=tuple(
+                (
+                    str(binding["input_name"]),
+                    str(binding["source_instance_id"]),
+                    str(binding["source_output"]),
+                )
+                for binding in item["input_bindings"]
+            ),
+            operations=(str(item["operation"]),),
+            resource_tags=tuple(
+                sorted((str(key), str(value)) for key, value in item["resource_tags"].items())
+            ),
+        )
+        for item in accepted
+    )
+    plan = UniversalExecutionPlan(
+        plan_digest=plan_digest,
+        modules=modules,
+        estimated_monthly_cost_state="not_resolved_by_worker",
+    )
+    return resolve_module_inputs(plan, instance_id, module_outputs, module_states)
+
+
 def compile_universal_execution_plan(
     modules: list[ArchitectureModule], *, workspace_id: str, project_id: str, plan_digest: str
 ) -> UniversalExecutionPlan:
