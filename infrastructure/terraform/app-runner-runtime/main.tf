@@ -45,7 +45,6 @@ locals {
     DAVDEPLOY_MODEL_DATA_POLICY       = "bedrock-no-training"
     DAVDEPLOY_MODEL_MAX_OUTPUT_TOKENS = "2000"
     DAVDEPLOY_MODEL_TIMEOUT_SECONDS   = "60"
-    DAVDEPLOY_MODEL_MAX_ATTEMPTS      = "2"
     } : {
     DAVDEPLOY_MODEL_PROVIDER = "fixture"
   }
