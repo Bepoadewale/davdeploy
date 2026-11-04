@@ -6,7 +6,8 @@
 
 | Capability | Evidence |
 | --- | --- |
-| Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded repair, provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
+| Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
+| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. PRs #320 and #321 are merged source changes only: no Nova-generated plan has been deployed. PR #318 is closed pending owner direction on pricing evidence. The hosted plan-only runner, tenant-scoped remote state, and actual-cost gate remain incomplete; open PR #322 does not satisfy the actual-cost gate. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |

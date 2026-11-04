@@ -40,26 +40,27 @@ distinct.
 
 ## Acceptance criteria
 
-- [ ] The three status/backlog documents distinguish merged source from
+- [x] The three status/backlog documents distinguish merged source from
   deployed and validated product behavior.
-- [ ] They record #320 and #321 as merged.
-- [ ] They state that no Nova-generated plan has been deployed.
-- [ ] They state that #318 remains closed pending owner direction and that the
+- [x] They record #320 and #321 as merged.
+- [x] They state that no Nova-generated plan has been deployed.
+- [x] They state that #318 remains closed pending owner direction and that the
   hosted plan-only runner, tenant-scoped remote state, and actual-cost gate are
   incomplete.
-- [ ] No implementation code, AWS resource, or private local goal file is
+- [x] No implementation code, AWS resource, or private local goal file is
   changed.
-- [ ] Documentation convention and diff checks pass.
+- [x] Documentation convention and diff checks pass.
 
 ## Acceptance status
 
-Implementation and validation pending.
+Documentation updates are complete. Local documentation convention and diff
+checks passed. Required GitHub CI is pending.
 
 ## Tests / validation performed
 
-Pending documentation convention and `git diff --check` validation. This is a
-documentation-only change; no runtime test, Terraform command, or AWS call is
-required or planned.
+`GITHUB_PR_NUMBER=323 python3 scripts/check_doc_conventions.py` passed.
+`git diff --check` passed. This is a documentation-only change; no runtime
+test, Terraform command, or AWS call is required or planned.
 
 ## Evidence files produced
 
