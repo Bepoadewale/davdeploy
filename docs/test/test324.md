@@ -104,8 +104,14 @@ python3.12 scripts/check_doc_conventions.py
 git diff --check
 ```
 
-The run generated `.local`; to honor the instruction to preserve generated files and volumes,
-the final `make clean-local` was not run. The worktree, `.local`, external virtual environment,
-test state file, and isolated Compose stack remain intact. Compose created no named volume;
-PostgreSQL used `tmpfs`. The clean-room test sequence passed through verification, while its
-final teardown step remains unmet by design.
+The run generated `.local`; it and the worktree, external virtual environment, and test state
+file were retained. After verification, the isolated Compose containers and network were
+removed with:
+
+```text
+docker compose -p davdeploy-pr324-cleanroom -f docker-compose.yml -f docker-compose.cleanroom.yml down --remove-orphans
+```
+
+A follow-up `docker ps` and `docker volume ls`, both filtered to
+`davdeploy-pr324-cleanroom`, returned no matching containers or volumes. Compose created no
+named volume; PostgreSQL used `tmpfs`. No AWS resource or generated local file was deleted.

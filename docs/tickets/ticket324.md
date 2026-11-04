@@ -69,9 +69,9 @@ deleted.
   resource-level scoping for `CreateProject`.
 - [x] Fresh worktree validation passed bootstrap through all demos, trace check, and
   `make verify` (689 tests).
-- [ ] Final clean-room teardown was not run: the fresh worktree contained generated `.local`,
-  and files and volumes were explicitly required to be preserved. The isolated Compose
-  stack, worktree, and external virtual environment remain available.
+- [x] Isolated Compose containers and network were stopped and removed after verification;
+  follow-up checks found no project containers or volumes. The worktree, generated `.local`,
+  external virtual environment, and test state file remain preserved.
 
 ## Tests / validation performed
 
