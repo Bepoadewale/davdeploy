@@ -67,6 +67,18 @@ def fake_terraform(tmp_path, *, applyable=True, errored=False):
         "format_version": "1.2",
         "applyable": applyable,
         "errored": errored,
+        "complete": True,
+        "configuration": {
+            "provider_config": {"aws": {"expressions": {"region": {"constant_value": "us-east-1"}}}}
+        },
+        "planned_values": {
+            "root_module": {
+                "resources": [
+                    {"address": "aws_s3_bucket.bucket", "mode": "managed", "type": "aws_s3_bucket", "values": {"bucket": "davdeploy-plan-test-unique"}},
+                    {"address": "terraform_data.account_guard", "mode": "managed", "type": "terraform_data", "values": {"input": None}},
+                ]
+            }
+        },
         "resource_changes": [
             {
                 "address": "aws_s3_bucket.bucket",
@@ -132,6 +144,8 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
     )
     assert result.summary.create_count == 1
     assert result.summary.applyable is True
+    assert result.policy.verdict.value == "DENY"
+    assert {item.code for item in result.policy.findings} == {"s3_public_access_block_missing"}
     assert result.target_account_id == "654654474502"
     assert result.region == "us-east-1"
     assert result.terraform_version == "1.14.7"

@@ -26,6 +26,10 @@ from davdeploy.generated_plan_inspection import (
     TerraformPlanSummary,
     inspect_terraform_plan,
 )
+from davdeploy.generated_plan_policy import (
+    GeneratedPlanPolicyResult,
+    evaluate_generated_plan_policy,
+)
 from davdeploy.generated_provider_validation import (
     GeneratedProviderSchemaError,
     validate_generated_proposal,
@@ -39,6 +43,7 @@ class TerraformPlanExecutionError(RuntimeError):
 @dataclass(frozen=True)
 class GeneratedTerraformPlan:
     summary: TerraformPlanSummary
+    policy: GeneratedPlanPolicyResult
     target_account_id: str
     region: str
     terraform_version: str
@@ -174,13 +179,21 @@ class GeneratedTerraformPlanRunner:
             try:
                 document = json.loads(json_output.read())
                 summary = inspect_terraform_plan(document)
-            except (json.JSONDecodeError, TerraformPlanInspectionError) as error:
+            except (json.JSONDecodeError, TerraformPlanInspectionError, RecursionError) as error:
                 raise TerraformPlanExecutionError("Terraform JSON plan could not be safely inspected") from error
         if summary.errored or (not summary.applyable and summary.create_count + summary.update_count + summary.delete_count + summary.replacement_count > 0):
             raise TerraformPlanExecutionError("Terraform produced an errored or non-applyable plan")
+        policy = evaluate_generated_plan_policy(
+            document,
+            proposal,
+            expected_account_id=expected_account_id,
+            expected_region=region,
+            trusted_configuration=config,
+        )
 
         return GeneratedTerraformPlan(
             summary=summary,
+            policy=policy,
             target_account_id=expected_account_id,
             region=region,
             terraform_version=installed_version,

@@ -1,0 +1,411 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_plan_policy import (
+    PlanPolicyVerdict,
+    evaluate_generated_plan_policy,
+)
+
+ACCOUNT = "654654474502"
+REGION = "us-east-1"
+
+
+def proposal(resources=None):
+    resources = resources or [
+        {
+            "resource_id": "bucket",
+            "resource_type": "aws_s3_bucket",
+            "name": "bucket",
+            "arguments": {"bucket": "private-plan-bucket"},
+            "rationale": "Private application file storage.",
+        },
+        {
+            "resource_id": "public-access",
+            "resource_type": "aws_s3_bucket_public_access_block",
+            "name": "public_access",
+            "arguments": {
+                "bucket": {
+                    "kind": "resource_reference",
+                    "resource_id": "bucket",
+                    "output_name": "id",
+                    "value_type": "string",
+                },
+                "block_public_acls": True,
+                "block_public_policy": True,
+                "ignore_public_acls": True,
+                "restrict_public_buckets": True,
+            },
+            "rationale": "Keep customer files private.",
+        },
+    ]
+    if resources[0]["resource_type"] == "aws_s3_bucket":
+        resources[0]["outputs"] = [{"name": "id", "value_type": "string"}]
+    return GeneratedDeploymentProposal.model_validate(
+        {
+            "contract_version": "1.0",
+            "source_revision": "test-revision",
+            "context_digest": "a" * 64,
+            "requirements": {"region": REGION},
+            "resources": resources,
+        }
+    )
+
+
+def resource(address, kind, values):
+    return {"address": address, "mode": "managed", "type": kind, "values": values}
+
+
+def change(address, kind, actions=("create",), **metadata):
+    return {
+        "address": address,
+        "type": kind,
+        "change": {"actions": list(actions), "before_sensitive": False, "after_sensitive": False, **metadata},
+    }
+
+
+def plan(resources=None, changes=None, **overrides):
+    resources = resources or [
+        resource("aws_s3_bucket.bucket", "aws_s3_bucket", {"bucket": "private-plan-bucket"}),
+        resource(
+            "aws_s3_bucket_public_access_block.public_access",
+            "aws_s3_bucket_public_access_block",
+            {
+                "bucket": "private-plan-bucket",
+                "block_public_acls": True,
+                "block_public_policy": True,
+                "ignore_public_acls": True,
+                "restrict_public_buckets": True,
+            },
+        ),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    changes = changes or [
+        change("aws_s3_bucket.bucket", "aws_s3_bucket"),
+        change("aws_s3_bucket_public_access_block.public_access", "aws_s3_bucket_public_access_block"),
+        change("terraform_data.account_guard", "terraform_data"),
+    ]
+    document = {
+        "format_version": "1.2",
+        "applyable": True,
+        "errored": False,
+        "complete": True,
+        "configuration": {
+            "provider_config": {"aws": {"expressions": {"region": {"constant_value": REGION}}}}
+        },
+        "planned_values": {"root_module": {"resources": resources}},
+        "resource_changes": changes,
+    }
+    document.update(overrides)
+    return document
+
+
+def evaluate(document=None, proposal_value=None):
+    return evaluate_generated_plan_policy(
+        document or plan(),
+        proposal_value or proposal(),
+        expected_account_id=ACCOUNT,
+        expected_region=REGION,
+        trusted_configuration={
+            "data": {"aws_caller_identity": {"trusted": {}}},
+            "resource": {
+                "terraform_data": {
+                    "account_guard": {
+                        "lifecycle": {
+                            "precondition": {
+                                "condition": '${data.aws_caller_identity.trusted.account_id == "'
+                                + ACCOUNT
+                                + '"}'
+                            }
+                        }
+                    }
+                }
+            },
+        },
+    )
+
+
+def codes(result):
+    return {finding.code for finding in result.findings}
+
+
+def test_secure_composed_s3_plan_is_eligible_only_for_human_review():
+    result = evaluate()
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.human_approval_required is True
+    assert result.findings == ()
+
+
+@pytest.mark.parametrize(
+    "flag",
+    ["block_public_acls", "block_public_policy", "ignore_public_acls", "restrict_public_buckets"],
+)
+def test_s3_public_access_must_be_blocked_in_all_four_settings(flag):
+    document = plan()
+    document["planned_values"]["root_module"]["resources"][1]["values"][flag] = False
+    assert "s3_public_access_block_incomplete" in codes(evaluate(document))
+
+
+def test_missing_s3_public_access_block_is_denied():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].pop(1)
+    document["resource_changes"].pop(1)
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_public_access_block_missing" in codes(result)
+    assert "plan_resource_inventory_mismatch" in codes(result)
+
+
+@pytest.mark.parametrize("acl", ["public-read", "public-read-write", "authenticated-read"])
+def test_public_s3_acl_is_denied(acl):
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_acl.bucket_acl", "aws_s3_bucket_acl", {"acl": acl})
+    )
+    return_resource = change("aws_s3_bucket_acl.bucket_acl", "aws_s3_bucket_acl")
+    document["resource_changes"].append(return_resource)
+    result = evaluate(document)
+    assert "s3_public_acl" in codes(result)
+
+
+def test_public_s3_policy_is_denied():
+    document = plan()
+    policy = {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": "*", "Action": "s3:GetObject", "Resource": "*"}]}
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "bucket-policy",
+                "resource_type": "aws_s3_bucket_policy",
+                "name": "policy",
+                "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+                "rationale": "Public delivery requires review.",
+            },
+        ]
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_public_policy_denied" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {"Statement": "malformed"},
+        {"Statement": ["malformed"]},
+        {"Statement": {"Effect": "Allow", "Action": 7, "Principal": "*", "Resource": "*"}},
+        {"Statement": {"Effect": "Allow", "Action": "s3:GetObject", "Principal": [], "Resource": "*"}},
+    ],
+)
+def test_malformed_public_bucket_policy_fails_closed(policy):
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {"resource_id": "bucket-policy", "resource_type": "aws_s3_bucket_policy", "name": "policy",
+             "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+             "rationale": "Malformed policy regression."},
+        ]
+    )
+    assert evaluate(document, proposal_value).verdict == PlanPolicyVerdict.DENY
+
+
+@pytest.mark.parametrize("port", [22, 3306, 5432, 6379])
+def test_public_admin_or_database_ingress_is_denied(port):
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            "aws_security_group_rule.ingress",
+            "aws_security_group_rule",
+            {"protocol": "tcp", "from_port": port, "to_port": port, "cidr_blocks": ["0.0.0.0/0"]},
+        )
+    )
+    document["resource_changes"].append(change("aws_security_group_rule.ingress", "aws_security_group_rule"))
+    assert "public_sensitive_port" in codes(evaluate(document))
+
+
+def test_public_web_ingress_is_flagged_for_review():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            "aws_security_group_rule.web",
+            "aws_security_group_rule",
+            {"protocol": "tcp", "from_port": 443, "to_port": 443, "cidr_blocks": ["0.0.0.0/0"]},
+        )
+    )
+    document["resource_changes"].append(change("aws_security_group_rule.web", "aws_security_group_rule"))
+    assert "public_web_ingress_review" in codes(evaluate(document))
+
+
+def test_unknown_ingress_source_fails_closed():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_security_group_rule.unknown", "aws_security_group_rule", {"from_port": 8080, "to_port": 8080})
+    )
+    document["resource_changes"].append(change("aws_security_group_rule.unknown", "aws_security_group_rule"))
+    assert "security_group_ingress_unknown" in codes(evaluate(document))
+
+
+def test_malformed_ingress_cidr_fails_closed():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            "aws_security_group_rule.bad_cidr", "aws_security_group_rule",
+            {"from_port": 8080, "to_port": 8080, "cidr_blocks": ["not-a-cidr"]},
+        )
+    )
+    document["resource_changes"].append(change("aws_security_group_rule.bad_cidr", "aws_security_group_rule"))
+    assert "security_group_ingress_unknown" in codes(evaluate(document))
+
+
+def test_scoped_security_group_source_is_not_treated_as_unknown_or_public():
+    ingress = resource(
+        "aws_security_group_rule.internal", "aws_security_group_rule",
+        {"from_port": 8080, "to_port": 8080, "protocol": "tcp", "source_security_group_id": "sg-0123456789abcdef0"},
+    )
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(ingress)
+    document["resource_changes"].append(change("aws_security_group_rule.internal", "aws_security_group_rule"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {"resource_id": "internal-ingress", "resource_type": "aws_security_group_rule", "name": "internal",
+             "arguments": {"from_port": 8080, "to_port": 8080, "protocol": "tcp", "source_security_group_id": "sg-0123456789abcdef0"},
+             "rationale": "Allow traffic from a scoped application security group."},
+        ]
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.findings == ()
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {"Statement": {"Effect": "Allow", "Action": "*", "Resource": "*"}},
+        {"Statement": {"Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"}},
+        {"Statement": {"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}},
+        {"Statement": {"Effect": "Allow", "Action": "iam:CreateRole", "Resource": "arn:aws:iam::654654474502:role/*"}},
+    ],
+)
+def test_wildcard_privileged_iam_is_denied(policy):
+    result = evaluate(
+        plan(
+            resources=[
+                resource("aws_iam_policy.application", "aws_iam_policy", {"policy": json.dumps(policy)}),
+                resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+            ],
+            changes=[
+                change("aws_iam_policy.application", "aws_iam_policy"),
+                change("terraform_data.account_guard", "terraform_data"),
+            ],
+        ),
+        proposal(
+            [
+                {"resource_id": "application", "resource_type": "aws_iam_policy", "name": "application", "arguments": {"name": "application", "policy": json.dumps(policy)}, "rationale": "Application permissions."}
+            ]
+        ),
+    )
+    assert "iam_privileged_wildcard" in codes(result)
+
+
+def test_wildcard_role_trust_and_administrator_attachment_are_denied():
+    resources = [
+        resource("aws_iam_role.application", "aws_iam_role", {"assume_role_policy": json.dumps({"Statement": {"Effect": "Allow", "Principal": "*", "Action": "sts:AssumeRole"}})}),
+        resource("aws_iam_role_policy_attachment.admin", "aws_iam_role_policy_attachment", {"policy_arn": "arn:aws:iam::aws:policy/AdministratorAccess"}),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    generated = [
+        {"resource_id": "application", "resource_type": "aws_iam_role", "name": "application", "arguments": {"name": "application", "assume_role_policy": json.dumps({"Statement": {"Effect": "Allow", "Principal": "*", "Action": "sts:AssumeRole"}})}, "rationale": "Application role."},
+        {"resource_id": "admin", "resource_type": "aws_iam_role_policy_attachment", "name": "admin", "arguments": {"role": "application", "policy_arn": "arn:aws:iam::aws:policy/AdministratorAccess"}, "rationale": "Test denied attachment."},
+    ]
+    document = plan(resources, [change(item["address"], item["type"]) for item in resources])
+    result = evaluate(document, proposal(generated))
+    assert {"iam_wildcard_trust", "iam_administrator_access_attached"}.issubset(codes(result))
+
+
+@pytest.mark.parametrize(
+    "kind,values,expected",
+    [
+        ("aws_db_instance", {"publicly_accessible": True, "storage_encrypted": True}, "database_publicly_accessible"),
+        ("aws_db_instance", {"publicly_accessible": False, "storage_encrypted": False}, "database_encryption_required"),
+        ("aws_db_instance", {"storage_encrypted": True}, "database_publicly_accessible"),
+    ],
+)
+def test_database_publicness_and_encryption_fail_closed(kind, values, expected):
+    address = f"{kind}.database"
+    resources = [resource(address, kind, values), resource("terraform_data.account_guard", "terraform_data", {"input": None})]
+    proposal_value = proposal([{"resource_id": "database", "resource_type": kind, "name": "database", "arguments": {"identifier": "database", **values}, "rationale": "Database."}])
+    result = evaluate(plan(resources, [change(address, kind), change("terraform_data.account_guard", "terraform_data")]), proposal_value)
+    assert expected in codes(result)
+
+
+def test_unexpected_region_or_resource_inventory_is_denied():
+    wrong_region = plan()
+    wrong_region["configuration"]["provider_config"]["aws"]["expressions"]["region"]["constant_value"] = "eu-west-1"
+    assert evaluate(wrong_region).verdict == PlanPolicyVerdict.DENY
+    extra = plan()
+    extra["planned_values"]["root_module"]["resources"].append(resource("aws_s3_bucket.extra", "aws_s3_bucket", {"bucket": "unapproved"}))
+    assert "plan_resource_inventory_mismatch" in codes(evaluate(extra))
+
+
+@pytest.mark.parametrize("guard", [None, "${true}", '${data.aws_caller_identity.trusted.account_id == "111111111111"}'])
+def test_missing_or_mismatched_trusted_account_guard_is_denied(guard):
+    trusted = {
+        "data": {"aws_caller_identity": {"trusted": {}}},
+        "resource": {"terraform_data": {"account_guard": {"lifecycle": {"precondition": {"condition": guard}}}}},
+    }
+    result = evaluate_generated_plan_policy(
+        plan(), proposal(), expected_account_id=ACCOUNT, expected_region=REGION, trusted_configuration=trusted
+    )
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "plan_policy_input_invalid" in codes(result)
+
+
+def test_nested_unproposed_resource_is_not_hidden_from_inventory():
+    document = plan()
+    document["planned_values"]["root_module"]["child_modules"] = [
+        {"resources": [resource("module.hidden.aws_s3_bucket.extra", "aws_s3_bucket", {"bucket": "extra"})]}
+    ]
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "plan_resource_inventory_mismatch" in codes(result)
+
+
+def test_unexplained_unknown_plan_shape_fails_closed_without_echoing_values():
+    secret = "super-secret-plan-value"
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = secret
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert secret not in repr(result)
+
+
+def test_delete_replacement_and_sensitive_change_require_human_review():
+    document = plan()
+    document["resource_changes"] = [
+        change("aws_s3_bucket.bucket", "aws_s3_bucket", ("delete",), before_sensitive={"secret": True}),
+        change("aws_s3_bucket_public_access_block.public_access", "aws_s3_bucket_public_access_block"),
+        change("terraform_data.account_guard", "terraform_data"),
+    ]
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert {"destructive_change_requires_review", "sensitive_change_requires_review"}.issubset(codes(result))
+
+
+def test_delete_of_resource_outside_proposal_is_denied():
+    document = plan()
+    document["resource_changes"].append(change("aws_s3_bucket.unowned", "aws_s3_bucket", ("delete",)))
+    result = evaluate(document)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "unproposed_resource_change" in codes(result)
