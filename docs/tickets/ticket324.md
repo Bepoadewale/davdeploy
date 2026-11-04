@@ -45,12 +45,12 @@ The project must fail closed until the trusted fixed runner is wired. The future
 - [x] API `StartBuild` and `BatchGetBuilds` grants are conditional and target only this project's ARN; newly added API input/result object actions use only their dedicated keys and the configured plan KMS key/context.
 - [x] StartBuild source/buildspec/service-role/environment/compute/artifact/other authority-changing overrides are denied; the only accepted environment override name is the required run ID. The application must source its value from the trusted persisted run.
 - [x] Completion events match only this CodeBuild project's exact name and terminal build statuses.
-- [x] Focused tests, Terraform formatting/validation, repository checks, documentation checks, and all seven required GitHub checks pass in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576).
+- [x] Focused tests, Terraform formatting/validation, repository checks, and documentation checks pass. All seven required GitHub checks pass in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576); the final evidence update also passed all seven in [run 41918524417](https://github.com/Bepoadewale/davdeploy/actions/runs/41918524417).
 - [x] No AWS calls/apply, no merge, no pricing changes, no PR #323 changes, and no modification of the protected untracked file.
 
 ## Acceptance status
 
-Infrastructure implementation and local validation are complete. All seven required GitHub checks passed in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576). The PR remains a draft and unmerged.
+Infrastructure implementation and local validation are complete. All seven required GitHub checks passed on the implementation/evidence commits in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576) and [run 41918524417](https://github.com/Bepoadewale/davdeploy/actions/runs/41918524417). The PR remains a draft and unmerged.
 
 ## Tests / validation performed
 

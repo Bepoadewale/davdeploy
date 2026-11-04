@@ -32,7 +32,8 @@ terraform-validate` initialized and validated all configured Terraform roots; Ku
 rendering passed. Documentation conventions and `git diff --check` passed. All seven required
 GitHub checks passed in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576)
 on branch commit `a5e8214` (the evidence-only commit after implementation commit
-`8890acf11d6025b188f82b6697d0dbf777880b75`).
+`8890acf11d6025b188f82b6697d0dbf777880b75`). The final evidence update also passed all seven
+checks in [run 41918524417](https://github.com/Bepoadewale/davdeploy/actions/runs/41918524417).
 
 ## Teardown
 
