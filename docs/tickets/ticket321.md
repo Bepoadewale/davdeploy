@@ -1,6 +1,6 @@
 # ticket321: Require encrypted EBS volumes in Nova plan policy
 
-PR: #321 (draft)  
+PR: #321 (ready for review)
 Branch: `fix/ebs-volume-encryption-policy`
 
 ## Problem / goal
@@ -60,7 +60,8 @@ Validation performed:
   and Compose configuration checks passed.
 - `python3.12 scripts/check_doc_conventions.py` and `git diff --check` passed.
 - All seven required GitHub Actions checks passed in run
-  [41903332283](https://github.com/Bepoadewale/davdeploy/actions/runs/41903332283).
+  [41904100015](https://github.com/Bepoadewale/davdeploy/actions/runs/41904100015)
+  on the final PR head.
 - No AWS calls or resource mutations were performed.
 
 ## Evidence files produced
