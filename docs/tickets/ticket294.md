@@ -35,7 +35,7 @@ PR #293 merged distinct module type and instance identities. Dependencies are in
 - [x] Valid bindings are included in the immutable compiled lifecycle graph and durable work payload.
 - [x] Legacy plans with no bindings remain valid.
 - [x] Hosted worker remains fail-closed for multi-module execution.
-- [ ] Focused tests, full verification, clean-room cycle, and GitHub CI pass.
+- [x] Focused tests, full verification, clean-room cycle, and GitHub CI pass.
 
 ## Acceptance status
 
@@ -51,7 +51,7 @@ having a contract.
 - `.venv/bin/python -m ruff check ...` on changed Python files — passed.
 - `git diff --check` — passed.
 - Full isolated clean-room cycle passed from an empty worktree and unique Compose project: clean, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. All resources created by this test were removed.
-- Required GitHub PR checks — pending.
+- GitHub Actions run [41753761053](https://github.com/Bepoadewale/davdeploy/actions/runs/41753761053) — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain. The ticket-only follow-up commit will receive a fresh CI run before merge.
 
 ## Evidence files produced
 
