@@ -21,8 +21,9 @@ removed by pytest's temporary-directory fixture.
 
 5 tests passed. Anonymous GET requests succeeded for published post list, detail, and
 comments. Anonymous protected-route requests were rejected by required-header
-validation (HTTP 422). The test avoids the application lifespan and guards the global
-migration/session factories, so it cannot migrate or seed the configured database.
+validation (HTTP 422). The test does not enter the application lifespan, guards the
+global migration/session factories, stubs edge-origin and Aurora readiness checks,
+and makes any `boto3.client` call fail, preventing configured database or cloud access.
 
 ## Teardown
 

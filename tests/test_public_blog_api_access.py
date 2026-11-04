@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import boto3
 from davdeploy import main as api_main
 from davdeploy.db import make_engine, run_migrations
 from davdeploy.main import app, product_service
@@ -43,8 +44,20 @@ def test_public_blog_reads_are_anonymous_and_authoring_routes_require_sign_in(
     def reject_global_lifespan_database_access():
         raise AssertionError("the API test must not enter the application database lifespan")
 
+    boundary_calls = []
+
+    def allow_test_edge(_header):
+        boundary_calls.append("edge")
+        return True
+
+    def report_test_database_ready():
+        boundary_calls.append("database")
+
     monkeypatch.setattr(api_main, "run_migrations", reject_global_lifespan_database_access)
     monkeypatch.setattr(api_main, "SessionLocal", reject_global_lifespan_database_access)
+    monkeypatch.setattr(api_main, "edge_origin_is_authorized", allow_test_edge)
+    monkeypatch.setattr(api_main, "ensure_aurora_ready", report_test_database_ready)
+    monkeypatch.setattr(boto3, "client", reject_global_lifespan_database_access)
     client = TestClient(app)
     try:
         # Deliberately avoid TestClient's context manager: entering it runs the
@@ -83,6 +96,8 @@ def test_public_blog_reads_are_anonymous_and_authoring_routes_require_sign_in(
         # FastAPI reports a missing required Authorization header as 422;
         # the routes remain inaccessible without a bearer token.
         assert [response.status_code for response in anonymous_writes] == [422] * 6
+        assert boundary_calls.count("edge") == 9
+        assert boundary_calls.count("database") == 9
     finally:
         client.close()
         if previous_override is missing_override:
