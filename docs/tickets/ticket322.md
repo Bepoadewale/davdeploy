@@ -40,15 +40,15 @@ Generated Terraform plans must be produced from a submitted customer revision be
 - [x] The explicit architecture-decision route remains unchanged.
 - [x] Focused tests, full `make verify`, and documentation convention checks pass.
 - [x] No AWS, Bedrock, or infrastructure calls/mutations are performed.
-- [ ] Required GitHub checks pass.
+- [x] All seven required GitHub checks pass in run [41910023222](https://github.com/Bepoadewale/davdeploy/actions/runs/41910023222).
 
 ## Acceptance status
 
-Implementation and local validation are complete. Draft PR #322 is open; required GitHub checks are pending.
+Implementation and local validation are complete. All seven required GitHub checks passed in run [41910023222](https://github.com/Bepoadewale/davdeploy/actions/runs/41910023222). Draft PR #322 remains open and unmerged for review.
 
 ## Tests / validation performed
 
-See `docs/test/test322.md`. Local full verification passed with 683 tests.
+See `docs/test/test322.md`. Local full verification passed with 683 tests; required GitHub checks passed on the current implementation and evidence.
 
 ## Evidence files produced
 

@@ -22,7 +22,7 @@ No AWS or customer resources. Unit tests used temporary local fixtures. An ignor
 
 ## Observed result
 
-Focused generated-plan review/artifact tests passed (32). Full `make verify` passed: 683 tests, Ruff, actions-configuration boundary, OpenAPI snapshot, and Compose configuration. Documentation conventions and `git diff --check` passed. GitHub CI is pending.
+Focused generated-plan review/artifact tests passed (32). Full `make verify` passed: 683 tests, Ruff, actions-configuration boundary, OpenAPI snapshot, and Compose configuration. Documentation conventions and `git diff --check` passed. All seven required GitHub checks passed in [run 41910023222](https://github.com/Bepoadewale/davdeploy/actions/runs/41910023222).
 
 ## Teardown
 
