@@ -21,6 +21,7 @@ from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 
 MAX_SAVED_PLAN_BYTES = 128 * 1024 * 1024
 NOVA_PLAN_OBJECT_PREFIX = "plans/nova-generated"
+UNAVAILABLE_PRICING_REASON = "regional_pricing_evaluator_not_integrated"
 
 
 class GeneratedPlanArtifactError(RuntimeError):
@@ -294,9 +295,9 @@ def generated_plan_manifest(
     policy_digest: str,
     created_at: str,
 ) -> dict[str, Any]:
-    """Build canonical, secret-free approval material for the exact plan bytes."""
+    """Build canonical, secret-free review material for exact plan bytes."""
     return {
-        "manifest_version": 2,
+        "manifest_version": 3,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -331,6 +332,14 @@ def generated_plan_manifest(
             "drift_count": plan.summary.drift_count,
             "contains_sensitive_changes": plan.summary.contains_sensitive_changes,
         },
+        "pricing": {
+            "status": "UNAVAILABLE",
+            "region": plan.region,
+            "currency": None,
+            "monthly_cost": None,
+            "evidence_sha256": None,
+            "reason_code": UNAVAILABLE_PRICING_REASON,
+        },
         "artifact": {
             "bucket": stored_object.bucket,
             "key": stored_object.key,
@@ -339,6 +348,20 @@ def generated_plan_manifest(
         },
         "created_at": created_at,
     }
+
+
+def has_complete_pricing_evidence(manifest: dict[str, Any]) -> bool:
+    """Require a region-bound digest before an exact plan can be approved."""
+    pricing = manifest.get("pricing")
+    target = manifest.get("target")
+    return (
+        isinstance(pricing, dict)
+        and pricing.get("status") == "COMPLETE"
+        and isinstance(target, dict)
+        and pricing.get("region") == target.get("region")
+        and isinstance(pricing.get("evidence_sha256"), str)
+        and bool(re.fullmatch(r"[a-f0-9]{64}", pricing["evidence_sha256"]))
+    )
 
 
 def policy_allows_human_review(policy: GeneratedPlanPolicyResult) -> bool:
