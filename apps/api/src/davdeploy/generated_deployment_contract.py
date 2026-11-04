@@ -1,0 +1,194 @@
+"""Typed boundary for untrusted Nova infrastructure proposals.
+
+This contract does not authorize Terraform execution.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class StrictContract(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class ResourceReference(StrictContract):
+    kind: str = Field(pattern=r"^resource_reference$")
+    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    output_name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    value_type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+
+
+class GeneratedOutput(StrictContract):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    value_type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    sensitive: bool = False
+
+
+class GeneratedResource(StrictContract):
+    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    resource_type: str = Field(pattern=r"^aws_[a-z0-9_]{2,120}$")
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    arguments: dict[str, Any]
+    depends_on: tuple[str, ...] = ()
+    outputs: tuple[GeneratedOutput, ...] = ()
+    rationale: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_arguments_and_outputs(self) -> GeneratedResource:
+        names = [output.name for output in self.outputs]
+        if len(names) != len(set(names)):
+            raise ValueError("generated output names must be unique")
+        forbidden = {
+            "provider", "provisioner", "connection", "access_key",
+            "secret_key", "session_token", "private_key", "password",
+            "user_data", "backend", "required_providers",
+        }
+        def visit(value: Any) -> None:
+            if isinstance(value, str) and any(
+                marker in value.lower()
+                for marker in (chr(36) + "{", "%{", "file(", "templatefile(")
+            ):
+                raise ValueError("model-authored Terraform expressions are forbidden")
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    if not isinstance(key, str) or key.lower() in forbidden:
+                        raise ValueError("generated arguments contain a forbidden field")
+                    if isinstance(child, dict) and child.get("kind") == "resource_reference":
+                        ResourceReference.model_validate(child)
+                    visit(child)
+            elif isinstance(value, (list, tuple)):
+                for child in value:
+                    visit(child)
+        visit(self.arguments)
+        return self
+
+
+class WorkloadRequirements(StrictContract):
+    region: str = Field(min_length=1, max_length=64)
+    monthly_budget_minor: int | None = Field(default=None, ge=0)
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    data_residency: tuple[str, ...] = ()
+    availability: str | None = Field(default=None, max_length=500)
+    downtime_tolerance: str | None = Field(default=None, max_length=500)
+
+
+class HealthAssertion(StrictContract):
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    target_resource_id: str
+    description: str = Field(min_length=1, max_length=500)
+
+
+class RecoveryRequirement(StrictContract):
+    backup_required: bool = False
+    recovery_point_objective_minutes: int | None = Field(default=None, ge=0)
+    recovery_time_objective_minutes: int | None = Field(default=None, ge=0)
+    destructive_change_notes: str | None = Field(default=None, max_length=1000)
+
+
+class CostAssumption(StrictContract):
+    resource_id: str
+    description: str = Field(min_length=1, max_length=500)
+    source: str = Field(min_length=1, max_length=300)
+    captured_at: str = Field(min_length=1, max_length=80)
+
+
+class GeneratedDeploymentProposal(StrictContract):
+    contract_version: str = Field(pattern=r"^1\.[0-9]+$")
+    source_revision: str = Field(min_length=1, max_length=160)
+    context_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    resources: tuple[GeneratedResource, ...] = Field(min_length=1, max_length=200)
+    requirements: WorkloadRequirements
+    health_assertions: tuple[HealthAssertion, ...] = ()
+    recovery: RecoveryRequirement = Field(default_factory=RecoveryRequirement)
+    cost_assumptions: tuple[CostAssumption, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    limitations: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_graph(self) -> GeneratedDeploymentProposal:
+        by_id: dict[str, GeneratedResource] = {}
+        addresses: set[tuple[str, str]] = set()
+        for resource in self.resources:
+            if resource.resource_id in by_id:
+                raise ValueError("resource IDs must be unique")
+            address = (resource.resource_type, resource.name)
+            if address in addresses:
+                raise ValueError("Terraform resource addresses must be unique")
+            by_id[resource.resource_id] = resource
+            addresses.add(address)
+        graph: dict[str, set[str]] = {}
+        for resource in self.resources:
+            dependencies = set(resource.depends_on)
+            if resource.resource_id in dependencies or not dependencies.issubset(by_id):
+                raise ValueError("dependencies must reference other declared resources")
+            graph[resource.resource_id] = dependencies
+            for ref in _references(resource.arguments):
+                target = by_id.get(ref.resource_id)
+                if target is None:
+                    raise ValueError("references must target a declared resource")
+                declared = {item.name: item.value_type for item in target.outputs}
+                if declared.get(ref.output_name) != ref.value_type:
+                    raise ValueError("reference must match a declared output type")
+                graph[resource.resource_id].add(ref.resource_id)
+        visiting: set[str] = set()
+        visited: set[str] = set()
+        def visit(resource_id: str) -> None:
+            if resource_id in visiting:
+                raise ValueError("resource dependency graph must be acyclic")
+            if resource_id in visited:
+                return
+            visiting.add(resource_id)
+            for dependency in graph[resource_id]:
+                visit(dependency)
+            visiting.remove(resource_id)
+            visited.add(resource_id)
+        for resource_id in graph:
+            visit(resource_id)
+        ids = set(by_id)
+        if any(item.target_resource_id not in ids for item in self.health_assertions):
+            raise ValueError("health assertions must target declared resources")
+        if any(item.resource_id not in ids for item in self.cost_assumptions):
+            raise ValueError("cost assumptions must target declared resources")
+        return self
+
+
+def _references(value: Any) -> list[ResourceReference]:
+    if isinstance(value, dict):
+        if value.get("kind") == "resource_reference":
+            return [ResourceReference.model_validate(value)]
+        return [ref for child in value.values() for ref in _references(child)]
+    if isinstance(value, (list, tuple)):
+        return [ref for child in value for ref in _references(child)]
+    return []
+
+
+def terraform_resource_blocks(
+    proposal: GeneratedDeploymentProposal,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Translate validated references into Terraform resource expressions."""
+    by_id = {resource.resource_id: resource for resource in proposal.resources}
+
+    def encode(value: Any) -> Any:
+        if isinstance(value, dict) and value.get("kind") == "resource_reference":
+            reference = ResourceReference.model_validate(value)
+            target = by_id[reference.resource_id]
+            return chr(36) + "{" + target.resource_type + "." + target.name + "." + reference.output_name + "}"
+        if isinstance(value, dict):
+            return {key: encode(child) for key, child in value.items()}
+        if isinstance(value, list):
+            return [encode(child) for child in value]
+        return value
+
+    result: dict[str, dict[str, dict[str, Any]]] = {}
+    for resource in proposal.resources:
+        block = encode(resource.arguments)
+        if resource.depends_on:
+            block["depends_on"] = [
+                f"{by_id[dependency].resource_type}.{by_id[dependency].name}"
+                for dependency in resource.depends_on
+            ]
+        result.setdefault(resource.resource_type, {})[resource.name] = block
+    return result
