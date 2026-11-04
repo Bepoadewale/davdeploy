@@ -37,7 +37,7 @@ class GeneratedResource(StrictContract):
     rationale: str = Field(min_length=1, max_length=500)
 
     @model_validator(mode="after")
-    def validate_arguments_and_outputs(self) -> "GeneratedResource":
+    def validate_arguments_and_outputs(self) -> GeneratedResource:
         names = [output.name for output in self.outputs]
         if len(names) != len(set(names)):
             raise ValueError("generated output names must be unique")
@@ -108,7 +108,7 @@ class GeneratedDeploymentProposal(StrictContract):
     limitations: tuple[str, ...] = ()
 
     @model_validator(mode="after")
-    def validate_graph(self) -> "GeneratedDeploymentProposal":
+    def validate_graph(self) -> GeneratedDeploymentProposal:
         by_id: dict[str, GeneratedResource] = {}
         addresses: set[tuple[str, str]] = set()
         for resource in self.resources:

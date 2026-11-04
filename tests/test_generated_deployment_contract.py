@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from pydantic import ValidationError
 
 
 def proposal(resources: list[dict[str, object]]) -> dict[str, object]:
