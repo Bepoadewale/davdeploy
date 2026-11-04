@@ -54,13 +54,18 @@ distinct.
 ## Acceptance status
 
 Documentation updates are complete. Local documentation convention and diff
-checks passed. Required GitHub CI is pending.
+checks passed. All seven required GitHub Actions checks passed in run
+[41908518245](https://github.com/Bepoadewale/davdeploy/actions/runs/41908518245).
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=323 python3 scripts/check_doc_conventions.py` passed.
 `git diff --check` passed. This is a documentation-only change; no runtime
 test, Terraform command, or AWS call is required or planned.
+All seven required CI checks passed in run
+[41908518245](https://github.com/Bepoadewale/davdeploy/actions/runs/41908518245):
+cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and
+supply-chain.
 
 ## Evidence files produced
 
