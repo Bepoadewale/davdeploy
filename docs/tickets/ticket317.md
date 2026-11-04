@@ -12,11 +12,13 @@ unknown or mismatched. Preserve safe typed references within one proposal.
 
 ## Current repo state
 
-Backend main is `c2c6279` (PR #315). The Nova plan runner injects the trusted
-AWS account guard and region. The generated-plan policy verifies the resource
-inventory, region and account guard, but does not verify resource ownership
-tags. Typed references are already constrained to declared resources, acyclic
-dependencies, and declared provider outputs with matching type and sensitivity.
+This PR branch's code baseline is `c2c6279` (main at PR #315). Documentation
+follow-ups #316 and #319 have since merged to main. At this baseline, the Nova
+plan runner injects the trusted AWS account guard and region. The generated-plan
+policy verifies the resource inventory, region and account guard, but does not
+verify resource ownership tags. Typed references are already constrained to
+declared resources, acyclic dependencies, and declared provider outputs with
+matching type and sensitivity.
 
 ## Research / references used
 
