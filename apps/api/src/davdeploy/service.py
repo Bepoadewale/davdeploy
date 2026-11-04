@@ -99,6 +99,7 @@ from davdeploy.models import (
     WorkspaceInvitation,
     WorkspaceSubscription,
 )
+from davdeploy.module_ports import validate_module_outputs
 from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
@@ -5226,6 +5227,9 @@ class ProductService:
             if not set(module_outcomes).issubset(instance_ids):
                 raise ValueError("module outcome is outside its execution run graph")
             outcomes = dict(module_outcomes)
+            module_ids = {
+                item.instance_id: item.module_id for item in run.module_instances
+            }
             for instance_id, outcome in outcomes.items():
                 if not isinstance(instance_id, str) or not isinstance(
                     outcome, ModuleLifecycleOutcome
@@ -5233,6 +5237,8 @@ class ProductService:
                     raise TypeError("module outcome has an invalid shape")
                 if outcome.state not in allowed_targets:
                     raise ValueError("module outcome has an unsupported state")
+                if outcome.outputs is not None:
+                    validate_module_outputs(module_ids[instance_id], dict(outcome.outputs))
                 try:
                     if outcome.outputs is not None:
                         json.dumps(dict(outcome.outputs), sort_keys=True)

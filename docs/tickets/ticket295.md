@@ -28,21 +28,29 @@ PR #293 separates module type from instance identity. PR #294 declares typed por
 
 ## Acceptance criteria
 
-- [ ] Typed outputs are validated before persistence for modules with checked-in port contracts.
-- [ ] Unknown output ports, malformed values, insecure URLs, and plaintext secrets are rejected.
-- [ ] Consumer references resolve only from declared dependency instances in a successful state.
-- [ ] Existing untyped App Runner outcomes remain backward compatible and are not mislabeled as typed.
-- [ ] Resolution never fetches or accepts secret contents.
-- [ ] The execution handoff reflects merged #293/#294 and current remaining work.
+- [x] Typed outputs are validated before persistence for modules with checked-in port contracts.
+- [x] Unknown output ports, malformed values, insecure URLs, and plaintext secrets are rejected.
+- [x] Consumer references resolve only from declared dependency instances in a successful state.
+- [x] Existing untyped App Runner outcomes remain backward compatible and are not mislabeled as typed.
+- [x] Resolution never fetches or accepts secret contents.
+- [x] The execution handoff reflects merged #293/#294 and current remaining work.
 - [ ] Focused tests, full verification, clean-room cycle, and GitHub CI pass.
 
 ## Acceptance status
 
-Pending implementation.
+Implemented for the typed port families introduced in PR #294. The resolver operates on
+persisted reference data and success states, validates source outputs again, and returns
+only declared values. The durable worker does not yet call the resolver; this PR provides
+the validated boundary needed before worker scheduling is wired.
 
 ## Tests / validation performed
 
-Pending implementation.
+- `.venv/bin/python -m pytest -q tests/test_module_ports.py tests/test_cloud_execution.py tests/test_universal_execution.py tests/test_planner_decisions.py` — **136 passed**.
+- `make verify` — configuration check passed; Ruff passed; **470 tests passed**; OpenAPI snapshot matched; Docker Compose configuration passed.
+- `.venv/bin/python -m ruff check ...` on changed Python files — passed.
+- `git diff --check` — passed.
+- Full isolated clean-room lifecycle cycle — pending.
+- Required GitHub PR checks — pending.
 
 ## Evidence files produced
 

@@ -6,7 +6,9 @@ credentials, or permission to execute a module.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from davdeploy.domain import ModulePort
 
@@ -61,7 +63,74 @@ _PORTS: dict[str, ModulePorts] = {
     ),
 }
 
+_RESOURCE_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,254}\Z")
+_PARTITIONS = {"aws", "aws-us-gov", "aws-cn"}
+
+
+def _valid_arn(value: str) -> bool:
+    parts = value.split(":", maxsplit=5)
+    if len(parts) != 6 or parts[0] != "arn" or parts[1] not in _PARTITIONS:
+        return False
+    service, region, account_id, resource = parts[2:]
+    if not service or not resource or "*" in value or any(char.isspace() for char in value):
+        return False
+    if service == "s3":
+        return not region and not account_id
+    if not account_id.isdigit() or len(account_id) != 12:
+        return False
+    return bool(region) or service == "iam"
+
+
+def _valid_port_value(port_contract: ModulePort, value: object) -> bool:
+    if not isinstance(value, str) or not value or len(value) > 4096 or "\x00" in value:
+        return False
+    if port_contract.secret_reference_only:
+        return value.startswith(("arn:aws:secretsmanager:", "arn:aws:ssm:")) and _valid_arn(value)
+    if port_contract.value_type == "resource_name":
+        return bool(_RESOURCE_NAME_PATTERN.fullmatch(value))
+    if port_contract.value_type == "aws_arn":
+        return _valid_arn(value)
+    parsed = urlparse(value)
+    if port_contract.value_type == "aws_queue_url":
+        return (
+            parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and parsed.hostname.endswith((".amazonaws.com", ".amazonaws.com.cn"))
+            and len([segment for segment in parsed.path.split("/") if segment]) >= 2
+            and not parsed.username
+            and not parsed.password
+        )
+    if port_contract.value_type == "https_url":
+        return (
+            parsed.scheme == "https"
+            and bool(parsed.hostname)
+            and not parsed.username
+            and not parsed.password
+        )
+    return False
+
 
 def module_ports(module_id: str) -> ModulePorts:
     """Return the static port schema; unknown modules expose no bindable ports."""
     return _PORTS.get(module_id, ModulePorts())
+
+
+def validate_module_outputs(module_id: str, outputs: object) -> dict[str, str] | None:
+    """Validate output values for typed modules; return None for legacy modules."""
+    contracts = module_ports(module_id).outputs
+    if not contracts:
+        return None
+    if not isinstance(outputs, dict):
+        raise TypeError("typed module outputs must be an object")
+    if any(not isinstance(name, str) for name in outputs):
+        raise TypeError("typed module output names must be strings")
+    allowed = {item.name: item for item in contracts}
+    unknown = set(outputs) - set(allowed)
+    if unknown:
+        raise ValueError(f"typed module returned undeclared output ports: {sorted(unknown)}")
+    normalized: dict[str, str] = {}
+    for name, value in outputs.items():
+        if not _valid_port_value(allowed[name], value):
+            raise ValueError(f"typed module output {name} has an invalid {allowed[name].value_type} value")
+        normalized[name] = value
+    return normalized
