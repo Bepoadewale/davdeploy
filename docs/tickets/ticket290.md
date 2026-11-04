@@ -28,20 +28,20 @@ The worker currently advances module rows together with one renderer run, and Co
 
 ## Acceptance criteria
 
-- [ ] Only undispatched nodes with successful prerequisites are returned.
-- [ ] Independent nodes may share a wave; dependent nodes cannot.
-- [ ] Cleanup operations schedule dependents before their dependencies.
-- [ ] Missing/extra state rows and failed or uncertain prerequisite outcomes fail closed or remain blocked.
-- [ ] The helper does not submit cloud work or alter worker behavior.
-- [ ] Focused tests, full verification and GitHub CI pass.
+- [x] Only undispatched nodes with successful prerequisites are returned.
+- [x] Independent nodes may share a wave; dependent nodes cannot.
+- [x] Cleanup operations schedule dependents before their dependencies.
+- [x] Missing/extra state rows and unknown states fail closed; failed and uncertain prerequisites remain blocked.
+- [x] The helper does not submit cloud work or alter worker behavior.
+- [ ] GitHub CI passes before merge.
 
 ## Acceptance status
 
-Pending implementation.
+`make verify` passed: Actions configuration, Ruff, 441 pytest cases, OpenAPI snapshot and Docker Compose configuration. `scripts/check_doc_conventions.py` and `git diff --check` passed. One existing Starlette `TestClient` deprecation warning about `httpx` appeared; tests passed.
 
 ## Tests / validation performed
 
-Pending implementation.
+Implementation and local verification pass. GitHub CI is pending.
 
 ## Evidence files produced
 
