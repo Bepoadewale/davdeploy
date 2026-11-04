@@ -34,6 +34,8 @@ next execution-engine change.
 - `CODEX_BACKLOG.md`
 - `docs/product/COMPOSED_EXECUTION_GOAL.md`
 - `docs/product/EXECUTION_READINESS_MATRIX.md`
+- `apps/api/src/davdeploy/terraform_generation.py` and the plan-only caller in
+  `apps/api/src/davdeploy/service.py`
 - PRs #270, #302, and #303; workflow runs 41671744510, 41781048128,
   41781326222, 41782907889, and 41783453201.
 
@@ -50,6 +52,9 @@ next execution-engine change.
   active operations without inferring success from missing PIDs.
 - Preserve the 26 architecture modules and 30 Terraform implementation entries
   and the full goal scope.
+- Record that Nova already generates a typed Terraform proposal, while that
+  proposal is plan-only and has not passed provider-schema validation or the
+  hosted execution lifecycle.
 
 ## Acceptance criteria
 
@@ -60,6 +65,8 @@ next execution-engine change.
 - [x] `PROJECT_STATUS.md`, `docs/IMPLEMENTATION_STATUS.md`,
   `CODEX_BACKLOG.md`, and the two execution-goal documents agree.
 - [x] The complete 26-module / 30-implementation scope remains intact.
+- [x] Existing model-generated Terraform is recorded as a plan-only candidate,
+  not a functioning execution renderer.
 - [x] Documentation convention and diff checks pass.
 
 ## Acceptance status
