@@ -16,6 +16,7 @@ def test_nova_runtime_is_opt_in_and_restricted_to_nova_2_lite():
     assert 'variable = "bedrock:InferenceProfileArn"' in runtime
     assert "InvokeNova2LiteOnlyThroughProfile" in runtime
     assert 'DAVDEPLOY_MODEL_FALLBACK          = "disabled"' in runtime
+    assert "DAVDEPLOY_MODEL_MAX_ATTEMPTS" not in runtime
 
 
 def test_nova_configuration_contains_no_static_aws_credentials():

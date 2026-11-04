@@ -85,7 +85,6 @@ class BedrockRuntimeClient(Protocol):
 class NovaGatewayConfig:
     region: str = "us-east-1"
     model_id: str = NOVA_2_LITE_MODEL_ID
-    max_attempts: int = 2
     connect_timeout_seconds: int = 5
     read_timeout_seconds: int = 60
     input_price_per_million_usd: float | None = None
@@ -97,7 +96,6 @@ class NovaGatewayConfig:
         return cls(
             region=os.getenv("DAVDEPLOY_BEDROCK_REGION", "us-east-1"),
             model_id=os.getenv("DAVDEPLOY_BEDROCK_MODEL_ID", NOVA_2_LITE_MODEL_ID),
-            max_attempts=int(os.getenv("DAVDEPLOY_MODEL_MAX_ATTEMPTS", "2")),
             connect_timeout_seconds=int(
                 os.getenv("DAVDEPLOY_MODEL_CONNECT_TIMEOUT_SECONDS", "5")
             ),
@@ -115,8 +113,6 @@ class NovaGatewayConfig:
     def validate(self) -> None:
         if "nova-2-lite" not in self.model_id:
             raise ModelGatewayUnavailable("configured Bedrock model is not Amazon Nova 2 Lite")
-        if self.max_attempts not in range(1, 5):
-            raise ModelGatewayUnavailable("model attempts must be between 1 and 4")
         if self.connect_timeout_seconds not in range(1, 31):
             raise ModelGatewayUnavailable("model connect timeout must be between 1 and 30 seconds")
         if self.read_timeout_seconds not in range(1, 901):

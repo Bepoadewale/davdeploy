@@ -16,8 +16,12 @@ The current Nova 2 Lite Bedrock model card marks native structured outputs as
 unsupported. davdeploy therefore sends a JSON schema with the request and
 accepts only a plain JSON object or that object inside one exact `json` code
 fence. It rejects surrounding prose and non-object JSON, validates the decoded
-object locally, permits one bounded repair attempt, and fails closed if
-validation still fails. It does not claim provider-enforced schema compliance.
+object locally, permits one bounded JSON-format repair attempt per structured
+request, and fails closed if the response remains invalid. Terraform proposal
+generation permits at most two semantic attempts under a 120-second total
+deadline by default. It sends only sanitized schema error codes and allowlisted
+field paths in the repair request. It does not claim provider-enforced schema
+compliance.
 
 ## Configuration
 
@@ -31,7 +35,6 @@ DAVDEPLOY_BEDROCK_MODEL_ID=us.amazon.nova-2-lite-v1:0
 DAVDEPLOY_MODEL_DATA_POLICY=bedrock-no-training
 DAVDEPLOY_MODEL_MAX_OUTPUT_TOKENS=2000
 DAVDEPLOY_MODEL_TIMEOUT_SECONDS=60
-DAVDEPLOY_MODEL_MAX_ATTEMPTS=2
 ```
 
 The AWS SDK credential chain is the only credential mechanism. App Runner uses
@@ -54,9 +57,16 @@ digest, and validation result. Raw prompts and model output are not copied into
 audit metadata. The workload intent continues to retain the customer's original
 request as existing product data.
 
-Transport retries and application repair attempts are bounded. Content filtering,
-timeouts, incomplete output, digest mismatches, and repeated schema failures fail
-closed. Fixture fallback is available only when
+The Bedrock SDK does not retry transport calls; each request's connect and read
+timeouts share the caller's remaining deadline. The JSON repair uses that same
+deadline. Terraform semantic repair uses separate, uniquely identified model
+requests, and aggregates token usage, known cost, latency, retry count and
+digest-only evidence across them. If generation fails, ProductService persists
+the safe aggregate usage/evidence before returning a redacted error. Content
+filtering, timeouts, incomplete output, digest mismatches, and repeated schema
+failures fail closed. Terraform proposal generation bypasses fixture fallback
+even if a fallback gateway is configured; fixture output is never accepted as a
+repaired Bedrock proposal. Fixture fallback elsewhere is available only when
 `DAVDEPLOY_MODEL_FALLBACK=fixture` is explicitly set; its response remains
 labelled `SIMULATED` and never masquerades as Nova evidence.
 
