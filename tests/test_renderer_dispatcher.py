@@ -29,6 +29,11 @@ def _isolated_dispatcher(tmp_path: Path) -> tuple[Path, Path]:
         f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8"
     )
     storage_runner.chmod(0o755)
+    dynamodb_runner = scripts / "customer-workload-dynamodb.sh"
+    dynamodb_runner.write_text(
+        f"#!/usr/bin/env bash\nprintf '%s' \"$1\" >{marker}\n", encoding="utf-8"
+    )
+    dynamodb_runner.chmod(0o755)
     artifact_builder = scripts / "customer-serverless-artifact-build.py"
     artifact_builder.write_text(
         f"#!/usr/bin/env python3\nfrom pathlib import Path\nPath('{marker}').write_text('build-artifact')\n",
@@ -40,17 +45,25 @@ def _isolated_dispatcher(tmp_path: Path) -> tuple[Path, Path]:
 def _work(
     module_id: str = "aws-managed-application", operation: str = "apply"
 ) -> list[dict[str, object]]:
-    is_serverless = module_id == "aws-serverless-api"
-    terraform_root = (
-        "infrastructure/terraform/customer-workload-serverless-api"
-        if is_serverless
-        else "infrastructure/terraform/customer-workload-app-runner-pilot"
-    )
-    runner_script = (
-        "scripts/customer-workload-serverless-api.sh"
-        if is_serverless
-        else "scripts/customer-workload-app-runner-pilot.sh"
-    )
+    paths = {
+        "aws-managed-application": (
+            "infrastructure/terraform/customer-workload-app-runner-pilot",
+            "scripts/customer-workload-app-runner-pilot.sh",
+        ),
+        "aws-serverless-api": (
+            "infrastructure/terraform/customer-workload-serverless-api",
+            "scripts/customer-workload-serverless-api.sh",
+        ),
+        "aws-file-storage": (
+            "infrastructure/terraform/customer-workload-private-s3",
+            "scripts/customer-workload-private-s3.sh",
+        ),
+        "aws-nosql-data": (
+            "infrastructure/terraform/customer-workload-dynamodb",
+            "scripts/customer-workload-dynamodb.sh",
+        ),
+    }
+    terraform_root, runner_script = paths[module_id]
     return [
         {
             "module_id": module_id,
@@ -273,6 +286,56 @@ def test_dispatcher_requires_resolved_values_matching_module_input_references(
     assert "one typed renderer entry" in result.stderr
 
 
+def test_dispatcher_gates_dynamodb_renderer_and_routes_only_fixed_operations(
+    tmp_path: Path,
+) -> None:
+    dispatcher, marker = _isolated_dispatcher(tmp_path)
+    env = os.environ.copy()
+    env.update(
+        {
+            "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON": json.dumps(
+                _work("aws-nosql-data", "plan")
+            ),
+            "DAVDEPLOY_EXECUTION_OPERATION": "plan",
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "DynamoDB hosted certification route is disabled" in result.stderr
+    assert not marker.exists()
+
+    env["DAVDEPLOY_ENABLE_DYNAMODB_HOSTED_CERTIFICATION"] = "true"
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8") == "plan"
+
+    env["DAVDEPLOY_EXECUTION_OPERATION"] = "arbitrary-shell"
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "operation does not match" in result.stderr
+
+
 def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(
     tmp_path: Path,
 ) -> None:
@@ -434,5 +497,7 @@ def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
     assert "scripts/customer-workload-serverless-api.sh" in package_builder
     assert "infrastructure/terraform/customer-workload-private-s3" in package_builder
     assert "scripts/customer-workload-private-s3.sh" in package_builder
+    assert "infrastructure/terraform/customer-workload-dynamodb" in package_builder
+    assert "scripts/customer-workload-dynamodb.sh" in package_builder
     assert "scripts/customer-serverless-artifact-build.py" in package_builder
     assert "bash scripts/customer-workload-dispatcher.sh" in buildspec

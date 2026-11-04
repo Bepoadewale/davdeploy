@@ -211,6 +211,7 @@ class CodeBuildCloudExecutionAdapter:
     renderer_input_allowlist: ClassVar[dict[str, frozenset[str]]] = {
         "aws-serverless-api": frozenset({"uploads_bucket_name"}),
         "aws-file-storage": frozenset(),
+        "aws-nosql-data": frozenset(),
     }
 
     def __init__(self, project_name: str | None = None, client=None):
@@ -303,6 +304,7 @@ class CodeBuildCloudExecutionAdapter:
             certification_environment = {
                 "aws-serverless-api": "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION",
                 "aws-file-storage": "DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION",
+                "aws-nosql-data": "DAVDEPLOY_ENABLE_DYNAMODB_HOSTED_CERTIFICATION",
             }.get(str(selected["module_id"]))
             if certification_environment:
                 overrides.append(

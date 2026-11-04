@@ -137,10 +137,28 @@ def test_private_s3_renderer_outputs_normalize_to_typed_storage_ports():
             "value": "arn:aws:s3:::davdeploy-123456789012-us-east-1-0123456789abcdef0123",
         },
     }
-
     assert normalize_renderer_outputs("aws-file-storage", raw_outputs) == {
         "bucket_name": raw_outputs["bucket_name"]["value"],
         "bucket_arn": raw_outputs["bucket_arn"]["value"],
+    }
+
+
+def test_dynamodb_renderer_outputs_normalize_to_typed_nosql_ports():
+    raw_outputs = {
+        "table_name": {
+            "sensitive": False,
+            "type": "string",
+            "value": "davdeploy-123456789012-us-east-1-0123456789abcdef0123",
+        },
+        "table_arn": {
+            "sensitive": False,
+            "type": "string",
+            "value": "arn:aws:dynamodb:us-east-1:123456789012:table/davdeploy-table",
+        },
+    }
+    assert normalize_renderer_outputs("aws-nosql-data", raw_outputs) == {
+        "table_name": raw_outputs["table_name"]["value"],
+        "table_arn": raw_outputs["table_arn"]["value"],
     }
 
 

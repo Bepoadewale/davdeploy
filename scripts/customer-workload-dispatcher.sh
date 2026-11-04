@@ -51,6 +51,12 @@ case "$module_id:$terraform_root:$runner_script" in
     }
     script="scripts/customer-workload-private-s3.sh"
     ;;
+  aws-nosql-data:infrastructure/terraform/customer-workload-dynamodb:scripts/customer-workload-dynamodb.sh)
+    [[ "${DAVDEPLOY_ENABLE_DYNAMODB_HOSTED_CERTIFICATION:-false}" == "true" ]] || {
+      echo "DynamoDB hosted certification route is disabled" >&2; exit 2;
+    }
+    script="scripts/customer-workload-dynamodb.sh"
+    ;;
   *)
     echo "Module renderer is unknown or not enabled for hosted execution: ${module_id}" >&2
     exit 2
@@ -76,6 +82,13 @@ case "$module_id:$work_operation:$DAVDEPLOY_EXECUTION_OPERATION" in
   aws-file-storage:observe:observe|\
   aws-file-storage:destroy:destroy-saved-plan|\
   aws-file-storage:verify_cleanup:verify-cleanup)
+    ;;
+  aws-nosql-data:plan:plan|aws-nosql-data:plan:destroy-plan|\
+  aws-nosql-data:destroy_plan:destroy-plan|\
+  aws-nosql-data:apply:apply-saved-plan|\
+  aws-nosql-data:observe:observe|\
+  aws-nosql-data:destroy:destroy-saved-plan|\
+  aws-nosql-data:verify_cleanup:verify-cleanup)
     ;;
   *)
     echo "Lifecycle operation does not match the approved runner operation" >&2

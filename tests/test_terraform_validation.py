@@ -18,6 +18,8 @@ EXPECTED_ROOTS = {
     "infrastructure/terraform/serverless-control-plane",
     "infrastructure/terraform/customer-workload-app-runner-pilot",
     "infrastructure/terraform/customer-workload-serverless-api",
+    "infrastructure/terraform/customer-workload-private-s3",
+    "infrastructure/terraform/customer-workload-dynamodb",
     "infrastructure/terraform/renderers/app-runner-plan",
     "infrastructure/terraform/pilot",
 }
