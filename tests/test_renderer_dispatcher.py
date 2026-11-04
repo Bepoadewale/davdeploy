@@ -32,7 +32,9 @@ def _isolated_dispatcher(tmp_path: Path) -> tuple[Path, Path]:
     return dispatcher, marker
 
 
-def _work(module_id: str = "aws-managed-application", operation: str = "apply") -> list[dict[str, object]]:
+def _work(
+    module_id: str = "aws-managed-application", operation: str = "apply"
+) -> list[dict[str, object]]:
     is_serverless = module_id == "aws-serverless-api"
     terraform_root = (
         "infrastructure/terraform/customer-workload-serverless-api"
@@ -47,8 +49,10 @@ def _work(module_id: str = "aws-managed-application", operation: str = "apply") 
     return [
         {
             "module_id": module_id,
+            "instance_id": module_id,
             "operation": operation,
             "dependencies": [],
+            "input_bindings": [],
             "resource_tags": {"ManagedBy": "davdeploy"},
             "renderer": {
                 "terraform_root": terraform_root,
@@ -67,7 +71,14 @@ def test_dispatcher_routes_only_registered_app_runner_saved_plan_work(tmp_path: 
             "DAVDEPLOY_EXECUTION_OPERATION": "apply-saved-plan",
         }
     )
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 0
     assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
 
@@ -83,7 +94,14 @@ def test_dispatcher_allows_the_fixed_commit_pinned_image_build(tmp_path: Path) -
             "DAVDEPLOY_EXECUTION_OPERATION": "build-push-image",
         }
     )
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 0
     assert marker.read_text(encoding="utf-8") == "build-push-image"
 
@@ -97,20 +115,41 @@ def test_dispatcher_rejects_unregistered_or_mixed_work_before_script(tmp_path: P
             "DAVDEPLOY_EXECUTION_OPERATION": "apply-saved-plan",
         }
     )
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2
     assert "certification route is disabled" in result.stderr
     assert not marker.exists()
 
     env["DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION"] = "true"
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 0
     assert marker.read_text(encoding="utf-8") == "apply-saved-plan"
     previous_invocation = marker.read_text(encoding="utf-8")
 
     env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(_work() * 2)
     env.pop("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION")
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2
     assert "one typed renderer entry" in result.stderr
     assert marker.read_text(encoding="utf-8") == previous_invocation
@@ -127,20 +166,89 @@ def test_dispatcher_rejects_unknown_fields_and_operation_mismatches(tmp_path: Pa
             "DAVDEPLOY_EXECUTION_OPERATION": "apply-saved-plan",
         }
     )
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2
     assert "one typed renderer entry" in result.stderr
     assert not marker.exists()
 
     env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(_work())
     env["DAVDEPLOY_EXECUTION_OPERATION"] = "destroy-saved-plan"
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2
     assert "does not match" in result.stderr
     assert not marker.exists()
 
 
-def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(tmp_path: Path) -> None:
+def test_dispatcher_rejects_unresolved_or_inline_module_inputs(tmp_path: Path) -> None:
+    dispatcher, marker = _isolated_dispatcher(tmp_path)
+    work = _work()
+    work[0]["dependencies"] = ["uploads"]
+    work[0]["input_bindings"] = [
+        {
+            "input_name": "uploads_bucket_name",
+            "source_instance_id": "uploads",
+            "source_output": "bucket_name",
+        }
+    ]
+    env = os.environ.copy()
+    env.update(
+        {
+            "DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON": json.dumps(work),
+            "DAVDEPLOY_EXECUTION_OPERATION": "apply-saved-plan",
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "unresolved module dependencies or input bindings" in result.stderr
+    assert not marker.exists()
+
+    work[0]["dependencies"] = []
+    work[0]["input_bindings"] = [
+        {
+            "input_name": "uploads_bucket_name",
+            "source_instance_id": "uploads",
+            "source_output": "bucket_name",
+            "value": "customer-controlled-value",
+        }
+    ]
+    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(work)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "one typed renderer entry" in result.stderr
+    assert not marker.exists()
+
+
+def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(
+    tmp_path: Path,
+) -> None:
     dispatcher, marker = _isolated_dispatcher(tmp_path)
     env = os.environ.copy()
     env.update(
@@ -152,12 +260,28 @@ def test_dispatcher_routes_certification_lifecycle_only_to_serverless_renderer(t
             "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION": "true",
         }
     )
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 0
     assert marker.read_text(encoding="utf-8") == "health"
 
-    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(_work("aws-managed-application", "observe"))
-    result = subprocess.run(["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
+    env["DAVDEPLOY_UNIVERSAL_LIFECYCLE_WORK_JSON"] = json.dumps(
+        _work("aws-managed-application", "observe")
+    )
+    result = subprocess.run(
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert result.returncode == 2
     assert "operation does not match" in result.stderr
 
@@ -182,7 +306,12 @@ def test_dispatcher_enforces_exact_serverless_operation_mapping(tmp_path: Path) 
         )
         env["DAVDEPLOY_EXECUTION_OPERATION"] = runner_operation
         result = subprocess.run(
-            ["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+            ["bash", str(dispatcher)],
+            cwd=tmp_path,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert result.returncode == 0, result.stderr
         assert marker.read_text(encoding="utf-8") == (
@@ -194,14 +323,21 @@ def test_dispatcher_enforces_exact_serverless_operation_mapping(tmp_path: Path) 
     )
     env["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-saved-plan"
     result = subprocess.run(
-        ["bash", str(dispatcher)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+        ["bash", str(dispatcher)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert result.returncode == 2
     assert "operation does not match" in result.stderr
 
 
 def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
-    package_builder = (ROOT / "scripts/build_customer_executor_package.sh").read_text(encoding="utf-8")
+    package_builder = (ROOT / "scripts/build_customer_executor_package.sh").read_text(
+        encoding="utf-8"
+    )
     buildspec = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text(
         encoding="utf-8"
     )

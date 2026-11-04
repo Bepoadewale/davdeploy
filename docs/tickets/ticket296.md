@@ -36,11 +36,11 @@ Persist the identity of the CodeBuild operation on the exact module instance it 
 - [x] Multi-module work remains fail-closed until durable scheduling is complete.
 - [x] PR-numbered test/evidence and status documentation are present and accurate.
 - [x] Full isolated clean-room cycle passes.
-- [ ] GitHub CI passes.
+- [x] GitHub CI passes.
 
 ## Acceptance status
 
-Locally verified. CodeBuild submission persists a unique ID on a single module row. SQS/EventBridge reconciliation locates that row and only advances its state. Legacy rows retain the prior run-level fallback. Multi-module submissions remain rejected. PR CI and review remain pending.
+Merged as `9d14bd1`. CodeBuild submission persists a unique ID on a single module row. SQS/EventBridge reconciliation locates that row and only advances its state. Legacy rows retain the prior run-level fallback. Multi-module submissions remain rejected.
 
 ## Tests / validation performed
 
@@ -48,7 +48,8 @@ Locally verified. CodeBuild submission persists a unique ID on a single module r
 - `make verify` — config check, Ruff, full suite (471 passed), OpenAPI snapshot, and Compose config passed.
 - `uv run ruff check apps/api/src tests scripts` and `git diff --check` — passed.
 - Isolated clean-room cycle passed: `make bootstrap-local`; then smoke, API contract, customer-plan E2E, seed, simple/complex/Day-2/degraded/success/failure/readiness demos, trace check, and `make verify`; then cleanup. See `docs/test/test296.md`.
-- PR CI is running; the first `docs-conventions` attempt failed because the ticket headings did not match the repository's required template. The ticket and evidence headings are being corrected.
+- The first CI run failed `docs-conventions` because ticket headings did not match the required template. The headings were corrected before merge.
+- Final GitHub Actions run [41760912071](https://github.com/Bepoadewale/davdeploy/actions/runs/41760912071) passed all seven checks: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain.
 
 ## Evidence files produced
 
