@@ -51,7 +51,8 @@ the validated boundary needed before worker scheduling is wired.
 - `git diff --check` — passed.
 - Full isolated clean-room cycle passed from an empty worktree and unique Compose project: clean, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. All resources created by this test were removed.
 - GitHub Actions run [41756441895](https://github.com/Bepoadewale/davdeploy/actions/runs/41756441895) — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain.
-- GitHub Actions run [41756993823](https://github.com/Bepoadewale/davdeploy/actions/runs/41756993823) on the ticket update — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain. The final ticket-only commit will receive one fresh check run before merge.
+- GitHub Actions run [41756993823](https://github.com/Bepoadewale/davdeploy/actions/runs/41756993823) — all seven checks passed after the first ticket update.
+- GitHub Actions run [41757475202](https://github.com/Bepoadewale/davdeploy/actions/runs/41757475202) on the final ticket version — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain.
 
 ## Evidence files produced
 
