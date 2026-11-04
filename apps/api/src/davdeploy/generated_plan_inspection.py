@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,7 +15,6 @@ SUPPORTED_ACTIONS = {
     ("create",),
     ("update",),
     ("delete",),
-    ("forget",),
     ("delete", "create"),
     ("create", "delete"),
 }
@@ -36,6 +36,8 @@ class ResourceChangeSummary:
 @dataclass(frozen=True)
 class TerraformPlanSummary:
     format_version: str
+    applyable: bool
+    errored: bool
     resource_changes: tuple[ResourceChangeSummary, ...]
     create_count: int
     update_count: int
@@ -57,10 +59,15 @@ def inspect_terraform_plan(document: dict[str, Any]) -> TerraformPlanSummary:
     if not isinstance(document, dict):
         raise TerraformPlanInspectionError("Terraform plan must be a JSON object")
     version = document.get("format_version")
-    if not isinstance(version, str) or not version.startswith("1."):
+    if not isinstance(version, str) or re.fullmatch(r"1\.\d+", version) is None:
         raise TerraformPlanInspectionError("unsupported Terraform plan JSON format version")
 
-    changes = document.get("resource_changes", [])
+    applyable = document.get("applyable")
+    errored = document.get("errored")
+    if not isinstance(applyable, bool) or not isinstance(errored, bool):
+        raise TerraformPlanInspectionError("Terraform plan applyable and errored flags are required")
+
+    changes = document.get("resource_changes")
     drift = document.get("resource_drift", [])
     if not isinstance(changes, list) or not isinstance(drift, list):
         raise TerraformPlanInspectionError("Terraform resource changes must be arrays")
@@ -86,6 +93,8 @@ def inspect_terraform_plan(document: dict[str, Any]) -> TerraformPlanSummary:
 
     return TerraformPlanSummary(
         format_version=version,
+        applyable=applyable,
+        errored=errored,
         resource_changes=tuple(summaries),
         create_count=counts["create"],
         update_count=counts["update"],
@@ -128,7 +137,6 @@ def _resource_summary(item: Any) -> ResourceChangeSummary:
         ("create",): "create",
         ("update",): "update",
         ("delete",): "delete",
-        ("forget",): "delete",
         ("delete", "create"): "replacement",
         ("create", "delete"): "replacement",
     }[actions]

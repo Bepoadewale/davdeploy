@@ -18,6 +18,8 @@ def change(address: str, actions: list[str], **metadata):
 def plan(changes=None, drift=None):
     return {
         "format_version": "1.2",
+        "applyable": True,
+        "errored": False,
         "resource_changes": changes or [],
         "resource_drift": drift or [],
     }
@@ -72,7 +74,7 @@ def test_drift_is_counted_without_values():
     [
         ([], "JSON object"),
         ({"format_version": "2.0"}, "format version"),
-        ({"format_version": "1.2", "resource_changes": {}}, "arrays"),
+        ({**plan(), "resource_changes": {}}, "arrays"),
         (plan([change("aws.test", ["run-command"])]), "actions are unsupported"),
         (plan([{"address": "", "type": "aws_test", "change": {"actions": ["create"]}}]), "metadata"),
     ],
@@ -98,3 +100,17 @@ def test_rejects_malformed_sensitivity_shape():
 def test_read_action_is_reported_separately():
     result = inspect_terraform_plan(plan([change("data.aws_test_resource.lookup", ["read"])]))
     assert result.read_count == 1
+
+
+def test_non_applyable_or_errored_plan_flags_are_preserved():
+    document = plan()
+    document["applyable"] = False
+    document["errored"] = True
+    result = inspect_terraform_plan(document)
+    assert result.applyable is False
+    assert result.errored is True
+
+
+def test_requires_applyable_and_error_flags():
+    with pytest.raises(TerraformPlanInspectionError, match="flags are required"):
+        inspect_terraform_plan({"format_version": "1.2", "resource_changes": []})
