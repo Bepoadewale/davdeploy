@@ -7,6 +7,7 @@ import re
 import secrets
 import threading
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
@@ -23,6 +24,7 @@ from davdeploy.cloud_execution import (
     CloudExecutionAdapter,
     configured_cloud_execution_adapter,
 )
+from davdeploy.composed_deployment import ModuleLifecycleOutcome
 from davdeploy.connection_secrets import (
     ConnectionSecretStore,
     configured_connection_secret_store,
@@ -5174,8 +5176,14 @@ class ProductService:
         self.db.commit()
         return True
 
-    def _advance_cloud_execution_module_instances(self, run: CloudExecutionRun, state: str) -> None:
-        """Persist a trusted run transition on only its digest-bound graph nodes."""
+    def _advance_cloud_execution_module_instances(
+        self,
+        run: CloudExecutionRun,
+        state: str | None = None,
+        *,
+        module_outcomes: Mapping[str, ModuleLifecycleOutcome] | None = None,
+    ) -> None:
+        """Persist scoped run or per-module outcomes with optimistic locking."""
         allowed_targets = {
             "QUEUED",
             "SUBMITTED",
@@ -5192,8 +5200,36 @@ class ProductService:
             "IMAGE_BUILT_AWAITING_SERVICE_PLAN",
             "RECONCILIATION_REQUIRED",
         }
-        if state not in allowed_targets:
-            raise ValueError("cloud worker returned an unsupported module-instance state")
+        if (state is None) == (module_outcomes is None):
+            raise ValueError("provide either one run state or per-module outcomes")
+        if state is not None:
+            if state not in allowed_targets:
+                raise ValueError("cloud worker returned an unsupported module-instance state")
+            outcomes = {
+                item.instance_id: ModuleLifecycleOutcome(state=state)
+                for item in run.module_instances
+            }
+        else:
+            if not module_outcomes:
+                raise ValueError("per-module outcomes are required")
+            instance_ids = {item.instance_id for item in run.module_instances}
+            if not set(module_outcomes).issubset(instance_ids):
+                raise ValueError("module outcome is outside its execution run graph")
+            outcomes = dict(module_outcomes)
+            for instance_id, outcome in outcomes.items():
+                if not isinstance(instance_id, str) or not isinstance(
+                    outcome, ModuleLifecycleOutcome
+                ):
+                    raise TypeError("module outcome has an invalid shape")
+                if outcome.state not in allowed_targets:
+                    raise ValueError("module outcome has an unsupported state")
+                try:
+                    if outcome.outputs is not None:
+                        json.dumps(dict(outcome.outputs), sort_keys=True)
+                    if outcome.evidence is not None:
+                        json.dumps(dict(outcome.evidence), sort_keys=True)
+                except (TypeError, ValueError) as error:
+                    raise ValueError("module outcome must contain JSON-safe data") from error
         allowed_sources = {
             "NOT_DISPATCHED": {
                 "QUEUED",
@@ -5222,11 +5258,38 @@ class ProductService:
                 or item.input_digest != run.content_digest
             ):
                 raise ValueError("module instance is outside its execution run scope")
-            if item.state == state:
+            outcome = outcomes.get(item.instance_id)
+            if outcome is None:
                 continue
-            if item.state not in allowed_sources or state not in allowed_sources[item.state]:
+            if item.state == outcome.state:
+                same_outputs = outcome.outputs is None or dict(outcome.outputs) == (item.outputs or {})
+                same_evidence = outcome.evidence is None or dict(outcome.evidence) == (
+                    (item.evidence or {}).get("module_outcome", {})
+                )
+                if same_outputs and same_evidence:
+                    continue
+                raise ValueError("module outcome cannot overwrite an existing result")
+            if item.state not in allowed_sources or outcome.state not in allowed_sources[item.state]:
                 raise ValueError("module instance state cannot be replayed or overwritten")
-            event = {"from": item.state, "to": state, "run_id": run.id, "recorded_at": now}
+            event = {
+                "from": item.state,
+                "to": outcome.state,
+                "run_id": run.id,
+                "recorded_at": now,
+            }
+            evidence = {**(item.evidence or {})}
+            if outcome.evidence is not None:
+                evidence["module_outcome"] = dict(outcome.evidence)
+            evidence["transitions"] = [*evidence.get("transitions", []), event]
+            values = {
+                "state": outcome.state,
+                "attempt": item.attempt + (1 if outcome.state == "RUNNING" else 0),
+                "version": item.version + 1,
+                "evidence": evidence,
+                "updated_at": datetime.now(UTC),
+            }
+            if outcome.outputs is not None:
+                values["outputs"] = dict(outcome.outputs)
             result = self.db.execute(
                 update(CloudExecutionModuleInstance)
                 .where(
@@ -5238,27 +5301,17 @@ class ProductService:
                     CloudExecutionModuleInstance.state == item.state,
                     CloudExecutionModuleInstance.version == item.version,
                 )
-                .values(
-                    state=state,
-                    attempt=item.attempt + (1 if state == "RUNNING" else 0),
-                    version=item.version + 1,
-                    evidence={
-                        **(item.evidence or {}),
-                        "transitions": [*(item.evidence or {}).get("transitions", []), event],
-                    },
-                    updated_at=datetime.now(UTC),
-                )
+                .values(**values)
                 .execution_options(synchronize_session=False)
             )
             if result.rowcount != 1:
                 raise ValueError("module instance changed concurrently; refusing stale outcome")
-            item.state = state
-            item.attempt += 1 if state == "RUNNING" else 0
+            item.state = outcome.state
+            item.attempt += 1 if outcome.state == "RUNNING" else 0
             item.version += 1
-            item.evidence = {
-                **(item.evidence or {}),
-                "transitions": [*(item.evidence or {}).get("transitions", []), event],
-            }
+            item.evidence = evidence
+            if outcome.outputs is not None:
+                item.outputs = dict(outcome.outputs)
 
     def reconcile_cloud_execution_build(self, build_id: str) -> bool:
         """Persist one CodeBuild completion received through the SQS event bridge."""

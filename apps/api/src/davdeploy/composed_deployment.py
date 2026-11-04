@@ -104,6 +104,13 @@ class DeploymentObservation:
     cost_state: str
 
 
+@dataclass(frozen=True)
+class ModuleLifecycleOutcome:
+    state: str
+    outputs: Mapping[str, object] | None = None
+    evidence: Mapping[str, object] | None = None
+
+
 def collect_observations(plan: UniversalExecutionPlan, evidence: tuple[LifecycleEvidence, ...]) -> tuple[DeploymentObservation, ...]:
     """Convert bounded provider observations into customer-safe plan evidence."""
     by_module: dict[str, list[LifecycleEvidence]] = {}

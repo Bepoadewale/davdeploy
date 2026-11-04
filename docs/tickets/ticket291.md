@@ -27,20 +27,20 @@ Per-module rows already exist with independent state, outputs, evidence, depende
 
 ## Acceptance criteria
 
-- [ ] A module-specific outcome updates only its matching run/project/workspace/digest-scoped row.
-- [ ] Outputs and evidence are persisted with the state transition.
-- [ ] Identical repeated outcomes are idempotent; conflicting state or payload replay is rejected.
-- [ ] Existing run-wide transitions continue to pass.
-- [ ] Focused and full verification plus GitHub CI pass.
-- [ ] No worker scheduling, CodeBuild behavior, or renderer enablement changes.
+- [x] A module-specific outcome updates only its matching run/project/workspace/digest-scoped row.
+- [x] Outputs and evidence are persisted with the state transition.
+- [x] Identical repeated outcomes are idempotent; conflicting state or payload replay is rejected.
+- [x] Existing run-wide transitions continue to pass.
+- [x] Focused and full local verification pass; GitHub CI is required before merge.
+- [x] No worker scheduling, CodeBuild behavior, or renderer enablement changes.
 
 ## Acceptance status
 
-Pending implementation.
+`make verify` passed: Actions configuration, Ruff, 442 pytest cases, OpenAPI snapshot and Docker Compose configuration. `scripts/check_doc_conventions.py` and `git diff --check` passed. One existing Starlette `TestClient` deprecation warning about `httpx` appeared; tests passed.
 
 ## Tests / validation performed
 
-Pending implementation.
+Implementation and local verification pass. GitHub CI is pending.
 
 ## Evidence files produced
 

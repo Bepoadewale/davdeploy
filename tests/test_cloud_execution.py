@@ -9,7 +9,9 @@ from davdeploy.cloud_execution import (
     CodeBuildCloudExecutionAdapter,
     DisabledCloudExecutionAdapter,
 )
+from davdeploy.composed_deployment import ModuleLifecycleOutcome
 from davdeploy.models import (
+    CloudExecutionModuleInstance,
     CloudExecutionRun,
     InfrastructurePlanDecisionRecord,
     InfrastructurePlanRevision,
@@ -1272,6 +1274,76 @@ def test_module_instance_outcomes_are_idempotent_scoped_and_terminal():
     node.project_id = "another-project"
     with pytest.raises(ValueError, match="outside its execution run scope"):
         service._advance_cloud_execution_module_instances(run, "FAILED")
+
+
+def test_module_specific_outcomes_persist_only_the_selected_scoped_row():
+    service, _ = make_service()
+    approved = approved_app_runner_customer_review(service)
+    created = service.create_cloud_execution_run_for_revision(
+        operator(),
+        approved.id,
+        content_digest=approved.content_digest,
+        terraform_render_id=None,
+        preflight_id=None,
+        terraform_plan_review_id=None,
+        expected_account_id=None,
+        expected_region=None,
+        mode="GUARDED_CLOUD_EXECUTION",
+        confirmation=None,
+    )
+    run = service.db.get(CloudExecutionRun, created["id"])
+    assert run is not None and run.module_instances
+    primary = run.module_instances[0]
+    secondary = CloudExecutionModuleInstance(
+        organization_id=run.organization_id,
+        project_id=run.project_id,
+        execution_run_id=run.id,
+        instance_id="independent-module",
+        module_id="aws-serverless-api",
+        state="NOT_DISPATCHED",
+        operation=primary.operation,
+        attempt=0,
+        input_digest=run.content_digest,
+        idempotency_key=f"{run.id}:independent-module",
+        dependencies=[],
+        outputs={},
+        evidence={},
+        version=1,
+    )
+    run.module_instances.append(secondary)
+    service.db.flush()
+
+    outcome = ModuleLifecycleOutcome(
+        state="QUEUED",
+        outputs={"artifact_digest": "sha256:abc"},
+        evidence={"runner": "fixed-registry"},
+    )
+    service._advance_cloud_execution_module_instances(
+        run, module_outcomes={primary.instance_id: outcome}
+    )
+    assert primary.state == "QUEUED"
+    assert primary.outputs == {"artifact_digest": "sha256:abc"}
+    assert primary.evidence["module_outcome"] == {"runner": "fixed-registry"}
+    assert secondary.state == "NOT_DISPATCHED"
+
+    version = primary.version
+    service._advance_cloud_execution_module_instances(
+        run, module_outcomes={primary.instance_id: outcome}
+    )
+    assert primary.version == version
+    with pytest.raises(ValueError, match="cannot overwrite"):
+        service._advance_cloud_execution_module_instances(
+            run,
+            module_outcomes={
+                primary.instance_id: ModuleLifecycleOutcome(
+                    state="QUEUED", outputs={"artifact_digest": "sha256:changed"}
+                )
+            },
+        )
+    with pytest.raises(ValueError, match="outside its execution run graph"):
+        service._advance_cloud_execution_module_instances(
+            run, module_outcomes={"unowned-module": ModuleLifecycleOutcome(state="QUEUED")}
+        )
 
 
 def test_module_instance_records_reconciliation_required_after_worker_loss():
