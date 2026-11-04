@@ -50,7 +50,8 @@ the validated boundary needed before worker scheduling is wired.
 - `.venv/bin/python -m ruff check ...` on changed Python files — passed.
 - `git diff --check` — passed.
 - Full isolated clean-room cycle passed from an empty worktree and unique Compose project: clean, fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, customer-plan end-to-end, fixture seed, trace check, full verification, and teardown. All resources created by this test were removed.
-- GitHub Actions run [41756441895](https://github.com/Bepoadewale/davdeploy/actions/runs/41756441895) — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain. The ticket-only follow-up commit will receive a fresh CI run before merge.
+- GitHub Actions run [41756441895](https://github.com/Bepoadewale/davdeploy/actions/runs/41756441895) — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain.
+- GitHub Actions run [41756993823](https://github.com/Bepoadewale/davdeploy/actions/runs/41756993823) on the ticket update — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, and supply-chain. The final ticket-only commit will receive one fresh check run before merge.
 
 ## Evidence files produced
 
