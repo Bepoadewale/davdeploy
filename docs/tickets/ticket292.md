@@ -29,11 +29,11 @@ PRs #286–#291 are merged. The worker still dispatches one certified module per
 - [x] Roadmap documents cite current merged foundations and accurately name the next integration work.
 - [x] No documentation implies that multi-module execution or hosted Lambda/API certification is enabled.
 - [x] Documentation convention and diff checks pass.
-- [ ] GitHub CI passes before merge.
+- [x] GitHub CI run [41748160181](https://github.com/Bepoadewale/davdeploy/actions/runs/41748160181) passes all seven jobs.
 
 ## Acceptance status
 
-`python3 scripts/check_doc_conventions.py` and `git diff --check` pass. GitHub CI is pending.
+`python3 scripts/check_doc_conventions.py` and `git diff --check` pass. All seven GitHub CI jobs pass.
 
 ## Tests / validation performed
 
