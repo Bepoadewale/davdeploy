@@ -43,14 +43,16 @@ PR #298 merged durable one-module-at-a-time dependency scheduling as `42200c0`. 
 
 The private S3 Terraform root, fixed lifecycle runner, typed output mapping,
 registry entry, dispatcher guard and tests are implemented. Focused tests,
-`make verify`, documentation checks and the isolated clean-room cycle passed.
-The renderer remains disabled. GitHub CI is pending.
+`make verify`, documentation checks, the isolated clean-room cycle and all
+seven GitHub CI checks passed. The renderer remains disabled.
 
 ## Tests / validation performed
 
 Terraform formatting, shell syntax, focused tests (61 passed), `make verify`
 (491 passed), Terraform validation, documentation conventions and the fresh
-local clean-room cycle passed. GitHub CI remains pending.
+local clean-room cycle passed. GitHub CI run
+[41770251973](https://github.com/Bepoadewale/davdeploy/actions/runs/41770251973)
+passed all seven checks.
 
 ## Evidence files produced
 

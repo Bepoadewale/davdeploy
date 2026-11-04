@@ -23,6 +23,7 @@ AWS region: Not applicable.
 - `make verify` — 491 passed, one existing Starlette deprecation warning; OpenAPI snapshot and Compose config passed.
 - `GITHUB_PR_NUMBER=299 python3.12 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- GitHub CI run [41770251973](https://github.com/Bepoadewale/davdeploy/actions/runs/41770251973) — all seven checks passed (`cloud-contracts`, `docs-conventions`, `local-e2e`, `policy`, `python`, `secrets`, `supply-chain`).
 - Clean-room cycle at commit `e42c4e2` — bootstrap, service smoke, API contract, customer-plan E2E, seed data, simple/complex/Day-2/degraded/policy/readiness demos, trace check and full `make verify` all passed (491 tests; one existing warning).
 
 Clean-room commands used a unique Compose project with a tmpfs override for
