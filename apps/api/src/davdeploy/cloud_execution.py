@@ -209,7 +209,7 @@ class CodeBuildCloudExecutionAdapter:
         }
     )
     renderer_input_allowlist: ClassVar[dict[str, frozenset[str]]] = {
-        "aws-serverless-api": frozenset({"uploads_bucket_name"}),
+        "aws-serverless-api": frozenset({"uploads_bucket_name", "table_name"}),
         "aws-file-storage": frozenset(),
         "aws-nosql-data": frozenset(),
     }

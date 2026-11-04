@@ -62,7 +62,7 @@ def test_serverless_runner_requires_live_cleanup_evidence():
     assert "Could not verify Lambda cleanup" in script
 
 
-def test_serverless_renderer_accepts_only_its_project_scoped_upload_bucket_input():
+def test_serverless_renderer_accepts_only_its_project_scoped_storage_and_database_inputs():
     root = ROOT / "infrastructure/terraform/customer-workload-serverless-api"
     main = (root / "main.tf").read_text()
     variables = (root / "variables.tf").read_text()
@@ -70,19 +70,25 @@ def test_serverless_renderer_accepts_only_its_project_scoped_upload_bucket_input
     lambda_module = (ROOT / "infrastructure/terraform/modules/lambda-service/main.tf").read_text()
 
     assert 'variable "uploads_bucket_name"' in variables
+    assert 'variable "table_name"' in variables
     assert "UPLOADS_BUCKET_NAME = var.uploads_bucket_name" in main
+    assert "DYNAMODB_TABLE_NAME = var.table_name" in main
     assert 'actions   = ["s3:ListBucket"]' in main
     assert '"s3:GetObject", "s3:PutObject", "s3:DeleteObject"' in main
     assert 'resources = ["arn:aws:s3:::${var.uploads_bucket_name}/*"]' in main
+    assert '"dynamodb:DeleteItem", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem"' in main
+    assert 'resources = ["arn:${data.aws_partition.current.partition}:dynamodb:${var.region}:${var.expected_account_id}:table/${var.table_name}"]' in main
+    assert '"dynamodb:Scan"' not in main
     assert "environment = local.lambda_environment" in main
     assert 'dynamic "environment"' in lambda_module
     assert "DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON" in script
     assert "expected_uploads_bucket" in script
     assert "does not match this account, project and region" in script
     assert '"-var=uploads_bucket_name=${uploads_bucket_name}"' in script
+    assert '"-var=table_name=${table_name}"' in script
 
 
-def test_serverless_runner_rejects_mismatched_or_extra_upload_bucket_inputs_before_aws_calls():
+def test_serverless_runner_rejects_mismatched_or_extra_typed_inputs_before_aws_calls(tmp_path):
     script = ROOT / "scripts/customer-workload-serverless-api.sh"
     connection_id = "connection123"
     project_id = "project123"
@@ -90,6 +96,7 @@ def test_serverless_runner_rejects_mismatched_or_extra_upload_bucket_inputs_befo
     digest = "a" * 64
     suffix = hashlib.sha256(f"{connection_id}:{project_id}:{region}".encode()).hexdigest()[:20]
     expected_bucket = f"davdeploy-654654474502-{region}-{suffix}"
+    expected_table = f"davdeploy-654654474502-{region}-{suffix}"
     environment = os.environ.copy()
     environment.update(
         {
@@ -102,7 +109,7 @@ def test_serverless_runner_rejects_mismatched_or_extra_upload_bucket_inputs_befo
             "DAVDEPLOY_CUSTOMER_EXECUTION_ROLE_ARN": "arn:aws:iam::654654474502:role/customerExecution",
             "DAVDEPLOY_EXTERNAL_ID_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:654654474502:secret:external-id",
             "DAVDEPLOY_EXECUTION_RUN_ID": "run123",
-            "DAVDEPLOY_EXECUTION_RESULT_S3_URI": f"s3://davdeploy-state/davdeploy/customer/{connection_id}/runs/run123/result.json",
+            "DAVDEPLOY_EXECUTION_RESULT_S3_URI": f"s3://davdeploy-state/davdeploy/customer/{connection_id}/projects/{project_id}/runs/run123/result.json",
             "DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI": f"s3://davdeploy-state/davdeploy/customer/{connection_id}/projects/{project_id}/{digest}/apply/run123.tfplan",
             "DAVDEPLOY_CUSTOMER_PLAN_DIGEST": digest,
             "DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON": json.dumps(
@@ -119,10 +126,36 @@ def test_serverless_runner_rejects_mismatched_or_extra_upload_bucket_inputs_befo
     assert "another-project-bucket" not in result.stderr
 
     environment["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"] = json.dumps(
-        {"uploads_bucket_name": expected_bucket, "extra": "value"}
+        {"table_name": "another-project-table"}
+    )
+    result = subprocess.run(
+        ["bash", str(script), "plan"], capture_output=True, text=True, env=environment, check=False
+    )
+    assert result.returncode == 2
+    assert "DynamoDB table reference does not match this account, project and region" in result.stderr
+
+    environment["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"] = json.dumps(
+        {"uploads_bucket_name": expected_bucket, "table_name": expected_table, "extra": "value"}
     )
     result = subprocess.run(
         ["bash", str(script), "plan"], capture_output=True, text=True, env=environment, check=False
     )
     assert result.returncode == 2
     assert "unsupported or malformed values" in result.stderr
+
+    aws_stub = tmp_path / "aws-stub"
+    aws_stub.mkdir()
+    aws_path = aws_stub / "aws"
+    aws_path.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$AWS_CALL_LOG\"\nexit 42\n")
+    aws_path.chmod(0o755)
+    call_log = tmp_path / "aws-calls.log"
+    environment["PATH"] = f"{aws_stub}:{environment['PATH']}"
+    environment["AWS_CALL_LOG"] = str(call_log)
+    environment["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"] = json.dumps(
+        {"uploads_bucket_name": expected_bucket, "table_name": expected_table}
+    )
+    result = subprocess.run(
+        ["bash", str(script), "plan"], capture_output=True, text=True, env=environment, check=False
+    )
+    assert result.returncode == 42
+    assert "secretsmanager get-secret-value" in call_log.read_text()

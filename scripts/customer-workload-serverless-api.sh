@@ -38,6 +38,9 @@ resolved_inputs_json="${DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON:-}"
 uploads_scope="${connection_id}:${project_id}:${AWS_REGION}"
 uploads_suffix="$(printf '%s' "$uploads_scope" | shasum -a 256 | awk '{print substr($1, 1, 20)}')"
 expected_uploads_bucket="davdeploy-${EXPECTED_AWS_ACCOUNT_ID}-${AWS_REGION}-${uploads_suffix}"
+dynamodb_scope="${connection_id}:${project_id}:${AWS_REGION}"
+dynamodb_suffix="$(printf '%s' "$dynamodb_scope" | shasum -a 256 | awk '{print substr($1, 1, 20)}')"
+expected_dynamodb_table="davdeploy-${EXPECTED_AWS_ACCOUNT_ID}-${AWS_REGION}-${dynamodb_suffix}"
 result_uri="$DAVDEPLOY_EXECUTION_RESULT_S3_URI"
 saved_plan_uri="$DAVDEPLOY_EXECUTION_SAVED_PLAN_S3_URI"
 artifact_uri="${DAVDEPLOY_SERVERLESS_ARTIFACT_S3_URI:-}"
@@ -62,13 +65,17 @@ customer_profile="davdeploy-customer"
 [[ "$run_id" =~ ^[A-Za-z0-9_-]{1,80}$ ]] || { echo "Execution run identifier is invalid" >&2; exit 2; }
 [[ "$service_name" =~ ^[A-Za-z][A-Za-z0-9_-]{0,56}$ ]] || { echo "Customer service name is invalid" >&2; exit 2; }
 [[ "$DAVDEPLOY_CUSTOMER_PLAN_DIGEST" =~ ^[a-f0-9]{64}$ ]] || { echo "Customer plan digest must be a SHA-256 digest" >&2; exit 2; }
-if ! jq -e 'type == "object" and all(keys[]; . == "uploads_bucket_name") and all(.[]; type == "string")' \
+if ! jq -e 'type == "object" and all(keys[]; . == "uploads_bucket_name" or . == "table_name") and all(.[]; type == "string")' \
   <<<"$resolved_inputs_json" >/dev/null; then
   echo "Resolved renderer inputs contain unsupported or malformed values" >&2; exit 2
 fi
 uploads_bucket_name="$(jq -r '.uploads_bucket_name // empty' <<<"$resolved_inputs_json")"
 if [[ -n "$uploads_bucket_name" && "$uploads_bucket_name" != "$expected_uploads_bucket" ]]; then
   echo "The uploads bucket reference does not match this account, project and region" >&2; exit 2
+fi
+table_name="$(jq -r '.table_name // empty' <<<"$resolved_inputs_json")"
+if [[ -n "$table_name" && "$table_name" != "$expected_dynamodb_table" ]]; then
+  echo "The DynamoDB table reference does not match this account, project and region" >&2; exit 2
 fi
 [[ "$result_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Execution result URI is invalid" >&2; exit 2; }
 [[ "$saved_plan_uri" =~ ^s3://[A-Za-z0-9.-]+/[A-Za-z0-9_./=-]+$ ]] || { echo "Saved plan URI is invalid" >&2; exit 2; }
@@ -138,6 +145,7 @@ tf_vars=(
   "-var=artifact_path=${artifact}"
   "-var=customer_profile=${customer_profile}"
   "-var=uploads_bucket_name=${uploads_bucket_name}"
+  "-var=table_name=${table_name}"
 )
 
 tf_init() {

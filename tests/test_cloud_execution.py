@@ -747,9 +747,29 @@ def test_worker_builds_certification_context_from_persisted_run_mode():
     assert node.evidence["runner_build_id"] == "serverless-1"
 
 
-def test_worker_resolves_successful_storage_output_for_selected_api_module():
+@pytest.mark.parametrize(
+    ("source_module_id", "source_instance_id", "input_name", "source_output", "value"),
+    [
+        (
+            "aws-file-storage",
+            "uploads",
+            "uploads_bucket_name",
+            "bucket_name",
+            "davdeploy-654654474502-us-east-1-0123456789abcdef0123",
+        ),
+        (
+            "aws-nosql-data",
+            "database",
+            "table_name",
+            "table_name",
+            "davdeploy-654654474502-us-east-1-0123456789abcdef0123",
+        ),
+    ],
+)
+def test_worker_resolves_successful_typed_output_for_selected_api_module(
+    source_module_id, source_instance_id, input_name, source_output, value
+):
     service, _ = make_service()
-    bucket_name = "davdeploy-654654474502-us-east-1-0123456789abcdef0123"
     run = CloudExecutionRun(
         organization_id=founder().organization_id,
         revision_id="revision-storage-api-binding",
@@ -761,8 +781,8 @@ def test_worker_resolves_successful_storage_output_for_selected_api_module():
         command={
             "universal_lifecycle_work": [
                 {
-                    "module_id": "aws-file-storage",
-                    "instance_id": "uploads",
+                    "module_id": source_module_id,
+                    "instance_id": source_instance_id,
                     "operation": "apply",
                     "dependencies": [],
                     "input_bindings": [],
@@ -772,12 +792,12 @@ def test_worker_resolves_successful_storage_output_for_selected_api_module():
                     "module_id": "aws-serverless-api",
                     "instance_id": "api",
                     "operation": "apply",
-                    "dependencies": ["uploads"],
+                    "dependencies": [source_instance_id],
                     "input_bindings": [
                         {
-                            "input_name": "uploads_bucket_name",
-                            "source_instance_id": "uploads",
-                            "source_output": "bucket_name",
+                            "input_name": input_name,
+                            "source_instance_id": source_instance_id,
+                            "source_output": source_output,
                         }
                     ],
                     "resource_tags": {"ManagedBy": "davdeploy"},
@@ -792,13 +812,7 @@ def test_worker_resolves_successful_storage_output_for_selected_api_module():
     service.db.add(run)
     service.db.flush()
     for instance_id, module_id, state, dependencies, outputs in (
-        (
-            "uploads",
-            "aws-file-storage",
-            "SUCCEEDED_AWAITING_OBSERVATION",
-            [],
-            {"bucket_name": bucket_name},
-        ),
+        (source_instance_id, source_module_id, "SUCCEEDED_AWAITING_OBSERVATION", [], {source_output: value}),
         ("api", "aws-serverless-api", "NOT_DISPATCHED", ["uploads"], {}),
     ):
         service.db.add(
@@ -843,8 +857,8 @@ def test_worker_resolves_successful_storage_output_for_selected_api_module():
     service.cloud_execution = adapter
     assert service.run_next_cloud_execution() is True
     assert adapter.context["dispatch_instance_id"] == "api"
-    assert adapter.context["resolved_module_inputs"] == {"uploads_bucket_name": bucket_name}
-    assert bucket_name not in json.dumps(service.db.get(CloudExecutionRun, run.id).evidence)
+    assert adapter.context["resolved_module_inputs"] == {input_name: value}
+    assert value not in json.dumps(service.db.get(CloudExecutionRun, run.id).evidence)
     assert run.state == "SUBMITTED"
 
 
@@ -1691,9 +1705,11 @@ def test_codebuild_adapter_passes_only_resolved_typed_inputs_to_the_selected_ren
 
     monkeypatch.setenv("DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION", "true")
     monkeypatch.setenv("DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION", "true")
+    monkeypatch.setenv("DAVDEPLOY_ENABLE_DYNAMODB_HOSTED_CERTIFICATION", "true")
     environment = {key: "value" for key in CodeBuildCloudExecutionAdapter.required_environment}
     environment["DAVDEPLOY_EXECUTION_OPERATION"] = "apply-saved-plan"
     bucket_name = "davdeploy-123456789012-us-east-1-0123456789abcdef0123"
+    table_name = "davdeploy-123456789012-us-east-1-0123456789abcdef0123"
     work = [
         {
             "module_id": "aws-file-storage",
@@ -1704,16 +1720,29 @@ def test_codebuild_adapter_passes_only_resolved_typed_inputs_to_the_selected_ren
             "resource_tags": {"ManagedBy": "davdeploy"},
         },
         {
+            "module_id": "aws-nosql-data",
+            "instance_id": "database",
+            "operation": "apply",
+            "dependencies": [],
+            "input_bindings": [],
+            "resource_tags": {"ManagedBy": "davdeploy"},
+        },
+        {
             "module_id": "aws-serverless-api",
             "instance_id": "api",
             "operation": "apply",
-            "dependencies": ["uploads"],
+            "dependencies": ["database", "uploads"],
             "input_bindings": [
                 {
                     "input_name": "uploads_bucket_name",
                     "source_instance_id": "uploads",
                     "source_output": "bucket_name",
-                }
+                },
+                {
+                    "input_name": "table_name",
+                    "source_instance_id": "database",
+                    "source_output": "table_name",
+                },
             ],
             "resource_tags": {"ManagedBy": "davdeploy"},
         },
@@ -1725,13 +1754,14 @@ def test_codebuild_adapter_passes_only_resolved_typed_inputs_to_the_selected_ren
         "dispatch_instance_id": "api",
         "mode": "AUTHENTICATED_SERVERLESS_CERTIFICATION",
         "profile": "aws-serverless-api",
-        "resolved_module_inputs": {"uploads_bucket_name": bucket_name},
+        "resolved_module_inputs": {"uploads_bucket_name": bucket_name, "table_name": table_name},
     }
     result = adapter.execute(context)
     assert result.state == "SUBMITTED"
     overrides = {item["name"]: item["value"] for item in calls[0]["environmentVariablesOverride"]}
     assert json.loads(overrides["DAVDEPLOY_RESOLVED_MODULE_INPUTS_JSON"]) == {
-        "uploads_bucket_name": bucket_name
+        "uploads_bucket_name": bucket_name,
+        "table_name": table_name,
     }
     assert overrides["DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION"] == "true"
     assert "DAVDEPLOY_ENABLE_PRIVATE_S3_HOSTED_CERTIFICATION" not in overrides
@@ -1751,6 +1781,7 @@ def test_codebuild_adapter_passes_only_resolved_typed_inputs_to_the_selected_ren
     context["dispatch_instance_id"] = "api"
     context["resolved_module_inputs"] = {
         "uploads_bucket_name": bucket_name,
+        "table_name": table_name,
         "arbitrary": "must-not-be-forwarded",
     }
     result = adapter.execute(context)

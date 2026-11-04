@@ -25,3 +25,9 @@ variable "uploads_bucket_name" {
   default     = ""
   description = "Optional project-scoped private S3 bucket name supplied through a validated typed module reference."
 }
+
+variable "table_name" {
+  type        = string
+  default     = ""
+  description = "Optional project-scoped DynamoDB table name supplied through a validated typed module reference."
+}
