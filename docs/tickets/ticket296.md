@@ -41,7 +41,8 @@ safe per-module scheduling without applying one result to every graph node.
   without per-module rows.
 - [x] Multi-module work remains fail-closed until durable scheduling is complete.
 - [x] PR-numbered test/evidence and status documentation are present and accurate.
-- [ ] Full isolated clean-room cycle and GitHub CI pass.
+- [x] Full isolated clean-room cycle passes.
+- [ ] GitHub CI passes.
 
 ## Validation
 
@@ -52,8 +53,8 @@ and `git diff --check` passed.
 
 ## Evidence
 
-`docs/test/test296.md` will record the isolated clean-room cycle and CI once
-those gates finish. No AWS resources were created.
+`docs/test/test296.md` records the focused, full, and isolated clean-room
+validation. No AWS resources were created. GitHub CI is still pending.
 
 ## Boundaries and follow-up
 
