@@ -12,9 +12,21 @@ Replace the isolated Nova CodeBuild project's fail-closed stub with a fixed, che
 
 - PR #324 provides a disabled-by-default `davdeploy-nova-plan-only` CodeBuild project with `NO_SOURCE`, `NO_ARTIFACTS`, and an inline buildspec that exits 78. Its API StartBuild grant is exact-project scoped and admits only the durable run-ID environment override. IAM can deny only override fields with supported condition keys; the fixed dispatcher source must not send other fields.
 - PR #325 provides durable, idempotent `GeneratedPlanRun` records, per-attempt immutable S3 input/result keys, leases, a stable CodeBuild idempotency token, and exact-project build reconciliation. A successful build is currently `BUILD_SUCCEEDED_UNVERIFIED`; there is no trusted result persistence path.
-- PR #326 adds a distinct `plan_role_arn` and customer-side plan-only role using the connection's ExternalId. Its template denies customer service actions except the identity check. This PR must preserve ExternalId on role assumption and must not broaden the deployment executor.
+- PR #326 adds a distinct `plan_role_arn` and customer-side plan-only role using the connection's ExternalId. Its template explicitly denies all customer service actions; AWS STS `GetCallerIdentity` remains usable even when explicitly denied. This PR must preserve ExternalId on role assumption and must not broaden the deployment executor.
 - `GeneratedTerraformPlanRunner` performs exact Terraform/provider pin checks, provider schema validation, ownership tagging, policy evaluation, and saved-plan inspection, but currently runs with `-backend=false` and `-lock=false`.
 - Nova plan approval remains blocked while complete regional pricing evidence is unavailable.
+
+## State boundary decision and follow-up blocker
+
+PR #328 is deliberately limited to an initial, backend-free plan. It must not read, write, or lock Terraform state, and its artifact must remain unapprovable and non-deployable even if regional pricing becomes available later. This avoids giving the shared CodeBuild service role access to every tenant's remote state. It is not a completion of the durable deployment-plan lifecycle.
+
+Remote-state approaches reviewed for a later milestone:
+
+1. **Per-customer state bucket and role.** Customer-account state could be isolated to a per-connection bucket/key and a separate role, but the current plan-only Quick Create intentionally installs a deny-all role. This requires a separately reviewed customer template, state encryption/versioning, ownership, recovery, and lifecycle contract.
+2. **Per-tenant DavDeploy backend role.** A role for each tenant can grant access to one control-plane bucket key and S3 lock object. The current CodeBuild project has one shared service role and cannot receive a run-scoped IAM session policy through the allowed run-ID-only `StartBuild` override. The roles would need a separate, durable provisioning and teardown lifecycle before this is safe.
+3. **DavDeploy-managed state service.** A control-plane service could broker exact tenant state versions and locks, but it would need Terraform-compatible state read/write, conditional version updates, crash recovery, and independent access controls. This is not an existing repository capability.
+
+No option is implemented here. Do not add shared CodeBuild access to `davdeploy/customer/*`, do not use caller-controlled backend settings, and do not claim that backend-free plans represent refreshed or durable deployment state. Until a later state design is reviewed and implemented, approval, apply, and destroy remain blocked for these artifacts.
 
 ## Research / references used
 
@@ -33,7 +45,7 @@ Replace the isolated Nova CodeBuild project's fail-closed stub with a fixed, che
 - Pin and verify the Terraform CLI and AWS provider, including the checked-in lockfile and immutable code artifact. The dispatcher must not download or execute customer-provided code.
 - Load the durable run and exact immutable input by run ID; verify the run is `STARTING_BUILD`, the build project/run ID match, the submitted revision is current and integrity-checked, and the canonical proposal/context/account/region/input digests agree.
 - Assume only the bound `plan_role_arn` with the exact connection ExternalId. Keep credentials out of backend config and all plan/result files. Backend bucket/key/region/lock settings must be server-injected.
-- Decide and test an explicit remote-state/locking boundary. Prefer the versioned S3 backend with `use_lockfile` if supported by the pinned Terraform CLI, with an exact per-tenant key and least-privilege state/lock permissions. If the #326 plan-role deny policy, CodeBuild role, provider, or state trust cannot support a safe exact boundary, stop and document the blocker instead of weakening policy or using `-lock=false`.
+- Keep the current intermediate slice backend-free and explicitly initial-plan-only. Do not add state-bucket or lock permissions to the shared CodeBuild role. Track one of the three state approaches above as a separate milestone; until then all generated artifacts stay unapprovable and non-deployable.
 - Reuse the existing strict schema, graph, ownership, policy, and actual saved-plan pipeline. Do not add apply/destroy, pricing claims, or policy relaxations.
 - Store the saved plan and a canonical result envelope as encrypted, versioned S3 objects. Bind exact object version IDs and digests to the durable run; keep sensitive plan contents redacted from logs and API responses.
 - Add a trusted completion path that obtains an authenticated event, fetches the exact CodeBuild build, verifies project/build/run/revision/organization/tenant/account and all proposal/input/result/saved-plan digests and versions, then persists the verified artifact through the existing tenant-scoped plan persistence path.
@@ -44,22 +56,22 @@ Replace the isolated Nova CodeBuild project's fail-closed stub with a fixed, che
 - [ ] The fixed runner accepts only the durable run ID and a trusted persisted attempt; no customer source/buildspec/role/image/command override is accepted.
 - [ ] Exact Terraform CLI, AWS provider, lockfile, code artifact, and provider schema are verified before planning.
 - [ ] The cross-account customer plan role is assumed only with the exact ExternalId bound to the run's connection; credentials never appear in backend configuration, plan files, result envelopes, logs, or API output.
-- [ ] The backend and lock boundary is explicit and least-privilege: server-injected exact per-tenant key, versioned state bucket, and supported native S3 lock object. No `-lock=false` fallback or caller-controlled backend settings.
+- [ ] This PR uses no Terraform backend or state lock; the artifact explicitly records `INITIAL_PLAN_NO_REMOTE_STATE` and cannot be approved even if pricing evidence later becomes available. No `-lock=false` workaround is added for a configured backend.
 - [ ] The runner verifies immutable proposal, context, account, region, current revision, and staged input before invoking the existing strict schema/graph/policy/actual-plan pipeline.
 - [ ] A saved plan and result envelope are encrypted and versioned. Exact object VersionIds and digests are recorded against the run.
 - [ ] Authenticated completion verifies exact CodeBuild project/build, durable run, revision, tenant, account, input, result, and saved-plan identity before artifact persistence; duplicate or mismatched completion cannot persist.
 - [ ] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
-- [ ] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE` and approval remains blocked until regional pricing evidence exists.
+- [ ] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
 - [ ] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
 - [ ] Focused/full validation and PR CI pass; clean-room status is recorded truthfully.
 
 ## Acceptance status
 
-Draft PR and ticket created before implementation. No substantive code has been changed yet. Toolchain, S3 backend/lock, ExternalId, completion authentication, and exact permission boundaries are under review. The runner must remain disabled; if those trust boundaries cannot be made explicit, this PR will stop at a documented blocker.
+Draft PR and ticket were created before implementation. The decision is to implement only a backend-free initial-plan slice. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice must be explicitly unapprovable and non-deployable.
 
 ## Tests / validation performed
 
-- None yet. No customer workload or AWS account was used.
+- No implementation or test evidence yet. No customer workload or AWS account was used.
 - The required clean-room cycle is not run yet. Cleanup targets and existing user artifacts will be preserved unless separately authorized.
 
 ## Evidence files
@@ -68,4 +80,4 @@ Draft PR and ticket created before implementation. No substantive code has been 
 
 ## Boundaries and follow-up
 
-No AWS calls, Terraform apply/destroy, customer resource mutations, broad IAM grants, PR merges, or artifact deletion. The feature stays disabled by default. Regional pricing, approval, and the separately authorized deployment lifecycle remain outside this PR.
+No AWS calls, Terraform apply/destroy, customer resource mutations, broad IAM grants, PR merges, or artifact deletion. The feature stays disabled by default. Regional pricing, remote state, approval, and the separately authorized deployment lifecycle remain blocked or outside this intermediate PR.
