@@ -417,6 +417,31 @@ def test_nova_gateway_provider_4xx_rejection_is_not_uncertain():
     assert not error.value.outcome_uncertain
 
 
+def test_nova_gateway_provider_5xx_is_uncertain():
+    document = {"customer_request": "deploy"}
+
+    class FailedRuntime:
+        def converse(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "InternalServerException"},
+                    "ResponseMetadata": {"HTTPStatusCode": 503},
+                },
+                "Converse",
+            )
+
+    gateway = BedrockNovaGateway(nova_config(), FailedRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.outcome_uncertain
+
+
 def test_nova_gateway_exhausted_json_repair_preserves_complete_cost_and_evidence():
     document = {"customer_request": "deploy"}
     client = FakeBedrockRuntime(output={})

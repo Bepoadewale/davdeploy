@@ -554,9 +554,13 @@ class BedrockNovaGateway:
             code = "transport_error"
             outcome_uncertain = isinstance(error, BotoCoreError)
             if isinstance(error, ClientError):
-                code = str(error.response.get("Error", {}).get("Code") or code)
-                status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-                outcome_uncertain = not isinstance(status, int) or status >= 500
+                response = error.response if isinstance(error.response, dict) else {}
+                error_data = response.get("Error")
+                if isinstance(error_data, dict):
+                    code = str(error_data.get("Code") or code)
+                metadata = response.get("ResponseMetadata")
+                status = metadata.get("HTTPStatusCode") if isinstance(metadata, dict) else None
+                outcome_uncertain = type(status) is not int or not 400 <= status < 500
             raise ModelGatewayUnavailable(
                 f"Bedrock model call failed ({code})",
                 outcome_uncertain=outcome_uncertain,
