@@ -11,7 +11,7 @@ AWS region: N/A; no AWS calls
 
 ## Scope
 
-Verify that PR #325's schema version 31 remains intact and PR #326 adds version 32 only for the separate customer plan-role columns. A fresh schema records version 32. An existing v31 database adds `plan_role_arn` and `plan_role_setup_state`, preserves existing connection data, and records v32 idempotently. A malformed v31 schema without `cloud_connections` fails closed without advancing its version. Plan-role verification is disabled by default, and the list/detail API reports trust/account verification separately from unattested effective policy. Plan-only setup works when the runner is off, omitting its unused broker principal; when enabled, Terraform wires the CodeBuild role ARN.
+Verify that PR #325's schema version 31 remains intact and PR #326 adds version 32 only for the separate customer plan-role columns. A fresh schema records version 32. An existing v31 database adds `plan_role_arn` and `plan_role_setup_state`, preserves existing connection data, and records v32 idempotently. A malformed v31 schema without `cloud_connections` fails closed without advancing its version. Plan-role verification is disabled by default, and the list/detail API reports trust/account verification separately from unattested effective policy. The Terraform plan workflow maps `NOVA_PLAN_ROLE_VERIFICATION_ENABLED`, defaulting to false when unset; this PR does not enable it in hosted AWS. Plan-only setup works when the runner is off, omitting its unused broker principal; when enabled, Terraform wires the CodeBuild role ARN.
 
 ## Commands executed
 
@@ -23,11 +23,17 @@ terraform init -backend=false -lockfile=readonly && terraform validate
 make verify
 GITHUB_PR_NUMBER=326 uv run --locked python scripts/check_doc_conventions.py
 git diff --check
+uv run --locked --extra dev pytest -q tests/test_nova_plan_only_infra.py tests/test_terraform_workflows.py
+uv run --locked python scripts/check_actions_configuration.py
+GITHUB_PR_NUMBER=326 uv run --locked python scripts/check_doc_conventions.py
+git diff --check
 ```
 
 ## Observed result
 
 The focused plan-role, list response, migration and Terraform policy suite passed 123 tests. `terraform fmt` and `terraform validate` passed. `make verify` passed 772 tests plus Ruff, Actions configuration, the OpenAPI snapshot, and Compose configuration. Documentation conventions and diff checks passed. A pre-existing Starlette/httpx deprecation warning remains. No AWS calls were made. Coverage includes fresh schema v32, existing v31→v32 with only plan-role columns added, idempotence, malformed-schema failure, default-off plan verification, optional broker trust, and truthful `POLICY_UNATTESTED` list/detail output.
+
+For the follow-up workflow wiring, the focused Nova/workflow tests passed (14 tests), the Actions configuration boundary classified 26 public metadata names and 3 secret names, the PR documentation convention check passed, and `git diff --check` passed. The workflow maps `NOVA_PLAN_ROLE_VERIFICATION_ENABLED` with a false fallback; the hosted variable was not enabled or changed.
 
 ## Resources created
 

@@ -48,6 +48,10 @@ def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scop
         "\nvariable ", 1
     )[0]
     assert 'default     = false' in variable
+    assert (
+        "TF_VAR_enable_nova_plan_role_verification: "
+        "${{ vars.NOVA_PLAN_ROLE_VERIFICATION_ENABLED || 'false' }}"
+    ) in PLAN_WORKFLOW
     assert "effective permissions" in variable
     assert "DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED" in MAIN
     assert "tostring(var.enable_nova_plan_role_verification)" in MAIN

@@ -23,7 +23,7 @@ After discovery is verified, a workspace administrator can choose the `plan-only
 
 The CloudFormation template attaches an expected explicit deny for customer service actions, but DavDeploy does not verify effective IAM permissions. A successful verification proves only role trust and account identity; policy status remains `POLICY_UNATTESTED`, and later customer policy changes are not detected. The current Nova CodeBuild project is a fail-closed stub; no Nova-generated plan has been run through it.
 
-The verification flag defaults off and can be enabled while the runner remains off. When enabled, the API may assume roles named `davdeployPlan-*` only, with a connection ExternalId and dedicated verification session name. Terraform supplies the optional broker ARN from the CodeBuild role only when the runner is enabled. This change does not broaden the existing customer executor.
+The verification flag defaults off and can be enabled while the runner remains off. In the protected GitHub Actions `terraform-plan` environment, its variable is named `NOVA_PLAN_ROLE_VERIFICATION_ENABLED`; if unset, the workflow passes `false` to Terraform. Keep it unset or `false` in hosted AWS until verification is deliberately enabled. When enabled, the API may assume roles named `davdeployPlan-*` only, with a connection ExternalId and dedicated verification session name. Terraform supplies the optional broker ARN from the CodeBuild role only when the runner is enabled. This change does not broaden the existing customer executor.
 
 ## Product boundary
 

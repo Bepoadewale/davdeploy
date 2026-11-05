@@ -31,7 +31,9 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - Gate API plan-role identity verification behind `enable_nova_plan_role_verification` (default false) and narrowly allow `sts:AssumeRole` only for the `davdeployPlan-*` role prefix with a non-empty ExternalId and a dedicated verification session name.
 - Require a workspace administrator and a discovery-only connection before generating a plan-only setup URL. Preserve general verification of execution roles on legacy mixed-role connections.
 - Distinguish an expected, unverified template policy from a trust/account-verified role whose installed policy is still unattested. Do not infer plan-only permissions for manually attached arbitrary role ARNs.
-- Add focused tests and update customer connection/security documentation. Record required isolated broker AssumeRole permissions as follow-up work; do not modify the CodeBuild executor or PR #324 files.
+- Add focused tests and update customer connection/security documentation.
+- Map the plan-role verification Terraform input through the protected `terraform-plan` GitHub Environment variable `NOVA_PLAN_ROLE_VERIFICATION_ENABLED`, defaulting to false when unset; do not enable it in the hosted environment in this PR.
+- Do not modify the CodeBuild executor or PR #324 files.
 
 ## Acceptance criteria
 

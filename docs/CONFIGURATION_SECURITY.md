@@ -16,6 +16,7 @@ The current Terraform environments use these non-secret variables:
 - `FRONTEND_ORIGIN`
 - `GOOGLE_IDENTITY_PROVIDER_ENABLED`
 - `NOVA_PLAN_ONLY_RUNNER_ENABLED`
+- `NOVA_PLAN_ROLE_VERIFICATION_ENABLED`
 - `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED`
 - `SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON`
 - `TF_PLAN_BUCKET`
@@ -32,6 +33,12 @@ and environment protections provide authorization.
 `NOVA_PLAN_ONLY_RUNNER_ENABLED` defaults to `false`. Keep it disabled until the reviewed fixed
 Nova plan-only runner is wired. When enabled, Terraform creates a separate CodeBuild project and
 scoped role, but its checked-in buildspec still fails closed until that runner replaces the stub.
+
+`NOVA_PLAN_ROLE_VERIFICATION_ENABLED` maps to Terraform's
+`enable_nova_plan_role_verification` input and defaults to `false` when unset. The protected
+`terraform-plan` workflow reads this Actions variable; leave it unset or explicitly `false` in the
+hosted environment until plan-role verification is deliberately enabled. This setting is separate
+from the Nova runner flag and does not attest customer role permissions or enable deployment.
 
 The serverless API certification inputs are off by default. Set
 `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED` to `true` only for a controlled certification and
