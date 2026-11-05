@@ -2440,9 +2440,30 @@ class ProductService:
                 else "not granted"
             ),
             "plan_role_policy": (
-                "template-installed explicit deny for all customer service actions; policy changes after setup are not checked"
-                if connection.plan_role_arn
-                else "not configured"
+                "not configured"
+                if not connection.plan_role_arn
+                else (
+                    "role trust verification failed; the expected template policy is not verified"
+                    if connection.plan_role_setup_state == "VERIFICATION_FAILED"
+                    else (
+                        "role trust and account are verified; installed policy contents and later policy changes are not attested"
+                        if connection.plan_role_setup_state == "VERIFIED"
+                        else "template is expected to install an explicit deny for all customer service actions; setup is not yet verified"
+                    )
+                )
+            ),
+            "plan_role_policy_status": (
+                "NOT_CONFIGURED"
+                if not connection.plan_role_arn
+                else (
+                    "POLICY_UNATTESTED"
+                    if connection.plan_role_setup_state == "VERIFIED"
+                    else (
+                        "VERIFICATION_FAILED"
+                        if connection.plan_role_setup_state == "VERIFICATION_FAILED"
+                        else "EXPECTED_UNVERIFIED"
+                    )
+                )
             ),
         }
 
@@ -2479,6 +2500,8 @@ class ProductService:
     ) -> dict[str, object]:
         """Generate a one-click AWS Console setup; it does not create AWS resources itself."""
         connection = self._cloud_connection(principal, connection_id)
+        if access_mode == "plan-only":
+            self._require_workspace_admin(principal)
         discovery_broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
         execution_broker_role_arn = os.getenv("DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN")
         nova_plan_broker_role_arn = os.getenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN")
@@ -2727,7 +2750,10 @@ class ProductService:
         if discovered_account != connection.account_id:
             raise PermissionError("assumed AWS role belongs to a different account")
         execution_verified = False
-        if connection.execution_role_arn:
+        # A plan-only verification checks only the discovery and plan roles. Never
+        # assume a customer's execution role as a side effect of verifying the
+        # read-only plan path, even if an older connection record has both roles.
+        if connection.execution_role_arn and not connection.plan_role_arn:
             execution_account = discovery.verify_execution_role(
                 connection.id, connection.execution_role_arn, external_id, region
             )

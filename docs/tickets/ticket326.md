@@ -14,6 +14,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - Connection verification assumes the discovery role and, when present, the execution role; it confirms account identity but does not evaluate effective role permissions.
 - `GeneratedTerraformPlanRunner` is backend-free and has no apply/destroy method. Its current plan configuration uses only the trusted `aws_caller_identity` data source.
 - The isolated Nova CodeBuild project and future plan-broker permissions are being handled separately. This PR must not change that infrastructure or grant AssumeRole to an existing executor.
+- Migration numbering is pending PR #325. Its schema migration must land first; then this PR's plan-role migration should be numbered version 32. The current branch's v31 schema diff is provisional and must not be treated as final. Keep this PR draft until #325 merges and the migration is reconciled.
 
 ## Research / references used
 
@@ -25,9 +26,10 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Work planned for the PR
 
-- Add a separate `plan_role_arn` purpose to the connection model and migration; keep it distinct from `execution_role_arn`.
+- Add a separate `plan_role_arn` purpose to the connection model and schema migration v32 after PR #325 lands; keep it distinct from `execution_role_arn`.
 - Add `plan-only` to Quick Create and the reviewed customer CloudFormation template, creating a role with a unique name, exact ExternalId trust, API and future isolated Nova plan broker principals, and explicit deny-all customer service permissions.
-- Extend verification and connection detail output to report plan-role status accurately. Do not infer plan-only permissions for manually attached arbitrary role ARNs.
+- Require a workspace administrator before generating a plan-only setup URL; do not let plan-only verification assume a customer's execution role, even if an older connection record contains both role ARNs.
+- Distinguish an expected, unverified template policy from a trust/account-verified role whose installed policy is still unattested. Do not infer plan-only permissions for manually attached arbitrary role ARNs.
 - Add focused tests and update customer connection/security documentation. Record required isolated broker AssumeRole permissions as follow-up work; do not modify the CodeBuild executor or PR #324 files.
 
 ## Acceptance criteria
@@ -36,6 +38,9 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - [x] The plan-only template path creates no AdministratorAccess or other service Allow permissions, and includes an explicit service-action deny.
 - [x] Discovery and plan roles both require the exact connection ExternalId; the plan role trusts only the configured API and isolated Nova plan broker principals.
 - [x] Verification attempts the plan-role trust/account check and never reports a plan role verified from discovery-role success alone.
+- [x] Plan-only verification does not assume an optional execution role; focused tests fail if that verifier is called.
+- [x] Plan-only setup URL generation requires a workspace administrator, including for same-tenant developers.
+- [x] Connection details distinguish an expected, unverified deny policy from verified role trust with policy contents still unattested.
 - [x] Existing apply paths cannot use the plan role as execution access.
 - [x] Existing discovery and administrator-pilot contracts remain compatible.
 - [x] Focused tests pass; no AWS resources are created or changed.
@@ -43,7 +48,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Acceptance status
 
-The criteria above are met in code and local tests. Live plan-role verification remains unavailable until a separate change grants the API verification broker permission to assume `davdeployPlan-*`; no live account verification is claimed here.
+The plan-only authorization and status-reporting safeguards are implemented and pass focused local tests. The PR remains draft while PR #325 lands and this PR's migration is reconciled to v32. Live plan-role verification remains unavailable until a separate change grants the API verification broker permission to assume `davdeployPlan-*`; no live account verification is claimed here.
 
 ## Tests / validation performed
 
@@ -52,6 +57,8 @@ The criteria above are met in code and local tests. Live plan-role verification 
 - `uv run --locked python scripts/export_openapi.py` — OpenAPI v1 snapshot matches.
 - `uv run --locked python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- `uv run --locked --extra dev pytest -q tests/test_product.py` — 45 passed; one existing Starlette/httpx deprecation warning.
+- `uv run --locked --extra dev pytest -q tests/test_product.py -k 'plan_only or plan_role or quick_create_setup'` — 7 passed, 38 deselected.
 - `ruff format --check` on the changed Python files still flags existing unrelated lines in `integrations.py`, `service.py`, and `test_cloud_execution.py`; no formatting-only changes were made to those unrelated lines.
 - The full clean-room cycle was not run because its `clean-local` step deletes `.venv` and `.local` and removes Docker volumes; the repository's user deletion rule requires explicit approval for that cleanup. No AWS calls, stacks, or customer resources were created.
 

@@ -161,6 +161,11 @@ def founder() -> Principal:
     return Principal(subject, organization_id, role)
 
 
+def workspace_admin() -> Principal:
+    subject, organization_id, role = LOCAL_USERS["administrator"]
+    return Principal(subject, organization_id, role)
+
+
 def test_verified_identity_can_create_a_personal_workspace():
     service, _ = make_service()
     profile = service.onboard_identity(
@@ -642,7 +647,7 @@ def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separat
     service.db.commit()
 
     setup = service.aws_quick_create_setup(
-        founder(), connection.id, "123456789012", access_mode="plan-only"
+        workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
     )
 
     saved = service.db.get(type(connection), connection.id)
@@ -661,6 +666,47 @@ def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separat
     assert saved.plan_role_arn == setup["plan_role_arn"]
     assert saved.plan_role_setup_state == "SETUP_LINK_GENERATED"
     assert "external_id" not in setup
+    detail = service.cloud_connection_detail(founder(), connection.id)
+    assert detail["plan_role_policy_status"] == "EXPECTED_UNVERIFIED"
+    assert "expected to install" in detail["plan_role_policy"]
+    assert "not yet verified" in detail["plan_role_policy"]
+
+
+def test_plan_only_setup_url_requires_same_workspace_administrator(monkeypatch):
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-api",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployDiscovery-{connection.id}"
+    )
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "existing-token"
+    )
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+    developer = Principal("workspace-developer", founder().organization_id, "developer")
+
+    with pytest.raises(PermissionError, match="workspace administrator role required"):
+        service.aws_quick_create_setup(
+            developer, connection.id, "123456789012", access_mode="plan-only"
+        )
+
+    saved = service.db.get(type(connection), connection.id)
+    assert saved.plan_role_arn is None
+    assert saved.plan_role_setup_state == "NOT_CONFIGURED"
 
 
 def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_broker(monkeypatch):
@@ -678,7 +724,7 @@ def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_br
 
     with pytest.raises(ValueError, match="verify the existing discovery connection"):
         service.aws_quick_create_setup(
-            founder(), connection.id, "123456789012", access_mode="plan-only"
+            workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
         )
 
     connection.account_id = "123456789012"
@@ -692,7 +738,7 @@ def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_br
     service.db.commit()
     with pytest.raises(RuntimeError, match="isolated Nova plan broker role ARN"):
         service.aws_quick_create_setup(
-            founder(), connection.id, "123456789012", access_mode="plan-only"
+            workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
         )
 
 
@@ -715,6 +761,9 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
             assert external_id == "current-external-id"
             return "123456789012"
 
+        def verify_execution_role(self, *_args):
+            pytest.fail("plan-only verification must not assume the execution role")
+
     monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
     service, _ = make_service()
     connection = service.create_cloud_connection(
@@ -722,6 +771,7 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
     )
     connection.account_id = "123456789012"
     connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-test"
+    connection.execution_role_arn = "arn:aws:iam::123456789012:role/davdeployExecution-test"
     connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-connection-plan"
     connection.plan_role_setup_state = "SETUP_LINK_GENERATED"
     connection.external_id_secret_ref = service.connection_secrets.put_external_id(
@@ -740,11 +790,13 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
     detail = service.cloud_connection_detail(founder(), connection.id)
     assert saved.setup_state == "VERIFIED"
     assert saved.plan_role_setup_state == "VERIFIED"
-    assert saved.execution_role_arn is None
+    assert saved.execution_role_arn.endswith("davdeployExecution-test")
     assert audit.detail["plan_role_verified"] is True
+    assert audit.detail["execution_role_verified"] is False
     assert audit.detail["plan_role_permissions_attested"] is False
     assert detail["plan_role_arn"] == connection.plan_role_arn
-    assert detail["plan_role_policy"].startswith("template-installed explicit deny")
+    assert detail["plan_role_policy_status"] == "POLICY_UNATTESTED"
+    assert "policy contents" in detail["plan_role_policy"]
     assert any(
         capability.startswith("initial Nova Terraform plan")
         for capability in detail["capabilities"]
@@ -787,6 +839,8 @@ def test_plan_role_is_not_reported_usable_when_its_trust_check_fails(monkeypatch
     saved = service.db.get(type(connection), connection.id)
     detail = service.cloud_connection_detail(founder(), connection.id)
     assert saved.plan_role_setup_state == "VERIFICATION_FAILED"
+    assert detail["plan_role_policy_status"] == "VERIFICATION_FAILED"
+    assert "verification failed" in detail["plan_role_policy"]
     assert not any("Nova Terraform plan" in capability for capability in detail["capabilities"])
 
 
