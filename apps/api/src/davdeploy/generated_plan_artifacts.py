@@ -132,9 +132,17 @@ class S3GeneratedPlanArtifactStore:
         organization_id: str,
         project_id: str,
         revision_id: str,
+        build_arn: str | None = None,
     ) -> None:
         """Verify the exact S3 object version before exposing or approving its manifest."""
-        expected_key = self._key(organization_id, project_id, revision_id, run_id, stored.sha256)
+        expected_key = self._key(
+            organization_id,
+            project_id,
+            revision_id,
+            run_id,
+            stored.sha256,
+            build_arn=build_arn,
+        )
         if (
             stored.bucket != self.bucket
             or stored.key != expected_key
@@ -223,6 +231,8 @@ class S3GeneratedPlanArtifactStore:
         revision_id: str,
         run_id: str,
         digest: str,
+        *,
+        build_arn: str | None = None,
     ) -> str:
         identifiers = (organization_id, project_id, revision_id)
         if any(
@@ -230,6 +240,16 @@ class S3GeneratedPlanArtifactStore:
         ):
             raise GeneratedPlanArtifactError("generated-plan tenant scope is invalid")
         scope = [hashlib.sha256(value.encode("utf-8")).hexdigest()[:32] for value in identifiers]
+        if build_arn is not None:
+            if not re.fullmatch(
+                r"arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/[A-Za-z0-9_-]+:[A-Za-z0-9-]+",
+                build_arn,
+            ):
+                raise GeneratedPlanArtifactError("generated-plan CodeBuild ARN is invalid")
+            return (
+                f"{NOVA_PLAN_OBJECT_PREFIX}/builds/{build_arn}/"
+                f"org-{scope[0]}/project-{scope[1]}/revision-{scope[2]}/{digest}.tfplan"
+            )
         return f"{NOVA_PLAN_OBJECT_PREFIX}/org-{scope[0]}/project-{scope[1]}/revision-{scope[2]}/{run_id}/{digest}.tfplan"
 
 
@@ -329,8 +349,15 @@ def generated_plan_manifest(
             "update_count": plan.summary.update_count,
             "delete_count": plan.summary.delete_count,
             "replacement_count": plan.summary.replacement_count,
+            "read_count": plan.summary.read_count,
+            "no_op_count": plan.summary.no_op_count,
             "drift_count": plan.summary.drift_count,
             "contains_sensitive_changes": plan.summary.contains_sensitive_changes,
+        },
+        "planning_boundary": {
+            "mode": "INITIAL_PLAN_NO_REMOTE_STATE",
+            "approval_allowed": False,
+            "execution_allowed": False,
         },
         "pricing": {
             "status": "UNAVAILABLE",

@@ -90,14 +90,25 @@ variable "nova_plan_kms_key_arn" {
   }
 }
 
+variable "nova_plan_runner_release_kms_key_arn" {
+  type        = string
+  description = "Exact KMS key used to encrypt the immutable Lambda release archive that contains the fixed Nova runner."
+  default     = ""
+
+  validation {
+    condition     = var.nova_plan_runner_release_kms_key_arn == "" || can(regex("^arn:aws:kms:[a-z0-9-]+:[0-9]{12}:key/[A-Za-z0-9-]+$", var.nova_plan_runner_release_kms_key_arn))
+    error_message = "nova_plan_runner_release_kms_key_arn must be a concrete AWS KMS key ARN."
+  }
+}
+
 variable "enable_nova_plan_only_runner" {
   type        = bool
-  description = "Provision the isolated, fail-closed Nova plan-only CodeBuild project and expose it to the API. Keep disabled until the fixed runner interface is wired."
+  description = "Provision the isolated fixed Nova initial-plan CodeBuild runner and expose it to the API. Keep disabled until the separate durable-state milestone is ready."
   default     = false
 
   validation {
-    condition     = !var.enable_nova_plan_only_runner || (var.nova_plan_artifact_bucket != "" && var.nova_plan_kms_key_arn != "")
-    error_message = "The Nova plan-only runner requires the existing plan artifact bucket and KMS key."
+    condition     = !var.enable_nova_plan_only_runner || (var.nova_plan_artifact_bucket != "" && var.nova_plan_kms_key_arn != "" && var.nova_plan_runner_release_kms_key_arn != "" && var.artifact_key != "" && var.artifact_object_version != null && var.artifact_object_version != "")
+    error_message = "The Nova plan-only runner requires versioned plan storage, a fixed release KMS key, and an exact immutable Lambda package version."
   }
 
   validation {

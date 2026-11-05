@@ -40,6 +40,9 @@ from davdeploy.generated_provider_validation import (
     validate_generated_proposal,
 )
 
+PINNED_TERRAFORM_VERSION = "1.14.7"
+PINNED_AWS_PROVIDER_VERSION = "5.100.0"
+
 
 class TerraformPlanExecutionError(RuntimeError):
     """A generated proposal could not safely produce a Terraform saved plan."""
@@ -102,6 +105,7 @@ class GeneratedTerraformPlanRunner:
         region: str,
         ownership_scope: PlanOwnershipScope,
         workspace: str | Path,
+        aws_credentials: dict[str, str] | None = None,
     ) -> GeneratedTerraformPlan:
         """Validate and plan; never apply, destroy, or return resource values."""
         if not isinstance(ownership_scope, PlanOwnershipScope):
@@ -136,11 +140,14 @@ class GeneratedTerraformPlanRunner:
         config = self._trusted_configuration(
             proposal, region, expected_account_id, self.expected_terraform_version
         )
+        terraform_environment = self._terraform_environment(aws_credentials)
         config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self._write_private(working_root / "main.tf.json", config_bytes)
         self._write_private(working_root / ".terraform.lock.hcl", lockfile_bytes)
 
-        version_output = self._run(["version", "-json"], working_root)
+        version_output = self._run(
+            ["version", "-json"], working_root, env=terraform_environment
+        )
         try:
             installed_version = json.loads(version_output.stdout)["terraform_version"]
         except (json.JSONDecodeError, KeyError, TypeError) as error:
@@ -148,8 +155,14 @@ class GeneratedTerraformPlanRunner:
         if installed_version != self.expected_terraform_version:
             raise TerraformPlanExecutionError("Terraform CLI version does not match trusted pin")
 
-        self._run(["init", "-backend=false", "-input=false", "-lockfile=readonly", "-no-color"], working_root)
-        schema_output = self._run(["providers", "schema", "-json"], working_root)
+        self._run(
+            ["init", "-backend=false", "-input=false", "-lockfile=readonly", "-no-color"],
+            working_root,
+            env=terraform_environment,
+        )
+        schema_output = self._run(
+            ["providers", "schema", "-json"], working_root, env=terraform_environment
+        )
         try:
             schema = json.loads(schema_output.stdout)
             validate_generated_proposal(proposal, schema)
@@ -163,7 +176,7 @@ class GeneratedTerraformPlanRunner:
         self._rewrite_private(working_root / "main.tf.json", config_bytes)
         config_digest = hashlib.sha256(config_bytes).hexdigest()
 
-        self._run(["validate", "-no-color"], working_root)
+        self._run(["validate", "-no-color"], working_root, env=terraform_environment)
         self._run(
             [
                 "plan",
@@ -174,6 +187,7 @@ class GeneratedTerraformPlanRunner:
             ],
             working_root,
             allowed_exit_codes=frozenset({0, 2}),
+            env=terraform_environment,
         )
         if not plan_path.is_file() or plan_path.is_symlink():
             raise TerraformPlanExecutionError("Terraform did not produce a saved plan")
@@ -188,6 +202,7 @@ class GeneratedTerraformPlanRunner:
                 ["show", "-json", str(plan_path)],
                 working_root,
                 stdout_file=json_output,
+                env=terraform_environment,
             )
             json_output.seek(0, os.SEEK_END)
             if json_output.tell() > 32 * 1024 * 1024:
@@ -233,6 +248,7 @@ class GeneratedTerraformPlanRunner:
         *,
         allowed_exit_codes: frozenset[int] = frozenset({0}),
         stdout_file=None,
+        env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         try:
             result = subprocess.run(
@@ -243,7 +259,7 @@ class GeneratedTerraformPlanRunner:
                 text=stdout_file is None,
                 timeout=self.command_timeout_seconds,
                 check=False,
-                env=self._terraform_environment(),
+                env=env if env is not None else self._terraform_environment(),
             )
         except (OSError, subprocess.TimeoutExpired):
             raise TerraformPlanExecutionError(
@@ -344,7 +360,9 @@ class GeneratedTerraformPlanRunner:
             raise TerraformPlanExecutionError("generated Terraform configuration is unavailable") from error
 
     @staticmethod
-    def _terraform_environment() -> dict[str, str]:
+    def _terraform_environment(
+        aws_credentials: dict[str, str] | None = None,
+    ) -> dict[str, str]:
         allowed = {
             "PATH",
             "HOME",
@@ -361,7 +379,35 @@ class GeneratedTerraformPlanRunner:
             "AWS_ROLE_ARN",
             "AWS_WEB_IDENTITY_TOKEN_FILE",
         }
-        return {key: value for key, value in os.environ.items() if key in allowed}
+        environment = {key: value for key, value in os.environ.items() if key in allowed}
+        if aws_credentials is not None:
+            access_key = aws_credentials.get("AccessKeyId")
+            secret_key = aws_credentials.get("SecretAccessKey")
+            session_token = aws_credentials.get("SessionToken")
+            if not all(
+                isinstance(value, str) and value
+                for value in (access_key, secret_key, session_token)
+            ):
+                raise TerraformPlanExecutionError(
+                    "assumed AWS role returned incomplete temporary credentials"
+                )
+            for key in (
+                "AWS_PROFILE",
+                "AWS_DEFAULT_PROFILE",
+                "AWS_CONFIG_FILE",
+                "AWS_SHARED_CREDENTIALS_FILE",
+                "AWS_ROLE_ARN",
+                "AWS_WEB_IDENTITY_TOKEN_FILE",
+            ):
+                environment.pop(key, None)
+            environment.update(
+                {
+                    "AWS_ACCESS_KEY_ID": access_key,
+                    "AWS_SECRET_ACCESS_KEY": secret_key,
+                    "AWS_SESSION_TOKEN": session_token,
+                }
+            )
+        return environment
 
     @staticmethod
     def _aws_account_id() -> str:

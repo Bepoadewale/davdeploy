@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import uuid
 
@@ -24,7 +25,7 @@ class FakeS3:
         self.calls.append(kwargs)
         self.uploaded = kwargs["Body"]
         self.metadata = kwargs["Metadata"]
-        return {"VersionId": self.version_id}
+        return {"VersionId": self.version_id, "BucketKeyEnabled": True}
 
     def head_object(self, **kwargs):
         del kwargs
@@ -33,7 +34,13 @@ class FakeS3:
                 {"Error": {"Code": "NoSuchKey"}, "ResponseMetadata": {"HTTPStatusCode": 404}},
                 "HeadObject",
             )
-        return {"Metadata": self.metadata, "VersionId": self.version_id}
+        return {
+            "Metadata": self.metadata,
+            "VersionId": self.version_id,
+            "BucketKeyEnabled": True,
+            "ServerSideEncryption": "aws:kms",
+            "SSEKMSKeyId": KMS_KEY,
+        }
 
 
 class FakeCodeBuild:
@@ -41,6 +48,7 @@ class FakeCodeBuild:
         self.response = response or {
             "build": {
                 "id": f"{PROJECT}:{RUN_ID}",
+                "arn": f"arn:aws:codebuild:us-east-1:{OWNER}:build/{PROJECT}:{RUN_ID}",
                 "projectName": PROJECT,
                 "buildStatus": "IN_PROGRESS",
             }
@@ -84,11 +92,118 @@ def test_stage_input_is_encrypted_versioned_and_limited_to_run_key():
     assert call["ExpectedBucketOwner"] == OWNER
     assert call["ServerSideEncryption"] == "aws:kms"
     assert call["SSEKMSKeyId"] == KMS_KEY
-    assert call["BucketKeyEnabled"] is False
+    assert call["BucketKeyEnabled"] is True
     assert call["Metadata"] == {
         "davdeploy-run-id": RUN_ID,
         "davdeploy-input-sha256": digest,
     }
+
+
+def test_build_scoped_input_and_result_paths_are_distinct_per_build_arn():
+    configured = dispatcher()
+    build_a = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{PROJECT}:run-a"
+    build_b = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{PROJECT}:run-b"
+
+    input_a = configured.build_input_key(build_a)
+    input_b = configured.build_input_key(build_b)
+    result_a = configured.build_result_key(build_a)
+    result_b = configured.build_result_key(build_b)
+
+    assert input_a == f"plans/nova-generated/builds/{build_a}/input.json"
+    assert input_b == f"plans/nova-generated/builds/{build_b}/input.json"
+    assert result_a == f"plans/nova-generated/builds/{build_a}/result.json"
+    assert result_b == f"plans/nova-generated/builds/{build_b}/result.json"
+    assert input_a != input_b
+    assert result_a != result_b
+
+
+def result_object_s3(result, *, version_id="result-version-1", stored_digest=None):
+    body = json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
+    digest = stored_digest or hashlib.sha256(body).hexdigest()
+
+    class ResultS3:
+        def get_object(self, **kwargs):
+            assert kwargs == {
+                "Bucket": BUCKET,
+                "Key": configured.build_result_key(build_arn),
+                "ExpectedBucketOwner": OWNER,
+            }
+            return {
+                "Body": io.BytesIO(body),
+                "VersionId": version_id,
+                "ContentLength": len(body),
+                "Metadata": {
+                    "davdeploy-run-id": RUN_ID,
+                    "davdeploy-build-id": build_id,
+                    "davdeploy-result-sha256": digest,
+                },
+                "ServerSideEncryption": "aws:kms",
+                "SSEKMSKeyId": KMS_KEY,
+                "BucketKeyEnabled": True,
+            }
+
+    build_id = f"{PROJECT}:{RUN_ID}"
+    build_arn = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}"
+    configured = dispatcher(s3=ResultS3())
+    return configured, build_id, build_arn, digest
+
+
+def test_read_result_binds_exact_run_build_build_arn_and_object_version():
+    build_id = f"{PROJECT}:{RUN_ID}"
+    build_arn = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}"
+    result = {
+        "contract": "davdeploy.nova-plan-result.v1",
+        "run_id": RUN_ID,
+        "codebuild_project": PROJECT,
+        "codebuild_build_id": build_id,
+        "codebuild_build_arn": build_arn,
+    }
+    configured, build_id, build_arn, digest = result_object_s3(result)
+
+    document, version_id, result_sha256 = configured.read_result(
+        RUN_ID,
+        configured.build_result_key(build_arn),
+        build_id,
+        build_arn,
+    )
+
+    assert document == result
+    assert version_id == "result-version-1"
+    assert result_sha256 == digest
+
+
+@pytest.mark.parametrize("tamper", ["run_id", "build_arn", "metadata_digest", "version"])
+def test_read_result_rejects_tampered_identity_digest_or_missing_version(tamper):
+    build_id = f"{PROJECT}:{RUN_ID}"
+    build_arn = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}"
+    result = {
+        "contract": "davdeploy.nova-plan-result.v1",
+        "run_id": RUN_ID,
+        "codebuild_project": PROJECT,
+        "codebuild_build_id": build_id,
+        "codebuild_build_arn": build_arn,
+    }
+    version_id = "result-version-1"
+    stored_digest = None
+    if tamper == "run_id":
+        result["run_id"] = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    elif tamper == "build_arn":
+        result["codebuild_build_arn"] = build_arn.replace(RUN_ID, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    elif tamper == "version":
+        version_id = "null"
+    elif tamper == "metadata_digest":
+        stored_digest = "f" * 64
+    configured, build_id, build_arn, _digest = result_object_s3(
+        result, version_id=version_id, stored_digest=stored_digest
+    )
+
+    with pytest.raises(NovaPlanDispatchError, match="did not match|metadata did not match"):
+        configured.read_result(
+            RUN_ID,
+            configured.build_result_key(build_arn),
+            build_id,
+            build_arn,
+        )
 
 
 def test_stage_input_fails_closed_without_bucket_versioning():
@@ -250,7 +365,23 @@ def test_start_build_transport_timeout_is_reconciliation_required():
 def test_describe_build_requires_exact_project_and_id():
     build_id = f"{PROJECT}:{RUN_ID}"
     codebuild = FakeCodeBuild(
-        builds=[{"id": build_id, "projectName": PROJECT, "buildStatus": "SUCCEEDED"}]
+        builds=[
+            {
+                "id": build_id,
+                "arn": f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}",
+                "projectName": PROJECT,
+                "buildStatus": "SUCCEEDED",
+                "environment": {
+                    "environmentVariables": [
+                        {
+                            "name": "DAVDEPLOY_NOVA_PLAN_RUN_ID",
+                            "value": RUN_ID,
+                            "type": "PLAINTEXT",
+                        }
+                    ]
+                },
+            }
+        ]
     )
     configured = dispatcher(codebuild=codebuild)
 
@@ -297,6 +428,7 @@ class LookupCodeBuild:
 def _lookup_build(build_id, run_id):
     return {
         "id": build_id,
+        "arn": f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}",
         "projectName": PROJECT,
         "buildStatus": "IN_PROGRESS",
         "environment": {
@@ -417,6 +549,38 @@ def test_find_build_by_run_id_fails_closed_on_malformed_environment(build):
 
     assert error.value.outcome_uncertain
     assert error.value.phase == "build_start"
+
+
+@pytest.mark.parametrize("response", [None, [], {"builds": None}, {"builds": [None]}])
+def test_find_build_by_run_id_fails_closed_on_malformed_batch_response(response):
+    class MalformedBatchResponse:
+        def list_builds_for_project(self, **_kwargs):
+            return {"ids": [f"{PROJECT}:malformed"]}
+
+        def batch_get_builds(self, **_kwargs):
+            return response
+
+    configured = dispatcher(codebuild=MalformedBatchResponse())
+
+    with pytest.raises(NovaPlanDispatchError) as error:
+        configured.find_build_by_run_id(RUN_ID)
+
+    assert error.value.outcome_uncertain
+    assert error.value.phase == "build_start"
+
+
+@pytest.mark.parametrize("response", [None, [], {"builds": None}, {"builds": [None]}])
+def test_describe_build_fails_closed_on_malformed_batch_response(response):
+    class MalformedBatchResponse:
+        def batch_get_builds(self, **_kwargs):
+            return response
+
+    configured = dispatcher(codebuild=MalformedBatchResponse())
+
+    with pytest.raises(NovaPlanDispatchError) as error:
+        configured.describe_build(f"{PROJECT}:{RUN_ID}")
+
+    assert error.value.outcome_uncertain
 
 
 def test_run_id_path_is_canonicalized_to_lowercase_uuid():

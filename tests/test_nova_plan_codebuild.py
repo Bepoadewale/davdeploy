@@ -1,0 +1,611 @@
+from __future__ import annotations
+
+import ast
+import hashlib
+import io
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import davdeploy.nova_plan_codebuild as codebuild_runner
+import pytest
+from botocore.exceptions import ClientError
+from davdeploy.generated_deployment_contract import (
+    GeneratedDeploymentProposal,
+    GeneratedResource,
+    WorkloadRequirements,
+)
+from davdeploy.generated_plan_artifacts import canonical_json_digest
+from davdeploy.generated_plan_inspection import TerraformPlanSummary
+from davdeploy.generated_plan_ownership import PlanOwnershipScope
+from davdeploy.generated_plan_policy import (
+    GeneratedPlanPolicyResult,
+    PlanPolicyVerdict,
+)
+from davdeploy.generated_terraform_plan import (
+    PINNED_AWS_PROVIDER_VERSION,
+    PINNED_TERRAFORM_VERSION,
+    GeneratedTerraformPlan,
+)
+from davdeploy.terraform_generation import generation_context_digest
+from test_nova_plan_only_infra import ROOT
+
+RUN_ID = "12345678-1234-1234-1234-123456789012"
+PROJECT = "davdeploy-nova-plan-only"
+ACCOUNT_A = "654654474502"
+CONNECTION_A = "connection-a"
+EXTERNAL_A = "external-id-for-connection-a-0123456789"
+ACCOUNT_B = "111111111111"
+CONNECTION_B = "connection-b"
+EXTERNAL_B = "external-id-for-connection-b-0123456789"
+BUCKET = "davdeploy-tfplans-654654474502"
+KMS_KEY = "arn:aws:kms:us-east-1:654654474502:key/12345678-1234-1234-1234-123456789012"
+
+
+def make_input_document(
+    *,
+    run_id=RUN_ID,
+    build_arn=None,
+    account_id=ACCOUNT_A,
+    connection_id=CONNECTION_A,
+    external_id=EXTERNAL_A,
+    organization_id="org-a",
+    project_id="project-a",
+    plan_id="plan-a",
+    revision_id="revision-a",
+):
+    build_arn = build_arn or build_arn_for(run_id)
+    region = "us-east-1"
+    source_plan_id = f"source-{plan_id}"
+    revision = {
+        "target": {
+            "account_id": account_id,
+            "region": region,
+            "connection_id": connection_id,
+            "environment_id": "production",
+        },
+        "source_deployment_plan_id": source_plan_id,
+    }
+    revision_sha256 = canonical_json_digest(revision)
+    ownership = PlanOwnershipScope(
+        organization_id=organization_id,
+        workspace_id=organization_id,
+        project_id=project_id,
+        plan_id=plan_id,
+        revision_id=revision_id,
+        environment_id="production",
+    )
+    proposal = GeneratedDeploymentProposal(
+        contract_version="1.0",
+        source_revision=revision_id,
+        context_digest=generation_context_digest(revision, revision_id),
+        resources=(
+            GeneratedResource(
+                resource_id="bucket",
+                resource_type="aws_s3_bucket",
+                name="app_data",
+                arguments={"bucket_prefix": "fixture"},
+                rationale="Private application storage.",
+            ),
+        ),
+        requirements=WorkloadRequirements(region=region),
+    )
+    request_document = {
+        "organization_id": organization_id,
+        "project_id": project_id,
+        "plan_id": plan_id,
+        "revision_id": revision_id,
+        "revision_sha256": revision_sha256,
+        "target_account_id": account_id,
+        "region": region,
+        "connection_id": connection_id,
+        "source_deployment_plan_id": source_plan_id,
+    }
+    proposal_document = proposal.model_dump(mode="json")
+    return {
+        "contract": codebuild_runner.INPUT_CONTRACT,
+        "run_id": run_id,
+        "control_plane_run_id": run_id,
+        "runner_project": PROJECT,
+        "codebuild_build_arn": build_arn,
+        "request_document": request_document,
+        "request_sha256": canonical_json_digest(request_document),
+        "customer_revision": revision,
+        "revision_id": revision_id,
+        "revision_sha256": revision_sha256,
+        "proposal": proposal_document,
+        "proposal_sha256": canonical_json_digest(proposal_document),
+        "plan_role": {
+            "arn": f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection_id}",
+            "external_id": external_id,
+        },
+        "ownership_scope": {
+            "organization_id": ownership.organization_id,
+            "workspace_id": ownership.workspace_id,
+            "project_id": ownership.project_id,
+            "plan_id": ownership.plan_id,
+            "revision_id": ownership.revision_id,
+            "environment_id": ownership.environment_id,
+            "scope_sha256": ownership.scope_sha256(),
+            "plan_id_sha256": ownership.plan_id_sha256(),
+            "tags": ownership.tags(),
+        },
+    }
+
+
+def build_arn_for(run_id=RUN_ID, project=PROJECT):
+    return f"arn:aws:codebuild:us-east-1:{ACCOUNT_A}:build/{project}:{run_id}"
+
+
+def build_env(run_id=RUN_ID, project=PROJECT, build_arn=None):
+    return {
+        codebuild_runner.RUN_ID_ENV: run_id,
+        "CODEBUILD_BUILD_ID": f"{project}:{run_id}",
+        "CODEBUILD_BUILD_ARN": build_arn or build_arn_for(run_id, project),
+        "DAVDEPLOY_NOVA_PLAN_PROJECT_NAME": project,
+        "DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET": BUCKET,
+        "DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN": KMS_KEY,
+        "DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER": ACCOUNT_A,
+        "AWS_DEFAULT_REGION": "us-east-1",
+    }
+
+
+class FakeS3:
+    def __init__(self, *, get_version_id=None):
+        self.objects = {}
+        self.get_version_id = get_version_id
+        self.head_calls = []
+        self.get_calls = []
+        self.put_calls = []
+
+    def seed_input(self, build_arn, document):
+        key = codebuild_runner._build_object_key(build_arn, "input.json")
+        body = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+        version_id = "input-version-1"
+        self.objects[(BUCKET, key, version_id)] = {
+            "Body": body,
+            "Metadata": {
+                "davdeploy-run-id": document["run_id"],
+                "davdeploy-input-sha256": canonical_json_digest(document),
+            },
+            "VersionId": version_id,
+        }
+        return key, version_id
+
+    def head_object(self, *, Bucket, Key, ExpectedBucketOwner):
+        self.head_calls.append((Bucket, Key, ExpectedBucketOwner))
+        obj = self._latest(Bucket, Key)
+        return {
+            "VersionId": obj["VersionId"],
+            "ContentLength": len(obj["Body"]),
+            "Metadata": obj["Metadata"],
+            "ServerSideEncryption": "aws:kms",
+            "SSEKMSKeyId": KMS_KEY,
+            "BucketKeyEnabled": True,
+        }
+
+    def get_object(self, *, Bucket, Key, VersionId, ExpectedBucketOwner):
+        self.get_calls.append((Bucket, Key, VersionId, ExpectedBucketOwner))
+        obj = self.objects[(Bucket, Key, VersionId)]
+        return {
+            "Body": io.BytesIO(obj["Body"]),
+            "VersionId": self.get_version_id or VersionId,
+            "ContentLength": len(obj["Body"]),
+            "Metadata": obj["Metadata"],
+            "ServerSideEncryption": "aws:kms",
+            "SSEKMSKeyId": KMS_KEY,
+            "BucketKeyEnabled": True,
+        }
+
+    def put_object(self, **kwargs):
+        body = kwargs["Body"]
+        payload = body if isinstance(body, bytes) else body.read()
+        key = (kwargs["Bucket"], kwargs["Key"])
+        self.put_calls.append((kwargs, payload))
+        version_id = f"output-version-{len(self.put_calls)}"
+        self.objects[(key[0], key[1], version_id)] = {
+            "Body": payload,
+            "Metadata": kwargs["Metadata"],
+            "VersionId": version_id,
+        }
+        return {"VersionId": version_id, "BucketKeyEnabled": True}
+
+    def _latest(self, bucket, key):
+        matches = [
+            (version, value)
+            for (stored_bucket, stored_key, version), value in self.objects.items()
+            if stored_bucket == bucket and stored_key == key
+        ]
+        if not matches:
+            raise ClientError(
+                {"Error": {"Code": "NoSuchKey"}, "ResponseMetadata": {"HTTPStatusCode": 404}},
+                "HeadObject",
+            )
+        return max(matches, key=lambda item: item[0])[1]
+
+
+class FakeSTS:
+    def __init__(self, accepted_external_ids):
+        self.accepted_external_ids = accepted_external_ids
+        self.calls = []
+
+    def assume_role(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.accepted_external_ids.get(kwargs["RoleArn"]) != kwargs["ExternalId"]:
+            raise ClientError(
+                {"Error": {"Code": "AccessDenied", "Message": "external ID mismatch"}},
+                "AssumeRole",
+            )
+        return {
+            "Credentials": {
+                "AccessKeyId": "ASIAFIXTUREACCESSKEY",
+                "SecretAccessKey": "fixture-secret-credential",
+                "SessionToken": "fixture-session-token",
+            }
+        }
+
+
+class FakeSession:
+    def __init__(self, **kwargs):
+        self.credentials = kwargs
+
+    def client(self, name):
+        assert name == "sts"
+        return SimpleNamespace(get_caller_identity=lambda: {"Account": ACCOUNT_A})
+
+
+class FakePlanRunner:
+    def __init__(self, *, verdict=PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW):
+        self.verdict = verdict
+        self.calls = []
+
+    def plan(
+        self,
+        proposal,
+        *,
+        expected_account_id,
+        region,
+        ownership_scope,
+        workspace,
+        aws_credentials,
+    ):
+        self.calls.append(
+            {
+                "proposal": proposal,
+                "expected_account_id": expected_account_id,
+                "region": region,
+                "ownership_scope": ownership_scope,
+                "workspace": workspace,
+                "aws_credentials": aws_credentials,
+            }
+        )
+        saved_plan = Path(workspace) / "saved.tfplan"
+        saved_plan.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        saved_plan.write_bytes(b"opaque saved plan fixture")
+        plan_digest = hashlib.sha256(saved_plan.read_bytes()).hexdigest()
+        policy = GeneratedPlanPolicyResult(
+            verdict=self.verdict,
+            policy_version="fixture-policy-v1",
+            findings=(),
+        )
+        summary = TerraformPlanSummary(
+            format_version="1.2",
+            applyable=True,
+            errored=False,
+            resource_changes=(),
+            create_count=1,
+            update_count=0,
+            delete_count=0,
+            replacement_count=0,
+            read_count=0,
+            no_op_count=0,
+            drift_count=0,
+            contains_sensitive_changes=False,
+        )
+        return GeneratedTerraformPlan(
+            summary=summary,
+            policy=policy,
+            target_account_id=expected_account_id,
+            region=region,
+            terraform_version=PINNED_TERRAFORM_VERSION,
+            aws_provider_version=PINNED_AWS_PROVIDER_VERSION,
+            provider_lockfile_sha256="a" * 64,
+            proposal_sha256=canonical_json_digest(proposal.model_dump(mode="json")),
+            context_sha256=proposal.context_digest,
+            configuration_sha256="b" * 64,
+            ownership_scope_sha256=ownership_scope.scope_sha256(),
+            ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
+            saved_plan_sha256=plan_digest,
+            saved_plan_path=str(saved_plan),
+        )
+
+
+def run_build(monkeypatch, tmp_path, *, document=None, runner=None, sts=None, s3=None, env=None):
+    build_arn = build_arn_for()
+    document = document or make_input_document(build_arn=build_arn)
+    s3 = s3 or FakeS3()
+    key, version_id = s3.seed_input(build_arn, document)
+    sts = sts or FakeSTS(
+        {f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A}
+    )
+    runner = runner or FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+    result = codebuild_runner.run_nova_plan_build(
+        RUN_ID,
+        environment=env or build_env(),
+        s3_client=s3,
+        sts_client=sts,
+        runner=runner,
+        workspace_root=tmp_path,
+        input_poll_attempts=1,
+        input_poll_interval_seconds=0,
+    )
+    return result, document, key, version_id, s3, sts, runner
+
+
+def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
+    monkeypatch, tmp_path
+):
+    result, document, input_key, input_version, s3, sts, runner = run_build(
+        monkeypatch, tmp_path
+    )
+
+    assert s3.head_calls == [(BUCKET, input_key, ACCOUNT_A)]
+    assert s3.get_calls == [(BUCKET, input_key, input_version, ACCOUNT_A)]
+    assert sts.calls[0]["RoleArn"] == f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}"
+    assert sts.calls[0]["ExternalId"] == EXTERNAL_A
+    assert sts.calls[0]["RoleSessionName"] == f"davdeploy-nova-plan-{RUN_ID[:8]}"
+    assert runner.calls[0]["aws_credentials"]["SecretAccessKey"] == "fixture-secret-credential"
+    assert len(s3.put_calls) == 2
+
+    keys = [call[0]["Key"] for call in s3.put_calls]
+    expected_plan_prefix = f"plans/nova-generated/builds/{build_arn_for()}/"
+    assert all(key.startswith(expected_plan_prefix) for key in keys)
+    assert f"plans/nova-generated/builds/{build_arn_for()}/result.json" in keys
+    for call, _payload in s3.put_calls:
+        assert call["ServerSideEncryption"] == "aws:kms"
+        assert call["SSEKMSKeyId"] == KMS_KEY
+        assert call["BucketKeyEnabled"] is True
+        assert call["IfNoneMatch"] == "*"
+        assert call["ExpectedBucketOwner"] == ACCOUNT_A
+
+    result_put = next(call for call, _payload in s3.put_calls if call["Key"].endswith("result.json"))
+    result_bytes = next(payload for call, payload in s3.put_calls if call is result_put)
+    result_document = json.loads(result_bytes)
+    assert result["result_key"] == result_put["Key"]
+    assert result["result_version_id"] == "output-version-2"
+    assert result_document["run_id"] == RUN_ID
+    assert result_document["codebuild_build_arn"] == build_arn_for()
+    assert result_document["input"] == {
+        "key": input_key,
+        "version_id": input_version,
+        "sha256": canonical_json_digest(document),
+    }
+    assert result_document["planning_boundary"] == "INITIAL_PLAN_NO_REMOTE_STATE"
+    assert EXTERNAL_A not in result_bytes.decode()
+    assert "fixture-secret-credential" not in result_bytes.decode()
+    assert result["saved_plan"].version_id == "output-version-1"
+    assert not hasattr(runner, "apply")
+    assert not hasattr(runner, "destroy")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"run_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"},
+        {"codebuild_build_arn": "arn:aws:codebuild:us-east-1:654654474502:build/other:run"},
+        {"organization_id": "org-b"},
+    ],
+)
+def test_tampered_input_wrong_run_build_or_tenant_stops_before_assume_role(
+    monkeypatch, tmp_path, changes
+):
+    document = make_input_document(build_arn=build_arn_for())
+    if "organization_id" in changes:
+        document["ownership_scope"]["organization_id"] = changes["organization_id"]
+    else:
+        document.update(changes)
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert sts.calls == []
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+def test_wrong_input_version_is_rejected_before_assume_role(monkeypatch, tmp_path):
+    s3 = FakeS3(get_version_id="another-input-version")
+    document = make_input_document(build_arn=build_arn_for())
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="not immutably versioned"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert sts.calls == []
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+@pytest.mark.parametrize("tamper", ["revision_account", "revision_id"])
+def test_input_revision_or_account_tampering_is_rejected_before_assume_role(
+    monkeypatch, tmp_path, tamper
+):
+    document = make_input_document(build_arn=build_arn_for())
+    if tamper == "revision_account":
+        document["customer_revision"]["target"]["account_id"] = ACCOUNT_B
+    else:
+        document["revision_id"] = "revision-tampered"
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert sts.calls == []
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+def test_input_body_digest_tampering_is_rejected_before_assume_role(monkeypatch, tmp_path):
+    s3 = FakeS3()
+    document = make_input_document(build_arn=build_arn_for())
+    key, version_id = s3.seed_input(build_arn_for(), document)
+    stored = s3.objects[(BUCKET, key, version_id)]
+    tampered = dict(document)
+    tampered["proposal_sha256"] = "f" * 64
+    stored["Body"] = json.dumps(tampered, sort_keys=True, separators=(",", ":")).encode()
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="digest check"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert sts.calls == []
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+def test_denied_plan_policy_stores_no_plan_or_result(monkeypatch, tmp_path):
+    s3 = FakeS3()
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner(verdict=PlanPolicyVerdict.DENY)
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="policy denied"):
+        run_build(monkeypatch, tmp_path, runner=runner, sts=sts, s3=s3)
+
+    assert len(sts.calls) == 1
+    assert len(runner.calls) == 1
+    assert s3.put_calls == []
+
+
+def test_tampered_saved_plan_is_rejected_before_s3_write(tmp_path):
+    plan_path = tmp_path / "saved.tfplan"
+    plan_path.write_bytes(b"tampered saved plan")
+    s3 = FakeS3()
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="integrity verification"):
+        codebuild_runner._put_saved_plan(
+            s3,
+            BUCKET,
+            ACCOUNT_A,
+            KMS_KEY,
+            RUN_ID,
+            f"plans/nova-generated/builds/{build_arn_for()}/plan.tfplan",
+            str(plan_path),
+            hashlib.sha256(b"expected saved plan").hexdigest(),
+        )
+
+    assert s3.put_calls == []
+
+
+def test_cross_tenant_plan_role_fails_exact_external_id_trust(monkeypatch, tmp_path):
+    build_arn = build_arn_for()
+    document = make_input_document(
+        build_arn=build_arn,
+        account_id=ACCOUNT_B,
+        connection_id=CONNECTION_B,
+        external_id=EXTERNAL_A,
+        organization_id="org-b",
+        project_id="project-b",
+        plan_id="plan-b",
+        revision_id="revision-b",
+    )
+    role_b = f"arn:aws:iam::{ACCOUNT_B}:role/davdeployPlan-{CONNECTION_B}"
+    s3 = FakeS3()
+    s3.seed_input(build_arn, document)
+    sts = FakeSTS({role_b: EXTERNAL_B})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="could not be verified"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert len(sts.calls) == 1
+    assert sts.calls[0]["RoleArn"] == role_b
+    assert sts.calls[0]["ExternalId"] == EXTERNAL_A
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+def test_customer_plan_role_trust_requires_exact_external_id_and_deny_all():
+    template = (ROOT / "infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
+    plan_role = template.split("  NovaPlanOnlyRole:", 1)[1].split("  ExecutionRole:", 1)[0]
+    assert "!Ref davdeployNovaPlanBrokerRoleArn" in plan_role
+    assert "StringEquals:" in plan_role
+    assert "sts:ExternalId: !Ref ExternalId" in plan_role
+    assert "Effect: Deny" in plan_role
+    assert 'Action: "*"' in plan_role
+    assert 'Resource: "*"' in plan_role
+
+
+def test_fixed_build_runner_has_no_resource_mutation_calls():
+    module = ast.parse(Path(codebuild_runner.__file__).read_text())
+    mutation_calls = [
+        node.func.attr
+        for node in ast.walk(module)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr.casefold() in {"apply", "destroy", "delete_resource"}
+    ]
+    assert mutation_calls == []
+    assert not hasattr(codebuild_runner.GeneratedTerraformPlanRunner, "apply")
+    assert not hasattr(codebuild_runner.GeneratedTerraformPlanRunner, "destroy")

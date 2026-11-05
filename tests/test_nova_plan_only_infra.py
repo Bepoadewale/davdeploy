@@ -1,4 +1,6 @@
 import ast
+import re
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +23,15 @@ def test_nova_plan_only_resources_are_opt_in_and_fail_closed() -> None:
     assert 'default     = false' in variable
     assert 'var.nova_plan_artifact_bucket != ""' in variable
     assert 'var.nova_plan_kms_key_arn != ""' in variable
+    assert (
+        "condition     = !var.enable_nova_plan_only_runner || var.enable_nova_plan_reviews"
+        in variable
+    )
     assert "TF_VAR_enable_nova_plan_only_runner" in PLAN_WORKFLOW
+
+    api_policy = resource_block(MAIN, "aws_iam_role_policy", "api")
+    assert '"codebuild:ListBuildsForProject", "codebuild:BatchGetBuilds"' in api_policy
+    assert "nova_plan_artifact_bucket}/plans/nova-generated/requests/" in api_policy
 
     for resource_type, resource_name in (
         ("aws_iam_role", "nova_plan_only"),
@@ -35,10 +45,12 @@ def test_nova_plan_only_resources_are_opt_in_and_fail_closed() -> None:
         assert "count = var.enable_nova_plan_only_runner ? 1 : 0" in block
 
     project = resource_block(MAIN, "aws_codebuild_project", "nova_plan_only")
-    assert 'type = "NO_SOURCE"' in project
+    assert re.search(r'type\s*=\s*"NO_SOURCE"', project)
     assert 'artifacts { type = "NO_ARTIFACTS" }' in project
     assert 'privileged_mode             = false' in project
-    assert "exit 78" in project
+    assert "python3.12 -m davdeploy.nova_plan_codebuild" in project
+    assert "1.14.7" in project
+    assert "sha256sum --check --status" in project
     assert 'DAVDEPLOY_NOVA_PLAN_PROJECT' in MAIN
     assert 'aws_codebuild_project.nova_plan_only[0].name : ""' in MAIN
 
@@ -50,8 +62,9 @@ def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_log
     assert "aws_cloudwatch_log_group.nova_plan_only[0].arn" in policy
     assert '"s3:GetObject"' in policy
     assert '"s3:PutObject"' in policy
-    assert "nova_plan_only_input_key" in policy
-    assert "nova_plan_only_result_key" in policy
+    assert "nova_plan_only_scoped_input_key" in policy
+    assert "nova_plan_only_scoped_result_key" in policy
+    assert "nova_plan_only_scoped_saved_plan_key" in policy
     assert '"s3:x-amz-server-side-encryption"' in policy
     assert '"s3:x-amz-server-side-encryption-aws-kms-key-id"' in policy
     assert '"kms:ViaService"' in policy
@@ -62,11 +75,14 @@ def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_log
         "customer_execution_state_bucket",
         "customer_execution_lock_table",
         "secretsmanager:",
-        '"sts:AssumeRole"',
         '"terraform:Apply"',
         '"terraform:Destroy"',
     ):
         assert forbidden not in policy
+    assert 'Action   = ["sts:AssumeRole"]' in policy
+    assert 'role/davdeployPlan-*' in policy
+    assert '"sts:ExternalId"      = "?*"' in policy
+    assert '"sts:RoleSessionName" = "davdeploy-nova-plan-????????"' in policy
 
     role = resource_block(MAIN, "aws_iam_role", "nova_plan_only")
     assert '"aws:SourceAccount"' in role
@@ -152,7 +168,7 @@ def test_api_artifact_permissions_and_completion_events_are_exactly_scoped() -> 
     api_artifacts = resource_block(MAIN, "aws_iam_role_policy", "api_nova_plan_only_artifacts")
     assert "count = var.enable_nova_plan_only_runner ? 1 : 0" in api_artifacts
     assert "nova_plan_only_input_key" in api_artifacts
-    assert "nova_plan_only_result_key" in api_artifacts
+    assert "nova_plan_only_build_result_key" in api_artifacts
     assert '"kms:EncryptionContext:aws:s3:arn"' in api_artifacts
 
     event_rule = resource_block(MAIN, "aws_cloudwatch_event_rule", "nova_plan_only_completion")
@@ -164,9 +180,77 @@ def test_api_artifact_permissions_and_completion_events_are_exactly_scoped() -> 
 
 
 def test_plan_only_object_keys_require_object_level_sse_kms_context() -> None:
-    assert 'nova_plan_only_input_key    = "plans/nova-generated/requests/*/input.json"' in MAIN
-    assert 'nova_plan_only_result_key   = "plans/nova-generated/requests/*/result.json"' in MAIN
+    assert re.search(
+        r'nova_plan_only_input_key\s*=\s*"plans/nova-generated/requests/\*/input\.json"',
+        MAIN,
+    )
+    assert re.search(
+        r'nova_plan_only_build_result_key\s*=\s*"\$\{local\.nova_plan_only_build_prefix\}/result\.json"',
+        MAIN,
+    )
     role_policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only")
     assert "StringLike" in role_policy
-    assert "nova_plan_only_input_key" in role_policy
-    assert "nova_plan_only_result_key" in role_policy
+    assert "nova_plan_only_scoped_input_key" in role_policy
+    assert "nova_plan_only_scoped_result_key" in role_policy
+
+    bootstrap = (ROOT / "infrastructure/terraform/terraform-operations-bootstrap/main.tf").read_text()
+    plans_encryption = bootstrap.split(
+        'resource "aws_s3_bucket_server_side_encryption_configuration" "plans"', 1
+    )[1].split('\nresource "', 1)[0]
+    assert "bucket_key_enabled = true" in plans_encryption
+    api_artifacts = resource_block(MAIN, "aws_iam_role_policy", "api_nova_plan_only_artifacts")
+    bucket_context = (
+        '"kms:EncryptionContext:aws:s3:arn" = '
+        '"arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"'
+    )
+    assert api_artifacts.count(bucket_context) == 3
+    dispatcher = (ROOT / "apps/api/src/davdeploy/nova_plan_dispatch.py").read_text()
+    codebuild_runner = (ROOT / "apps/api/src/davdeploy/nova_plan_codebuild.py").read_text()
+    assert dispatcher.count("BucketKeyEnabled=True") == 1
+    assert codebuild_runner.count("BucketKeyEnabled=True") == 2
+
+
+def test_codebuild_artifact_permissions_are_scoped_to_its_exact_build_arn() -> None:
+    policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only")
+    assert re.search(
+        r'nova_plan_only_scoped_prefix\s*=\s*"plans/nova-generated/builds/\$\$\{codebuild:buildArn\}"',
+        MAIN,
+    )
+    for scoped_key in (
+        "nova_plan_only_scoped_input_key",
+        "nova_plan_only_scoped_result_key",
+        "nova_plan_only_scoped_saved_plan_key",
+    ):
+        assert f"local.{scoped_key}" in policy
+    for unscoped_key in (
+        "local.nova_plan_only_input_key}",
+        "local.nova_plan_only_build_input_key}",
+        "local.nova_plan_only_build_result_key}",
+        "local.nova_plan_only_build_saved_plan_key}",
+    ):
+        assert unscoped_key not in policy
+    assert "plans/nova-generated/requests/" not in policy
+    bucket_context = (
+        '"kms:EncryptionContext:aws:s3:arn" = '
+        '"arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"'
+    )
+    assert policy.count(bucket_context) == 2
+    assert "nova_plan_only_build_prefix}/*\"" not in policy
+
+    scoped_prefix = "plans/nova-generated/builds/$${codebuild:buildArn}"
+    build_a = "arn:aws:codebuild:us-east-1:654654474502:build/project-a:run-a"
+    build_b = "arn:aws:codebuild:us-east-1:654654474502:build/project-a:run-b"
+    for suffix, object_suffix in (
+        ("/input.json", "/input.json"),
+        ("/result.json", "/result.json"),
+        (
+            "/org-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/project-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/"
+            "revision-cccccccccccccccccccccccccccccccc/" + "d" * 64 + ".tfplan",
+            "/org-*/project-*/revision-*/*.tfplan",
+        ),
+    ):
+        resource_pattern = scoped_prefix.replace("$${codebuild:buildArn}", build_a) + object_suffix
+        key_a = f"plans/nova-generated/builds/{build_a}{suffix}"
+        key_b = f"plans/nova-generated/builds/{build_b}{suffix}"
+        assert fnmatchcase(key_a, resource_pattern)
+        assert not fnmatchcase(key_b, resource_pattern)

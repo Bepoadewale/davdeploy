@@ -47,6 +47,9 @@ package-dir = {"" = "apps/api/src"}
 where = ["apps/api/src"]
 include = ["davdeploy*"]
 
+[tool.setuptools.package-data]
+davdeploy = ["terraform-provider.lock.hcl"]
+
 [tool.pytest.ini_options]
 pythonpath = ["apps/api/src"]
 testpaths = ["tests"]
