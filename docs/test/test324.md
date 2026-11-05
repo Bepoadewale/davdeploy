@@ -115,3 +115,23 @@ docker compose -p davdeploy-pr324-cleanroom -f docker-compose.yml -f docker-comp
 A follow-up `docker ps` and `docker volume ls`, both filtered to
 `davdeploy-pr324-cleanroom`, returned no matching containers or volumes. Compose created no
 named volume; PostgreSQL used `tmpfs`. No AWS resource or generated local file was deleted.
+
+## IAM auto-retry follow-up
+
+The `StartBuild` policy now explicitly denies the supported `codebuild:autoRetryLimit`
+condition key. CodeBuild does not expose IAM condition keys for every optional StartBuild
+field, including timeout and debug-session options; the dependent PR #325 adds a static
+source contract test proving its fixed dispatcher sends only the project name, idempotency
+token, and trusted run-ID environment override.
+
+```text
+.venv/bin/python -m pytest tests/test_nova_plan_only_infra.py -q
+terraform fmt -check -diff infrastructure/terraform/serverless-control-plane/main.tf
+terraform validate
+git diff --check
+```
+
+The focused contract tests passed (5 tests), Terraform formatting and validation passed, and
+`git diff --check` passed. Terraform validation used the existing initialized local providers;
+no AWS calls or apply were performed. The protected untracked `--only-show-errors` file was
+preserved.

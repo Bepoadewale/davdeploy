@@ -86,6 +86,7 @@ def test_api_can_start_only_this_project_with_the_trusted_run_id_override() -> N
 
     blocked_keys = MAIN.split("nova_plan_only_blocked_start_build_keys = [", 1)[1].split("]", 1)[0]
     for override in (
+        "codebuild:autoRetryLimit",
         "codebuild:source.buildspec",
         "codebuild:source.location",
         "codebuild:source.auth.resource",
