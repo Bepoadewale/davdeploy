@@ -14,7 +14,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - Connection verification assumes the discovery role and, when present, the execution role; it confirms account identity but does not evaluate effective role permissions.
 - `GeneratedTerraformPlanRunner` is backend-free and has no apply/destroy method. Its current plan configuration uses only the trusted `aws_caller_identity` data source.
 - The isolated Nova CodeBuild project and future plan-broker permissions are being handled separately. This PR must not change that infrastructure or grant AssumeRole to an existing executor.
-- Migration numbering is pending PR #325. This branch's plan-role migration is prepared at version 32 after PR #325's v31 migration. Keep this PR draft until #325 merges and the migration is reconciled against the merged mainline.
+- PR #325 (`feat/nova-plan-request-api`) is the base for this stacked branch and ends at schema v31. PR #326 adds only the v31→v32 plan-role migration. Fresh databases create current metadata and record v32 directly.
 
 ## Research / references used
 
@@ -26,7 +26,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Work planned for the PR
 
-- Add a separate `plan_role_arn` purpose to the connection model and schema migration v32 after PR #325 lands; keep it distinct from `execution_role_arn`.
+- Add a separate `plan_role_arn` purpose to the connection model and schema migration v32 after PR #325's v31 migrations; keep it distinct from `execution_role_arn`.
 - Add `plan-only` to Quick Create and the reviewed customer CloudFormation template, creating a role with a unique name, exact ExternalId trust, API and future isolated Nova plan broker principals, and explicit deny-all customer service permissions.
 - Require a workspace administrator and a discovery-only connection before generating a plan-only setup URL. Preserve general verification of execution roles on legacy mixed-role connections.
 - Distinguish an expected, unverified template policy from a trust/account-verified role whose installed policy is still unattested. Do not infer plan-only permissions for manually attached arbitrary role ARNs.
@@ -42,13 +42,14 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - [x] Plan-only setup URL generation requires a workspace administrator, including for same-tenant developers.
 - [x] Connection details distinguish an expected, unverified deny policy from verified role trust with policy contents still unattested.
 - [x] Existing apply paths cannot use the plan role as execution access.
+- [x] Schema migration v32 follows #325's v31 migration, and an existing v31 database adds only plan-role columns before advancing to v32.
 - [x] Existing discovery and administrator-pilot contracts remain compatible.
 - [x] Focused tests pass; no AWS resources are created or changed.
 - [x] Required broker AssumeRole policy changes are documented as a follow-up and no existing executor policy is broadened here.
 
 ## Acceptance status
 
-The plan-only authorization and status-reporting safeguards are implemented and pass focused local tests. The PR remains draft while PR #325 lands and this PR's migration is reconciled to v32. Live plan-role verification remains unavailable until a separate change grants the API verification broker permission to assume `davdeployPlan-*`; no live account verification is claimed here.
+The plan-only authorization and status-reporting safeguards are implemented. PR #325's final v31 branch is merged into this branch using a normal merge, and the v32 migration now follows it. Focused migration verification is recorded in `docs/test/test326.md`. The PR remains draft and targets the #325 branch. Live plan-role verification remains unavailable until a separate change grants the API verification broker permission to assume `davdeployPlan-*`; no live account verification is claimed here.
 
 ## Tests / validation performed
 
@@ -59,12 +60,17 @@ The plan-only authorization and status-reporting safeguards are implemented and 
 - `git diff --check` — passed.
 - `uv run --locked --extra dev pytest -q tests/test_product.py` — 47 passed; one existing Starlette/httpx deprecation warning.
 - `uv run --locked --extra dev pytest -q tests/test_product.py -k 'plan_only or plan_role or quick_create_setup'` — 8 passed, 39 deselected; one existing Starlette/httpx deprecation warning.
+- `uv run --locked --extra dev pytest -q tests/test_db_config.py tests/test_invitation_email.py` — 15 passed after merging the final #325 v31 migration chain and adding the #326 v32 migration.
+- `uv run --locked --extra dev pytest -q tests/test_product.py tests/test_connection_experience.py tests/test_customer_aws_connection_contract.py tests/test_db_config.py tests/test_invitation_email.py tests/test_cloud_execution.py` — 142 passed; one existing Starlette/httpx deprecation warning.
+- `make verify` — passed: 764 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration; one existing Starlette/httpx deprecation warning.
+- `GITHUB_PR_NUMBER=326 uv run --locked python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed before the final ticket/evidence wording update; rerun before commit.
 - `ruff format --check` on the changed Python files still flags existing unrelated lines in `integrations.py`, `service.py`, and `test_cloud_execution.py`; no formatting-only changes were made to those unrelated lines.
 - The full clean-room cycle was not run because its `clean-local` step deletes `.venv` and `.local` and removes Docker volumes; the repository's user deletion rule requires explicit approval for that cleanup. No AWS calls, stacks, or customer resources were created.
 
 ## Evidence files produced
 
-None. This PR has no customer workload run and requires no `docs/test/test326.md` workload evidence file.
+- `docs/test/test326.md` records local schema-migration and focused contract test evidence only. It is not a customer workload run and makes no AWS deployment claim.
 
 ## Boundaries
 
