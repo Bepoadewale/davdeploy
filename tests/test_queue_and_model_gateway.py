@@ -442,6 +442,31 @@ def test_nova_gateway_provider_5xx_is_uncertain():
     assert error.value.outcome_uncertain
 
 
+def test_nova_gateway_provider_408_timeout_is_uncertain():
+    document = {"customer_request": "deploy"}
+
+    class TimeoutRuntime:
+        def converse(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "ModelTimeoutException"},
+                    "ResponseMetadata": {"HTTPStatusCode": 408},
+                },
+                "Converse",
+            )
+
+    gateway = BedrockNovaGateway(nova_config(), TimeoutRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.outcome_uncertain
+
+
 def test_nova_gateway_exhausted_json_repair_preserves_complete_cost_and_evidence():
     document = {"customer_request": "deploy"}
     client = FakeBedrockRuntime(output={})

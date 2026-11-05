@@ -560,7 +560,11 @@ class BedrockNovaGateway:
                     code = str(error_data.get("Code") or code)
                 metadata = response.get("ResponseMetadata")
                 status = metadata.get("HTTPStatusCode") if isinstance(metadata, dict) else None
-                outcome_uncertain = type(status) is not int or not 400 <= status < 500
+                outcome_uncertain = (
+                    type(status) is not int
+                    or status == 408
+                    or not 400 <= status < 500
+                )
             raise ModelGatewayUnavailable(
                 f"Bedrock model call failed ({code})",
                 outcome_uncertain=outcome_uncertain,

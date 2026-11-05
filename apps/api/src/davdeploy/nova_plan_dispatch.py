@@ -253,11 +253,35 @@ class NovaPlanOnlyDispatcher:
                     }
                 ],
             )
-        except ClientError:
-            raise NovaPlanDispatchError("Nova plan build was rejected by the configured runner") from None
+        except ClientError as error:
+            response = error.response if isinstance(error.response, dict) else {}
+            error_data = response.get("Error")
+            code = (
+                str(error_data.get("Code") or "unknown")
+                if isinstance(error_data, dict)
+                else "unknown"
+            )
+            metadata = response.get("ResponseMetadata")
+            status = metadata.get("HTTPStatusCode") if isinstance(metadata, dict) else None
+            if (
+                "timeout" in code.casefold()
+                or type(status) is not int
+                or status == 408
+                or not 400 <= status < 500
+            ):
+                raise NovaPlanDispatchError(
+                    f"Nova plan build start outcome is uncertain ({code})",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                ) from None
+            raise NovaPlanDispatchError(
+                f"Nova plan build was rejected by the configured runner ({code})"
+            ) from None
         except (BotoCoreError, OSError, TimeoutError):
             raise NovaPlanDispatchError(
-                "Nova plan build start could not be confirmed", outcome_uncertain=True
+                "Nova plan build start could not be confirmed",
+                outcome_uncertain=True,
+                phase="build_start",
             ) from None
         build = response.get("build") or {}
         build_id = build.get("id")
@@ -270,7 +294,9 @@ class NovaPlanOnlyDispatcher:
             or status not in {"IN_PROGRESS", "QUEUED"}
         ):
             raise NovaPlanDispatchError(
-                "Nova plan build identity could not be verified", outcome_uncertain=True
+                "Nova plan build identity could not be verified",
+                outcome_uncertain=True,
+                phase="build_start",
             )
         return NovaPlanBuild(build_id, returned_project, status)
 

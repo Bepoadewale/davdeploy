@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +102,49 @@ def test_api_can_start_only_this_project_with_the_trusted_run_id_override() -> N
         "codebuild:logsConfig",
     ):
         assert override in blocked_keys
+
+
+def test_fixed_dispatcher_source_sends_no_other_start_build_arguments() -> None:
+    source = (ROOT / "apps/api/src/davdeploy/nova_plan_dispatch.py").read_text()
+    module = ast.parse(source)
+    dispatcher_class = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "NovaPlanOnlyDispatcher"
+    )
+    start_build = next(
+        node
+        for node in dispatcher_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "start_build"
+    )
+    calls = [
+        node
+        for node in ast.walk(start_build)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "start_build"
+    ]
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert all(keyword.arg is not None for keyword in call.keywords)
+    assert {keyword.arg for keyword in call.keywords} == {
+        "projectName",
+        "idempotencyToken",
+        "environmentVariablesOverride",
+    }
+    overrides = next(
+        keyword.value
+        for keyword in call.keywords
+        if keyword.arg == "environmentVariablesOverride"
+    )
+    assert isinstance(overrides, ast.List)
+    assert len(overrides.elts) == 1
+    run_id_override = overrides.elts[0]
+    assert isinstance(run_id_override, ast.Dict)
+    assert {
+        key.value for key in run_id_override.keys if isinstance(key, ast.Constant)
+    } == {"name", "value", "type"}
 
 
 def test_api_artifact_permissions_and_completion_events_are_exactly_scoped() -> None:

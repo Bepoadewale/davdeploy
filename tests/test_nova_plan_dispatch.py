@@ -5,7 +5,7 @@ import json
 import uuid
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ReadTimeoutError
 from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
 
 PROJECT = "davdeploy-nova-plan-only"
@@ -203,6 +203,48 @@ def test_start_build_rejects_unexpected_project_or_terminal_state(build):
 
     with pytest.raises(NovaPlanDispatchError, match="identity could not be verified"):
         configured.start_build(RUN_ID, RUN_ID)
+
+
+@pytest.mark.parametrize(
+    ("status", "error_code", "uncertain"),
+    [
+        (400, "InvalidInputException", False),
+        (400, "RequestTimeout", True),
+        (408, "TimeoutException", True),
+        (503, "ServiceUnavailableException", True),
+        (None, "UnknownError", True),
+    ],
+)
+def test_start_build_classifies_client_error_acceptance_uncertainty(status, error_code, uncertain):
+    class FailingCodeBuild:
+        def start_build(self, **_kwargs):
+            response = {"Error": {"Code": error_code}}
+            if status is not None:
+                response["ResponseMetadata"] = {"HTTPStatusCode": status}
+            raise ClientError(response, "StartBuild")
+
+    configured = dispatcher(codebuild=FailingCodeBuild())
+
+    with pytest.raises(NovaPlanDispatchError) as error:
+        configured.start_build(RUN_ID, RUN_ID)
+
+    assert error.value.outcome_uncertain is uncertain
+    if uncertain:
+        assert error.value.phase == "build_start"
+
+
+def test_start_build_transport_timeout_is_reconciliation_required():
+    class TimeoutCodeBuild:
+        def start_build(self, **_kwargs):
+            raise ReadTimeoutError(endpoint_url="https://codebuild.example.test")
+
+    configured = dispatcher(codebuild=TimeoutCodeBuild())
+
+    with pytest.raises(NovaPlanDispatchError) as error:
+        configured.start_build(RUN_ID, RUN_ID)
+
+    assert error.value.outcome_uncertain
+    assert error.value.phase == "build_start"
 
 
 def test_describe_build_requires_exact_project_and_id():
