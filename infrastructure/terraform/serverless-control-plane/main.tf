@@ -12,6 +12,7 @@ locals {
   nova_plan_only_input_key    = "plans/nova-generated/requests/*/input.json"
   nova_plan_only_result_key   = "plans/nova-generated/requests/*/result.json"
   nova_plan_only_blocked_start_build_keys = [
+    "codebuild:autoRetryLimit",
     "codebuild:source.buildspec",
     "codebuild:source",
     "codebuild:source.location",
@@ -356,8 +357,10 @@ resource "aws_iam_role_policy" "api_nova_plan_only_codebuild" {
         },
       ],
       # IAM evaluates different condition keys in one condition block as AND.
-      # Emit one explicit Deny per override key so any one is enough to reject
-      # StartBuild, as CodeBuild documents for its Null presence conditions.
+      # Emit one explicit Deny per IAM-exposed override key so any one is enough
+      # to reject StartBuild. AWS has no condition keys for every StartBuild
+      # field (including timeout and debug-session options); the fixed dispatcher
+      # also limits the request arguments it sends.
       [
         for condition_key in local.nova_plan_only_blocked_start_build_keys : {
           Effect   = "Deny"

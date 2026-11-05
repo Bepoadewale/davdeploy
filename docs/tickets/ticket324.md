@@ -7,7 +7,7 @@ Branch: `feat/nova-plan-only-codebuild`
 
 Create a dedicated, disabled-by-default CodeBuild project and service role for future trusted Nova plan-only work. Keep its authority separate from `customer_executor`, limit its object access to request input/result artifacts, scope its logs and KMS context, and route completion events only for this exact project. The API project-name environment variable is `DAVDEPLOY_NOVA_PLAN_PROJECT`; it is empty while the project flag is disabled.
 
-The project must fail closed until the trusted fixed runner is wired. The future API caller may pass only the server-owned run ID override `DAVDEPLOY_NOVA_PLAN_RUN_ID`; source, buildspec, service role, environment/compute, artifact, and other authority-changing StartBuild overrides must be denied.
+The project must fail closed until the trusted fixed runner is wired. The future API caller may pass only the server-owned run ID override `DAVDEPLOY_NOVA_PLAN_RUN_ID`; StartBuild override fields with supported CodeBuild IAM condition keys are denied. CodeBuild has no IAM condition keys for some options, including timeout and debug-session settings, so a fixed application dispatcher must not send those fields. PR #325's source contract test asserts the dispatcher sends only the project name, idempotency token, and run-ID override.
 
 ## Current repo state
 
@@ -33,7 +33,7 @@ The project must fail closed until the trusted fixed runner is wired. The future
 - Keep the project on `NO_SOURCE`, `NO_ARTIFACTS`, and non-privileged Linux compute with a checked-in buildspec that exits unsuccessfully until the trusted fixed runner is wired.
 - Give the service role only scoped log writes, `GetObject` on `plans/nova-generated/requests/*/input.json`, `PutObject` on the matching `result.json` objects, and KMS decrypt/data-key access conditioned on regional S3 and those object ARN contexts.
 - Give the API role conditional `StartBuild` and `BatchGetBuilds` access on this exact project only, plus request-input/result-output access for the exact object paths. Set `DAVDEPLOY_NOVA_PLAN_PROJECT` to the project name only when enabled.
-- Deny command-changing `StartBuild` overrides with official CodeBuild condition keys. Permit the required `DAVDEPLOY_NOVA_PLAN_RUN_ID` environment variable name and no other override name. Require the name/value entries; the API remains responsible for supplying the trusted persisted run ID.
+- Deny `StartBuild` overrides that CodeBuild exposes through IAM condition keys, including `codebuild:autoRetryLimit`. Permit the required `DAVDEPLOY_NOVA_PLAN_RUN_ID` environment variable name and no other override name. Require the name/value entries; the API remains responsible for supplying the trusted persisted run ID.
 - Route CodeBuild completion events for this exact project to the existing worker queue.
 - Add focused static contract tests and PR-numbered validation evidence. Do not call AWS or apply Terraform.
 
@@ -43,7 +43,8 @@ The project must fail closed until the trusted fixed runner is wired. The future
 - [x] The isolated project is non-privileged, uses no source/artifact override, and fails closed until a fixed runner is wired.
 - [x] Its role has only scoped log access, input `GetObject`, result `PutObject`, and object-context-scoped KMS access; no customer state/lock, customer connection secret, or customer-role assumption permissions.
 - [x] API `StartBuild` and `BatchGetBuilds` grants are conditional and target only this project's ARN; newly added API input/result object actions use only their dedicated keys and the configured plan KMS key/context.
-- [x] StartBuild source/buildspec/service-role/environment/compute/artifact/other authority-changing overrides are denied; the only accepted environment override name is the required run ID. The application must source its value from the trusted persisted run.
+- [x] IAM denies supported StartBuild source/buildspec/service-role/environment/compute/artifact/auto-retry and other condition-key overrides; the only accepted environment override name is the required run ID. The application must source its value from the trusted persisted run.
+- [x] Known CodeBuild condition-key gap is documented: IAM cannot reject timeout/debug-session fields that lack condition keys; PR #325 statically checks that the fixed dispatcher does not submit them.
 - [x] Completion events match only this CodeBuild project's exact name and terminal build statuses.
 - [x] Focused tests, Terraform formatting/validation, repository checks, and documentation checks pass. All seven required GitHub checks pass in [run 41917758576](https://github.com/Bepoadewale/davdeploy/actions/runs/41917758576); the final evidence update also passed all seven in [run 41918524417](https://github.com/Bepoadewale/davdeploy/actions/runs/41918524417).
 - [x] No AWS calls/apply, no merge, no pricing changes, no PR #323 changes, and no modification of the protected untracked file.
