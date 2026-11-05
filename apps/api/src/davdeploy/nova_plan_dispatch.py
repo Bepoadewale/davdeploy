@@ -44,6 +44,9 @@ class NovaPlanOnlyDispatcher:
     image, compute, artifacts, or commands.
     """
 
+    _RUN_ID_ENVIRONMENT_VARIABLE = "DAVDEPLOY_NOVA_PLAN_RUN_ID"
+    _BUILD_LOOKUP_PAGE_LIMIT = 10
+
     def __init__(
         self,
         *,
@@ -232,14 +235,19 @@ class NovaPlanOnlyDispatcher:
             return None
         return version_id
 
-    def start_build(self, run_id: str) -> NovaPlanBuild:
+    def start_build(self, run_id: str, idempotency_token: str) -> NovaPlanBuild:
         run_id = _validate_run_id(run_id)
+        if not isinstance(idempotency_token, str) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,64}", idempotency_token
+        ):
+            raise NovaPlanDispatchError("Nova plan build idempotency token is invalid")
         try:
             response = self.codebuild.start_build(
                 projectName=self.project_name,
+                idempotencyToken=idempotency_token,
                 environmentVariablesOverride=[
                     {
-                        "name": "DAVDEPLOY_NOVA_PLAN_RUN_ID",
+                        "name": self._RUN_ID_ENVIRONMENT_VARIABLE,
                         "value": run_id,
                         "type": "PLAINTEXT",
                     }
@@ -265,6 +273,167 @@ class NovaPlanOnlyDispatcher:
                 "Nova plan build identity could not be verified", outcome_uncertain=True
             )
         return NovaPlanBuild(build_id, returned_project, status)
+
+    def find_build_by_run_id(self, run_id: str) -> NovaPlanBuild | None:
+        """Find one build by its exact server-owned run-ID override, fail closed otherwise."""
+        run_id = _validate_run_id(run_id)
+        build_ids: list[str] = []
+        next_token: str | None = None
+        seen_tokens: set[str] = set()
+        complete = False
+        try:
+            for _ in range(self._BUILD_LOOKUP_PAGE_LIMIT):
+                request: dict[str, Any] = {"projectName": self.project_name}
+                if next_token:
+                    request["nextToken"] = next_token
+                page = self.codebuild.list_builds_for_project(**request)
+                ids = page.get("ids")
+                if not isinstance(ids, list) or any(
+                    not isinstance(build_id, str)
+                    or not build_id.startswith(f"{self.project_name}:")
+                    for build_id in ids
+                ):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build search returned an invalid project result",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                build_ids.extend(ids)
+                next_token = page.get("nextToken")
+                if not next_token:
+                    complete = True
+                    break
+                if not isinstance(next_token, str) or next_token in seen_tokens:
+                    raise NovaPlanDispatchError(
+                        "Nova plan build search pagination could not be confirmed",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                seen_tokens.add(next_token)
+        except NovaPlanDispatchError:
+            raise
+        except (BotoCoreError, ClientError, OSError, TimeoutError, ValueError, TypeError, AttributeError):
+            raise NovaPlanDispatchError(
+                "Nova plan build search could not be confirmed",
+                outcome_uncertain=True,
+                phase="build_start",
+            ) from None
+        if not complete:
+            raise NovaPlanDispatchError(
+                "Nova plan build search exceeded its safe pagination limit",
+                outcome_uncertain=True,
+                phase="build_start",
+            )
+
+        matches: list[NovaPlanBuild] = []
+        for offset in range(0, len(build_ids), 100):
+            batch_ids = build_ids[offset : offset + 100]
+            try:
+                response = self.codebuild.batch_get_builds(ids=batch_ids)
+            except (BotoCoreError, ClientError, OSError, TimeoutError, ValueError, TypeError):
+                raise NovaPlanDispatchError(
+                    "Nova plan build details could not be confirmed",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                ) from None
+            builds = response.get("builds")
+            if (
+                not isinstance(builds, list)
+                or len(builds) != len(batch_ids)
+                or response.get("buildsNotFound")
+            ):
+                raise NovaPlanDispatchError(
+                    "Nova plan build search returned incomplete build details",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                )
+            for build in builds:
+                if not isinstance(build, dict):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build details could not be checked",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                build_id = build.get("id")
+                if (
+                    build.get("projectName") != self.project_name
+                    or not isinstance(build_id, str)
+                    or not build_id.startswith(f"{self.project_name}:")
+                ):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build search returned another project identity",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                environment = build.get("environment")
+                if not isinstance(environment, dict):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build environment could not be checked",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                variables = environment.get("environmentVariables")
+                if not isinstance(variables, list):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build environment could not be checked",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                if any(not isinstance(variable, dict) for variable in variables):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build environment could not be checked",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                run_id_variables = [
+                    variable
+                    for variable in variables
+                    if variable.get("name") == self._RUN_ID_ENVIRONMENT_VARIABLE
+                ]
+                if len(run_id_variables) > 1:
+                    raise NovaPlanDispatchError(
+                        "Nova plan build has an ambiguous run-ID override",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                if run_id_variables and (
+                    not isinstance(run_id_variables[0].get("value"), str)
+                    or run_id_variables[0].get("type") != "PLAINTEXT"
+                ):
+                    raise NovaPlanDispatchError(
+                        "Nova plan build run-ID override could not be confirmed",
+                        outcome_uncertain=True,
+                        phase="build_start",
+                    )
+                if (
+                    len(run_id_variables) == 1
+                    and run_id_variables[0].get("value") == run_id
+                    and run_id_variables[0].get("type") == "PLAINTEXT"
+                ):
+                    status = build.get("buildStatus")
+                    if status not in {
+                        "IN_PROGRESS",
+                        "QUEUED",
+                        "SUCCEEDED",
+                        "FAILED",
+                        "FAULT",
+                        "STOPPED",
+                        "TIMED_OUT",
+                    }:
+                        raise NovaPlanDispatchError(
+                            "Nova plan build returned an unrecognized status",
+                            outcome_uncertain=True,
+                            phase="build_start",
+                        )
+                    matches.append(NovaPlanBuild(build_id, self.project_name, status))
+
+        if len(matches) > 1:
+            raise NovaPlanDispatchError(
+                "Multiple Nova plan builds matched this exact run ID; reconcile manually",
+                outcome_uncertain=True,
+                phase="build_start",
+            )
+        return matches[0] if matches else None
 
     def describe_build(self, build_id: str) -> NovaPlanBuild:
         if not isinstance(build_id, str) or not build_id.startswith(f"{self.project_name}:"):

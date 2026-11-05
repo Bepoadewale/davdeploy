@@ -411,7 +411,7 @@ def test_configured_fixture_fallback_is_not_invoked_for_terraform_generation():
 
         def generate_structured(self, request, document, output_schema=None):
             self.calls += 1
-            raise ModelGatewayUnavailable("primary unavailable")
+            raise ModelGatewayUnavailable("primary response was lost", outcome_uncertain=True)
 
         def estimate_cost(self, request):
             return 0.0
@@ -422,12 +422,13 @@ def test_configured_fixture_fallback_is_not_invoked_for_terraform_generation():
     primary = FailingPrimary()
     fallback = RecordingGateway(lambda request, document: _valid_proposal(request, document))
     gateway = FallbackModelGateway(primary, fallback)
-    with pytest.raises(ModelGatewayUnavailable, match="stopped before a valid response"):
+    with pytest.raises(ModelGatewayUnavailable, match="stopped before a valid response") as error:
         NovaTerraformGenerator(gateway=gateway).generate(
             approved_plan={"target": {"region": "us-east-1"}}, tenant=scope()
         )
     assert primary.calls == 1
     assert fallback.calls == []
+    assert error.value.outcome_uncertain
 
 
 def test_semantic_repair_stops_when_time_budget_expires(monkeypatch):

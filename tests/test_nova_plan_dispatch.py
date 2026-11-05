@@ -172,13 +172,14 @@ def test_start_build_sets_only_server_owned_run_id_override():
     codebuild = FakeCodeBuild()
     configured = dispatcher(codebuild=codebuild)
 
-    result = configured.start_build(RUN_ID)
+    result = configured.start_build(RUN_ID, RUN_ID)
 
     assert result.build_id == f"{PROJECT}:{RUN_ID}"
     assert result.project_name == PROJECT
     call = codebuild.calls[0][1]
     assert call == {
         "projectName": PROJECT,
+        "idempotencyToken": RUN_ID,
         "environmentVariablesOverride": [
             {
                 "name": "DAVDEPLOY_NOVA_PLAN_RUN_ID",
@@ -201,7 +202,7 @@ def test_start_build_rejects_unexpected_project_or_terminal_state(build):
     configured = dispatcher(codebuild=FakeCodeBuild(response={"build": build}))
 
     with pytest.raises(NovaPlanDispatchError, match="identity could not be verified"):
-        configured.start_build(RUN_ID)
+        configured.start_build(RUN_ID, RUN_ID)
 
 
 def test_describe_build_requires_exact_project_and_id():
@@ -232,6 +233,148 @@ def test_describe_build_rejects_other_project():
 
     with pytest.raises(NovaPlanDispatchError, match="different project"):
         configured.describe_build(f"{PROJECT}:{RUN_ID}")
+
+
+class LookupCodeBuild:
+    def __init__(self, pages, builds_by_id):
+        self.pages = pages
+        self.builds_by_id = builds_by_id
+        self.list_calls = []
+        self.batch_calls = []
+
+    def list_builds_for_project(self, **kwargs):
+        self.list_calls.append(kwargs)
+        token = kwargs.get("nextToken")
+        return self.pages[token]
+
+    def batch_get_builds(self, **kwargs):
+        self.batch_calls.append(kwargs)
+        return {"builds": [self.builds_by_id[build_id] for build_id in kwargs["ids"]]}
+
+
+def _lookup_build(build_id, run_id):
+    return {
+        "id": build_id,
+        "projectName": PROJECT,
+        "buildStatus": "IN_PROGRESS",
+        "environment": {
+            "environmentVariables": [
+                {
+                    "name": "DAVDEPLOY_NOVA_PLAN_RUN_ID",
+                    "value": run_id,
+                    "type": "PLAINTEXT",
+                }
+            ]
+        },
+    }
+
+
+def test_find_build_by_run_id_scans_exact_project_pages_and_accepts_one_match():
+    match_id = f"{PROJECT}:matched-build"
+    other_id = f"{PROJECT}:other-build"
+    client = LookupCodeBuild(
+        pages={None: {"ids": [other_id], "nextToken": "page-2"}, "page-2": {"ids": [match_id]}},
+        builds_by_id={
+            other_id: _lookup_build(other_id, str(uuid.uuid4())),
+            match_id: _lookup_build(match_id, RUN_ID),
+        },
+    )
+    configured = dispatcher(codebuild=client)
+
+    build = configured.find_build_by_run_id(RUN_ID)
+
+    assert build is not None
+    assert build.build_id == match_id
+    assert client.list_calls == [
+        {"projectName": PROJECT},
+        {"projectName": PROJECT, "nextToken": "page-2"},
+    ]
+    assert client.batch_calls == [{"ids": [other_id, match_id]}]
+
+
+def test_find_build_by_run_id_rejects_multiple_exact_matches():
+    first_id = f"{PROJECT}:first-build"
+    second_id = f"{PROJECT}:second-build"
+    client = LookupCodeBuild(
+        pages={None: {"ids": [first_id, second_id]}},
+        builds_by_id={
+            first_id: _lookup_build(first_id, RUN_ID),
+            second_id: _lookup_build(second_id, RUN_ID),
+        },
+    )
+    configured = dispatcher(codebuild=client)
+
+    with pytest.raises(NovaPlanDispatchError, match="Multiple Nova plan builds") as error:
+        configured.find_build_by_run_id(RUN_ID)
+
+    assert error.value.outcome_uncertain
+    assert error.value.phase == "build_start"
+
+
+def test_find_build_by_run_id_keeps_zero_or_incomplete_search_blocked():
+    client = LookupCodeBuild(
+        pages={None: {"ids": [f"{PROJECT}:other-build"]}},
+        builds_by_id={f"{PROJECT}:other-build": _lookup_build(f"{PROJECT}:other-build", "other-run")},
+    )
+    configured = dispatcher(codebuild=client)
+    assert configured.find_build_by_run_id(RUN_ID) is None
+
+    client.pages = {None: {"ids": [], "nextToken": "continued"}}
+    configured._BUILD_LOOKUP_PAGE_LIMIT = 1
+    with pytest.raises(NovaPlanDispatchError, match="pagination limit") as error:
+        configured.find_build_by_run_id(RUN_ID)
+    assert error.value.outcome_uncertain
+
+
+def test_find_build_by_run_id_keeps_unavailable_lookup_blocked():
+    class UnavailableCodeBuild:
+        def list_builds_for_project(self, **_kwargs):
+            raise OSError("fixture CodeBuild API unavailable")
+
+    configured = dispatcher(codebuild=UnavailableCodeBuild())
+    with pytest.raises(NovaPlanDispatchError, match="build search could not be confirmed") as error:
+        configured.find_build_by_run_id(RUN_ID)
+    assert error.value.outcome_uncertain
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        {"id": f"{PROJECT}:missing-environment", "projectName": PROJECT},
+        {
+            "id": f"{PROJECT}:missing-variables",
+            "projectName": PROJECT,
+            "environment": {},
+        },
+        {
+            "id": f"{PROJECT}:malformed-variable",
+            "projectName": PROJECT,
+            "environment": {"environmentVariables": [None]},
+        },
+        {
+            "id": f"{PROJECT}:malformed-run-id",
+            "projectName": PROJECT,
+            "environment": {
+                "environmentVariables": [
+                    {"name": "DAVDEPLOY_NOVA_PLAN_RUN_ID", "value": RUN_ID}
+                ]
+            },
+        },
+    ],
+)
+def test_find_build_by_run_id_fails_closed_on_malformed_environment(build):
+    build_id = build["id"]
+    configured = dispatcher(
+        codebuild=LookupCodeBuild(
+            pages={None: {"ids": [build_id]}}, builds_by_id={build_id: build}
+        )
+    )
+
+    with pytest.raises(NovaPlanDispatchError) as error:
+        configured.find_build_by_run_id(RUN_ID)
+
+    assert error.value.outcome_uncertain
+    assert error.value.phase == "build_start"
 
 
 def test_run_id_path_is_canonicalized_to_lowercase_uuid():

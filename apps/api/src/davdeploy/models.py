@@ -525,6 +525,7 @@ class GeneratedPlanRun(Base):
     request_sha256: Mapped[str] = mapped_column(String(64), index=True)
     request_document: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     runner_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    codebuild_idempotency_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     revision_sha256: Mapped[str] = mapped_column(String(64))
     proposal_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -537,6 +538,7 @@ class GeneratedPlanRun(Base):
     result_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     error_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preparation_phase: Mapped[str | None] = mapped_column(String(40), nullable=True)
     preparation_lease_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -562,6 +564,11 @@ class GeneratedPlanRun(Base):
         Index("ix_generated_plan_run_tenant_revision", "organization_id", "revision_id"),
         Index("ix_generated_plan_run_preparation_lease", "state", "preparation_lease_expires_at"),
         Index("uq_generated_plan_runs_runner_run_id", "runner_run_id", unique=True),
+        Index(
+            "uq_generated_plan_runs_codebuild_idempotency_token",
+            "codebuild_idempotency_token",
+            unique=True,
+        ),
     )
 
 

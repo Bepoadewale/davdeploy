@@ -519,6 +519,21 @@
         "title": "GeneratedPlanArtifactApprovalRequest",
         "type": "object"
       },
+      "GeneratedPlanGenerationReconciliationRequest": {
+        "description": "Require explicit confirmation before abandoning an uncertain proposal call.",
+        "properties": {
+          "abandon_attempt": {
+            "const": true,
+            "title": "Abandon Attempt",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "abandon_attempt"
+        ],
+        "title": "GeneratedPlanGenerationReconciliationRequest",
+        "type": "object"
+      },
       "GeneratedPlanInputReconciliationRequest": {
         "description": "Resolve only an ambiguous S3 input-stage attempt before any build starts.",
         "properties": {
@@ -4236,6 +4251,110 @@
           }
         },
         "summary": "Get Generated Plan Run"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/reconcile-build": {
+      "post": {
+        "description": "Find one exact CodeBuild attempt after its start response was lost.",
+        "operationId": "reconcile_generated_plan_build_attempt_api_v1_generated_plan_runs__run_id__reconcile_build_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Generated Plan Build Attempt"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/reconcile-generation": {
+      "post": {
+        "description": "Explicitly abandon an uncertain proposal call so a fresh retry can begin.",
+        "operationId": "abandon_generated_plan_generation_attempt_api_v1_generated_plan_runs__run_id__reconcile_generation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanGenerationReconciliationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Abandon Generated Plan Generation Attempt"
       }
     },
     "/api/v1/generated-plan-runs/{run_id}/reconcile-input": {

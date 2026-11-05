@@ -206,7 +206,7 @@ def run_migrations(target: Engine | None = None) -> None:
                 )
             )
             _install_generated_plan_immutability(connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (30)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
             return
         if version < 2:
             connection.execute(
@@ -459,6 +459,52 @@ def run_migrations(target: Engine | None = None) -> None:
                 )
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (30)"))
+        if version < 31:
+            _add_columns_if_missing(
+                connection,
+                "generated_plan_runs",
+                {
+                    "preparation_phase": "VARCHAR(40)",
+                    "codebuild_idempotency_token": "VARCHAR(64)",
+                },
+            )
+            connection.execute(
+                text(
+                    "UPDATE generated_plan_runs "
+                    "SET codebuild_idempotency_token = runner_run_id "
+                    "WHERE codebuild_idempotency_token IS NULL AND runner_run_id IS NOT NULL"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE generated_plan_runs SET preparation_phase = 'STAGING_INPUT' "
+                    "WHERE preparation_phase IS NULL AND state = 'PREPARING' "
+                    "AND codebuild_build_id IS NULL AND input_sha256 IS NOT NULL "
+                    "AND input_version_id IS NULL"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE generated_plan_runs SET preparation_phase = 'STARTING_BUILD' "
+                    "WHERE preparation_phase IS NULL AND state = 'PREPARING' "
+                    "AND codebuild_build_id IS NULL AND input_version_id IS NOT NULL"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE generated_plan_runs SET preparation_phase = 'GENERATING_PROPOSAL' "
+                    "WHERE preparation_phase IS NULL AND state = 'PREPARING' "
+                    "AND codebuild_build_id IS NULL AND input_sha256 IS NULL"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS "
+                    "uq_generated_plan_runs_codebuild_idempotency_token "
+                    "ON generated_plan_runs(codebuild_idempotency_token)"
+                )
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
         _install_generated_plan_immutability(connection)
 
 

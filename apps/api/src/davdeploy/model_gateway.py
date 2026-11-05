@@ -37,11 +37,13 @@ class ModelGatewayUnavailable(RuntimeError):
         usage: ModelUsage | None = None,
         evidence: tuple[EvidenceRef, ...] = (),
         attempt_count: int = 0,
+        outcome_uncertain: bool = False,
     ):
         super().__init__(message)
         self.usage = usage
         self.evidence = evidence
         self.attempt_count = attempt_count
+        self.outcome_uncertain = outcome_uncertain
 
 
 class ModelCallPolicy(BaseModel):
@@ -322,7 +324,7 @@ class BedrockNovaGateway:
                     repair=attempt == 1,
                     timeout_seconds=timeout_seconds,
                 )
-            except ModelGatewayUnavailable:
+            except ModelGatewayUnavailable as error:
                 raise self._structured_failure(
                     "Bedrock model call failed within its time limit",
                     request,
@@ -334,6 +336,7 @@ class BedrockNovaGateway:
                     evidence,
                     attempt + 1,
                     False,
+                    outcome_uncertain=error.outcome_uncertain,
                 ) from None
 
             if not isinstance(raw, dict):
@@ -549,9 +552,15 @@ class BedrockNovaGateway:
             )
         except (BotoCoreError, ClientError) as error:
             code = "transport_error"
+            outcome_uncertain = isinstance(error, BotoCoreError)
             if isinstance(error, ClientError):
                 code = str(error.response.get("Error", {}).get("Code") or code)
-            raise ModelGatewayUnavailable(f"Bedrock model call failed ({code})") from error
+                status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                outcome_uncertain = not isinstance(status, int) or status >= 500
+            raise ModelGatewayUnavailable(
+                f"Bedrock model call failed ({code})",
+                outcome_uncertain=outcome_uncertain,
+            ) from error
 
     def _client_for_timeout(self, timeout_seconds: int) -> BedrockRuntimeClient:
         if self.client is not None:
@@ -587,6 +596,8 @@ class BedrockNovaGateway:
         evidence: list[EvidenceRef],
         attempt_count: int,
         usage_is_complete: bool,
+        *,
+        outcome_uncertain: bool = False,
     ) -> ModelGatewayUnavailable:
         usage = ModelUsage(
             input_tokens=input_tokens,
@@ -606,6 +617,7 @@ class BedrockNovaGateway:
             usage=usage,
             evidence=tuple(evidence),
             attempt_count=attempt_count,
+            outcome_uncertain=outcome_uncertain,
         )
 
     def estimate_cost(self, request: ModelRequest) -> float:
@@ -645,7 +657,9 @@ class FallbackModelGateway:
     def complete(self, request: ModelRequest, document: dict[str, Any]) -> ModelResponse:
         try:
             return self.primary.complete(request, document)
-        except ModelGatewayUnavailable:
+        except ModelGatewayUnavailable as error:
+            if error.outcome_uncertain:
+                raise
             return self.fallback.complete(_fixture_request(request), document)
 
     def generate_structured(
@@ -656,7 +670,9 @@ class FallbackModelGateway:
     ) -> ModelResponse:
         try:
             return self.primary.generate_structured(request, document, output_schema)
-        except ModelGatewayUnavailable:
+        except ModelGatewayUnavailable as error:
+            if error.outcome_uncertain:
+                raise
             return self.fallback.generate_structured(
                 _fixture_request(request), document, output_schema
             )

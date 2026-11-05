@@ -136,8 +136,9 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
         attempt_count: int,
         usage: ModelUsage,
         evidence: tuple[EvidenceRef, ...],
+        outcome_uncertain: bool = False,
     ):
-        super().__init__(message)
+        super().__init__(message, outcome_uncertain=outcome_uncertain)
         self.attempt_count = attempt_count
         self.usage = usage
         self.evidence = evidence
@@ -260,6 +261,7 @@ class NovaTerraformGenerator:
                     additional_evidence=error.evidence,
                     semantic_retry_count=len(responses),
                     attempt_count=len(responses) + 1,
+                    outcome_uncertain=error.outcome_uncertain,
                 ) from None
             responses.append(response)
             if response.request.provider != "bedrock":
@@ -422,6 +424,7 @@ def _generation_failure(
     additional_evidence: tuple[EvidenceRef, ...] = (),
     semantic_retry_count: int | None = None,
     attempt_count: int | None = None,
+    outcome_uncertain: bool = False,
 ) -> NovaTerraformGenerationFailed:
     usage, evidence = _aggregate_usage_and_evidence(
         responses,
@@ -436,4 +439,5 @@ def _generation_failure(
         attempt_count=(len(responses) if attempt_count is None else attempt_count),
         usage=usage,
         evidence=evidence,
+        outcome_uncertain=outcome_uncertain,
     )

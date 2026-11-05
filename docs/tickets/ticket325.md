@@ -19,6 +19,11 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - Input-stage uncertainty has a specific reconciliation route. A matching stored version can resume the queued worker without regenerating; confirmed absence becomes a retryable failure; unavailable or mismatched inspection remains blocked until inspection succeeds or an operator explicitly abandons that pre-build attempt. Abandonment leaves the old key untouched and later retry uses a fresh key.
 - The API role can `GetObject` only for `plans/nova-generated/requests/<run-id>/input.json`, which authorizes HeadObject metadata checks. It receives no `ListBucket`; therefore an absent key returned as 403 is treated as uncertain and resolved through explicit abandonment plus a fresh immutable retry key.
 - Migration 30 backfills runner IDs and seeds a database-backed round-robin cursor. The worker honors `DAVDEPLOY_WORKER_MAX_JOBS_PER_WAKEUP` from 1 to 10 and remains fair across cold starts.
+- Migration 31 records the durable preparation phase and a unique per-attempt CodeBuild idempotency token. It backfills `GENERATING_PROPOSAL` when no input digest exists, `STAGING_INPUT` when digests exist without an immutable input version, and `STARTING_BUILD` when an input version exists but no build ID is bound. The token is the immutable runner UUID and is passed to `StartBuild`; AWS treats a repeated token as idempotent for five minutes.
+- Before each external call, the worker commits its phase. Expiry during generation, input staging, or `StartBuild` becomes a distinct reconciliation state. In particular, a lost `StartBuild` response cannot return the run to the queue.
+- An uncertain proposal-generation call stays blocked until the requester explicitly abandons it; only then can they retry with a fresh idempotency key. This avoids automatic replay while preserving a recovery path when cross-key deduplication would otherwise return the same blocked run.
+- Bedrock transport exceptions from the actual provider call are marked outcome-uncertain and flow through generation failure records to the same explicit abandon action. Pre-call validation/policy failures and provider 4xx rejections remain confirmed failures and can use the existing fresh-key retry path.
+- `reconcile-build` searches only the configured Nova plan project, batch-fetches listed builds, and matches the exact `DAVDEPLOY_NOVA_PLAN_RUN_ID` override. Only one exact match is bound. Zero matches, multiple matches, API errors, or an incomplete bounded search leave the run blocked; the route never starts a build.
 - PR #324 is adding a distinct, disabled-by-default `DAVDEPLOY_NOVA_PLAN_PROJECT`; do not use `customer_executor`.
 - Protected untracked file `--only-show-errors` is not part of this PR and must remain untouched.
 
@@ -31,6 +36,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - `apps/api/src/davdeploy/lambda_worker.py`: hosted queue worker.
 - PR #324: dedicated plan-only CodeBuild boundary and fixed run-ID input contract.
 - AWS CodeBuild `StartBuild` and IAM condition-key documentation: https://docs.aws.amazon.com/codebuild/latest/APIReference/API_StartBuild.html and https://docs.aws.amazon.com/codebuild/latest/userguide/action-context-keys.html.
+- AWS CodeBuild recovery lookup APIs: https://docs.aws.amazon.com/codebuild/latest/APIReference/API_ListBuildsForProject.html and https://docs.aws.amazon.com/codebuild/latest/APIReference/API_BatchGetBuilds.html.
 - AWS S3 `HeadObject` permission behavior: https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html.
 
 ## Work planned for the PR
@@ -40,6 +46,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - Add a scoped API to enqueue and inspect plan requests. Reject stale or mismatched revisions, renders, targets, and idempotency-key reuse.
 - Dispatch only through the feature-gated plan-only CodeBuild project using a server-generated per-attempt run ID; keep the route disabled if the project is not configured.
 - Reconcile the exact CodeBuild project/build completion against the durable run. Do not interpret a successful CodeBuild status alone as a verified Terraform plan.
+- Persist a stable per-attempt `StartBuild` idempotency token and provide a fail-closed, exact-project lookup path when the start response is lost.
 - Preserve the cost-unavailable gate and all tenant, role, target, ownership, policy, and immutable-manifest boundaries.
 
 ## Acceptance criteria
@@ -54,21 +61,24 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - [x] Duplicate/concurrent worker wake-ups and CodeBuild callbacks cannot create duplicate runs or bind another tenant's result.
 - [x] Failed, expired, or uncertain work remains visibly failed or requires reconciliation; no fake plan/artifact success is recorded.
 - [x] Lost input-stage responses cannot trigger an unsafe overwrite or duplicate write; durable reconciliation resumes a matching object, confirms absence, or requires explicit attempt abandonment before a fresh-key retry.
+- [x] Lost CodeBuild start responses are protected by a durable per-attempt token and can be reconciled only by one exact runner-ID match in the dedicated CodeBuild project. Zero, multiple, incomplete, or unavailable results remain blocked without retry.
+- [x] An uncertain generation lease can be explicitly abandoned and retried with a fresh key; no generation attempt is automatically replayed.
+- [x] Bedrock response loss/transport timeout is not treated as a confirmed generation failure; definite pre-call or 4xx rejection remains retryable.
 - [x] Plan output remains unapprovable while complete regional pricing evidence is absent.
 - [x] Focused and full local verification pass, with no AWS mutation.
 
 ## Acceptance status
 
-All implementation and local validation criteria are met. The PR remains open for review and has not been merged.
+Focused validation (99 tests) and `make verify` (734 tests) pass on migration 31 and both reconciliation paths. Bedrock transport timeouts and connection failures after `converse()` begins now require explicit generation abandonment; confirmed pre-call failures and provider 4xx responses remain retryable. The required clean-room cycle is pending because `make clean-local` would remove existing local files and a PostgreSQL volume; those targets are preserved pending explicit approval. The PR remains open for review and has not been merged.
 
 ## Tests / validation performed
 
-- Initial `make verify` before correcting the migration assertions: 692 passed, 4 failed. All four failures were stale expectations of schema version 26 after PR #325 had advanced it to 27.
-- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py tests/test_lambda_worker.py tests/test_db_config.py tests/test_invitation_email.py` — 45 passed after the S3 input-stage reconciliation and scoped IAM update.
-- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py` — 25 passed in the focused dispatcher/run subset after adding S3 input-stage reconciliation.
-- `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed with 711 tests, Ruff, configuration/OpenAPI checks, and `docker compose config --quiet`.
-- `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated the snapshot; the final `make verify` confirmed it matches.
-- No AWS calls or customer resources were used.
+- `uv run --locked --extra dev pytest -q tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py tests/test_db_config.py tests/test_invitation_email.py tests/test_nova_plan_artifact_infra.py tests/test_queue_and_model_gateway.py tests/test_terraform_generation.py` — 99 passed, including phase migration, explicit generation-abandon confirmation, exact build recovery, malformed CodeBuild result shapes, retry blocking, uncertain Bedrock transport outcomes, and confirmed pre-call/4xx failures.
+- `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed with 734 tests, Ruff, Actions configuration, OpenAPI snapshot, and `docker compose config --quiet`.
+- `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated both reconciliation routes; `make verify` confirmed the snapshot matches.
+- `terraform fmt -check -diff infrastructure/terraform/serverless-control-plane/main.tf`, `uv run --locked --extra dev python scripts/check_doc_conventions.py`, and `git diff --check` passed.
+- The earlier initial verification reported 692 passed and 4 failures due to stale schema-version expectations; those assertions are now updated and all 734 tests pass.
+- No AWS calls or customer resources were used. The clean-room cycle was not run because the repository cleanup target removes existing user data; see the exact paths below.
 
 ## Evidence files produced
 
@@ -76,7 +86,9 @@ All implementation and local validation criteria are met. The PR remains open fo
 
 ## Boundaries and limitations
 
-No Terraform apply, destroy, customer resource mutation, or AWS deployment. A successful plan job is not proof of apply, health, update, recovery, or cleanup. The separate customer plan-only role and tenant-isolated remote state remain follow-up gates. PR #326 must use schema migration 31 after this PR's migration 30.
+No Terraform apply, destroy, customer resource mutation, or AWS deployment. A successful plan job is not proof of apply, health, update, recovery, or cleanup. The separate customer plan-only role and tenant-isolated remote state remain follow-up gates. PR #326 must use schema migration 32 after this PR's migration 31.
+
+The local clean-room cycle remains pending. `make clean-local` would delete `/Users/adewale/Projects/davdeploy-pr325/.venv`, `/Users/adewale/Projects/davdeploy-pr325/.local/davdeploy.db`, and the Docker volume `davdeploy_davdeploy-postgres` at `/var/lib/docker/volumes/davdeploy_davdeploy-postgres/_data`. These local artifacts were preserved.
 
 ## Follow-up work
 

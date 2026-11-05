@@ -36,6 +36,7 @@ from davdeploy.domain import (
     DesiredStatePublicationRequest,
     DesiredStatePublicationStateRequest,
     GeneratedPlanArtifactApprovalRequest,
+    GeneratedPlanGenerationReconciliationRequest,
     GeneratedPlanInputReconciliationRequest,
     GeneratedPlanRunRequest,
     InfrastructurePlanConstraintUpdateRequest,
@@ -1259,6 +1260,35 @@ def reconcile_generated_plan_input(
         return service.reconcile_generated_plan_input(
             principal, run_id, abandon_attempt=request.abandon_attempt
         )
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/reconcile-generation", status_code=202)
+def abandon_generated_plan_generation_attempt(
+    run_id: str,
+    request: GeneratedPlanGenerationReconciliationRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Explicitly abandon an uncertain proposal call so a fresh retry can begin."""
+    REQUESTS.labels("generated_plan_runs.reconcile_generation").inc()
+    try:
+        return service.abandon_generated_plan_generation_attempt(principal, run_id)
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/reconcile-build", status_code=202)
+def reconcile_generated_plan_build_attempt(
+    run_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Find one exact CodeBuild attempt after its start response was lost."""
+    REQUESTS.labels("generated_plan_runs.reconcile_build").inc()
+    try:
+        return service.reconcile_generated_plan_build_attempt(principal, run_id)
     except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
         translate(error)
 

@@ -31,6 +31,25 @@ def test_nova_plan_storage_access_is_opt_in_and_prefix_scoped() -> None:
     assert '"kms:EncryptionContext:aws:s3:arn"' in policy
 
 
+def test_nova_build_reconciliation_is_limited_to_the_plan_project():
+    terraform = (ROOT / "infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    policy = terraform.split('resource "aws_iam_role_policy" "api"', 1)[1].split(
+        'resource "aws_iam_role" "customer_executor"', 1
+    )[0]
+
+    recovery = policy.split("# Recovery can inspect only", 1)[1].split("}],", 1)[0]
+    assert '"codebuild:ListBuildsForProject", "codebuild:BatchGetBuilds"' in recovery
+    assert '"codebuild:StartBuild"' not in recovery
+    assert "var.enable_nova_plan_reviews ? [{" in policy.split(
+        "# Recovery can inspect only", 1
+    )[0][-100:]
+    assert (
+        "arn:aws:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:"
+        "project/${local.name}-nova-plan-only"
+    ) in recovery
+    assert 'Action   = ["codebuild:ListBuildsForProject"]\n        Resource = "*"' not in policy
+
+
 def test_nova_plan_storage_runtime_uses_existing_ci_bucket_and_key_with_reviews_disabled_by_default() -> (
     None
 ):
