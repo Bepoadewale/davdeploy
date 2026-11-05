@@ -75,6 +75,14 @@ Allowed status values: `not started`, `in progress`, `implemented`,
   Each requires its own provisioning, recovery, tenant-isolation, and lifecycle
   evidence. No option is implemented by #328, and no backend-free plan may be
   counted as stateful deployment evidence.
+- Plan-runner object access is scoped to the exact CodeBuild ARN in S3 resources;
+  the API-only request prefix is inaccessible to CodeBuild. The shared CodeBuild
+  role's STS permission still matches the `davdeployPlan-*` role-name pattern.
+  The fixed runner binds the ARN to the validated connection/account, each
+  customer trust requires its exact ExternalId, and those customer roles deny
+  all service actions. Cross-tenant trust tests are mocked contracts, not a live
+  IAM simulation. Keep the runner disabled by default, and require an isolated
+  per-tenant broker before any plan role receives customer service permissions.
 
 ## Evidence update rule
 

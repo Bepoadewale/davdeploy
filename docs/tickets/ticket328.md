@@ -28,6 +28,14 @@ Remote-state approaches reviewed for a later milestone:
 
 No option is implemented here. Do not add shared CodeBuild access to `davdeploy/customer/*`, do not use caller-controlled backend settings, and do not claim that backend-free plans represent refreshed or durable deployment state. Until a later state design is reviewed and implemented, approval, apply, and destroy remain blocked for these artifacts.
 
+## Run-scoped object and role boundary
+
+The API first writes immutable request input to its API-only `requests/{runId}/input.json` key. The CodeBuild role has no permission on that prefix. After `StartBuild` returns and the exact build identity is durably recorded, the API copies the verified request bytes into `builds/{BuildArn}/input.json`. The fixed build entrypoint bounded-polls that exact key. Its result and saved plan use the same BuildArn prefix. CodeBuild S3 resources interpolate the AWS-supported `codebuild:buildArn` policy variable, so a build with ARN A cannot read or write build B's input, result, or plan. There is no `ListBucket` grant.
+
+The shared CodeBuild role's `sts:AssumeRole` resource is the name pattern `davdeployPlan-*`; IAM does not bind that permission to the current run's customer ARN. The fixed runner derives the expected ARN from the verified input account and connection ID. The CodeBuild role can read only its own build-scoped input, and the customer plan-role trust requires `StringEquals` on that connection's ExternalId. PR #326's plan role explicitly denies all customer service actions. A mocked trust test proves that a connection-A ExternalId is rejected by connection B's role; this is a static/unit contract check, not an AWS IAM simulation. Keep the runner disabled by default. If a future plan role receives customer service permissions, require a separately reviewed per-tenant broker boundary first.
+
+The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact bucket ARN as the KMS encryption context. Nova input, result, and saved-plan uploads explicitly enable the bucket key; KMS statements match the bucket ARN, while S3 object resources retain exact per-build paths.
+
 ## Research / references used
 
 - `apps/api/src/davdeploy/generated_terraform_plan.py`: fixed CLI version, provider lockfile, schema, graph/policy, and saved-plan inspection pipeline.
@@ -37,47 +45,55 @@ No option is implemented here. Do not add shared CodeBuild access to `davdeploy/
 - `infrastructure/cloudformation/customer-discovery-role.yaml`: customer plan-role trust and permissions from PR #326.
 - HashiCorp S3 backend documentation: `https://developer.hashicorp.com/terraform/language/backend/s3` (versioned state object and native `use_lockfile`; exact support must match the pinned Terraform CLI).
 - AWS third-party role access documentation: `https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html` (the customer connection ExternalId must be preserved on cross-account AssumeRole).
+- AWS S3 SSE-KMS documentation: `https://docs.aws.amazon.com/AmazonS3/latest/userguide/specifying-kms-encryption.html` (S3 Bucket Keys use the bucket ARN as the KMS encryption context).
+- AWS S3 object-level Bucket Key documentation: `https://docs.aws.amazon.com/AmazonS3/latest/userguide/configuring-bucket-key-object.html` (a PUT can inherit or explicitly set the per-object Bucket Key behavior).
+- AWS CodeBuild IAM context documentation: `https://docs.aws.amazon.com/codebuild/latest/userguide/permissions-conditionkeys-variables.html` and `https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html` (the supported `codebuild:buildArn` policy variable).
 - AWS CodeBuild `StartBuild`, `BatchGetBuilds`, and S3 object-version APIs for bounded start, verification, and artifact identity.
 
 ## Work planned for the PR
 
 - Replace only the project’s fail-closed buildspec with a fixed checked-in entrypoint whose sole customer input is `DAVDEPLOY_NOVA_PLAN_RUN_ID`; do not accept customer buildspec/source/role/image/command overrides.
 - Pin and verify the Terraform CLI and AWS provider, including the checked-in lockfile and immutable code artifact. The dispatcher must not download or execute customer-provided code.
-- Load the durable run and exact immutable input by run ID; verify the run is `STARTING_BUILD`, the build project/run ID match, the submitted revision is current and integrity-checked, and the canonical proposal/context/account/region/input digests agree.
+- Load the durable run and exact immutable build-scoped input by run ID; verify the project/build ARN/run ID, submitted revision, tenant, proposal/context/account/region, and canonical input digest. The API durably records the build before copying staged input into its BuildArn key; lease expiry or a lost copy response is handled by explicit build-input reconciliation without replaying StartBuild.
 - Assume only the bound `plan_role_arn` with the exact connection ExternalId. Keep credentials out of backend config and all plan/result files. Backend bucket/key/region/lock settings must be server-injected.
 - Keep the current intermediate slice backend-free and explicitly initial-plan-only. Do not add state-bucket or lock permissions to the shared CodeBuild role. Track one of the three state approaches above as a separate milestone; until then all generated artifacts stay unapprovable and non-deployable.
 - Reuse the existing strict schema, graph, ownership, policy, and actual saved-plan pipeline. Do not add apply/destroy, pricing claims, or policy relaxations.
-- Store the saved plan and a canonical result envelope as encrypted, versioned S3 objects. Bind exact object version IDs and digests to the durable run; keep sensitive plan contents redacted from logs and API responses.
+- Store the saved plan and canonical result envelope as encrypted, versioned S3 objects under the exact BuildArn prefix. The API binds exact object version IDs and digests to the durable run; all Nova uploads use S3 Bucket Keys to match the plans bucket's KMS context. Sensitive plan contents remain out of logs and API responses.
 - Add a trusted completion path that obtains an authenticated event, fetches the exact CodeBuild build, verifies project/build/run/revision/organization/tenant/account and all proposal/input/result/saved-plan digests and versions, then persists the verified artifact through the existing tenant-scoped plan persistence path.
 - Add strict negative tests for tampered input/result/plan, wrong tenant/run/build/revision/account, incorrect versions/digests, unsafe policy, redaction, timeout/duplicate completion, and absence of apply/destroy or resource-mutation calls.
+- Bind the customer role ARN to the account and connection in immutable input, and retain the per-connection exact ExternalId trust check. Test cross-tenant object isolation and mocked trust mismatch; do not claim a live IAM simulation.
 
 ## Acceptance criteria
 
-- [ ] The fixed runner accepts only the durable run ID and a trusted persisted attempt; no customer source/buildspec/role/image/command override is accepted.
-- [ ] Exact Terraform CLI, AWS provider, lockfile, code artifact, and provider schema are verified before planning.
-- [ ] The cross-account customer plan role is assumed only with the exact ExternalId bound to the run's connection; credentials never appear in backend configuration, plan files, result envelopes, logs, or API output.
-- [ ] This PR uses no Terraform backend or state lock; the artifact explicitly records `INITIAL_PLAN_NO_REMOTE_STATE` and cannot be approved even if pricing evidence later becomes available. No `-lock=false` workaround is added for a configured backend.
-- [ ] The runner verifies immutable proposal, context, account, region, current revision, and staged input before invoking the existing strict schema/graph/policy/actual-plan pipeline.
-- [ ] A saved plan and result envelope are encrypted and versioned. Exact object VersionIds and digests are recorded against the run.
-- [ ] Authenticated completion verifies exact CodeBuild project/build, durable run, revision, tenant, account, input, result, and saved-plan identity before artifact persistence; duplicate or mismatched completion cannot persist.
-- [ ] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
-- [ ] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
-- [ ] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
-- [ ] Focused/full validation and PR CI pass; clean-room status is recorded truthfully.
+- [x] The fixed runner accepts only the durable run ID and a trusted persisted attempt; no customer source/buildspec/role/image/command override is accepted.
+- [x] Exact Terraform CLI, AWS provider, lockfile, code artifact, and provider schema are verified before planning.
+- [x] The cross-account customer plan role is assumed only with the exact ExternalId bound to the run's connection; credentials never appear in backend configuration, plan files, result envelopes, logs, or API output.
+- [x] This PR uses no Terraform backend or state lock; the artifact explicitly records `INITIAL_PLAN_NO_REMOTE_STATE` and cannot be approved even if pricing evidence later becomes available. No `-lock=false` workaround is added for a configured backend.
+- [x] The runner verifies immutable proposal, context, account, region, current revision, and staged input before invoking the existing strict schema/graph/policy/actual-plan pipeline.
+- [x] A saved plan and result envelope are encrypted and versioned. Exact object VersionIds and digests are recorded against the run.
+- [x] Authenticated completion verifies exact CodeBuild project/build, durable run, revision, tenant, account, input, result, and saved-plan identity before artifact persistence; duplicate or mismatched completion cannot persist.
+- [x] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
+- [x] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
+- [x] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
+- [ ] Focused/full validation and PR CI pass; clean-room status is recorded truthfully. Local focused/full validation is recorded; PR CI and clean-room gate are pending.
 
 ## Acceptance status
 
-Draft PR and ticket were created before implementation. The decision is to implement only a backend-free initial-plan slice. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice must be explicitly unapprovable and non-deployable.
+Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, and explicit input-handoff recovery. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
 
 ## Tests / validation performed
 
-- No implementation or test evidence yet. No customer workload or AWS account was used.
-- The required clean-room cycle is not run yet. Cleanup targets and existing user artifacts will be preserved unless separately authorized.
+- Local focused feature tests, full `make verify`, Terraform formatting, and Terraform validation are recorded in `docs/test/test328.md`; no customer workload or AWS account was used.
+- The required clean-room cycle is pending because `make clean-local` would delete the worktree `.venv/`, `.local/`, and project-scoped Compose PostgreSQL volume. Those targets are preserved pending explicit approval.
 
-## Evidence files
+## Evidence files produced
 
-- `docs/test/test328.md` will record local tests and Terraform validation; no customer workload is planned.
+- `docs/test/test328.md` records local tests and Terraform validation; no customer workload is planned.
 
-## Boundaries and follow-up
+## Boundaries
 
-No AWS calls, Terraform apply/destroy, customer resource mutations, broad IAM grants, PR merges, or artifact deletion. The feature stays disabled by default. Regional pricing, remote state, approval, and the separately authorized deployment lifecycle remain blocked or outside this intermediate PR.
+No AWS calls, Terraform apply/destroy, customer resource mutations, PR merges, or artifact deletion. The feature stays disabled by default. Regional pricing, remote state, approval, and the separately authorized deployment lifecycle remain blocked or outside this intermediate PR. The mocked cross-tenant trust check does not replace deployed IAM verification.
+
+## Follow-up work
+
+Design and implement a separately reviewed per-tenant remote-state boundary before any generated plan can become approvable or deployable. Add a tenant-isolated role broker before the plan role receives customer service permissions. Enable the runner only after the required deployment and regional pricing milestones are complete.
