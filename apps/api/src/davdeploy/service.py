@@ -2502,6 +2502,10 @@ class ProductService:
         connection = self._cloud_connection(principal, connection_id)
         if access_mode == "plan-only":
             self._require_workspace_admin(principal)
+            if connection.execution_role_arn:
+                raise ValueError(
+                    "plan-only setup requires a discovery-only connection without an execution role"
+                )
         discovery_broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
         execution_broker_role_arn = os.getenv("DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN")
         nova_plan_broker_role_arn = os.getenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN")
@@ -2750,10 +2754,7 @@ class ProductService:
         if discovered_account != connection.account_id:
             raise PermissionError("assumed AWS role belongs to a different account")
         execution_verified = False
-        # A plan-only verification checks only the discovery and plan roles. Never
-        # assume a customer's execution role as a side effect of verifying the
-        # read-only plan path, even if an older connection record has both roles.
-        if connection.execution_role_arn and not connection.plan_role_arn:
+        if connection.execution_role_arn:
             execution_account = discovery.verify_execution_role(
                 connection.id, connection.execution_role_arn, external_id, region
             )

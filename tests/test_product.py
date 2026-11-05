@@ -709,6 +709,24 @@ def test_plan_only_setup_url_requires_same_workspace_administrator(monkeypatch):
     assert saved.plan_role_setup_state == "NOT_CONFIGURED"
 
 
+def test_plan_only_setup_rejects_connection_with_execution_role():
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.execution_role_arn = "arn:aws:iam::123456789012:role/davdeployExecution-existing"
+    service.db.commit()
+
+    with pytest.raises(ValueError, match="discovery-only connection without an execution role"):
+        service.aws_quick_create_setup(
+            workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
+        )
+
+    saved = service.db.get(type(connection), connection.id)
+    assert saved.plan_role_arn is None
+    assert saved.plan_role_setup_state == "NOT_CONFIGURED"
+
+
 def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_broker(monkeypatch):
     monkeypatch.setenv(
         "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
@@ -771,7 +789,6 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
     )
     connection.account_id = "123456789012"
     connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-test"
-    connection.execution_role_arn = "arn:aws:iam::123456789012:role/davdeployExecution-test"
     connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-connection-plan"
     connection.plan_role_setup_state = "SETUP_LINK_GENERATED"
     connection.external_id_secret_ref = service.connection_secrets.put_external_id(
@@ -790,7 +807,7 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
     detail = service.cloud_connection_detail(founder(), connection.id)
     assert saved.setup_state == "VERIFIED"
     assert saved.plan_role_setup_state == "VERIFIED"
-    assert saved.execution_role_arn.endswith("davdeployExecution-test")
+    assert saved.execution_role_arn is None
     assert audit.detail["plan_role_verified"] is True
     assert audit.detail["execution_role_verified"] is False
     assert audit.detail["plan_role_permissions_attested"] is False
@@ -801,6 +818,53 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
         capability.startswith("initial Nova Terraform plan")
         for capability in detail["capabilities"]
     )
+
+
+def test_general_verification_still_checks_execution_role_on_legacy_mixed_connection(monkeypatch):
+    class VerifiedLegacyMixedRoles:
+        def verify(self, _connection_id, _role_arn, _external_id, region):
+            return CloudInventorySnapshot(
+                region=region,
+                approved_regions=[region],
+                approved_resources=["aws-account:123456789012"],
+                discovered_at=datetime.now(UTC),
+                provenance="live-read-only-sts-discovery",
+            )
+
+        def verify_execution_role(self, _connection_id, role_arn, _external_id, _region):
+            assert role_arn.endswith("davdeployExecution-legacy")
+            return "123456789012"
+
+        def verify_plan_role(self, _connection_id, role_arn, _external_id, _region):
+            assert role_arn.endswith("davdeployPlan-legacy")
+            return "123456789012"
+
+    monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Legacy mixed AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-legacy"
+    connection.execution_role_arn = "arn:aws:iam::123456789012:role/davdeployExecution-legacy"
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-legacy"
+    connection.plan_role_setup_state = "SETUP_LINK_GENERATED"
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "legacy-external-id"
+    )
+    service.db.commit()
+
+    service.verify_aws_connection(
+        founder(), connection.id, "us-east-1", VerifiedLegacyMixedRoles()
+    )
+
+    audit = next(
+        event
+        for event in reversed(service.audits(founder()))
+        if event.action == "cloud_connection.aws_verified"
+    )
+    assert audit.detail["execution_role_verified"] is True
+    assert audit.detail["plan_role_verified"] is True
 
 
 def test_plan_role_is_not_reported_usable_when_its_trust_check_fails(monkeypatch):
