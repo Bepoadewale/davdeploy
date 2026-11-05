@@ -65,6 +65,19 @@ def test_quick_create_plan_role_is_separate_and_explicitly_denies_customer_actio
     assert "NovaPlanOnlyRoleArn" in template
 
 
+def test_quick_create_omits_optional_nova_broker_principal_when_runner_is_disabled():
+    template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
+    plan_role = template.split("\n  NovaPlanOnlyRole:\n", 1)[1].split("\n  ExecutionRole:\n", 1)[0]
+
+    assert "Default: unused" in template
+    assert "CreateNovaPlanBrokerTrust: !Not [!Equals [!Ref davdeployNovaPlanBrokerRoleArn, unused]]" in template
+    assert "AWS: !If" in plan_role
+    assert "[!Ref davdeployDiscoveryBrokerRoleArn, !Ref davdeployNovaPlanBrokerRoleArn]" in plan_role
+    assert "- !Ref davdeployDiscoveryBrokerRoleArn" in plan_role
+    assert "DavDeploy does not attest effective permissions" in template
+    assert "It has no customer service permissions" not in template
+
+
 def test_plan_role_broker_permissions_are_explicit_follow_up_not_added_to_existing_executor():
     configuration = Path("infrastructure/terraform/serverless-control-plane/main.tf").read_text()
     executor = configuration.split('resource "aws_iam_role_policy" "customer_executor"', 1)[

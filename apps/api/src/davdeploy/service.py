@@ -4269,7 +4269,12 @@ class ProductService:
                 "read-only inventory discovery",
                 "read-only Cost Explorer query when customer policy permits",
                 *(
-                    ["initial Nova Terraform plan with no customer service permissions"]
+                    [
+                        (
+                            "Nova plan role identity verified for this account; effective AWS "
+                            "permissions and plan-runner readiness are not attested"
+                        )
+                    ]
                     if connection.plan_role_setup_state == "VERIFIED"
                     else []
                 ),
@@ -4296,19 +4301,20 @@ class ProductService:
                 )
             ),
             "plan_role_policy_status": (
-                "NOT_CONFIGURED"
-                if not connection.plan_role_arn
-                else (
-                    "POLICY_UNATTESTED"
-                    if connection.plan_role_setup_state == "VERIFIED"
-                    else (
-                        "VERIFICATION_FAILED"
-                        if connection.plan_role_setup_state == "VERIFICATION_FAILED"
-                        else "EXPECTED_UNVERIFIED"
-                    )
-                )
+                self.plan_role_policy_status(connection)
             ),
         }
+
+    @staticmethod
+    def plan_role_policy_status(connection: CloudConnection) -> str:
+        """Report role identity verification separately from unattested permissions."""
+        if not connection.plan_role_arn:
+            return "NOT_CONFIGURED"
+        if connection.plan_role_setup_state == "VERIFIED":
+            return "POLICY_UNATTESTED"
+        if connection.plan_role_setup_state == "VERIFICATION_FAILED":
+            return "VERIFICATION_FAILED"
+        return "EXPECTED_UNVERIFIED"
 
     def disconnect_cloud_connection(self, principal: Principal, connection_id: str) -> None:
         connection = self._cloud_connection(principal, connection_id)
@@ -4349,9 +4355,14 @@ class ProductService:
                 raise ValueError(
                     "plan-only setup requires a discovery-only connection without an execution role"
                 )
+            if os.getenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false").lower() != "true":
+                raise RuntimeError(
+                    "Nova plan-role verification is disabled for this control plane"
+                )
         discovery_broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
         execution_broker_role_arn = os.getenv("DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN")
-        nova_plan_broker_role_arn = os.getenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN")
+        nova_plan_broker_role_arn = os.getenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN", "").strip()
+        nova_plan_project = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "").strip()
         # Compatibility is intentionally temporary for pre-split hosted configurations.
         legacy_broker_role_arn = os.getenv("DAVDEPLOY_CONTROL_PLANE_ROLE_ARN")
         discovery_broker_role_arn = discovery_broker_role_arn or legacy_broker_role_arn
@@ -4372,12 +4383,17 @@ class ProductService:
                 raise ValueError(
                     "a plan-only setup has already been started for this connection; verify it or create a new connection"
                 )
-            if not nova_plan_broker_role_arn or not re.fullmatch(
+            if nova_plan_project and not re.fullmatch(
                 r"arn:aws:iam::[0-9]{12}:role/.+", nova_plan_broker_role_arn
             ):
                 raise RuntimeError(
-                    "AWS plan-only setup is not configured with the isolated Nova plan broker role ARN"
+                    "Nova plan-only runner is enabled without its configured broker role ARN"
                 )
+            # With the runner disabled, the API can still create and verify the
+            # plan-only role. The CloudFormation template then omits the optional
+            # future runner principal from its trust policy.
+            if not nova_plan_project:
+                nova_plan_broker_role_arn = ""
             external_id = self.connection_secrets.get_external_id(connection.external_id_secret_ref)
             plan_role_arn = f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
             stack_name = f"davdeploy-Plan-{connection.id}"
@@ -4452,8 +4468,8 @@ class ProductService:
             "customer_steps": (
                 [
                     "Open the AWS Quick Create link in the customer account already connected for discovery.",
-                    "Review the separate plan-only role and its explicit deny-all customer service policy.",
-                    "Create the stack, then return to davdeploy to verify the plan-role trust.",
+                    "Review the template's expected deny-all policy for customer service actions; DavDeploy does not attest effective permissions.",
+                    "Create the stack, then return to davdeploy to verify plan-role trust and account identity.",
                 ]
                 if access_mode == "plan-only"
                 else [
@@ -4463,7 +4479,7 @@ class ProductService:
                 ]
             ),
             "boundary": (
-                "This action only creates a setup link. The separate Nova plan role has an explicit deny for all customer service actions and supports initial backend-free Terraform plans only."
+                "This action only creates a setup link. The template requests a separate Nova plan role with an explicit deny for customer service actions. DavDeploy verifies role trust and account identity, but does not inspect or attest effective permissions."
                 if access_mode == "plan-only"
                 else "This action only creates a setup link. Discovery is read-only; administrator-pilot creates a separate execution role that can modify customer AWS resources after product approval."
             ),
@@ -4581,6 +4597,10 @@ class ProductService:
             raise ValueError("generate a new AWS setup link before verifying this connection")
         if os.getenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "false").lower() != "true":
             raise RuntimeError("live AWS discovery is not enabled for this control-plane process")
+        if connection.plan_role_arn and os.getenv(
+            "DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false"
+        ).lower() != "true":
+            raise RuntimeError("Nova plan-role verification is disabled for this control plane")
         external_id = self.connection_secrets.get_external_id(connection.external_id_secret_ref)
         discovery = discovery or StsAwsDiscovery()
         snapshot = discovery.verify(

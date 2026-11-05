@@ -704,6 +704,7 @@ def list_cloud_connections(
             "setup_state": item.setup_state,
             "plan_role_arn": item.plan_role_arn,
             "plan_role_setup_state": item.plan_role_setup_state,
+            "plan_role_policy_status": service.plan_role_policy_status(item),
         }
         for item in service.cloud_connections(principal)
     ]
