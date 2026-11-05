@@ -519,6 +519,48 @@
         "title": "GeneratedPlanArtifactApprovalRequest",
         "type": "object"
       },
+      "GeneratedPlanGenerationReconciliationRequest": {
+        "description": "Require explicit confirmation before abandoning an uncertain proposal call.",
+        "properties": {
+          "abandon_attempt": {
+            "const": true,
+            "title": "Abandon Attempt",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "abandon_attempt"
+        ],
+        "title": "GeneratedPlanGenerationReconciliationRequest",
+        "type": "object"
+      },
+      "GeneratedPlanInputReconciliationRequest": {
+        "description": "Resolve only an ambiguous S3 input-stage attempt before any build starts.",
+        "properties": {
+          "abandon_attempt": {
+            "default": false,
+            "title": "Abandon Attempt",
+            "type": "boolean"
+          }
+        },
+        "title": "GeneratedPlanInputReconciliationRequest",
+        "type": "object"
+      },
+      "GeneratedPlanRunRequest": {
+        "description": "Request a generated plan for one exact immutable customer revision.",
+        "properties": {
+          "content_digest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_digest"
+        ],
+        "title": "GeneratedPlanRunRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3077,6 +3119,74 @@
         "summary": "Execute Customer Plan Dry Run"
       }
     },
+    "/api/v1/customer-plan-revisions/{revision_id}/generated-plan-runs": {
+      "post": {
+        "description": "Queue one exact submitted revision through the separate plan-only project.",
+        "operationId": "request_generated_plan_run_api_v1_customer_plan_revisions__revision_id__generated_plan_runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Generated Plan Run"
+      }
+    },
     "/api/v1/customer-plan-revisions/{revision_id}/submit": {
       "post": {
         "operationId": "submit_customer_plan_revision_api_v1_customer_plan_revisions__revision_id__submit_post",
@@ -4094,6 +4204,272 @@
           }
         },
         "summary": "Approve Generated Plan Artifact"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}": {
+      "get": {
+        "description": "Return safe status for one organization-owned Nova plan request.",
+        "operationId": "get_generated_plan_run_api_v1_generated_plan_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Generated Plan Run"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/reconcile-build": {
+      "post": {
+        "description": "Find one exact CodeBuild attempt after its start response was lost.",
+        "operationId": "reconcile_generated_plan_build_attempt_api_v1_generated_plan_runs__run_id__reconcile_build_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Generated Plan Build Attempt"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/reconcile-generation": {
+      "post": {
+        "description": "Explicitly abandon an uncertain proposal call so a fresh retry can begin.",
+        "operationId": "abandon_generated_plan_generation_attempt_api_v1_generated_plan_runs__run_id__reconcile_generation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanGenerationReconciliationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Abandon Generated Plan Generation Attempt"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/reconcile-input": {
+      "post": {
+        "description": "Verify a staged input or explicitly abandon that pre-build attempt.",
+        "operationId": "reconcile_generated_plan_input_api_v1_generated_plan_runs__run_id__reconcile_input_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanInputReconciliationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Generated Plan Input"
+      }
+    },
+    "/api/v1/generated-plan-runs/{run_id}/retry": {
+      "post": {
+        "description": "Explicitly retry a confirmed failure with a new idempotency key.",
+        "operationId": "retry_generated_plan_run_api_v1_generated_plan_runs__run_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 16,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Generated Plan Run"
       }
     },
     "/api/v1/github/connection": {

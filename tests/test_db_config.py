@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 27
+            == 32
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -89,7 +89,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 27
+            == 32
         )
     engine.dispose()
 
@@ -126,7 +126,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 27
+            == 32
         )
         connection.execute(
             text(
@@ -144,15 +144,59 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     engine.dispose()
 
 
-def test_plan_role_migration_adds_separate_purpose_columns_to_existing_connections():
+def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     engine = create_engine("sqlite+pysqlite:///:memory:")
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
-        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (26)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (27)"))
         connection.execute(
             text(
                 "CREATE TABLE cloud_connections ("
-                "id VARCHAR(36) PRIMARY KEY, execution_role_arn TEXT)"
+                "id VARCHAR(36) PRIMARY KEY, account_id VARCHAR(12), "
+                "discovery_role_arn TEXT, execution_role_arn TEXT)"
+            )
+        )
+        connection.execute(text("CREATE TABLE organizations (id VARCHAR(36) PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO organizations(id) VALUES ('org-demo')"))
+        connection.execute(
+            text(
+                "CREATE TABLE generated_plan_runs ("
+                "id VARCHAR(36) PRIMARY KEY, organization_id VARCHAR(36), "
+                "idempotency_key_sha256 VARCHAR(64), request_sha256 VARCHAR(64), state VARCHAR(40), "
+                "preparation_lease_expires_at TIMESTAMP WITH TIME ZONE, "
+                "input_sha256 VARCHAR(64), input_version_id VARCHAR(255), "
+                "codebuild_build_id VARCHAR(255))"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO generated_plan_runs "
+                "(id, organization_id, idempotency_key_sha256, request_sha256, state) "
+                "VALUES ('run-demo', 'org-demo', 'key-hash-demo', 'request-hash-demo', 'QUEUED')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO generated_plan_runs "
+                "(id, organization_id, idempotency_key_sha256, request_sha256, state, input_sha256) "
+                "VALUES ('staging-run', 'org-demo', 'staging-key', 'staging-request', "
+                "'PREPARING', 'a')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO generated_plan_runs "
+                "(id, organization_id, idempotency_key_sha256, request_sha256, state, input_sha256, input_version_id) "
+                "VALUES ('starting-run', 'org-demo', 'starting-key', 'starting-request', "
+                "'PREPARING', 'b', 'version-1')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO generated_plan_runs "
+                "(id, organization_id, idempotency_key_sha256, request_sha256, state) "
+                "VALUES ('generation-run', 'org-demo', 'generation-key', 'generation-request', "
+                "'PREPARING')"
             )
         )
         connection.execute(text("CREATE TABLE generated_plan_artifacts (id TEXT PRIMARY KEY)"))
@@ -161,14 +205,127 @@ def test_plan_role_migration_adds_separate_purpose_columns_to_existing_connectio
     db.run_migrations(engine)
     db.run_migrations(engine)
 
-    columns = {
-        column["name"]: column for column in inspect(engine).get_columns("cloud_connections")
+    columns = {column["name"] for column in inspect(engine).get_columns("generated_plan_runs")}
+    assert {
+        "request_document",
+        "preparation_lease_token",
+        "runner_run_id",
+        "preparation_phase",
+        "codebuild_idempotency_token",
+    } <= columns
+    assert inspect(engine).has_table("generated_plan_run_idempotency_keys")
+    with engine.connect() as connection:
+        binding = connection.execute(
+            text(
+                "SELECT organization_id, idempotency_key_sha256, request_sha256, run_id "
+                "FROM generated_plan_run_idempotency_keys "
+                "WHERE idempotency_key_sha256 = 'key-hash-demo'"
+            )
+        ).mappings().one()
+        runner_run_id = connection.execute(
+            text("SELECT runner_run_id FROM generated_plan_runs WHERE id = 'run-demo'")
+        ).scalar_one()
+        codebuild_token = connection.execute(
+            text("SELECT codebuild_idempotency_token FROM generated_plan_runs WHERE id = 'run-demo'")
+        ).scalar_one()
+        phases = connection.execute(
+            text(
+                "SELECT id, preparation_phase FROM generated_plan_runs "
+                "WHERE id IN ('generation-run', 'staging-run', 'starting-run') ORDER BY id"
+            )
+        ).all()
+        worker_cursor = connection.execute(
+            text("SELECT next_queue_index FROM worker_dispatch_states WHERE id = 1")
+        ).scalar_one()
+    assert binding == {
+        "organization_id": "org-demo",
+        "idempotency_key_sha256": "key-hash-demo",
+        "request_sha256": "request-hash-demo",
+        "run_id": "run-demo",
     }
-    assert {"plan_role_arn", "plan_role_setup_state"} <= set(columns)
-    assert columns["plan_role_setup_state"]["default"] == "'NOT_CONFIGURED'"
+    assert runner_run_id == "run-demo"
+    assert codebuild_token == "run-demo"
+    assert phases == [
+        ("generation-run", "GENERATING_PROPOSAL"),
+        ("staging-run", "STAGING_INPUT"),
+        ("starting-run", "STARTING_BUILD"),
+    ]
+    assert worker_cursor == 0
+    indexes = {index["name"] for index in inspect(engine).get_indexes("generated_plan_runs")}
+    assert "ix_generated_plan_run_preparation_lease" in indexes
+    assert "uq_generated_plan_runs_runner_run_id" in indexes
+    assert "uq_generated_plan_runs_codebuild_idempotency_token" in indexes
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 27
+            == 32
         )
+    engine.dispose()
+
+
+def test_plan_role_migration_upgrades_version_31_with_only_plan_role_columns():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
+        connection.execute(
+            text(
+                "CREATE TABLE cloud_connections ("
+                "id VARCHAR(36) PRIMARY KEY, account_id VARCHAR(12), "
+                "discovery_role_arn TEXT, execution_role_arn TEXT)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO cloud_connections "
+                "(id, account_id, discovery_role_arn, execution_role_arn) "
+                "VALUES ('connection-1', '123456789012', 'arn:discovery', 'arn:execution')"
+            )
+        )
+        connection.execute(text("CREATE TABLE generated_plan_artifacts (id TEXT PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE generated_plan_approvals (id TEXT PRIMARY KEY)"))
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("cloud_connections")}
+    assert columns == {
+        "id",
+        "account_id",
+        "discovery_role_arn",
+        "execution_role_arn",
+        "plan_role_arn",
+        "plan_role_setup_state",
+    }
+    with engine.connect() as connection:
+        version = connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+        existing = connection.execute(
+            text(
+                "SELECT account_id, discovery_role_arn, execution_role_arn, "
+                "plan_role_arn, plan_role_setup_state FROM cloud_connections WHERE id = 'connection-1'"
+            )
+        ).one()
+    assert version == 32
+    assert existing == (
+        "123456789012",
+        "arn:discovery",
+        "arn:execution",
+        None,
+        "NOT_CONFIGURED",
+    )
+    engine.dispose()
+
+
+def test_plan_role_migration_fails_closed_if_cloud_connections_is_missing():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
+
+    with pytest.raises(RuntimeError, match="cloud_connections table is missing"):
+        db.run_migrations(engine)
+
+    with engine.connect() as connection:
+        version = connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+    assert version == 31
     engine.dispose()

@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -36,6 +36,9 @@ from davdeploy.domain import (
     DesiredStatePublicationRequest,
     DesiredStatePublicationStateRequest,
     GeneratedPlanArtifactApprovalRequest,
+    GeneratedPlanGenerationReconciliationRequest,
+    GeneratedPlanInputReconciliationRequest,
+    GeneratedPlanRunRequest,
     InfrastructurePlanConstraintUpdateRequest,
     InfrastructurePlanDecisionRequest,
     InfrastructurePlanRevisionRequest,
@@ -55,6 +58,7 @@ from davdeploy.domain import (
 from davdeploy.edge_origin import edge_origin_is_authorized
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
+from davdeploy.nova_plan_dispatch import NovaPlanDispatchError
 from davdeploy.product_readiness import security_headers
 from davdeploy.rate_limit import SlidingWindowRateLimiter
 from davdeploy.security import (
@@ -197,6 +201,8 @@ def translate(error: Exception) -> None:
     if isinstance(error, (ValueError, KeyError)):
         raise HTTPException(409, str(error)) from error
     if isinstance(error, ModelGatewayUnavailable):
+        raise HTTPException(503, str(error)) from error
+    if isinstance(error, NovaPlanDispatchError):
         raise HTTPException(503, str(error)) from error
     if isinstance(error, InvitationDeliveryUnavailable):
         raise HTTPException(503, str(error)) from error
@@ -1187,6 +1193,105 @@ def get_generated_plan_artifact(
     try:
         return service.generated_plan_artifact_detail(principal, artifact_id)
     except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.post(
+    "/api/v1/customer-plan-revisions/{revision_id}/generated-plan-runs",
+    status_code=202,
+)
+def request_generated_plan_run(
+    revision_id: str,
+    request: GeneratedPlanRunRequest,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=16, max_length=200),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Queue one exact submitted revision through the separate plan-only project."""
+    REQUESTS.labels("generated_plan_runs.create").inc()
+    try:
+        return service.request_generated_plan_run(
+            principal,
+            revision_id,
+            request.content_digest,
+            idempotency_key,
+        )
+    except (PermissionError, ValueError, KeyError, ModelGatewayUnavailable, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.get("/api/v1/generated-plan-runs/{run_id}")
+def get_generated_plan_run(
+    run_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Return safe status for one organization-owned Nova plan request."""
+    REQUESTS.labels("generated_plan_runs.get").inc()
+    try:
+        return service.generated_plan_run_detail(principal, run_id)
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/retry", status_code=202)
+def retry_generated_plan_run(
+    run_id: str,
+    idempotency_key: str = Header(alias="Idempotency-Key", min_length=16, max_length=200),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Explicitly retry a confirmed failure with a new idempotency key."""
+    REQUESTS.labels("generated_plan_runs.retry").inc()
+    try:
+        return service.retry_generated_plan_run(principal, run_id, idempotency_key)
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/reconcile-input", status_code=202)
+def reconcile_generated_plan_input(
+    run_id: str,
+    request: GeneratedPlanInputReconciliationRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Verify a staged input or explicitly abandon that pre-build attempt."""
+    REQUESTS.labels("generated_plan_runs.reconcile_input").inc()
+    try:
+        return service.reconcile_generated_plan_input(
+            principal, run_id, abandon_attempt=request.abandon_attempt
+        )
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/reconcile-generation", status_code=202)
+def abandon_generated_plan_generation_attempt(
+    run_id: str,
+    request: GeneratedPlanGenerationReconciliationRequest,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Explicitly abandon an uncertain proposal call so a fresh retry can begin."""
+    REQUESTS.labels("generated_plan_runs.reconcile_generation").inc()
+    try:
+        return service.abandon_generated_plan_generation_attempt(principal, run_id)
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
+        translate(error)
+
+
+@app.post("/api/v1/generated-plan-runs/{run_id}/reconcile-build", status_code=202)
+def reconcile_generated_plan_build_attempt(
+    run_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Find one exact CodeBuild attempt after its start response was lost."""
+    REQUESTS.labels("generated_plan_runs.reconcile_build").inc()
+    try:
+        return service.reconcile_generated_plan_build_attempt(principal, run_id)
+    except (PermissionError, ValueError, KeyError, NovaPlanDispatchError) as error:
         translate(error)
 
 

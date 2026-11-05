@@ -15,6 +15,7 @@ The current Terraform environments use these non-secret variables:
 - `EXPECTED_AWS_ACCOUNT_ID`
 - `FRONTEND_ORIGIN`
 - `GOOGLE_IDENTITY_PROVIDER_ENABLED`
+- `NOVA_PLAN_ONLY_RUNNER_ENABLED`
 - `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED`
 - `SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON`
 - `TF_PLAN_BUCKET`
@@ -27,6 +28,10 @@ The current Terraform environments use these non-secret variables:
 These values identify deployment configuration. They do not authenticate a caller and remain
 GitHub Actions variables. Bucket policies, IAM trust policies, KMS policies, branch restrictions,
 and environment protections provide authorization.
+
+`NOVA_PLAN_ONLY_RUNNER_ENABLED` defaults to `false`. Keep it disabled until the reviewed fixed
+Nova plan-only runner is wired. When enabled, Terraform creates a separate CodeBuild project and
+scoped role, but its checked-in buildspec still fails closed until that runner replaces the stub.
 
 The serverless API certification inputs are off by default. Set
 `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED` to `true` only for a controlled certification and

@@ -19,6 +19,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from httpx import HTTPError
 from opentelemetry import trace
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from davdeploy.cloud_execution import (
@@ -72,6 +73,7 @@ from davdeploy.invitation_email import (
     InvitationEmailSender,
     configured_invitation_sender,
 )
+from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
     ApiCredential,
     Approval,
@@ -91,6 +93,8 @@ from davdeploy.models import (
     ExecutionJob,
     GeneratedPlanApproval,
     GeneratedPlanArtifact,
+    GeneratedPlanRun,
+    GeneratedPlanRunIdempotencyKey,
     GitHubAppInstallationState,
     GitHubWebhookDelivery,
     Incident,
@@ -111,6 +115,7 @@ from davdeploy.models import (
     TerraformPlanRender,
     TerraformPlanReview,
     UsageRecord,
+    WorkerDispatchState,
     WorkloadIntent,
     WorkspaceInvitation,
     WorkspaceSubscription,
@@ -120,6 +125,7 @@ from davdeploy.module_ports import (
     validate_module_inputs,
     validate_module_outputs,
 )
+from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
 from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
@@ -140,6 +146,20 @@ BLOG_AUTHOR_EMAILS = frozenset({"bepoadewale1@gmail.com"})
 CLOUD_EXECUTION_WORKER_LEASE_SECONDS = 900
 CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS = 60
 CLOUD_EXECUTION_LEASE_SCAN_SECONDS = 30
+NOVA_PLAN_PREPARATION_LEASE_SECONDS = 180
+NOVA_PLAN_WORKER_HEARTBEAT_SECONDS = 30
+NOVA_PLAN_MAX_EXPLICIT_RETRIES = 3
+NOVA_PLAN_UNCERTAIN_ERROR_CODES = frozenset(
+    {
+        "DISPATCH_UNCERTAIN",
+        "INPUT_STAGE_RECONCILIATION_REQUIRED",
+        "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED",
+        "BUILD_START_RECONCILIATION_REQUIRED",
+        "PREPARATION_OUTCOME_UNCERTAIN",
+        "PREPARATION_LEASE_EXPIRED",
+        "BUILD_STATUS_UNCONFIRMED",
+    }
+)
 _last_cloud_execution_lease_scan = 0.0
 _cloud_execution_lease_scan_lock = threading.Lock()
 
@@ -175,6 +195,7 @@ class ProductService:
         invitation_sender: InvitationEmailSender | None = None,
         terraform_generator: NovaTerraformGenerator | None = None,
         generated_plan_artifact_store: Any | None = None,
+        nova_plan_dispatcher: NovaPlanOnlyDispatcher | None = None,
     ):
         self.db = db
         self.intent_provider = intent_provider or configured_intent_provider()
@@ -190,6 +211,7 @@ class ProductService:
         self.invitation_sender = invitation_sender or configured_invitation_sender()
         self.terraform_generator = terraform_generator or NovaTerraformGenerator()
         self.generated_plan_artifact_store = generated_plan_artifact_store
+        self.nova_plan_dispatcher = nova_plan_dispatcher
 
     def _wake_worker(self, kind: str, job_id: str) -> None:
         """Send a non-sensitive wake-up after durable work has committed.
@@ -1891,6 +1913,1827 @@ class ProductService:
         )
         self.db.commit()
         return revision
+
+    def request_generated_plan_run(
+        self,
+        principal: Principal,
+        revision_id: str,
+        content_digest: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Persist one exact submitted revision and wake the isolated plan worker.
+
+        The route is disabled unless a later reviewed release explicitly marks
+        the fixed runner ready. This API records QUEUED work and does not call
+        Bedrock, upload runner input, or start CodeBuild.
+        """
+        dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        if dispatcher is None:
+            raise ModelGatewayUnavailable("hosted Nova plan generation is not enabled")
+        if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", idempotency_key):
+            raise ValueError("Idempotency-Key must contain 16-200 safe characters")
+
+        revision = self._infrastructure_revision(principal, revision_id)
+        customer_plan = self._infrastructure_plan(principal, revision.infrastructure_plan_id)
+        if (
+            not self._is_workspace_administrator(principal)
+            and customer_plan.creator_subject != principal.subject
+        ):
+            raise PermissionError("only the plan creator or a workspace administrator may request a plan")
+        if revision.state not in {
+            InfrastructurePlanState.SUBMITTED,
+            InfrastructurePlanState.APPROVED,
+        }:
+            raise ValueError("Nova plan generation requires a submitted customer revision")
+        if revision.content_digest != content_digest or plan_hash(revision.content) != content_digest:
+            raise ValueError("customer revision digest is stale or invalid")
+        latest = self.db.scalar(
+            select(InfrastructurePlanRevision)
+            .where(
+                InfrastructurePlanRevision.infrastructure_plan_id == customer_plan.id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+            .order_by(InfrastructurePlanRevision.revision_number.desc())
+            .limit(1)
+        )
+        if not latest or latest.id != revision.id:
+            raise ValueError("Nova plan request refers to a stale customer revision")
+        if revision.state == InfrastructurePlanState.APPROVED:
+            decision = self.db.scalar(
+                select(InfrastructurePlanDecisionRecord).where(
+                    InfrastructurePlanDecisionRecord.revision_id == revision.id,
+                    InfrastructurePlanDecisionRecord.organization_id == principal.organization_id,
+                )
+            )
+            if (
+                not decision
+                or decision.decision != InfrastructurePlanDecision.APPROVED
+                or decision.approved_digest != content_digest
+            ):
+                raise ValueError("approved customer revision has no matching approval record")
+
+        content = revision.content or {}
+        target = content.get("target") or {}
+        connection_id = target.get("connection_id")
+        connection = self._cloud_connection(principal, str(connection_id or ""))
+        account_id = str(target.get("account_id") or "")
+        region = str(target.get("region") or "")
+        if (
+            connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or not connection.account_id
+            or account_id != connection.account_id
+            or not re.fullmatch(r"\d{12}", account_id)
+            or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region)
+        ):
+            raise ValueError("plan target must match a verified AWS account and region")
+        project = self._project(principal, customer_plan.project_id)
+        source_id = content.get("source_deployment_plan_id")
+        if not source_id:
+            raise ValueError("customer revision has no source deployment plan")
+        self._plan(principal, str(source_id))
+
+        request_document = {
+            "contract": "davdeploy.nova-plan-request.v1",
+            "organization_id": principal.organization_id,
+            "project_id": project.id,
+            "plan_id": customer_plan.id,
+            "revision_id": revision.id,
+            "revision_sha256": revision.content_digest,
+            "target_account_id": account_id,
+            "region": region,
+            "generator_model": self.terraform_generator.model_id,
+            "runner_project": dispatcher.project_name,
+        }
+        request_sha256 = canonical_json_digest(request_document)
+        idempotency_sha256 = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+        existing = self._generated_plan_run_for_idempotency_key(
+            principal.organization_id, idempotency_sha256
+        )
+        if existing:
+            if existing.request_sha256 != request_sha256:
+                raise ValueError("Idempotency-Key was already used for a different plan request")
+            self._wake_generated_plan_run(existing)
+            return self.generated_plan_run_detail(principal, existing.id)
+        existing_request = self.db.scalar(
+            select(GeneratedPlanRun).where(
+                GeneratedPlanRun.organization_id == principal.organization_id,
+                GeneratedPlanRun.revision_id == revision.id,
+                GeneratedPlanRun.request_sha256 == request_sha256,
+            )
+        )
+        if existing_request:
+            existing_request = self._bind_generated_plan_run_idempotency_key(
+                existing_request,
+                principal.organization_id,
+                idempotency_sha256,
+                request_sha256,
+            )
+            self._wake_generated_plan_run(existing_request)
+            return self.generated_plan_run_detail(principal, existing_request.id)
+
+        run_id = str(uuid.uuid4())
+        run = GeneratedPlanRun(
+            id=run_id,
+            organization_id=principal.organization_id,
+            project_id=project.id,
+            revision_id=revision.id,
+            requester_subject=principal.subject,
+            idempotency_key_sha256=idempotency_sha256,
+            request_sha256=request_sha256,
+            request_document=request_document,
+            runner_run_id=run_id,
+            codebuild_idempotency_token=run_id,
+            revision_sha256=revision.content_digest,
+            state="QUEUED",
+            codebuild_project=dispatcher.project_name,
+            input_key=dispatcher.input_key(run_id),
+            result_key=dispatcher.result_key(run_id),
+        )
+        self.db.add(run)
+        self.db.add(
+            GeneratedPlanRunIdempotencyKey(
+                organization_id=principal.organization_id,
+                idempotency_key_sha256=idempotency_sha256,
+                request_sha256=request_sha256,
+                run_id=run.id,
+            )
+        )
+        self.audit(
+            principal,
+            "generated_plan_run.requested",
+            "generated_plan_run",
+            run.id,
+            {
+                "revision_id": revision.id,
+                "revision_sha256": revision.content_digest,
+                "request_sha256": request_sha256,
+                "runner_project": dispatcher.project_name,
+                "state": run.state,
+            },
+        )
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existing = self._generated_plan_run_for_idempotency_key(
+                principal.organization_id, idempotency_sha256
+            )
+            if existing:
+                if existing.request_sha256 != request_sha256:
+                    raise ValueError(
+                        "Idempotency-Key was already used for a different plan request"
+                    ) from None
+            else:
+                existing = self.db.scalar(
+                    select(GeneratedPlanRun).where(
+                        GeneratedPlanRun.organization_id == principal.organization_id,
+                        GeneratedPlanRun.revision_id == revision.id,
+                        GeneratedPlanRun.request_sha256 == request_sha256,
+                    )
+                )
+            if not existing:
+                raise ValueError("Nova plan request could not be recorded safely") from None
+            if existing.request_sha256 != request_sha256:
+                raise ValueError("Idempotency-Key was already used for a different plan request")
+            existing = self._bind_generated_plan_run_idempotency_key(
+                existing,
+                principal.organization_id,
+                idempotency_sha256,
+                request_sha256,
+            )
+            self._wake_generated_plan_run(existing)
+            return self.generated_plan_run_detail(principal, existing.id)
+
+        self._wake_generated_plan_run(run)
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def retry_generated_plan_run(
+        self, principal: Principal, run_id: str, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Explicitly requeue a confirmed failure with a fresh idempotency key.
+
+        The original request remains bound to its run. Retry keys are separately
+        recorded so replaying a retry request cannot start another attempt. Runs
+        requiring reconciliation are never eligible for retry.
+        """
+        if not re.fullmatch(r"[A-Za-z0-9._:-]{16,200}", idempotency_key):
+            raise ValueError("Idempotency-Key must contain 16-200 safe characters")
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+
+        retry_key_sha256 = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+        retry_events = self._generated_plan_run_retry_events(principal.organization_id, run.id)
+        if any(
+            (event.detail or {}).get("idempotency_key_sha256") == retry_key_sha256
+            for event in retry_events
+        ):
+            if run.state == "QUEUED":
+                self._wake_generated_plan_run(run)
+            return self.generated_plan_run_detail(principal, run.id)
+
+        if self._generated_plan_run_for_idempotency_key(
+            principal.organization_id, retry_key_sha256
+        ):
+            raise ValueError("Idempotency-Key was already used for another request")
+        if run.state != "FAILED" or run.error_code in NOVA_PLAN_UNCERTAIN_ERROR_CODES:
+            raise ValueError(
+                "only a confirmed failed plan request can be retried; reconcile uncertain work first"
+            )
+        if len(retry_events) >= NOVA_PLAN_MAX_EXPLICIT_RETRIES:
+            raise ValueError("Nova plan retry limit reached")
+
+        now = datetime.now(UTC)
+        runner_run_id = str(uuid.uuid4())
+        previous = {
+            "state": run.state,
+            "error_code": run.error_code,
+            "codebuild_build_id": run.codebuild_build_id,
+        }
+        self.db.add(
+            GeneratedPlanRunIdempotencyKey(
+                organization_id=principal.organization_id,
+                idempotency_key_sha256=retry_key_sha256,
+                request_sha256=run.request_sha256,
+                run_id=run.id,
+            )
+        )
+        try:
+            requeued = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "FAILED",
+                )
+                .values(
+                    state="QUEUED",
+                    proposal_sha256=None,
+                    input_sha256=None,
+                    input_version_id=None,
+                    runner_run_id=runner_run_id,
+                    codebuild_idempotency_token=runner_run_id,
+                    input_key=NovaPlanOnlyDispatcher.input_key(runner_run_id),
+                    result_key=NovaPlanOnlyDispatcher.result_key(runner_run_id),
+                    result_metadata=None,
+                    codebuild_build_id=None,
+                    error_code=None,
+                    error_summary=None,
+                    preparation_phase=None,
+                    preparation_lease_token=None,
+                    preparation_lease_expires_at=None,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if requeued.rowcount != 1:
+                self.db.rollback()
+                raise ValueError("plan request is no longer in a confirmed failed state")
+            self.audit(
+                principal,
+                "generated_plan_run.retry_requested",
+                "generated_plan_run",
+                run.id,
+                {
+                    "idempotency_key_sha256": retry_key_sha256,
+                    "request_sha256": run.request_sha256,
+                    "retry_number": len(retry_events) + 1,
+                    "previous": previous,
+                    "state": "QUEUED",
+                },
+            )
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            retry_events = self._generated_plan_run_retry_events(
+                principal.organization_id, run.id
+            )
+            if any(
+                (event.detail or {}).get("idempotency_key_sha256") == retry_key_sha256
+                for event in retry_events
+            ):
+                refreshed = self.db.scalar(
+                    select(GeneratedPlanRun)
+                    .where(GeneratedPlanRun.id == run.id)
+                    .execution_options(populate_existing=True)
+                )
+                if refreshed and refreshed.state == "QUEUED":
+                    self._wake_generated_plan_run(refreshed)
+                return self.generated_plan_run_detail(principal, run.id)
+            raise ValueError("Nova plan retry could not be recorded safely") from None
+
+        requeued_run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(GeneratedPlanRun.id == run.id)
+            .execution_options(populate_existing=True)
+        )
+        if requeued_run is None:
+            raise ValueError("Nova plan retry could not be recorded safely")
+        self._wake_generated_plan_run(requeued_run)
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def _generated_plan_run_retry_events(
+        self, organization_id: str, run_id: str
+    ) -> list[AuditEvent]:
+        return list(
+            self.db.scalars(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.organization_id == organization_id,
+                    AuditEvent.action == "generated_plan_run.retry_requested",
+                    AuditEvent.entity_type == "generated_plan_run",
+                    AuditEvent.entity_id == run_id,
+                )
+                .order_by(AuditEvent.created_at, AuditEvent.id)
+            )
+        )
+
+    def next_worker_dispatch_queue_index(self, queue_count: int) -> int:
+        """Atomically claim the next queue slot from durable shared state."""
+        if not 1 <= queue_count <= 10:
+            raise ValueError("worker queue count is invalid")
+        cursor = self.db.scalar(
+            select(WorkerDispatchState)
+            .where(WorkerDispatchState.id == 1)
+            .with_for_update()
+        )
+        if cursor is None:
+            self.db.rollback()
+            raise RuntimeError("worker dispatch scheduler is not initialized")
+        selected_index = cursor.next_queue_index % queue_count
+        cursor.next_queue_index = (selected_index + 1) % queue_count
+        cursor.updated_at = datetime.now(UTC)
+        self.db.commit()
+        return selected_index
+
+    def _generated_plan_run_for_idempotency_key(
+        self, organization_id: str, idempotency_key_sha256: str
+    ) -> GeneratedPlanRun | None:
+        alias = self.db.scalar(
+            select(GeneratedPlanRunIdempotencyKey).where(
+                GeneratedPlanRunIdempotencyKey.organization_id == organization_id,
+                GeneratedPlanRunIdempotencyKey.idempotency_key_sha256 == idempotency_key_sha256,
+            )
+        )
+        if alias:
+            run = self.db.scalar(
+                select(GeneratedPlanRun).where(GeneratedPlanRun.id == alias.run_id)
+            )
+            if (
+                not run
+                or run.organization_id != organization_id
+                or run.request_sha256 != alias.request_sha256
+            ):
+                raise ValueError("Nova plan request could not be recorded safely")
+            return run
+        # The original key is stored directly on the run for compatibility with
+        # records created before alias bindings were introduced.
+        return self.db.scalar(
+            select(GeneratedPlanRun).where(
+                GeneratedPlanRun.organization_id == organization_id,
+                GeneratedPlanRun.idempotency_key_sha256 == idempotency_key_sha256,
+            )
+        )
+
+    def _bind_generated_plan_run_idempotency_key(
+        self,
+        run: GeneratedPlanRun,
+        organization_id: str,
+        idempotency_key_sha256: str,
+        request_sha256: str,
+    ) -> GeneratedPlanRun:
+        existing = self._generated_plan_run_for_idempotency_key(
+            organization_id, idempotency_key_sha256
+        )
+        if existing:
+            if existing.request_sha256 != request_sha256:
+                raise ValueError("Idempotency-Key was already used for a different plan request")
+            return existing
+        if run.organization_id != organization_id or run.request_sha256 != request_sha256:
+            raise ValueError("Nova plan request could not be recorded safely")
+        if run.idempotency_key_sha256 == idempotency_key_sha256:
+            return run
+
+        self.db.add(
+            GeneratedPlanRunIdempotencyKey(
+                organization_id=organization_id,
+                idempotency_key_sha256=idempotency_key_sha256,
+                request_sha256=request_sha256,
+                run_id=run.id,
+            )
+        )
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existing = self._generated_plan_run_for_idempotency_key(
+                organization_id, idempotency_key_sha256
+            )
+            if existing and existing.request_sha256 == request_sha256:
+                return existing
+            if existing:
+                raise ValueError(
+                    "Idempotency-Key was already used for a different plan request"
+                ) from None
+            raise ValueError("Nova plan request could not be recorded safely") from None
+        return run
+
+    def reconcile_generated_plan_input(
+        self, principal: Principal, run_id: str, *, abandon_attempt: bool = False
+    ) -> dict[str, Any]:
+        """Verify an ambiguous pre-build input or safely abandon its attempt."""
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+        if (
+            run.state != "RECONCILIATION_REQUIRED"
+            or run.error_code != "INPUT_STAGE_RECONCILIATION_REQUIRED"
+            or run.codebuild_build_id is not None
+            or not run.runner_run_id
+            or not run.input_key
+            or not run.input_sha256
+            or not run.proposal_sha256
+        ):
+            raise ValueError("only an ambiguous pre-build input attempt can be reconciled here")
+
+        if abandon_attempt:
+            now = datetime.now(UTC)
+            abandoned = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.codebuild_build_id.is_(None),
+                )
+                .values(
+                    state="FAILED",
+                    error_code="INPUT_ATTEMPT_ABANDONED",
+                    error_summary=(
+                        "This pre-build input attempt was abandoned. A retry will use a fresh immutable key."
+                    ),
+                    preparation_phase=None,
+                    finished_at=now,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if abandoned.rowcount != 1:
+                self.db.rollback()
+                return self.generated_plan_run_detail(principal, run.id)
+            self.audit(
+                principal,
+                "generated_plan_run.input_attempt_abandoned",
+                "generated_plan_run",
+                run.id,
+                {
+                    "runner_run_id": run.runner_run_id,
+                    "input_key": run.input_key,
+                    "input_sha256": run.input_sha256,
+                    "state": "FAILED",
+                },
+            )
+            self.db.commit()
+            return self.generated_plan_run_detail(principal, run.id)
+
+        dispatcher = self.nova_plan_dispatcher
+        if dispatcher is None:
+            dispatcher = NovaPlanOnlyDispatcher.from_environment()
+        if dispatcher is None:
+            raise NovaPlanDispatchError("Nova plan runner is not enabled for input reconciliation")
+        expected_key = dispatcher.input_key(run.runner_run_id)
+        if run.input_key != expected_key:
+            raise ValueError("stored Nova input key does not match its durable attempt")
+        version_id = dispatcher.inspect_staged_input(
+            run.runner_run_id, run.input_key, run.input_sha256
+        )
+        if version_id is None:
+            now = datetime.now(UTC)
+            absent = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.codebuild_build_id.is_(None),
+                )
+                .values(
+                    state="FAILED",
+                    error_code="INPUT_NOT_STAGED",
+                    error_summary=(
+                        "No input object exists for this attempt. Retry with a fresh idempotency key."
+                    ),
+                    preparation_phase=None,
+                    finished_at=now,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if absent.rowcount != 1:
+                self.db.rollback()
+                return self.generated_plan_run_detail(principal, run.id)
+            self.audit(
+                principal,
+                "generated_plan_run.input_confirmed_absent",
+                "generated_plan_run",
+                run.id,
+                {
+                    "runner_run_id": run.runner_run_id,
+                    "input_key": run.input_key,
+                    "input_sha256": run.input_sha256,
+                    "state": "FAILED",
+                },
+            )
+            self.db.commit()
+            return self.generated_plan_run_detail(principal, run.id)
+
+        now = datetime.now(UTC)
+        resumed = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+                GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.codebuild_build_id.is_(None),
+            )
+            .values(
+                input_version_id=version_id,
+                state="QUEUED",
+                error_code=None,
+                error_summary=None,
+                preparation_phase=None,
+                finished_at=None,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if resumed.rowcount != 1:
+            self.db.rollback()
+            return self.generated_plan_run_detail(principal, run.id)
+        self.audit(
+            principal,
+            "generated_plan_run.input_reconciled",
+            "generated_plan_run",
+            run.id,
+            {
+                "runner_run_id": run.runner_run_id,
+                "input_key": run.input_key,
+                "input_sha256": run.input_sha256,
+                "input_version_id": version_id,
+                "state": "QUEUED",
+            },
+        )
+        self.db.commit()
+        queued = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(GeneratedPlanRun.id == run.id)
+            .execution_options(populate_existing=True)
+        )
+        if queued:
+            self._wake_generated_plan_run(queued)
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def abandon_generated_plan_generation_attempt(
+        self, principal: Principal, run_id: str
+    ) -> dict[str, Any]:
+        """Mark an uncertain proposal call failed after explicit user confirmation."""
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+        if (
+            run.state != "RECONCILIATION_REQUIRED"
+            or run.error_code != "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+            or run.preparation_phase != "GENERATING_PROPOSAL"
+            or run.proposal_sha256 is not None
+            or run.input_sha256 is not None
+            or run.input_version_id is not None
+            or run.codebuild_build_id is not None
+        ):
+            raise ValueError("only an uncertain proposal-generation attempt can be abandoned here")
+
+        now = datetime.now(UTC)
+        abandoned = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+                GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.error_code == "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.preparation_phase == "GENERATING_PROPOSAL",
+                GeneratedPlanRun.proposal_sha256.is_(None),
+                GeneratedPlanRun.input_sha256.is_(None),
+                GeneratedPlanRun.input_version_id.is_(None),
+                GeneratedPlanRun.codebuild_build_id.is_(None),
+            )
+            .values(
+                state="FAILED",
+                error_code="GENERATION_ATTEMPT_ABANDONED",
+                error_summary=(
+                    "The uncertain proposal-generation attempt was explicitly abandoned. "
+                    "Use the retry action with a fresh idempotency key to start a new attempt."
+                ),
+                preparation_phase=None,
+                preparation_lease_token=None,
+                preparation_lease_expires_at=None,
+                finished_at=now,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if abandoned.rowcount != 1:
+            self.db.rollback()
+            return self.generated_plan_run_detail(principal, run.id)
+        self.audit(
+            principal,
+            "generated_plan_run.generation_attempt_abandoned",
+            "generated_plan_run",
+            run.id,
+            {
+                "runner_run_id": run.runner_run_id,
+                "request_sha256": run.request_sha256,
+                "state": "FAILED",
+            },
+        )
+        self.db.commit()
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def reconcile_generated_plan_build_attempt(
+        self, principal: Principal, run_id: str
+    ) -> dict[str, Any]:
+        """Find and bind one exact build after a possibly lost StartBuild response."""
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+        if (
+            run.state != "RECONCILIATION_REQUIRED"
+            or run.error_code != "BUILD_START_RECONCILIATION_REQUIRED"
+            or run.preparation_phase != "STARTING_BUILD"
+            or not run.runner_run_id
+            or run.codebuild_idempotency_token != run.runner_run_id
+        ):
+            raise ValueError("only an ambiguous CodeBuild start can be reconciled here")
+
+        dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        if dispatcher is None or dispatcher.project_name != run.codebuild_project:
+            raise NovaPlanDispatchError(
+                "the exact Nova plan project is unavailable for build reconciliation",
+                outcome_uncertain=True,
+                phase="build_start",
+            )
+        if run.codebuild_build_id is not None:
+            if not run.codebuild_build_id.startswith(f"{run.codebuild_project}:"):
+                raise NovaPlanDispatchError(
+                    "the stored Nova plan build ID does not match its durable project",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                )
+            self.reconcile_generated_plan_build(run.codebuild_build_id)
+            return self.generated_plan_run_detail(principal, run.id)
+        # A failed or incomplete search is never evidence that StartBuild did not
+        # create a build; leave the durable start-uncertain state intact.
+        build = dispatcher.find_build_by_run_id(run.runner_run_id)
+        if build is None:
+            self.audit(
+                principal,
+                "generated_plan_run.build_start_lookup_no_match",
+                "generated_plan_run",
+                run.id,
+                {
+                    "codebuild_project": run.codebuild_project,
+                    "runner_run_id": run.runner_run_id,
+                    "state": "RECONCILIATION_REQUIRED",
+                },
+            )
+            self.db.commit()
+            return self.generated_plan_run_detail(principal, run.id)
+        if (
+            build.project_name != run.codebuild_project
+            or not isinstance(build.build_id, str)
+            or not build.build_id.startswith(f"{run.codebuild_project}:")
+        ):
+            raise NovaPlanDispatchError(
+                "the matched Nova plan build did not match its durable project",
+                outcome_uncertain=True,
+                phase="build_start",
+            )
+
+        now = datetime.now(UTC)
+        try:
+            bound = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.organization_id == principal.organization_id,
+                    GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.error_code == "BUILD_START_RECONCILIATION_REQUIRED",
+                    GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
+                    GeneratedPlanRun.codebuild_build_id.is_(None),
+                    GeneratedPlanRun.runner_run_id == run.runner_run_id,
+                    GeneratedPlanRun.codebuild_idempotency_token
+                    == run.codebuild_idempotency_token,
+                )
+                .values(
+                    state="BUILD_STARTED",
+                    codebuild_build_id=build.build_id,
+                    error_code=None,
+                    error_summary=None,
+                    preparation_phase=None,
+                    preparation_lease_token=None,
+                    preparation_lease_expires_at=None,
+                    started_at=now,
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if bound.rowcount != 1:
+                self.db.rollback()
+                return self.generated_plan_run_detail(principal, run.id)
+            self.audit(
+                principal,
+                "generated_plan_run.build_id_recovered",
+                "generated_plan_run",
+                run.id,
+                {
+                    "codebuild_project": run.codebuild_project,
+                    "codebuild_build_id": build.build_id,
+                    "runner_run_id": run.runner_run_id,
+                    "state": "BUILD_STARTED",
+                },
+            )
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            raise NovaPlanDispatchError(
+                "the matched Nova plan build is already bound to another request",
+                outcome_uncertain=True,
+                phase="build_start",
+            ) from None
+
+        # A live build remains BUILD_STARTED. A terminal build is processed by
+        # the existing exact-build reconciler before returning the request.
+        self.reconcile_generated_plan_build(build.build_id)
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def _wake_generated_plan_run(self, run: GeneratedPlanRun) -> None:
+        """Wake the durable worker; repeated SQS notifications are safe."""
+        if run.state != "QUEUED":
+            return
+        try:
+            self._wake_worker("generated_plan_run", run.id)
+        except RuntimeError as error:
+            raise NovaPlanDispatchError(
+                "Nova plan request is queued, but its worker wake-up could not be confirmed"
+            ) from error
+
+    def run_next_generated_plan_run(self) -> bool:
+        """Claim and prepare one durable Nova plan request from the SQS wake-up."""
+        self._reconcile_expired_generated_plan_run_leases()
+        claim = self._claim_next_generated_plan_run()
+        if claim is None:
+            return False
+        run, lease_token = claim
+        actor = Principal(run.requester_subject, run.organization_id, "operator")
+        dispatcher = self.nova_plan_dispatcher
+        if dispatcher is None:
+            try:
+                dispatcher = NovaPlanOnlyDispatcher.from_environment()
+            except NovaPlanDispatchError as error:
+                self._finish_generated_plan_run_claim(
+                    run,
+                    lease_token,
+                    state="FAILED",
+                    error_code="RUNNER_CONFIGURATION_INVALID",
+                    error_summary=str(error),
+                    action="generated_plan_run.worker_configuration_failed",
+                )
+                return True
+        if dispatcher is None:
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="FAILED",
+                error_code="RUNNER_CONFIGURATION_UNAVAILABLE",
+                error_summary="Nova plan generation is not enabled for this worker.",
+                action="generated_plan_run.worker_configuration_failed",
+            )
+            return True
+
+        try:
+            revision = self._infrastructure_revision(actor, run.revision_id)
+            customer_plan = self._infrastructure_plan(actor, revision.infrastructure_plan_id)
+            request_document = run.request_document
+            if (
+                not isinstance(request_document, dict)
+                or canonical_json_digest(request_document) != run.request_sha256
+                or request_document.get("organization_id") != run.organization_id
+                or request_document.get("project_id") != run.project_id
+                or request_document.get("plan_id") != customer_plan.id
+                or request_document.get("revision_id") != revision.id
+                or request_document.get("revision_sha256") != run.revision_sha256
+                or request_document.get("runner_project") != run.codebuild_project
+            ):
+                raise ValueError("durable Nova plan request did not match its stored digest")
+            target = (revision.content or {}).get("target") or {}
+            account_id = str(target.get("account_id") or "")
+            region = str(target.get("region") or "")
+            connection = self._cloud_connection(actor, str(target.get("connection_id") or ""))
+            source_plan_id = (revision.content or {}).get("source_deployment_plan_id")
+            latest = self.db.scalar(
+                select(InfrastructurePlanRevision)
+                .where(
+                    InfrastructurePlanRevision.infrastructure_plan_id == customer_plan.id,
+                    InfrastructurePlanRevision.organization_id == run.organization_id,
+                )
+                .order_by(InfrastructurePlanRevision.revision_number.desc())
+                .limit(1)
+            )
+            if (
+                customer_plan.project_id != run.project_id
+                or revision.state
+                not in {InfrastructurePlanState.SUBMITTED, InfrastructurePlanState.APPROVED}
+                or not latest
+                or latest.id != revision.id
+                or revision.content_digest != run.revision_sha256
+                or plan_hash(revision.content) != run.revision_sha256
+                or connection.provider != "aws"
+                or connection.setup_state != "VERIFIED"
+                or connection.account_id != account_id
+                or not re.fullmatch(r"\d{12}", account_id)
+                or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region)
+                or request_document.get("target_account_id") != account_id
+                or request_document.get("region") != region
+                or request_document.get("generator_model") != self.terraform_generator.model_id
+                or request_document.get("runner_project") != dispatcher.project_name
+                or not source_plan_id
+            ):
+                raise ValueError("durable Nova plan request no longer matches its submitted revision")
+            if revision.state == InfrastructurePlanState.APPROVED:
+                decision = self.db.scalar(
+                    select(InfrastructurePlanDecisionRecord).where(
+                        InfrastructurePlanDecisionRecord.revision_id == revision.id,
+                        InfrastructurePlanDecisionRecord.organization_id == run.organization_id,
+                    )
+                )
+                if (
+                    not decision
+                    or decision.decision != InfrastructurePlanDecision.APPROVED
+                    or decision.approved_digest != run.revision_sha256
+                ):
+                    raise ValueError("approved customer revision has no matching approval record")
+            self._plan(actor, str(source_plan_id))
+            self._project(actor, customer_plan.project_id)
+        except (PermissionError, ValueError, KeyError) as error:
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="FAILED",
+                error_code="DURABLE_REQUEST_INVALID",
+                error_summary=str(error),
+                action="generated_plan_run.worker_validation_failed",
+            )
+            return True
+
+        heartbeat_stop = threading.Event()
+        lease_lost = threading.Event()
+        bind = self.db.get_bind()
+        is_sqlite_memory = bind.dialect.name == "sqlite" and bind.url.database == ":memory:"
+        heartbeat: threading.Thread | None = None
+        if not is_sqlite_memory:
+            heartbeat = threading.Thread(
+                target=self._renew_generated_plan_run_lease,
+                args=(run.id, lease_token, heartbeat_stop, lease_lost),
+                daemon=True,
+                name=f"davdeploy-nova-plan-lease-{run.id[:8]}",
+            )
+            heartbeat.start()
+        try:
+            self._prepare_generated_plan_run(
+                actor,
+                run,
+                lease_token,
+                revision=revision,
+                customer_plan=customer_plan,
+                request_document=request_document,
+                dispatcher=dispatcher,
+                lease_lost=lease_lost,
+            )
+        except Exception:  # noqa: BLE001 - worker failures require durable reconciliation
+            self.db.rollback()
+            phase = run.preparation_phase
+            if phase in {"STAGING_INPUT", "VERIFYING_INPUT"}:
+                error_code = "INPUT_STAGE_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "Input storage could not be confirmed. Verify the exact staged object or "
+                    "abandon this attempt before retrying."
+                )
+            elif phase == "GENERATING_PROPOSAL":
+                error_code = "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "Proposal generation could not be confirmed. Explicitly abandon it with "
+                    "reconcile-generation before retrying with a new key."
+                )
+            elif phase == "STARTING_BUILD":
+                error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "CodeBuild may have started without returning a build ID. Do not retry this run; "
+                    "use reconcile-build to search for one exact build in the configured project."
+                )
+            else:
+                error_code = "WORKER_OUTCOME_UNCERTAIN"
+                error_summary = "The worker stopped before its outcome could be confirmed."
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="RECONCILIATION_REQUIRED",
+                error_code=error_code,
+                error_summary=error_summary,
+                action="generated_plan_run.worker_outcome_uncertain",
+            )
+        finally:
+            heartbeat_stop.set()
+            if heartbeat:
+                heartbeat.join(timeout=NOVA_PLAN_WORKER_HEARTBEAT_SECONDS + 1)
+        return True
+
+    def _claim_next_generated_plan_run(self) -> tuple[GeneratedPlanRun, str] | None:
+        """Atomically claim one queued run and attach an expiring lease token."""
+        candidate = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(GeneratedPlanRun.state == "QUEUED")
+            .order_by(GeneratedPlanRun.created_at, GeneratedPlanRun.id)
+            .limit(1)
+        )
+        if candidate is None:
+            return None
+        now = datetime.now(UTC)
+        lease_token = secrets.token_hex(32)
+        claimed = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == candidate.id,
+                GeneratedPlanRun.organization_id == candidate.organization_id,
+                GeneratedPlanRun.request_sha256 == candidate.request_sha256,
+                GeneratedPlanRun.state == "QUEUED",
+            )
+            .values(
+                state="PREPARING",
+                preparation_lease_token=lease_token,
+                preparation_lease_expires_at=now
+                + timedelta(seconds=NOVA_PLAN_PREPARATION_LEASE_SECONDS),
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        run = self.db.scalar(
+            select(GeneratedPlanRun)
+            .where(GeneratedPlanRun.id == candidate.id)
+            .execution_options(populate_existing=True)
+        )
+        return (run, lease_token) if run is not None else None
+
+    def _renew_generated_plan_run_lease(
+        self, run_id: str, lease_token: str, stop: threading.Event, lease_lost: threading.Event
+    ) -> None:
+        """Extend the worker's claim from an independent database session."""
+        bind = self.db.get_bind()
+        while not stop.wait(NOVA_PLAN_WORKER_HEARTBEAT_SECONDS):
+            now = datetime.now(UTC)
+            try:
+                with Session(bind=bind) as heartbeat_db:
+                    renewed = heartbeat_db.execute(
+                        update(GeneratedPlanRun)
+                        .where(
+                            GeneratedPlanRun.id == run_id,
+                            GeneratedPlanRun.state == "PREPARING",
+                            GeneratedPlanRun.preparation_lease_token == lease_token,
+                            GeneratedPlanRun.preparation_lease_expires_at > now,
+                        )
+                        .values(
+                            preparation_lease_expires_at=now
+                            + timedelta(seconds=NOVA_PLAN_PREPARATION_LEASE_SECONDS),
+                            updated_at=now,
+                        )
+                        .execution_options(synchronize_session=False)
+                    )
+                    heartbeat_db.commit()
+                if renewed.rowcount != 1:
+                    lease_lost.set()
+                    return
+            except SQLAlchemyError:
+                lease_lost.set()
+                return
+
+    def _generated_plan_run_lease_is_current(
+        self, run_id: str, lease_token: str
+    ) -> bool:
+        return (
+            self.db.scalar(
+                select(GeneratedPlanRun.id).where(
+                    GeneratedPlanRun.id == run_id,
+                    GeneratedPlanRun.state == "PREPARING",
+                    GeneratedPlanRun.preparation_lease_token == lease_token,
+                    GeneratedPlanRun.preparation_lease_expires_at > datetime.now(UTC),
+                )
+            )
+            is not None
+        )
+
+    def _set_generated_plan_run_phase(
+        self, run: GeneratedPlanRun, lease_token: str, phase: str
+    ) -> bool:
+        """Persist the next external boundary before the worker calls it."""
+        updated = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.state == "PREPARING",
+                GeneratedPlanRun.preparation_lease_token == lease_token,
+                GeneratedPlanRun.preparation_lease_expires_at > datetime.now(UTC),
+            )
+            .values(preparation_phase=phase, updated_at=datetime.now(UTC))
+            .execution_options(synchronize_session=False)
+        )
+        if updated.rowcount != 1:
+            self.db.rollback()
+            return False
+        self.db.commit()
+        run.preparation_phase = phase
+        return True
+
+    def _finish_generated_plan_run_claim(
+        self,
+        run: GeneratedPlanRun,
+        lease_token: str,
+        *,
+        state: str,
+        error_code: str,
+        error_summary: str,
+        action: str,
+        codebuild_build_id: str | None = None,
+    ) -> bool:
+        """Finish only the claim still owned by this worker."""
+        now = datetime.now(UTC)
+        values: dict[str, Any] = {
+            "state": state,
+            "error_code": error_code,
+            "error_summary": error_summary,
+            "preparation_lease_token": None,
+            "preparation_lease_expires_at": None,
+            "finished_at": now if state == "FAILED" else None,
+            "updated_at": now,
+        }
+        if state != "RECONCILIATION_REQUIRED":
+            values["preparation_phase"] = None
+        if codebuild_build_id and codebuild_build_id.startswith(f"{run.codebuild_project}:"):
+            values["codebuild_build_id"] = codebuild_build_id
+        finished = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.state == "PREPARING",
+                GeneratedPlanRun.preparation_lease_token == lease_token,
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+        if finished.rowcount != 1:
+            self.db.rollback()
+            if (
+                state == "RECONCILIATION_REQUIRED"
+                and codebuild_build_id
+                and codebuild_build_id.startswith(f"{run.codebuild_project}:")
+            ):
+                recovered = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                        GeneratedPlanRun.error_code == "BUILD_START_RECONCILIATION_REQUIRED",
+                        GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
+                        GeneratedPlanRun.codebuild_build_id.is_(None),
+                    )
+                    .values(
+                        state="BUILD_STARTED",
+                        codebuild_build_id=codebuild_build_id,
+                        error_code=None,
+                        error_summary=None,
+                        preparation_phase=None,
+                        preparation_lease_token=None,
+                        preparation_lease_expires_at=None,
+                        started_at=now,
+                        updated_at=now,
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if recovered.rowcount == 1:
+                    self.audit(
+                        Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                        "generated_plan_run.build_id_recovered",
+                        "generated_plan_run",
+                        run.id,
+                        {
+                            "codebuild_project": run.codebuild_project,
+                            "codebuild_build_id": codebuild_build_id,
+                            "state": "RECONCILIATION_REQUIRED",
+                        },
+                    )
+                    self.db.commit()
+                    return True
+                self.db.rollback()
+            return False
+        self.audit(
+            Principal("system-nova-plan-worker", run.organization_id, "operator"),
+            action,
+            "generated_plan_run",
+            run.id,
+            {
+                "state": state,
+                "error_code": error_code,
+                "codebuild_build_id": codebuild_build_id,
+            },
+        )
+        self.db.commit()
+        return True
+
+    def _reconcile_expired_generated_plan_run_leases(self) -> None:
+        """Mark abandoned preparation as uncertain; never replay external work."""
+        now = datetime.now(UTC)
+        expired_runs = list(
+            self.db.scalars(
+                select(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.state == "PREPARING",
+                    GeneratedPlanRun.preparation_lease_expires_at <= now,
+                )
+                .order_by(GeneratedPlanRun.preparation_lease_expires_at)
+                .limit(100)
+            )
+        )
+        for run in expired_runs:
+            self._expire_generated_plan_run_lease(run, now)
+
+    def _expire_generated_plan_run_lease(
+        self, run: GeneratedPlanRun, now: datetime | None = None
+    ) -> bool:
+        """Fence an expired claim and make its uncertain outcome visible."""
+        current_time = now or datetime.now(UTC)
+        lease_token = run.preparation_lease_token
+        if not lease_token:
+            return False
+        phase = run.preparation_phase
+        if phase in {"STAGING_INPUT", "VERIFYING_INPUT"}:
+            error_code = "INPUT_STAGE_RECONCILIATION_REQUIRED"
+            error_summary = (
+                "The worker stopped while staging or verifying input, before any build start. "
+                "Verify the exact input object or abandon this attempt before retrying."
+            )
+        elif phase == "GENERATING_PROPOSAL":
+            error_code = "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+            error_summary = (
+                "The proposal-generation result is uncertain and this request is blocked to avoid "
+                "replay. Explicitly abandon it with reconcile-generation before retrying with a new key."
+            )
+        elif phase == "STARTING_BUILD":
+            error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+            error_summary = (
+                "CodeBuild may have started without returning a build ID. Do not retry this run; "
+                "use reconcile-build to search for one exact build in the configured project."
+            )
+        else:
+            error_code = "PREPARATION_LEASE_EXPIRED"
+            error_summary = (
+                "The worker lease expired before its runner start could be confirmed. "
+                "Reconcile the request before retrying."
+            )
+        expired = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.state == "PREPARING",
+                GeneratedPlanRun.preparation_lease_token == lease_token,
+                GeneratedPlanRun.preparation_lease_expires_at <= current_time,
+            )
+            .values(
+                state="RECONCILIATION_REQUIRED",
+                error_code=error_code,
+                error_summary=error_summary,
+                preparation_lease_token=None,
+                preparation_lease_expires_at=None,
+                updated_at=current_time,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if expired.rowcount != 1:
+            self.db.rollback()
+            return False
+        self.audit(
+            Principal("system-nova-plan-reconcile", run.organization_id, "operator"),
+            "generated_plan_run.preparation_expired",
+            "generated_plan_run",
+            run.id,
+            {"state": "RECONCILIATION_REQUIRED", "error_code": error_code},
+        )
+        self.db.commit()
+        return True
+
+    def _prepare_generated_plan_run(
+        self,
+        principal: Principal,
+        run: GeneratedPlanRun,
+        lease_token: str,
+        *,
+        revision: InfrastructurePlanRevision,
+        customer_plan: InfrastructurePlan,
+        request_document: dict[str, Any],
+        dispatcher: NovaPlanOnlyDispatcher,
+        lease_lost: threading.Event,
+    ) -> dict[str, Any]:
+        if (
+            run.organization_id != principal.organization_id
+            or run.requester_subject != principal.subject
+            or run.state != "PREPARING"
+            or run.preparation_lease_token != lease_token
+        ):
+            return self.generated_plan_run_detail(principal, run.id)
+        runner_run_id = run.runner_run_id or run.id
+        idempotency_token = run.codebuild_idempotency_token
+        expected_input_key = dispatcher.input_key(runner_run_id)
+        if (
+            run.input_key != expected_input_key
+            or run.result_key != dispatcher.result_key(runner_run_id)
+            or not isinstance(idempotency_token, str)
+            or idempotency_token != runner_run_id
+        ):
+            raise ValueError("durable Nova plan attempt keys did not match the stored runner ID")
+        target = (revision.content or {}).get("target") or {}
+        ownership_scope = self._generated_plan_ownership_scope(
+            principal,
+            customer_plan.project_id,
+            customer_plan.id,
+            revision.id,
+            target.get("environment_id"),
+        )
+        build = None
+        generated = None
+        proposal_sha256 = run.proposal_sha256
+        input_sha256 = run.input_sha256
+        input_version_id = run.input_version_id
+        try:
+            if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
+                run.id, lease_token
+            ):
+                raise NovaPlanDispatchError(
+                    "Nova plan worker lease was lost before generation", outcome_uncertain=True
+                )
+
+            if input_version_id:
+                if not proposal_sha256 or not input_sha256:
+                    raise ValueError("durable staged Nova input is missing its digest binding")
+                if not self._set_generated_plan_run_phase(run, lease_token, "VERIFYING_INPUT"):
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost before input verification",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+                inspected_version = dispatcher.inspect_staged_input(
+                    runner_run_id, run.input_key, input_sha256
+                )
+                if inspected_version != input_version_id:
+                    raise NovaPlanDispatchError(
+                        "Nova plan input version no longer matches the durable attempt",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+            else:
+                if not self._set_generated_plan_run_phase(
+                    run, lease_token, "GENERATING_PROPOSAL"
+                ):
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost before generation",
+                        outcome_uncertain=True,
+                    )
+                generated = self.terraform_generator.generate(
+                    approved_plan=revision.content,
+                    tenant=TenantScope(
+                        organization_id=principal.organization_id,
+                        workspace_id=principal.organization_id,
+                        project_id=customer_plan.project_id,
+                        actor_id=principal.subject,
+                    ),
+                    source_revision=revision.id,
+                )
+                proposal = generated.proposal
+                if (
+                    proposal.source_revision != revision.id
+                    or proposal.requirements.region != target.get("region")
+                ):
+                    raise ValueError("Nova proposal did not match the trusted revision and region")
+                proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
+                request_payload = {
+                    **request_document,
+                    "run_id": runner_run_id,
+                    "control_plane_run_id": run.id,
+                    "proposal_sha256": proposal_sha256,
+                    "ownership_scope": {
+                        "organization_id": ownership_scope.organization_id,
+                        "workspace_id": ownership_scope.workspace_id,
+                        "project_id": ownership_scope.project_id,
+                        "plan_id": ownership_scope.plan_id,
+                        "revision_id": ownership_scope.revision_id,
+                        "environment_id": ownership_scope.environment_id,
+                        "scope_sha256": ownership_scope.scope_sha256(),
+                        "plan_id_sha256": ownership_scope.plan_id_sha256(),
+                        "tags": ownership_scope.tags(),
+                    },
+                    "proposal": proposal.model_dump(mode="json"),
+                    "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                }
+                expected_input_sha256 = canonical_json_digest(request_payload)
+                if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
+                    run.id, lease_token
+                ):
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost before input staging",
+                        outcome_uncertain=True,
+                    )
+                prepared = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.state == "PREPARING",
+                        GeneratedPlanRun.preparation_lease_token == lease_token,
+                    )
+                    .values(
+                        proposal_sha256=proposal_sha256,
+                        input_sha256=expected_input_sha256,
+                        input_version_id=None,
+                        preparation_phase="STAGING_INPUT",
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if prepared.rowcount != 1:
+                    self.db.rollback()
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost before input staging",
+                        outcome_uncertain=True,
+                    )
+                run.proposal_sha256 = proposal_sha256
+                run.input_sha256 = expected_input_sha256
+                run.input_version_id = None
+                run.preparation_phase = "STAGING_INPUT"
+                self.audit(
+                    Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                    "generated_plan_run.input_stage_started",
+                    "generated_plan_run",
+                    run.id,
+                    {
+                        "runner_run_id": runner_run_id,
+                        "input_key": run.input_key,
+                        "input_sha256": expected_input_sha256,
+                        "proposal_sha256": proposal_sha256,
+                    },
+                )
+                self.db.commit()
+
+                input_key, input_sha256, input_version_id = dispatcher.stage_input(
+                    runner_run_id, request_payload
+                )
+                if input_key != run.input_key or input_sha256 != expected_input_sha256:
+                    raise NovaPlanDispatchError(
+                        "Nova plan input did not match its durable digest binding",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+                staged = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.state == "PREPARING",
+                        GeneratedPlanRun.preparation_lease_token == lease_token,
+                    )
+                    .values(
+                        input_version_id=input_version_id,
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if staged.rowcount != 1:
+                    self.db.rollback()
+                    raise NovaPlanDispatchError(
+                        "Nova plan worker lease was lost after input staging",
+                        outcome_uncertain=True,
+                        phase="input_stage",
+                    )
+                run.input_version_id = input_version_id
+                response_usage = generated.response.usage
+                self._record_model_usage(
+                    principal,
+                    {
+                        "request_id": generated.response.request.request_id,
+                        "provider": generated.response.request.provider,
+                        "model": generated.response.request.model,
+                        "prompt_version": generated.response.request.prompt_version,
+                        "usage": response_usage.model_dump(mode="json") if response_usage else {},
+                        "attempt_count": (response_usage.retry_count + 1) if response_usage else 1,
+                        "retry_count": response_usage.retry_count if response_usage else 0,
+                        "latency_ms": response_usage.latency_ms if response_usage else None,
+                        "measured_at": (
+                            response_usage.measured_at.isoformat() if response_usage else None
+                        ),
+                        "estimated_cost_usd": (
+                            response_usage.estimated_cost_usd if response_usage else None
+                        ),
+                    },
+                )
+                self.audit(
+                    Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                    "generated_plan_run.input_staged",
+                    "generated_plan_run",
+                    run.id,
+                    {
+                        "input_sha256": input_sha256,
+                        "input_version_id": input_version_id,
+                        "proposal_sha256": proposal_sha256,
+                        "state": run.state,
+                    },
+                )
+                self.db.commit()
+
+            if not proposal_sha256 or not input_sha256 or not input_version_id:
+                raise ValueError("durable Nova input staging is incomplete")
+            if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
+                run.id, lease_token
+            ):
+                raise NovaPlanDispatchError(
+                    "Nova plan worker lease was lost before the runner start",
+                    outcome_uncertain=True,
+                    phase="input_stage",
+                )
+            if not self._set_generated_plan_run_phase(run, lease_token, "STARTING_BUILD"):
+                raise NovaPlanDispatchError(
+                    "Nova plan worker lease was lost before the runner start",
+                    outcome_uncertain=True,
+                    phase="input_stage",
+                )
+            build = dispatcher.start_build(runner_run_id, idempotency_token)
+            if build.project_name != run.codebuild_project:
+                raise NovaPlanDispatchError(
+                    "Nova plan build project did not match its durable request",
+                    outcome_uncertain=True,
+                )
+            started_at = datetime.now(UTC)
+            started = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.state == "PREPARING",
+                    GeneratedPlanRun.preparation_lease_token == lease_token,
+                )
+                .values(
+                    codebuild_build_id=build.build_id,
+                    state="BUILD_STARTED",
+                    preparation_phase=None,
+                    started_at=started_at,
+                    preparation_lease_token=None,
+                    preparation_lease_expires_at=None,
+                    error_code=None,
+                    error_summary=None,
+                    updated_at=started_at,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if started.rowcount != 1:
+                self.db.rollback()
+                raise NovaPlanDispatchError(
+                    "Nova plan build started but could not be bound to its durable request",
+                    outcome_uncertain=True,
+                )
+            self.audit(
+                Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                "generated_plan_run.build_started",
+                "generated_plan_run",
+                run.id,
+                {
+                    "codebuild_project": run.codebuild_project,
+                    "codebuild_build_id": build.build_id,
+                    "runner_run_id": runner_run_id,
+                    "request_sha256": run.request_sha256,
+                    "proposal_sha256": proposal_sha256,
+                    "input_sha256": input_sha256,
+                    "state": run.state,
+                },
+            )
+            self.db.commit()
+        except NovaTerraformGenerationFailed as error:
+            self.db.rollback()
+            generation_uncertain = error.outcome_uncertain
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="RECONCILIATION_REQUIRED" if generation_uncertain else "FAILED",
+                error_code=(
+                    "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+                    if generation_uncertain
+                    else "NOVA_GENERATION_FAILED"
+                ),
+                error_summary=(
+                    "The provider response was lost or could not be confirmed. Explicitly abandon "
+                    "this attempt with reconcile-generation before retrying with a new key."
+                    if generation_uncertain
+                    else "Nova could not produce a validated proposal. Review the request and try again."
+                ),
+                action=(
+                    "generated_plan_run.generation_uncertain"
+                    if generation_uncertain
+                    else "generated_plan_run.generation_failed"
+                ),
+            )
+            self._record_model_usage(
+                Principal("system-nova-plan-worker", run.organization_id, "operator"),
+                {
+                    "provider": "bedrock",
+                    "model": self.terraform_generator.model_id,
+                    "prompt_version": "terraform-nova2-contract-v3",
+                    "usage": error.usage.model_dump(mode="json"),
+                    "attempt_count": error.attempt_count,
+                    "retry_count": error.usage.retry_count,
+                    "latency_ms": error.usage.latency_ms,
+                    "measured_at": error.usage.measured_at.isoformat(),
+                    "estimated_cost_usd": error.usage.estimated_cost_usd,
+                    "failure": "generation_failed",
+                    "evidence": [_model_evidence_summary(item) for item in error.evidence],
+                },
+            )
+            self.db.commit()
+        except NovaPlanDispatchError as error:
+            self.db.rollback()
+            uncertain = error.outcome_uncertain
+            input_stage_failure = error.phase == "input_stage"
+            proposal_uncertain = uncertain and run.preparation_phase == "GENERATING_PROPOSAL"
+            build_start_uncertain = uncertain and run.preparation_phase == "STARTING_BUILD"
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="RECONCILIATION_REQUIRED" if uncertain else "FAILED",
+                error_code=(
+                    "INPUT_STAGE_RECONCILIATION_REQUIRED"
+                    if input_stage_failure and uncertain
+                    else "INPUT_STAGE_FAILED"
+                    if input_stage_failure
+                    else "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+                    if proposal_uncertain
+                    else "BUILD_START_RECONCILIATION_REQUIRED"
+                    if build_start_uncertain
+                    else "DISPATCH_UNCERTAIN"
+                    if uncertain
+                    else "DISPATCH_FAILED"
+                ),
+                error_summary=(
+                    "Input storage could not be confirmed. Verify the exact staged object or "
+                    "abandon this attempt before retrying."
+                    if input_stage_failure and uncertain
+                    else str(error)
+                    if input_stage_failure
+                    else "Proposal generation could not be confirmed. Explicitly abandon it with "
+                    "reconcile-generation before retrying with a new key."
+                    if proposal_uncertain
+                    else "CodeBuild may have started without returning a build ID. Do not retry this run; "
+                    "use reconcile-build to search for one exact build in the configured project."
+                    if build_start_uncertain
+                    else "The build start could not be confirmed. Check the run status before retrying."
+                    if uncertain
+                    else str(error)
+                ),
+                action="generated_plan_run.dispatch_failed",
+                codebuild_build_id=build.build_id if build else None,
+            )
+        except ModelGatewayUnavailable as error:
+            self.db.rollback()
+            generation_uncertain = error.outcome_uncertain
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="RECONCILIATION_REQUIRED" if generation_uncertain else "FAILED",
+                error_code=(
+                    "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+                    if generation_uncertain
+                    else "NOVA_GENERATION_UNAVAILABLE"
+                ),
+                error_summary=(
+                    "The provider response was lost or could not be confirmed. Explicitly abandon "
+                    "this attempt with reconcile-generation before retrying with a new key."
+                    if generation_uncertain
+                    else "Nova could not complete this plan request. Try again later."
+                ),
+                action=(
+                    "generated_plan_run.generation_uncertain"
+                    if generation_uncertain
+                    else "generated_plan_run.generation_unavailable"
+                ),
+            )
+        except ValueError as error:
+            self.db.rollback()
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="FAILED",
+                error_code="PREPARATION_REJECTED",
+                error_summary=str(error),
+                action="generated_plan_run.preparation_rejected",
+            )
+        except SQLAlchemyError:
+            self.db.rollback()
+            phase = run.preparation_phase
+            if build or phase == "STARTING_BUILD":
+                error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "CodeBuild may have started without a durable completion record. Do not retry "
+                    "this run; use reconcile-build or reconcile the recorded build ID."
+                )
+                action = "generated_plan_run.build_start_uncertain"
+            elif phase in {"STAGING_INPUT", "VERIFYING_INPUT"}:
+                error_code = "INPUT_STAGE_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "Input storage could not be confirmed. Verify the exact staged object or "
+                    "abandon this attempt before retrying."
+                )
+                action = "generated_plan_run.input_stage_uncertain"
+            elif phase == "GENERATING_PROPOSAL":
+                error_code = "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "Proposal generation could not be confirmed. Explicitly abandon it with "
+                    "reconcile-generation before retrying with a new key."
+                )
+                action = "generated_plan_run.generation_uncertain"
+            else:
+                error_code = "PREPARATION_OUTCOME_UNCERTAIN"
+                error_summary = "The request could not be fully confirmed. Check its status before retrying."
+                action = "generated_plan_run.preparation_uncertain"
+            self._finish_generated_plan_run_claim(
+                run,
+                lease_token,
+                state="RECONCILIATION_REQUIRED",
+                error_code=error_code,
+                error_summary=error_summary,
+                action=action,
+                codebuild_build_id=build.build_id if build else None,
+            )
+        return self.generated_plan_run_detail(principal, run.id)
+
+    def generated_plan_run_detail(self, principal: Principal, run_id: str) -> dict[str, Any]:
+        run = self.db.scalar(
+            select(GeneratedPlanRun).where(
+                GeneratedPlanRun.id == run_id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+            ).execution_options(populate_existing=True)
+        )
+        if not run:
+            raise PermissionError("generated plan request not found in this organization")
+        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+            raise PermissionError("generated plan request is not visible to this user")
+        expiry = run.preparation_lease_expires_at
+        if run.state == "PREPARING" and expiry:
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=UTC)
+            if expiry <= datetime.now(UTC):
+                self._expire_generated_plan_run_lease(run)
+                refreshed = self.db.scalar(
+                    select(GeneratedPlanRun)
+                    .where(GeneratedPlanRun.id == run_id)
+                    .execution_options(populate_existing=True)
+                )
+                if refreshed is not None:
+                    run = refreshed
+        return self._generated_plan_run_payload(run)
+
+    @staticmethod
+    def _generated_plan_run_payload(run: GeneratedPlanRun) -> dict[str, Any]:
+        return {
+            "id": run.id,
+            "project_id": run.project_id,
+            "revision_id": run.revision_id,
+            "revision_sha256": run.revision_sha256,
+            "proposal_sha256": run.proposal_sha256,
+            "state": run.state,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            "error_code": run.error_code,
+            "error_summary": run.error_summary,
+            "execution_boundary": (
+                "A CodeBuild start is not a verified Terraform plan. A completed build remains "
+                "unverified until its exact result and saved-plan artifact are validated. "
+                "This run cannot apply or destroy resources."
+            ),
+        }
+
+    def reconcile_generated_plan_build(self, build_id: str) -> bool:
+        """Record a completion only for the exact build bound to one plan run."""
+        normalized_build_id = build_id.rsplit("/", 1)[-1]
+        run = self.db.scalar(
+            select(GeneratedPlanRun).where(
+                GeneratedPlanRun.codebuild_build_id == normalized_build_id
+            )
+        )
+        if not run:
+            return False
+        if run.state not in {"BUILD_STARTED", "RECONCILIATION_REQUIRED"}:
+            return True
+        dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        if dispatcher is None:
+            run.state = "RECONCILIATION_REQUIRED"
+            run.error_code = "RUNNER_CONFIGURATION_UNAVAILABLE"
+            run.error_summary = "The configured runner is unavailable for status reconciliation."
+            self.db.commit()
+            return False
+        try:
+            build = dispatcher.describe_build(normalized_build_id)
+        except NovaPlanDispatchError:
+            run.state = "RECONCILIATION_REQUIRED"
+            run.error_code = "BUILD_STATUS_UNCONFIRMED"
+            run.error_summary = "The runner result could not be confirmed."
+            self.db.commit()
+            return False
+        if build.project_name != run.codebuild_project or build.build_id != normalized_build_id:
+            return False
+        if build.status in {"IN_PROGRESS", "QUEUED"}:
+            return False
+        now = datetime.now(UTC)
+        if build.status == "SUCCEEDED":
+            run.state = "BUILD_SUCCEEDED_UNVERIFIED"
+            run.error_code = "PLAN_RESULT_NOT_VERIFIED"
+            run.error_summary = (
+                "The build finished, but no trusted result handler is enabled; "
+                "no Terraform plan is available for approval."
+            )
+        else:
+            run.state = "FAILED"
+            run.error_code = f"CODEBUILD_{build.status}"
+            run.error_summary = "Nova plan generation did not complete successfully."
+        run.finished_at = now
+        run.preparation_lease_expires_at = None
+        self.audit(
+            Principal("system-nova-plan-worker", run.organization_id, "operator"),
+            "generated_plan_run.build_reconciled",
+            "generated_plan_run",
+            run.id,
+            {
+                "codebuild_project": run.codebuild_project,
+                "codebuild_build_id": normalized_build_id,
+                "build_status": build.status,
+                "state": run.state,
+                "error_code": run.error_code,
+            },
+        )
+        self.db.commit()
+        return True
 
     def persist_generated_plan_artifact(
         self,
