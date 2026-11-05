@@ -7,11 +7,41 @@ locals {
   }
 }
 
+locals {
+  nova_plan_only_project_name = "${local.name}-nova-plan-only"
+  nova_plan_only_input_key    = "plans/nova-generated/requests/*/input.json"
+  nova_plan_only_result_key   = "plans/nova-generated/requests/*/result.json"
+  nova_plan_only_blocked_start_build_keys = [
+    "codebuild:source.buildspec",
+    "codebuild:source",
+    "codebuild:source.location",
+    "codebuild:source.auth.resource",
+    "codebuild:source.auth.type",
+    "codebuild:source.insecureSsl",
+    "codebuild:serviceRole",
+    "codebuild:environment.image",
+    "codebuild:environment.type",
+    "codebuild:environment.computeType",
+    "codebuild:environment.privilegedMode",
+    "codebuild:environment.imagePullCredentialsType",
+    "codebuild:environment.registryCredential",
+    "codebuild:environment.certificate",
+    "codebuild:environment.fleet.fleetArn",
+    "codebuild:artifacts",
+    "codebuild:secondaryArtifacts",
+    "codebuild:secondarySources",
+    "codebuild:encryptionKey",
+    "codebuild:cache",
+    "codebuild:logsConfig",
+  ]
+}
+
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
 
 resource "aws_vpc" "database" {
   cidr_block           = "10.44.0.0/20"
@@ -293,6 +323,125 @@ resource "aws_iam_role_policy" "api" {
   })
 }
 
+resource "aws_iam_role_policy" "api_nova_plan_only_codebuild" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "nova-plan-only-codebuild"
+  role = aws_iam_role.api.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        {
+          Effect   = "Allow"
+          Action   = ["codebuild:StartBuild"]
+          Resource = aws_codebuild_project.nova_plan_only[0].arn
+          Condition = {
+            Null = {
+              "codebuild:environment.environmentVariables.name"                             = "false"
+              "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "false"
+            }
+            "ForAllValues:StringEquals" = {
+              "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
+            }
+            StringLike = {
+              "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "?*"
+            }
+          }
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["codebuild:BatchGetBuilds"]
+          Resource = aws_codebuild_project.nova_plan_only[0].arn
+        },
+      ],
+      # IAM evaluates different condition keys in one condition block as AND.
+      # Emit one explicit Deny per override key so any one is enough to reject
+      # StartBuild, as CodeBuild documents for its Null presence conditions.
+      [
+        for condition_key in local.nova_plan_only_blocked_start_build_keys : {
+          Effect   = "Deny"
+          Action   = ["codebuild:StartBuild"]
+          Resource = aws_codebuild_project.nova_plan_only[0].arn
+          Condition = {
+            Null = { (condition_key) = "false" }
+          }
+        }
+      ],
+      [
+        {
+          Effect   = "Deny"
+          Action   = ["codebuild:StartBuild"]
+          Resource = aws_codebuild_project.nova_plan_only[0].arn
+          Condition = {
+            "ForAnyValue:StringNotEquals" = {
+              "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
+            }
+          }
+        }
+      ]
+    )
+  })
+}
+
+resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "nova-plan-only-artifacts"
+  role = aws_iam_role.api.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = [
+              "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}",
+            ]
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = [
+              "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}",
+            ]
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role" "customer_executor" {
   name = "${local.name}-customer-executor"
   assume_role_policy = jsonencode({
@@ -385,6 +534,142 @@ resource "aws_codebuild_project" "customer_executor" {
   }
 
   tags = merge(local.common_tags, { Purpose = "bounded-customer-terraform-execution" })
+}
+
+resource "aws_iam_role" "nova_plan_only" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "${local.name}-nova-plan-only"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "codebuild.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+        ArnEquals = {
+          "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/${local.nova_plan_only_project_name}"
+        }
+      }
+    }]
+  })
+  tags = merge(local.common_tags, { Purpose = "isolated-nova-plan-only-runner" })
+}
+
+resource "aws_iam_role_policy" "nova_plan_only" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "isolated-nova-plan-only-artifacts"
+  role = aws_iam_role.nova_plan_only[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.nova_plan_only[0].arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}"
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_cloudwatch_log_group" "nova_plan_only" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name              = "/aws/codebuild/${local.nova_plan_only_project_name}"
+  retention_in_days = 14
+  tags              = merge(local.common_tags, { Purpose = "isolated-nova-plan-only-runner" })
+}
+
+resource "aws_codebuild_project" "nova_plan_only" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name                   = local.nova_plan_only_project_name
+  description            = "Fail-closed boundary for future trusted Nova Terraform plan-only runs."
+  service_role           = aws_iam_role.nova_plan_only[0].arn
+  build_timeout          = 15
+  queued_timeout         = 5
+  concurrent_build_limit = 1
+
+  artifacts { type = "NO_ARTIFACTS" }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:7.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = false
+    image_pull_credentials_type = "CODEBUILD"
+  }
+
+  source {
+    type = "NO_SOURCE"
+    # This stub intentionally cannot produce a successful build. Replace it
+    # only with the reviewed fixed runner in a follow-up change.
+    buildspec = <<-EOT
+      version: 0.2
+      phases:
+        build:
+          commands:
+            - echo "Nova plan-only runner is not wired; refusing to execute."
+            - exit 78
+    EOT
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name  = aws_cloudwatch_log_group.nova_plan_only[0].name
+      stream_name = "build"
+      status      = "ENABLED"
+    }
+    s3_logs { status = "DISABLED" }
+  }
+
+  tags = merge(local.common_tags, { Purpose = "isolated-nova-plan-only-runner" })
 }
 
 resource "aws_iam_role" "policy" {
@@ -588,6 +873,7 @@ locals {
     DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
     DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
     DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
+    DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
     DAVDEPLOY_CLOUD_EXECUTION_BACKEND                    = "codebuild"
     DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED            = tostring(var.enable_customer_cloud_execution)
     DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION                = tostring(var.enable_customer_cloud_execution)
@@ -862,12 +1148,30 @@ resource "aws_sqs_queue_policy" "worker_events" {
   queue_url = aws_sqs_queue.worker.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "events.amazonaws.com" }
-      Action    = "sqs:SendMessage"
-      Resource  = aws_sqs_queue.worker.arn
-    }]
+    Statement = concat(
+      [{
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.worker.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_cloudwatch_event_rule.customer_executor_completion.arn
+          }
+        }
+      }],
+      var.enable_nova_plan_only_runner ? [{
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.worker.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_cloudwatch_event_rule.nova_plan_only_completion[0].arn
+          }
+        }
+      }] : []
+    )
   })
 }
 
@@ -883,6 +1187,29 @@ resource "aws_cloudwatch_event_rule" "customer_executor_completion" {
 
 resource "aws_cloudwatch_event_target" "customer_executor_completion" {
   rule       = aws_cloudwatch_event_rule.customer_executor_completion.name
+  arn        = aws_sqs_queue.worker.arn
+  depends_on = [aws_sqs_queue_policy.worker_events]
+}
+
+resource "aws_cloudwatch_event_rule" "nova_plan_only_completion" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "${local.name}-nova-plan-only-completion"
+  event_pattern = jsonencode({
+    source        = ["aws.codebuild"]
+    "detail-type" = ["CodeBuild Build State Change"]
+    detail = {
+      "project-name" = [aws_codebuild_project.nova_plan_only[0].name]
+      "build-status" = ["SUCCEEDED", "FAILED", "FAULT", "TIMED_OUT", "STOPPED"]
+    }
+  })
+  tags = merge(local.common_tags, { Purpose = "isolated-nova-plan-only-runner" })
+}
+
+resource "aws_cloudwatch_event_target" "nova_plan_only_completion" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  rule       = aws_cloudwatch_event_rule.nova_plan_only_completion[0].name
   arn        = aws_sqs_queue.worker.arn
   depends_on = [aws_sqs_queue_policy.worker_events]
 }

@@ -433,8 +433,10 @@ data "aws_iam_policy_document" "apply_control_plane" {
       values   = ["davdeploy"]
     }
   }
+  # CodeBuild CreateProject does not support resource-level authorization; require
+  # the product and Terraform request tags, then scope later lifecycle calls by ARN.
   statement {
-    sid    = "CustomerExecutorCreate"
+    sid    = "CodeBuildProjectCreate"
     effect = "Allow"
     actions = [
       "codebuild:CreateProject"
@@ -452,7 +454,7 @@ data "aws_iam_policy_document" "apply_control_plane" {
     }
   }
   statement {
-    sid    = "CustomerExecutorLifecycle"
+    sid    = "CodeBuildProjectLifecycle"
     effect = "Allow"
     actions = [
       "codebuild:UpdateProject",
@@ -460,7 +462,10 @@ data "aws_iam_policy_document" "apply_control_plane" {
       "codebuild:TagResource",
       "codebuild:UntagResource"
     ]
-    resources = ["arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-customer-executor"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-customer-executor",
+      "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-plan-only"
+    ]
   }
   statement {
     sid    = "Networking"
@@ -570,6 +575,18 @@ data "aws_iam_policy_document" "apply_control_plane" {
       "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/davdeploy*:*"
     ]
   }
+  statement {
+    sid    = "NovaPlanOnlyLogs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy",
+      "logs:ListTagsForResource", "logs:TagResource", "logs:UntagResource"
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/davdeploy-nova-plan-only",
+      "arn:${data.aws_partition.current.partition}:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/codebuild/davdeploy-nova-plan-only:*"
+    ]
+  }
   # API Gateway creates a CloudWatch Logs delivery when stage access logging is enabled.
   # CloudWatch Logs log-delivery actions do not support resource-level restrictions.
   statement {
@@ -601,6 +618,7 @@ data "aws_iam_policy_document" "apply_control_plane" {
     resources = ["arn:${data.aws_partition.current.partition}:sns:${var.region}:${data.aws_caller_identity.current.account_id}:davdeploy-*"]
   }
   statement {
+    # This existing davdeploy role boundary already includes the opt-in Nova plan role.
     sid    = "RuntimeRoles"
     effect = "Allow"
     actions = [

@@ -90,6 +90,17 @@ variable "nova_plan_kms_key_arn" {
   }
 }
 
+variable "enable_nova_plan_only_runner" {
+  type        = bool
+  description = "Provision the isolated, fail-closed Nova plan-only CodeBuild project and expose it to the API. Keep disabled until the fixed runner interface is wired."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_plan_only_runner || (var.nova_plan_artifact_bucket != "" && var.nova_plan_kms_key_arn != "")
+    error_message = "The Nova plan-only runner requires the existing plan artifact bucket and KMS key."
+  }
+}
+
 variable "enable_customer_cloud_execution" {
   type        = bool
   description = "Explicitly enable bounded authenticated customer plan/apply submissions. Defaults to false."
