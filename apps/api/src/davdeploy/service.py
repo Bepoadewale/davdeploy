@@ -18,9 +18,10 @@ import httpx
 from botocore.exceptions import BotoCoreError, ClientError
 from httpx import HTTPError
 from opentelemetry import trace
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from davdeploy.cloud_execution import (
     CloudExecutionAdapter,
@@ -2377,6 +2378,13 @@ class ProductService:
         ):
             raise ValueError("only an ambiguous pre-build input attempt can be reconciled here")
 
+        # Keep the input identity from before the external inspection. A retry
+        # can update these mutable run fields while this request is in flight.
+        attempt_runner_run_id = run.runner_run_id
+        attempt_input_key = run.input_key
+        attempt_input_sha256 = run.input_sha256
+        attempt_proposal_sha256 = run.proposal_sha256
+
         if abandon_attempt:
             now = datetime.now(UTC)
             abandoned = self.db.execute(
@@ -2387,6 +2395,10 @@ class ProductService:
                     GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.codebuild_build_id.is_(None),
+                    GeneratedPlanRun.runner_run_id == attempt_runner_run_id,
+                    GeneratedPlanRun.input_key == attempt_input_key,
+                    GeneratedPlanRun.input_sha256 == attempt_input_sha256,
+                    GeneratedPlanRun.proposal_sha256 == attempt_proposal_sha256,
                 )
                 .values(
                     state="FAILED",
@@ -2409,9 +2421,9 @@ class ProductService:
                 "generated_plan_run",
                 run.id,
                 {
-                    "runner_run_id": run.runner_run_id,
-                    "input_key": run.input_key,
-                    "input_sha256": run.input_sha256,
+                    "runner_run_id": attempt_runner_run_id,
+                    "input_key": attempt_input_key,
+                    "input_sha256": attempt_input_sha256,
                     "state": "FAILED",
                 },
             )
@@ -2423,11 +2435,11 @@ class ProductService:
             dispatcher = NovaPlanOnlyDispatcher.from_environment()
         if dispatcher is None:
             raise NovaPlanDispatchError("Nova plan runner is not enabled for input reconciliation")
-        expected_key = dispatcher.input_key(run.runner_run_id)
-        if run.input_key != expected_key:
+        expected_key = dispatcher.input_key(attempt_runner_run_id)
+        if attempt_input_key != expected_key:
             raise ValueError("stored Nova input key does not match its durable attempt")
         version_id = dispatcher.inspect_staged_input(
-            run.runner_run_id, run.input_key, run.input_sha256
+            attempt_runner_run_id, attempt_input_key, attempt_input_sha256
         )
         if version_id is None:
             now = datetime.now(UTC)
@@ -2439,6 +2451,10 @@ class ProductService:
                     GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.codebuild_build_id.is_(None),
+                    GeneratedPlanRun.runner_run_id == attempt_runner_run_id,
+                    GeneratedPlanRun.input_key == attempt_input_key,
+                    GeneratedPlanRun.input_sha256 == attempt_input_sha256,
+                    GeneratedPlanRun.proposal_sha256 == attempt_proposal_sha256,
                 )
                 .values(
                     state="FAILED",
@@ -2461,9 +2477,9 @@ class ProductService:
                 "generated_plan_run",
                 run.id,
                 {
-                    "runner_run_id": run.runner_run_id,
-                    "input_key": run.input_key,
-                    "input_sha256": run.input_sha256,
+                    "runner_run_id": attempt_runner_run_id,
+                    "input_key": attempt_input_key,
+                    "input_sha256": attempt_input_sha256,
                     "state": "FAILED",
                 },
             )
@@ -2479,6 +2495,10 @@ class ProductService:
                 GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
                 GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
                 GeneratedPlanRun.codebuild_build_id.is_(None),
+                GeneratedPlanRun.runner_run_id == attempt_runner_run_id,
+                GeneratedPlanRun.input_key == attempt_input_key,
+                GeneratedPlanRun.input_sha256 == attempt_input_sha256,
+                GeneratedPlanRun.proposal_sha256 == attempt_proposal_sha256,
             )
             .values(
                 input_version_id=version_id,
@@ -2500,9 +2520,9 @@ class ProductService:
             "generated_plan_run",
             run.id,
             {
-                "runner_run_id": run.runner_run_id,
-                "input_key": run.input_key,
-                "input_sha256": run.input_sha256,
+                "runner_run_id": attempt_runner_run_id,
+                "input_key": attempt_input_key,
+                "input_sha256": attempt_input_sha256,
                 "input_version_id": version_id,
                 "state": "QUEUED",
             },
@@ -2533,26 +2553,46 @@ class ProductService:
             raise PermissionError("generated plan request not found in this organization")
         if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
             raise PermissionError("generated plan request is not visible to this user")
+        uncertain_generation = (
+            run.error_code == "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+            and run.preparation_phase == "GENERATING_PROPOSAL"
+        )
+        expired_before_call = (
+            run.error_code == "PREPARATION_LEASE_EXPIRED"
+            and run.preparation_phase is None
+        )
         if (
             run.state != "RECONCILIATION_REQUIRED"
-            or run.error_code != "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
-            or run.preparation_phase != "GENERATING_PROPOSAL"
+            or not (uncertain_generation or expired_before_call)
             or run.proposal_sha256 is not None
             or run.input_sha256 is not None
             or run.input_version_id is not None
             or run.codebuild_build_id is not None
         ):
-            raise ValueError("only an uncertain proposal-generation attempt can be abandoned here")
+            raise ValueError("only an uncertain or pre-call expired attempt can be abandoned here")
 
         now = datetime.now(UTC)
+        abandoned_error_code = (
+            "GENERATION_ATTEMPT_ABANDONED"
+            if uncertain_generation
+            else "PREPARATION_ATTEMPT_ABANDONED"
+        )
+        abandoned_summary = (
+            "The uncertain proposal-generation attempt was explicitly abandoned. "
+            "Use the retry action with a fresh idempotency key to start a new attempt."
+            if uncertain_generation
+            else "The worker lease expired before proposal generation began. "
+            "Use the retry action with a fresh idempotency key to start a new attempt."
+        )
         abandoned = self.db.execute(
             update(GeneratedPlanRun)
             .where(
                 GeneratedPlanRun.id == run.id,
                 GeneratedPlanRun.organization_id == principal.organization_id,
                 GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
-                GeneratedPlanRun.error_code == "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED",
-                GeneratedPlanRun.preparation_phase == "GENERATING_PROPOSAL",
+                GeneratedPlanRun.error_code == run.error_code,
+                GeneratedPlanRun.preparation_phase == run.preparation_phase,
+                GeneratedPlanRun.runner_run_id == run.runner_run_id,
                 GeneratedPlanRun.proposal_sha256.is_(None),
                 GeneratedPlanRun.input_sha256.is_(None),
                 GeneratedPlanRun.input_version_id.is_(None),
@@ -2560,11 +2600,8 @@ class ProductService:
             )
             .values(
                 state="FAILED",
-                error_code="GENERATION_ATTEMPT_ABANDONED",
-                error_summary=(
-                    "The uncertain proposal-generation attempt was explicitly abandoned. "
-                    "Use the retry action with a fresh idempotency key to start a new attempt."
-                ),
+                error_code=abandoned_error_code,
+                error_summary=abandoned_summary,
                 preparation_phase=None,
                 preparation_lease_token=None,
                 preparation_lease_expires_at=None,
@@ -2578,13 +2615,16 @@ class ProductService:
             return self.generated_plan_run_detail(principal, run.id)
         self.audit(
             principal,
-            "generated_plan_run.generation_attempt_abandoned",
+            "generated_plan_run.generation_attempt_abandoned"
+            if uncertain_generation
+            else "generated_plan_run.preparation_attempt_abandoned",
             "generated_plan_run",
             run.id,
             {
                 "runner_run_id": run.runner_run_id,
                 "request_sha256": run.request_sha256,
                 "state": "FAILED",
+                "error_code": abandoned_error_code,
             },
         )
         self.db.commit()
@@ -2606,13 +2646,21 @@ class ProductService:
             raise PermissionError("generated plan request not found in this organization")
         if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
             raise PermissionError("generated plan request is not visible to this user")
-        if (
-            run.state != "RECONCILIATION_REQUIRED"
-            or run.error_code != "BUILD_START_RECONCILIATION_REQUIRED"
-            or run.preparation_phase != "STARTING_BUILD"
-            or not run.runner_run_id
-            or run.codebuild_idempotency_token != run.runner_run_id
-        ):
+        uncertain_start = (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code == "BUILD_START_RECONCILIATION_REQUIRED"
+            and run.preparation_phase == "STARTING_BUILD"
+            and bool(run.runner_run_id)
+            and run.codebuild_idempotency_token == run.runner_run_id
+        )
+        uncertain_status = (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code
+            in {"BUILD_STATUS_UNCONFIRMED", "RUNNER_CONFIGURATION_UNAVAILABLE"}
+            and run.preparation_phase is None
+            and bool(run.codebuild_build_id)
+        )
+        if not (uncertain_start or uncertain_status):
             raise ValueError("only an ambiguous CodeBuild start can be reconciled here")
 
         dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
@@ -3003,7 +3051,10 @@ class ProductService:
             self.db.rollback()
             return False
         self.db.commit()
-        run.preparation_phase = phase
+        # The Core update already committed this value. Mark it as committed in
+        # the identity map so Session.commit() cannot flush it back over a later
+        # compare-and-set update that clears the phase.
+        set_committed_value(run, "preparation_phase", phase)
         return True
 
     def _finish_generated_plan_run_claim(
@@ -3016,6 +3067,8 @@ class ProductService:
         error_summary: str,
         action: str,
         codebuild_build_id: str | None = None,
+        expected_runner_run_id: str | None = None,
+        expected_idempotency_token: str | None = None,
     ) -> bool:
         """Finish only the claim still owned by this worker."""
         now = datetime.now(UTC)
@@ -3048,6 +3101,8 @@ class ProductService:
                 state == "RECONCILIATION_REQUIRED"
                 and codebuild_build_id
                 and codebuild_build_id.startswith(f"{run.codebuild_project}:")
+                and expected_runner_run_id
+                and expected_idempotency_token
             ):
                 recovered = self.db.execute(
                     update(GeneratedPlanRun)
@@ -3057,6 +3112,9 @@ class ProductService:
                         GeneratedPlanRun.error_code == "BUILD_START_RECONCILIATION_REQUIRED",
                         GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
                         GeneratedPlanRun.codebuild_build_id.is_(None),
+                        GeneratedPlanRun.runner_run_id == expected_runner_run_id,
+                        GeneratedPlanRun.codebuild_idempotency_token
+                        == expected_idempotency_token,
                     )
                     .values(
                         state="BUILD_STARTED",
@@ -3553,6 +3611,8 @@ class ProductService:
                 ),
                 action="generated_plan_run.dispatch_failed",
                 codebuild_build_id=build.build_id if build else None,
+                expected_runner_run_id=runner_run_id,
+                expected_idempotency_token=idempotency_token,
             )
         except ModelGatewayUnavailable as error:
             self.db.rollback()
@@ -3624,6 +3684,8 @@ class ProductService:
                 error_summary=error_summary,
                 action=action,
                 codebuild_build_id=build.build_id if build else None,
+                expected_runner_run_id=runner_run_id,
+                expected_idempotency_token=idempotency_token,
             )
         return self.generated_plan_run_detail(principal, run.id)
 
@@ -3686,39 +3748,87 @@ class ProductService:
             return False
         if run.state not in {"BUILD_STARTED", "RECONCILIATION_REQUIRED"}:
             return True
-        dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        try:
+            dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        except NovaPlanDispatchError:
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The configured runner could not be loaded. Retry status reconciliation after fixing its configuration.",
+            )
         if dispatcher is None:
-            run.state = "RECONCILIATION_REQUIRED"
-            run.error_code = "RUNNER_CONFIGURATION_UNAVAILABLE"
-            run.error_summary = "The configured runner is unavailable for status reconciliation."
-            self.db.commit()
-            return False
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The configured runner is unavailable. Retry status reconciliation after it is enabled.",
+            )
         try:
             build = dispatcher.describe_build(normalized_build_id)
         except NovaPlanDispatchError:
-            run.state = "RECONCILIATION_REQUIRED"
-            run.error_code = "BUILD_STATUS_UNCONFIRMED"
-            run.error_summary = "The runner result could not be confirmed."
-            self.db.commit()
-            return False
+            # The SQS wake-up can be acknowledged after this method returns.
+            # Keep the run recoverable through the authenticated exact-build route.
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The runner result could not be confirmed. Retry status reconciliation.",
+            )
         if build.project_name != run.codebuild_project or build.build_id != normalized_build_id:
-            return False
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The runner returned a different build identity. Retry status reconciliation after checking its configuration.",
+            )
         if build.status in {"IN_PROGRESS", "QUEUED"}:
             return False
         now = datetime.now(UTC)
-        if build.status == "SUCCEEDED":
-            run.state = "BUILD_SUCCEEDED_UNVERIFIED"
-            run.error_code = "PLAN_RESULT_NOT_VERIFIED"
-            run.error_summary = (
-                "The build finished, but no trusted result handler is enabled; "
-                "no Terraform plan is available for approval."
+        terminal_state = "BUILD_SUCCEEDED_UNVERIFIED" if build.status == "SUCCEEDED" else "FAILED"
+        terminal_error_code = (
+            "PLAN_RESULT_NOT_VERIFIED" if build.status == "SUCCEEDED" else f"CODEBUILD_{build.status}"
+        )
+        terminal_error_summary = (
+            "The build finished, but no trusted result handler is enabled; "
+            "no Terraform plan is available for approval."
+            if build.status == "SUCCEEDED"
+            else "Nova plan generation did not complete successfully."
+        )
+        # Reconcile with compare-and-set semantics. Another delivery may finish
+        # this build while a retry has already started; the old build must not
+        # overwrite the new attempt's state.
+        reconciled = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.codebuild_project == run.codebuild_project,
+                GeneratedPlanRun.codebuild_build_id == normalized_build_id,
+                GeneratedPlanRun.state.in_(("BUILD_STARTED", "RECONCILIATION_REQUIRED")),
+                or_(
+                    GeneratedPlanRun.error_code.is_(None),
+                    GeneratedPlanRun.error_code.in_(
+                        (
+                            "BUILD_START_RECONCILIATION_REQUIRED",
+                            "BUILD_STATUS_UNCONFIRMED",
+                            "PREPARATION_LEASE_EXPIRED",
+                        )
+                    ),
+                ),
             )
+            .values(
+                state=terminal_state,
+                error_code=terminal_error_code,
+                error_summary=terminal_error_summary,
+                finished_at=now,
+                preparation_lease_expires_at=None,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if reconciled.rowcount != 1:
+            self.db.rollback()
+            return True
+        if build.status == "SUCCEEDED":
+            audit_state = "BUILD_SUCCEEDED_UNVERIFIED"
         else:
-            run.state = "FAILED"
-            run.error_code = f"CODEBUILD_{build.status}"
-            run.error_summary = "Nova plan generation did not complete successfully."
-        run.finished_at = now
-        run.preparation_lease_expires_at = None
+            audit_state = "FAILED"
         self.audit(
             Principal("system-nova-plan-worker", run.organization_id, "operator"),
             "generated_plan_run.build_reconciled",
@@ -3728,11 +3838,53 @@ class ProductService:
                 "codebuild_project": run.codebuild_project,
                 "codebuild_build_id": normalized_build_id,
                 "build_status": build.status,
-                "state": run.state,
-                "error_code": run.error_code,
+                "state": audit_state,
+                "error_code": terminal_error_code,
             },
         )
         self.db.commit()
+        self.db.expire(run)
+        return True
+
+    def _mark_nova_plan_build_status_unconfirmed(
+        self, run: GeneratedPlanRun, build_id: str, summary: str
+    ) -> bool:
+        """Preserve recovery for an exact bound build when status cannot be trusted."""
+        status_uncertain = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.codebuild_project == run.codebuild_project,
+                GeneratedPlanRun.codebuild_build_id == build_id,
+                GeneratedPlanRun.state.in_(
+                    ("BUILD_STARTED", "RECONCILIATION_REQUIRED")
+                ),
+                or_(
+                    GeneratedPlanRun.error_code.is_(None),
+                    GeneratedPlanRun.error_code.in_(
+                        (
+                            "BUILD_START_RECONCILIATION_REQUIRED",
+                            "BUILD_STATUS_UNCONFIRMED",
+                            "RUNNER_CONFIGURATION_UNAVAILABLE",
+                            "PREPARATION_LEASE_EXPIRED",
+                        )
+                    ),
+                ),
+            )
+            .values(
+                state="RECONCILIATION_REQUIRED",
+                error_code="BUILD_STATUS_UNCONFIRMED",
+                error_summary=summary,
+                    preparation_phase=None,
+                updated_at=datetime.now(UTC),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if status_uncertain.rowcount != 1:
+            self.db.rollback()
+            return True
+        self.db.commit()
+        self.db.expire(run)
         return True
 
     def persist_generated_plan_artifact(
