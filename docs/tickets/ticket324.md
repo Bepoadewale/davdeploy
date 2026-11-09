@@ -51,11 +51,10 @@ The project must fail closed until the trusted fixed runner is wired. The future
 
 ## Acceptance status
 
-The infrastructure behavior and review findings are addressed. The PR remains open,
-mergeable, and unmerged. Fresh isolated validation passed through `make verify`; the final
-clean-room teardown is intentionally incomplete because `.local` was generated and the
-instruction was to preserve files and volumes. No generated files or Docker volumes were
-deleted.
+The infrastructure behavior and review findings are addressed. The PR remains open and
+unmerged. Fresh isolated `make local-proof` passed at the final branch commit, followed by
+scoped `make clean-local`; no generated files or Docker volumes outside that new clean-room
+workspace were deleted.
 
 ### Review findings follow-up
 
@@ -71,8 +70,9 @@ deleted.
 - [x] Fresh worktree validation passed bootstrap through all demos, trace check, and
   `make verify` (689 tests).
 - [x] Isolated Compose containers and network were stopped and removed after verification;
-  follow-up checks found no project containers or volumes. The worktree, generated `.local`,
-  external virtual environment, and test state file remain preserved.
+  follow-up checks found no project containers or volumes. A second isolated final-clean cycle
+  used a unique worktree and Compose project; its generated virtual environment and local files
+  were removed, with post-clean absence checks passing.
 
 ## Tests / validation performed
 
