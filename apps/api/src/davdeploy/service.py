@@ -2377,6 +2377,13 @@ class ProductService:
         ):
             raise ValueError("only an ambiguous pre-build input attempt can be reconciled here")
 
+        # Keep the input identity from before the external inspection. A retry
+        # can update these mutable run fields while this request is in flight.
+        attempt_runner_run_id = run.runner_run_id
+        attempt_input_key = run.input_key
+        attempt_input_sha256 = run.input_sha256
+        attempt_proposal_sha256 = run.proposal_sha256
+
         if abandon_attempt:
             now = datetime.now(UTC)
             abandoned = self.db.execute(
@@ -2387,6 +2394,10 @@ class ProductService:
                     GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.codebuild_build_id.is_(None),
+                    GeneratedPlanRun.runner_run_id == attempt_runner_run_id,
+                    GeneratedPlanRun.input_key == attempt_input_key,
+                    GeneratedPlanRun.input_sha256 == attempt_input_sha256,
+                    GeneratedPlanRun.proposal_sha256 == attempt_proposal_sha256,
                 )
                 .values(
                     state="FAILED",
@@ -2409,9 +2420,9 @@ class ProductService:
                 "generated_plan_run",
                 run.id,
                 {
-                    "runner_run_id": run.runner_run_id,
-                    "input_key": run.input_key,
-                    "input_sha256": run.input_sha256,
+                    "runner_run_id": attempt_runner_run_id,
+                    "input_key": attempt_input_key,
+                    "input_sha256": attempt_input_sha256,
                     "state": "FAILED",
                 },
             )
@@ -2423,11 +2434,11 @@ class ProductService:
             dispatcher = NovaPlanOnlyDispatcher.from_environment()
         if dispatcher is None:
             raise NovaPlanDispatchError("Nova plan runner is not enabled for input reconciliation")
-        expected_key = dispatcher.input_key(run.runner_run_id)
-        if run.input_key != expected_key:
+        expected_key = dispatcher.input_key(attempt_runner_run_id)
+        if attempt_input_key != expected_key:
             raise ValueError("stored Nova input key does not match its durable attempt")
         version_id = dispatcher.inspect_staged_input(
-            run.runner_run_id, run.input_key, run.input_sha256
+            attempt_runner_run_id, attempt_input_key, attempt_input_sha256
         )
         if version_id is None:
             now = datetime.now(UTC)
@@ -2439,6 +2450,10 @@ class ProductService:
                     GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
                     GeneratedPlanRun.codebuild_build_id.is_(None),
+                    GeneratedPlanRun.runner_run_id == attempt_runner_run_id,
+                    GeneratedPlanRun.input_key == attempt_input_key,
+                    GeneratedPlanRun.input_sha256 == attempt_input_sha256,
+                    GeneratedPlanRun.proposal_sha256 == attempt_proposal_sha256,
                 )
                 .values(
                     state="FAILED",
@@ -2461,9 +2476,9 @@ class ProductService:
                 "generated_plan_run",
                 run.id,
                 {
-                    "runner_run_id": run.runner_run_id,
-                    "input_key": run.input_key,
-                    "input_sha256": run.input_sha256,
+                    "runner_run_id": attempt_runner_run_id,
+                    "input_key": attempt_input_key,
+                    "input_sha256": attempt_input_sha256,
                     "state": "FAILED",
                 },
             )
@@ -2479,6 +2494,10 @@ class ProductService:
                 GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
                 GeneratedPlanRun.error_code == "INPUT_STAGE_RECONCILIATION_REQUIRED",
                 GeneratedPlanRun.codebuild_build_id.is_(None),
+                GeneratedPlanRun.runner_run_id == attempt_runner_run_id,
+                GeneratedPlanRun.input_key == attempt_input_key,
+                GeneratedPlanRun.input_sha256 == attempt_input_sha256,
+                GeneratedPlanRun.proposal_sha256 == attempt_proposal_sha256,
             )
             .values(
                 input_version_id=version_id,
@@ -2500,9 +2519,9 @@ class ProductService:
             "generated_plan_run",
             run.id,
             {
-                "runner_run_id": run.runner_run_id,
-                "input_key": run.input_key,
-                "input_sha256": run.input_sha256,
+                "runner_run_id": attempt_runner_run_id,
+                "input_key": attempt_input_key,
+                "input_sha256": attempt_input_sha256,
                 "input_version_id": version_id,
                 "state": "QUEUED",
             },
@@ -2533,26 +2552,46 @@ class ProductService:
             raise PermissionError("generated plan request not found in this organization")
         if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
             raise PermissionError("generated plan request is not visible to this user")
+        uncertain_generation = (
+            run.error_code == "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
+            and run.preparation_phase == "GENERATING_PROPOSAL"
+        )
+        expired_before_call = (
+            run.error_code == "PREPARATION_LEASE_EXPIRED"
+            and run.preparation_phase is None
+        )
         if (
             run.state != "RECONCILIATION_REQUIRED"
-            or run.error_code != "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
-            or run.preparation_phase != "GENERATING_PROPOSAL"
+            or not (uncertain_generation or expired_before_call)
             or run.proposal_sha256 is not None
             or run.input_sha256 is not None
             or run.input_version_id is not None
             or run.codebuild_build_id is not None
         ):
-            raise ValueError("only an uncertain proposal-generation attempt can be abandoned here")
+            raise ValueError("only an uncertain or pre-call expired attempt can be abandoned here")
 
         now = datetime.now(UTC)
+        abandoned_error_code = (
+            "GENERATION_ATTEMPT_ABANDONED"
+            if uncertain_generation
+            else "PREPARATION_ATTEMPT_ABANDONED"
+        )
+        abandoned_summary = (
+            "The uncertain proposal-generation attempt was explicitly abandoned. "
+            "Use the retry action with a fresh idempotency key to start a new attempt."
+            if uncertain_generation
+            else "The worker lease expired before proposal generation began. "
+            "Use the retry action with a fresh idempotency key to start a new attempt."
+        )
         abandoned = self.db.execute(
             update(GeneratedPlanRun)
             .where(
                 GeneratedPlanRun.id == run.id,
                 GeneratedPlanRun.organization_id == principal.organization_id,
                 GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
-                GeneratedPlanRun.error_code == "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED",
-                GeneratedPlanRun.preparation_phase == "GENERATING_PROPOSAL",
+                GeneratedPlanRun.error_code == run.error_code,
+                GeneratedPlanRun.preparation_phase == run.preparation_phase,
+                GeneratedPlanRun.runner_run_id == run.runner_run_id,
                 GeneratedPlanRun.proposal_sha256.is_(None),
                 GeneratedPlanRun.input_sha256.is_(None),
                 GeneratedPlanRun.input_version_id.is_(None),
@@ -2560,11 +2599,8 @@ class ProductService:
             )
             .values(
                 state="FAILED",
-                error_code="GENERATION_ATTEMPT_ABANDONED",
-                error_summary=(
-                    "The uncertain proposal-generation attempt was explicitly abandoned. "
-                    "Use the retry action with a fresh idempotency key to start a new attempt."
-                ),
+                error_code=abandoned_error_code,
+                error_summary=abandoned_summary,
                 preparation_phase=None,
                 preparation_lease_token=None,
                 preparation_lease_expires_at=None,
@@ -2578,13 +2614,16 @@ class ProductService:
             return self.generated_plan_run_detail(principal, run.id)
         self.audit(
             principal,
-            "generated_plan_run.generation_attempt_abandoned",
+            "generated_plan_run.generation_attempt_abandoned"
+            if uncertain_generation
+            else "generated_plan_run.preparation_attempt_abandoned",
             "generated_plan_run",
             run.id,
             {
                 "runner_run_id": run.runner_run_id,
                 "request_sha256": run.request_sha256,
                 "state": "FAILED",
+                "error_code": abandoned_error_code,
             },
         )
         self.db.commit()

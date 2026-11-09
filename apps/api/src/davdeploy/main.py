@@ -1271,7 +1271,7 @@ def abandon_generated_plan_generation_attempt(
     principal: Principal = Depends(verify_token),
     service: ProductService = Depends(product_service),
 ):
-    """Explicitly abandon an uncertain proposal call so a fresh retry can begin."""
+    """Explicitly abandon an uncertain or pre-call expired attempt for a fresh retry."""
     REQUESTS.labels("generated_plan_runs.reconcile_generation").inc()
     try:
         return service.abandon_generated_plan_generation_attempt(principal, run_id)

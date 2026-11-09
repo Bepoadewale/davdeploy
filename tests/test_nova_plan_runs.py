@@ -608,6 +608,89 @@ def test_input_stage_reconciliation_can_abandon_mismatch_then_retry_fresh_key():
     db.close()
 
 
+@pytest.mark.parametrize("inspected_version", ["fixture-input-version", None])
+def test_delayed_input_inspection_cannot_mutate_a_later_attempt(inspected_version):
+    service, db, _, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    original_stage = dispatcher.stage_input
+
+    def stage_then_lose_confirmation(run_id, document):
+        original_stage(run_id, document)
+        raise NovaPlanDispatchError(
+            "fixture lost input-stage confirmation",
+            outcome_uncertain=True,
+            phase="input_stage",
+        )
+
+    dispatcher.stage_input = stage_then_lose_confirmation
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-input-race-0001"
+    )
+    service._wake_worker = lambda *_args: None
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    original_runner_id = run.runner_run_id
+
+    def delayed_inspection(run_id, key, digest):
+        assert run_id == original_runner_id
+        assert key == dispatcher.input_key(original_runner_id)
+        assert digest == run.input_sha256
+        run.state = "RECONCILIATION_REQUIRED"
+        run.error_code = "INPUT_STAGE_RECONCILIATION_REQUIRED"
+        run.error_summary = "The later retry requires its own input reconciliation."
+        run.runner_run_id = "nova-plan-race-retry-attempt-0001"
+        run.input_key = dispatcher.input_key(run.runner_run_id)
+        run.result_key = dispatcher.result_key(run.runner_run_id)
+        run.input_sha256 = "c" * 64
+        run.proposal_sha256 = "d" * 64
+        run.input_version_id = None
+        db.commit()
+        return inspected_version
+
+    dispatcher.inspect_staged_input = delayed_inspection
+    recovered = service.reconcile_generated_plan_input(founder(), request["id"])
+    db.refresh(run)
+    assert recovered["state"] == "RECONCILIATION_REQUIRED"
+    assert run.runner_run_id == "nova-plan-race-retry-attempt-0001"
+    assert run.input_key == dispatcher.input_key(run.runner_run_id)
+    assert run.input_sha256 == "c" * 64
+    assert run.input_version_id is None
+    db.close()
+
+
+def test_preparation_lease_expired_before_generation_can_be_explicitly_abandoned_and_retried():
+    service, db, generator, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-expire-before-call-0001"
+    )
+    claimed = service._claim_next_generated_plan_run()
+    assert claimed is not None
+    run, _lease_token = claimed
+    assert run.preparation_phase is None
+    run.preparation_lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert service._expire_generated_plan_run_lease(run, datetime.now(UTC)) is True
+    expired = service.generated_plan_run_detail(founder(), request["id"])
+    assert expired["state"] == "RECONCILIATION_REQUIRED"
+    assert expired["error_code"] == "PREPARATION_LEASE_EXPIRED"
+    assert generator.calls == 0
+    assert dispatcher.started == []
+
+    abandoned = service.abandon_generated_plan_generation_attempt(founder(), request["id"])
+    assert abandoned["state"] == "FAILED"
+    assert abandoned["error_code"] == "PREPARATION_ATTEMPT_ABANDONED"
+    retried = service.retry_generated_plan_run(
+        founder(), request["id"], "nova-plan-expire-before-call-retry-0001"
+    )
+    assert retried["state"] == "QUEUED"
+    assert service.run_next_generated_plan_run() is True
+    assert generator.calls == 1
+    assert len(dispatcher.started) == 1
+    db.close()
+
+
 def test_worker_persists_each_phase_before_external_calls():
     service, db, generator, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)
