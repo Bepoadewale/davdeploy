@@ -82,6 +82,30 @@ runner is restored, the authenticated `reconcile-build` route can query that
 exact build; a successful CodeBuild state remains unverified until result
 ingestion is implemented.
 
+## Final runner-restoration clean-room evidence
+
+The required fresh local cycle passed on 2026-11-09 at commit
+`5cce5042d9194b3ea4fc18878a1e93792166efea` in detached worktree
+`/private/tmp/davdeploy-pr325-status-cleanroom`, using the unique Compose
+project `davdeploy-pr325-status`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr325-status make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr325-status docker compose stop
+COMPOSE_PROJECT_NAME=davdeploy-pr325-status docker compose rm -f
+```
+
+Fresh Python 3.12 bootstrap and image builds passed. Smoke, API contract,
+customer-plan E2E, fixture seed, trace check and full verification passed with
+690 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose checks.
+The existing Starlette/httpx deprecation warning remains. Only the uniquely
+named disposable containers were stopped and removed; absence was verified.
+The test-created Compose volume `davdeploy-pr325-status_davdeploy-postgres`
+and network `davdeploy-pr325-status_default` remain. The worktree `.venv` and
+`.local` were absent when checked after the proof; no command to remove those
+files was run. Existing local worktrees, volumes and data were not touched. No
+AWS calls or customer workloads occurred.
+
 ## First review-fix clean-room evidence
 
 The required fresh local cycle passed on 2026-11-09 at commit
