@@ -306,6 +306,32 @@ def test_old_build_completion_cannot_overwrite_a_new_queued_attempt():
     db.close()
 
 
+def test_late_transient_status_error_cannot_overwrite_terminal_completion():
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-status-race-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    build_id = run.codebuild_build_id
+
+    def transient_error_after_completion(_build_id):
+        run.state = "BUILD_SUCCEEDED_UNVERIFIED"
+        run.error_code = "PLAN_RESULT_NOT_VERIFIED"
+        run.error_summary = "The build finished, but its result remains unverified."
+        db.commit()
+        raise NovaPlanDispatchError("late transient status lookup error", outcome_uncertain=True)
+
+    dispatcher.describe_build = transient_error_after_completion
+    assert service.reconcile_generated_plan_build(build_id) is True
+    db.refresh(run)
+    assert run.state == "BUILD_SUCCEEDED_UNVERIFIED"
+    assert run.error_code == "PLAN_RESULT_NOT_VERIFIED"
+    db.close()
+
+
 def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild():
     service, db, _, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)

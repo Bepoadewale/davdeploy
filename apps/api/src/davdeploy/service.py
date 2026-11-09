@@ -3706,10 +3706,41 @@ class ProductService:
             # The SQS wake-up can be acknowledged after this method returns.
             # Persist a state that the authenticated reconcile-build action can
             # retry against this exact, already-bound build ID.
-            run.state = "RECONCILIATION_REQUIRED"
-            run.error_code = "BUILD_STATUS_UNCONFIRMED"
-            run.error_summary = "The runner result could not be confirmed. Retry status reconciliation."
+            status_uncertain = self.db.execute(
+                update(GeneratedPlanRun)
+                .where(
+                    GeneratedPlanRun.id == run.id,
+                    GeneratedPlanRun.codebuild_project == run.codebuild_project,
+                    GeneratedPlanRun.codebuild_build_id == normalized_build_id,
+                    GeneratedPlanRun.state.in_(
+                        ("BUILD_STARTED", "RECONCILIATION_REQUIRED")
+                    ),
+                    or_(
+                        GeneratedPlanRun.error_code.is_(None),
+                        GeneratedPlanRun.error_code.in_(
+                            (
+                                "BUILD_START_RECONCILIATION_REQUIRED",
+                                "BUILD_STATUS_UNCONFIRMED",
+                                "PREPARATION_LEASE_EXPIRED",
+                            )
+                        ),
+                    ),
+                )
+                .values(
+                    state="RECONCILIATION_REQUIRED",
+                    error_code="BUILD_STATUS_UNCONFIRMED",
+                    error_summary=(
+                        "The runner result could not be confirmed. Retry status reconciliation."
+                    ),
+                    updated_at=datetime.now(UTC),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if status_uncertain.rowcount != 1:
+                self.db.rollback()
+                return True
             self.db.commit()
+            self.db.expire(run)
             return True
         if build.project_name != run.codebuild_project or build.build_id != normalized_build_id:
             return False

@@ -3,7 +3,7 @@
 Date: 2026-11-09
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `7c05d80` (review follow-up); no customer workload was used.
+Commit: source review fixes are on the PR head; no customer workload was used.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -71,11 +71,11 @@ leaving the run permanently unrecoverable. Terminal completion uses a conditiona
 database update bound to the exact project, build ID, and eligible run state, so
 a late completion cannot overwrite a separately queued retry.
 
-- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 28 passed, including transient status reconciliation and stale build completion fencing.
+- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 29 passed, including transient status reconciliation, stale build completion fencing, and stale status-error fencing.
 - `.venv/bin/ruff check apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py` — passed.
-- `make verify` — 753 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
+- `make verify` — 754 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
 
-## Review-fix clean-room evidence
+## First review-fix clean-room evidence
 
 The required fresh local cycle passed on 2026-11-09 at commit
 `7c05d80a71bf271640bd2d3d5b1da5ad1c01687e` in detached worktree
