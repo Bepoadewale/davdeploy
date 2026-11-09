@@ -1,11 +1,11 @@
 # test326 - customer Nova plan-role boundary and migration
 
-Date: 2026-11-05
+Date: 2026-11-10
 Execution type: Local database migration, API contract and Terraform policy validation; no customer workload
 Repository: `Bepoadewale/davdeploy`
 Customer repository: N/A; no customer repository or workload was used
-Branch: `feat/customer-nova-plan-role-326`, stacked on `feat/nova-plan-request-api` (PR #325)
-Commit: PR #326 source revision; see the pull request for the exact commit
+Branch: `feat/customer-nova-plan-role-326` (refreshed after PR #325 merged)
+Commit: proof checkout at `3be87a1` (migration source `28ca129`, merged main `47d932e`); final evidence commit recorded in the pull request
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -35,13 +35,15 @@ The focused plan-role, list response, migration and Terraform policy suite passe
 
 For the follow-up workflow wiring, the focused Nova/workflow tests passed (14 tests), the Actions configuration boundary classified 26 public metadata names and 3 secret names, the PR documentation convention check passed, and `git diff --check` passed. The workflow maps `NOVA_PLAN_ROLE_VERIFICATION_ENABLED` with a false fallback; the hosted variable was not enabled or changed.
 
+After PR #325 merged, PR #326 was retargeted to `main` and its current mainline was merged into the feature branch. A fresh, isolated checkout then ran `make local-proof` successfully: Python 3.12 bootstrap, Docker Compose startup and smoke checks, API contract, customer-plan E2E, fixture seed, trace check, and full `make verify` all passed. The full suite reported 781 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. The pre-existing Starlette/httpx deprecation warning remains. The fresh project containers were stopped and retained; its new Compose volume/network and local `.venv`/`.local` were retained because the current deletion rule does not authorize deleting them. This was not the repository's complete clean-to-clean cycle. No AWS calls were made.
+
 ## Resources created
 
-No AWS resources or customer workloads. Tests use in-memory SQLite databases; no teardown is needed.
+No AWS resources or customer workloads. The isolated local proof created the project-specific Compose containers, network and PostgreSQL volume, plus `.venv` and `.local` in `/private/tmp/davdeploy-pr326-resume`. The containers were stopped. The network, volume and local files remain; do not treat them as AWS resources.
 
 ## Teardown
 
-Not applicable; no cloud resources or persistent test services were created.
+No cloud teardown was needed. The stopped local Compose stack and its persistent local artifacts remain because deletion was not authorized.
 
 ## Limits
 

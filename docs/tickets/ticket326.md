@@ -1,7 +1,7 @@
 # ticket326 — Add a customer-side Nova plan-only role
 
 PR: #326 (draft)
-Branch: `feat/customer-nova-plan-role-326`
+Branch: `feat/customer-nova-plan-role-326` (current evidence was prepared in a fresh checkout after PR #325 merged)
 
 ## Problem / goal
 
@@ -14,7 +14,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 - Connection verification assumes the discovery role and, when present, the execution role; it confirms account identity but does not evaluate effective role permissions.
 - `GeneratedTerraformPlanRunner` is backend-free and has no apply/destroy method. Its current plan configuration uses only the trusted `aws_caller_identity` data source.
 - The isolated Nova CodeBuild project and future plan-broker permissions are being handled separately. This PR must not change that infrastructure or grant AssumeRole to an existing executor.
-- PR #325 (`feat/nova-plan-request-api`) is the base for this stacked branch and ends at schema v31. PR #326 adds only the v31→v32 plan-role migration. Fresh databases create current metadata and record v32 directly.
+- PR #325 (`feat/nova-plan-request-api`) is merged to `main` at `47d932e` and ends at schema v31. PR #326 adds only the v31→v32 plan-role migration. Fresh databases create current metadata and record v32 directly.
 
 ## Research / references used
 
@@ -55,7 +55,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Acceptance status
 
-The plan-only authorization, opt-in identity verification and status-reporting safeguards are implemented. PR #325's final v31 branch is merged into this branch using a normal merge, and the v32 migration follows it. Focused migration and plan-role verification contract evidence is recorded in `docs/test/test326.md`. The PR remains draft and targets the #325 branch. Verification proves role trust and account identity only; effective policy contents remain unattested and are reported as `POLICY_UNATTESTED`.
+The plan-only authorization, opt-in identity verification and status-reporting safeguards are implemented. The PR now targets `main`; its branch includes the merged plan-request path, and the v32 migration follows v31. Focused migration and plan-role verification contract evidence is recorded in `docs/test/test326.md`. The PR remains draft pending current-head CI and review. Verification proves role trust and account identity only; effective policy contents remain unattested and are reported as `POLICY_UNATTESTED`.
 
 ## Tests / validation performed
 
@@ -71,9 +71,11 @@ The plan-only authorization, opt-in identity verification and status-reporting s
 - `terraform fmt -check -diff infrastructure/terraform/serverless-control-plane/main.tf infrastructure/terraform/serverless-control-plane/variables.tf` — passed.
 - `terraform init -backend=false -lockfile=readonly && terraform validate` in the serverless-control-plane root — passed; no AWS calls.
 - `make verify` — passed: 772 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration; one existing Starlette/httpx deprecation warning.
+- Fresh isolated `make local-proof` after merging current `main` — passed: bootstrap, Compose smoke, API contract, customer-plan E2E, fixture seed, trace check, `make verify` (781 tests), Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration.
+- `docker compose stop` — stopped only the isolated `davdeploy-pr326-resume` containers. The new local volume/network and `.venv`/`.local` remain because deletion is not authorized.
 - `GITHUB_PR_NUMBER=326 uv run --locked python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — rerun after final documentation updates.
-- The full clean-room cycle was not run because its `clean-local` step deletes `.venv` and `.local` and removes Docker volumes; the repository's user deletion rule requires explicit approval for that cleanup. No AWS calls, stacks, or customer resources were created.
+- The full `clean -> bootstrap -> demos -> verify -> clean` cycle was not run. The fresh isolated `make local-proof` completed the repository's bootstrap, smoke, API-contract, customer-plan E2E, trace and verification targets. Its artifacts remain because the final cleanup would delete `.venv`/`.local` and the Docker volume; the user's deletion rule requires explicit approval for that cleanup. No AWS calls, stacks, or customer resources were created.
 
 ## Evidence files produced
 
