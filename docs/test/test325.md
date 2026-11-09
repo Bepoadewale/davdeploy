@@ -3,7 +3,7 @@
 Date: 2026-11-09
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `c8141ae` is the prior migration-31 clean-room proof; review fixes are in this PR follow-up, with no customer workload used.
+Commit: `7c05d80` (review follow-up); no customer workload was used.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -74,6 +74,30 @@ a late completion cannot overwrite a separately queued retry.
 - `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 28 passed, including transient status reconciliation and stale build completion fencing.
 - `.venv/bin/ruff check apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py` — passed.
 - `make verify` — 753 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
+
+## Review-fix clean-room evidence
+
+The required fresh local cycle passed on 2026-11-09 at commit
+`7c05d80a71bf271640bd2d3d5b1da5ad1c01687e` in detached worktree
+`/private/tmp/davdeploy-pr325-review-cleanroom`, using the unique Compose
+project `davdeploy-pr325-review`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr325-review make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr325-review docker compose stop
+COMPOSE_PROJECT_NAME=davdeploy-pr325-review docker compose rm -f
+```
+
+Fresh Python 3.12 bootstrap and image builds passed. Smoke, API contract,
+customer-plan E2E, fixture seed, trace check and full verification passed. The
+fresh environment reported 690 tests passed, Ruff, Actions configuration,
+OpenAPI snapshot and Compose configuration passed, with one existing
+Starlette/httpx deprecation warning. Only the uniquely named disposable
+containers were stopped and removed; absence was verified. The test-created
+Compose volume `davdeploy-pr325-review_davdeploy-postgres`, network
+`davdeploy-pr325-review_default`, and worktree `.venv`/`.local` remain because
+they are non-container resources and were not deleted. Existing local worktrees,
+volumes and data were not touched. No AWS calls or customer workloads occurred.
 
 ## Known limitations
 
