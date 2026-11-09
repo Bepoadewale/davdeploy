@@ -276,6 +276,7 @@ def test_unconfirmed_codebuild_status_can_be_retried_for_exact_bound_build():
 
 def test_disabled_runner_status_reconciliation_is_recoverable_after_reenable(monkeypatch):
     service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    db.autoflush = False
     _, _, revision = make_submitted_revision(service)
     service._wake_worker = lambda *_args: None
     request = service.request_generated_plan_run(
@@ -283,6 +284,8 @@ def test_disabled_runner_status_reconciliation_is_recoverable_after_reenable(mon
     )
     assert service.run_next_generated_plan_run() is True
     run = db.get(GeneratedPlanRun, request["id"])
+    db.refresh(run)
+    assert run.preparation_phase is None
     build_id = run.codebuild_build_id
     service.nova_plan_dispatcher = None
     monkeypatch.setattr(

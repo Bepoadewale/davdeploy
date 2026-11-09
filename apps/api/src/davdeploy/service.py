@@ -21,6 +21,7 @@ from opentelemetry import trace
 from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import set_committed_value
 
 from davdeploy.cloud_execution import (
     CloudExecutionAdapter,
@@ -3050,7 +3051,10 @@ class ProductService:
             self.db.rollback()
             return False
         self.db.commit()
-        run.preparation_phase = phase
+        # The Core update already committed this value. Mark it as committed in
+        # the identity map so Session.commit() cannot flush it back over a later
+        # compare-and-set update that clears the phase.
+        set_committed_value(run, "preparation_phase", phase)
         return True
 
     def _finish_generated_plan_run_claim(
