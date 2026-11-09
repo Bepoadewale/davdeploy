@@ -76,7 +76,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 
 ## Acceptance status
 
-Focused validation (114 tests), `make verify` (750 tests), Terraform formatting, and `terraform validate` pass on migration 31 and both reconciliation paths. Bedrock HTTP 408 and transport timeouts, plus ambiguous CodeBuild `StartBuild` errors, require explicit reconciliation or abandonment; known pre-call failures and confirmed provider/CodeBuild rejections without timeout semantics remain retryable. The required clean-room cycle is pending because `make clean-local` would remove existing local files and a PostgreSQL volume; those targets are preserved pending explicit approval. The PR remains open for review and has not been merged.
+Focused validation (114 tests), full `make verify` (750 tests), Terraform formatting, and `terraform validate` pass on migration 31 and both reconciliation paths. An isolated clean-room cycle also passed at current branch head `c8141ae` (751 tests); its unique local environment and Compose resources were cleaned and absence verified. Bedrock HTTP 408 and transport timeouts, plus ambiguous CodeBuild `StartBuild` errors, require explicit reconciliation or abandonment; known pre-call failures and confirmed provider/CodeBuild rejections without timeout semantics remain retryable. The PR remains open for review and current-head CI.
 
 ## Tests / validation performed
 
@@ -85,7 +85,7 @@ Focused validation (114 tests), `make verify` (750 tests), Terraform formatting,
 - `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated both reconciliation routes; `make verify` confirmed the snapshot matches.
 - `terraform fmt -check -diff infrastructure/terraform/serverless-control-plane/main.tf infrastructure/terraform/serverless-control-plane/variables.tf`, `terraform validate`, `uv run --locked --extra dev python scripts/check_doc_conventions.py`, and `git diff --check` passed. Terraform initialization used `-backend=false -lockfile=readonly`.
 - The earlier initial verification reported 692 passed and 4 failures due to stale schema-version expectations; those assertions are now updated and the final full suite passes with 750 tests.
-- No AWS calls or customer resources were used. The clean-room cycle was not run because the repository cleanup target removes existing user data; see the exact paths below.
+- No AWS calls or customer resources were used. The isolated clean-room cycle passed on 2026-11-09 at `c8141ae`; exact commands and cleanup evidence are recorded in `docs/test/test325.md`.
 
 ## Evidence files produced
 
@@ -95,7 +95,7 @@ Focused validation (114 tests), `make verify` (750 tests), Terraform formatting,
 
 No Terraform apply, destroy, customer resource mutation, or AWS deployment. A successful plan job is not proof of apply, health, update, recovery, or cleanup. The separate customer plan-only role and tenant-isolated remote state remain follow-up gates. PR #326 must use schema migration 32 after this PR's migration 31.
 
-The local clean-room cycle remains pending. `make clean-local` would delete `/Users/adewale/Projects/davdeploy-pr325/.venv`, `/Users/adewale/Projects/davdeploy-pr325/.local/davdeploy.db`, and the Docker volume `davdeploy_davdeploy-postgres` at `/var/lib/docker/volumes/davdeploy_davdeploy-postgres/_data`. These local artifacts were preserved.
+The original worktree's `/Users/adewale/Projects/davdeploy-pr325/.venv`, `.local/davdeploy.db`, and Docker volume `davdeploy_davdeploy-postgres` remain preserved. Clean-room validation used a separate new worktree and a uniquely named Compose project, then cleaned only those test-created resources.
 
 ## Follow-up work
 

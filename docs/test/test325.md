@@ -1,9 +1,9 @@
 # test325 - durable hosted Nova plan requests
 
-Date: 2026-11-05
+Date: 2026-11-09
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: Migration-31 recovery and stacked #324 policy follow-up on `feat/nova-plan-request-api`; no customer workload was used
+Commit: `c8141ae` (Migration-31 recovery branch with PR #324 and latest main merged); no customer workload was used
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -42,7 +42,25 @@ Bedrock transport timeouts and connection-level failures after `converse()` begi
 
 PR #325 includes PR #324's isolated plan-only CodeBuild configuration through a normal branch merge. Its separate API policy grants `StartBuild` only on the exact project and only with the durable run-ID override. Explicit denies cover the other override fields for which CodeBuild provides IAM condition keys, including `codebuild:autoRetryLimit`. AWS exposes no IAM condition keys for some `StartBuild` fields, including timeout and debug-session options, so the IAM policy cannot forbid every API field. The fixed dispatcher sends only `projectName`, the idempotency token, and the single run-ID environment override; an abstract-syntax-tree contract test verifies that call shape. The Terraform variable validation requires reviews whenever the runner is enabled.
 
-The repository clean-room cycle remains pending because `make clean-local` would remove the existing `.venv`, `.local/davdeploy.db`, and Docker volume `davdeploy_davdeploy-postgres`. They were preserved pending approval.
+## Fresh isolated clean-room evidence
+
+The required local cycle passed on 2026-11-09 at commit
+`c8141ae` in detached worktree `/private/tmp/davdeploy-pr325-cleanroom` using
+the unique Compose project `davdeploy-pr325-cleanroom`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr325-cleanroom make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr325-cleanroom make clean-local
+```
+
+Fresh dependency installation and Docker image builds passed. Smoke, API contract,
+customer-plan end-to-end, fixture seed, and trace check passed. Full verification passed
+751 tests, Ruff, Actions configuration, the OpenAPI snapshot, and Compose configuration,
+with one existing Starlette/httpx deprecation warning. Cleanup removed only this cycle's
+uniquely named containers, network, PostgreSQL volume, and newly created worktree
+`.venv`/`.local`; post-clean checks found none remaining. The worktree is retained.
+The original `davdeploy-pr325` worktree and its previously existing local artifacts were
+not changed. No AWS resources or customer workloads were used.
 
 ## Known limitations
 
