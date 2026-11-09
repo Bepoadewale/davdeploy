@@ -3,7 +3,7 @@
 Date: 2026-11-09
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: final review-fix source and tests are on the PR head; no customer workload was used.
+Commit: `c3e57218522c9ffe608846247c7f4f789d035bda` (final review fixes); no customer workload was used.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -124,6 +124,30 @@ network `davdeploy-pr325-final_default`, and worktree `.venv`/`.local` remain
 because they are non-container resources and were not deleted. No existing local
 worktrees, volumes or data were touched. No AWS calls or customer workloads
 occurred.
+
+## Final retry-boundary clean-room evidence
+
+The required fresh local cycle passed on 2026-11-09 at commit
+`c3e57218522c9ffe608846247c7f4f789d035bda` in detached worktree
+`/private/tmp/davdeploy-pr325-review-final-cleanroom`, using the unique Compose
+project `davdeploy-pr325-review-final`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr325-review-final make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr325-review-final docker compose stop
+COMPOSE_PROJECT_NAME=davdeploy-pr325-review-final docker compose rm -f
+```
+
+Fresh Python 3.12 bootstrap and image builds passed. Smoke, API contract,
+customer-plan E2E, fixture seed, trace check and full verification passed with
+690 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose checks.
+The existing Starlette/httpx deprecation warning remains. Only the uniquely
+named disposable containers were stopped and removed; absence was verified.
+The test-created Compose volume `davdeploy-pr325-review-final_davdeploy-postgres`
+and network `davdeploy-pr325-review-final_default` remain. The worktree `.venv`
+and `.local` were absent when checked after the proof; no command to remove those
+files was run. Existing local worktrees, volumes and data were not touched. No
+AWS calls or customer workloads occurred.
 
 ## Known limitations
 
