@@ -287,6 +287,9 @@ def test_disabled_runner_status_reconciliation_is_recoverable_after_reenable(mon
     db.refresh(run)
     assert run.preparation_phase is None
     build_id = run.codebuild_build_id
+    run.preparation_phase = "STARTING_BUILD"
+    run.error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+    db.commit()
     service.nova_plan_dispatcher = None
     monkeypatch.setattr(
         "davdeploy.service.NovaPlanOnlyDispatcher.from_environment",
@@ -301,6 +304,59 @@ def test_disabled_runner_status_reconciliation_is_recoverable_after_reenable(mon
     service.nova_plan_dispatcher = dispatcher
     recovered = service.reconcile_generated_plan_build_attempt(founder(), request["id"])
     assert recovered["state"] == "BUILD_SUCCEEDED_UNVERIFIED"
+    db.close()
+
+
+def test_late_start_response_cannot_bind_old_build_to_new_runner_attempt():
+    service, db, _, _dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-late-build-id-race-0001"
+    )
+    claimed = service._claim_next_generated_plan_run()
+    assert claimed is not None
+    run, lease_token = claimed
+    original_runner_id = run.runner_run_id
+    original_token = run.codebuild_idempotency_token
+    run.proposal_sha256 = "a" * 64
+    run.input_sha256 = "b" * 64
+    run.input_version_id = "fixture-input-version"
+    run.preparation_phase = "STARTING_BUILD"
+    run.preparation_lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert service._expire_generated_plan_run_lease(run, datetime.now(UTC)) is True
+
+    run = db.get(GeneratedPlanRun, request["id"])
+    run.runner_run_id = "nova-plan-new-runner-attempt-0001"
+    run.codebuild_idempotency_token = run.runner_run_id
+    run.input_key = f"plans/nova-generated/requests/{run.runner_run_id}/input.json"
+    run.result_key = f"plans/nova-generated/requests/{run.runner_run_id}/result.json"
+    run.input_sha256 = None
+    run.input_version_id = None
+    run.proposal_sha256 = None
+    run.state = "RECONCILIATION_REQUIRED"
+    run.error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+    run.preparation_phase = "STARTING_BUILD"
+    db.commit()
+
+    bound = service._finish_generated_plan_run_claim(
+        run,
+        lease_token,
+        state="RECONCILIATION_REQUIRED",
+        error_code="BUILD_START_RECONCILIATION_REQUIRED",
+        error_summary="Late response from the old runner attempt.",
+        action="generated_plan_run.build_start_uncertain",
+        codebuild_build_id=f"{PROJECT}:{original_runner_id}",
+        expected_runner_run_id=original_runner_id,
+        expected_idempotency_token=original_token,
+    )
+
+    db.refresh(run)
+    assert bound is False
+    assert run.runner_run_id == "nova-plan-new-runner-attempt-0001"
+    assert run.codebuild_build_id is None
+    assert run.codebuild_idempotency_token == run.runner_run_id
     db.close()
 
 
@@ -982,6 +1038,8 @@ def test_known_codebuild_id_after_expired_start_is_bound_for_existing_reconciler
     claimed = service._claim_next_generated_plan_run()
     assert claimed is not None
     run, lease_token = claimed
+    runner_run_id = run.runner_run_id
+    idempotency_token = run.codebuild_idempotency_token
     run.proposal_sha256 = "a" * 64
     run.input_sha256 = "b" * 64
     run.input_version_id = "fixture-input-version"
@@ -999,6 +1057,8 @@ def test_known_codebuild_id_after_expired_start_is_bound_for_existing_reconciler
         error_summary="Build start response arrived after the lease expired.",
         action="generated_plan_run.build_start_uncertain",
         codebuild_build_id=build_id,
+        expected_runner_run_id=runner_run_id,
+        expected_idempotency_token=idempotency_token,
     ) is True
     recovered = db.get(GeneratedPlanRun, request["id"])
     db.refresh(recovered)

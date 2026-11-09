@@ -3067,6 +3067,8 @@ class ProductService:
         error_summary: str,
         action: str,
         codebuild_build_id: str | None = None,
+        expected_runner_run_id: str | None = None,
+        expected_idempotency_token: str | None = None,
     ) -> bool:
         """Finish only the claim still owned by this worker."""
         now = datetime.now(UTC)
@@ -3099,6 +3101,8 @@ class ProductService:
                 state == "RECONCILIATION_REQUIRED"
                 and codebuild_build_id
                 and codebuild_build_id.startswith(f"{run.codebuild_project}:")
+                and expected_runner_run_id
+                and expected_idempotency_token
             ):
                 recovered = self.db.execute(
                     update(GeneratedPlanRun)
@@ -3108,6 +3112,9 @@ class ProductService:
                         GeneratedPlanRun.error_code == "BUILD_START_RECONCILIATION_REQUIRED",
                         GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
                         GeneratedPlanRun.codebuild_build_id.is_(None),
+                        GeneratedPlanRun.runner_run_id == expected_runner_run_id,
+                        GeneratedPlanRun.codebuild_idempotency_token
+                        == expected_idempotency_token,
                     )
                     .values(
                         state="BUILD_STARTED",
@@ -3604,6 +3611,8 @@ class ProductService:
                 ),
                 action="generated_plan_run.dispatch_failed",
                 codebuild_build_id=build.build_id if build else None,
+                expected_runner_run_id=runner_run_id,
+                expected_idempotency_token=idempotency_token,
             )
         except ModelGatewayUnavailable as error:
             self.db.rollback()
@@ -3675,6 +3684,8 @@ class ProductService:
                 error_summary=error_summary,
                 action=action,
                 codebuild_build_id=build.build_id if build else None,
+                expected_runner_run_id=runner_run_id,
+                expected_idempotency_token=idempotency_token,
             )
         return self.generated_plan_run_detail(principal, run.id)
 
@@ -3864,6 +3875,7 @@ class ProductService:
                 state="RECONCILIATION_REQUIRED",
                 error_code="BUILD_STATUS_UNCONFIRMED",
                 error_summary=summary,
+                    preparation_phase=None,
                 updated_at=datetime.now(UTC),
             )
             .execution_options(synchronize_session=False)
