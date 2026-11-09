@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `ae49f4300ade1044dbeb48764d46e21f09a91a26` (final review fixes); no customer workload was used.
+Commit: `0e802d06b47a19e51f8581dce62ac69a3f273381` (final review fixes); no customer workload was used.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -71,10 +71,10 @@ leaving the run permanently unrecoverable. Terminal completion uses a conditiona
 database update bound to the exact project, build ID, and eligible run state, so
 a late completion cannot overwrite a separately queued retry.
 
-- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 33 passed, including transient status reconciliation, temporary runner disable/re-enable recovery, stale build completion fencing, stale status-error fencing, delayed input inspection fencing, and explicit recovery of pre-call lease expiry.
+- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 34 passed, including transient status reconciliation, temporary runner disable/re-enable recovery, stale build completion fencing, late build-ID fencing, status-phase clearing, stale status-error fencing, delayed input inspection fencing, and explicit recovery of pre-call lease expiry.
 - `.venv/bin/ruff check apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py` — passed.
 - `make openapi-update` updated the reconciliation-generation description for the explicit pre-call recovery path.
-- `make verify` — 758 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
+- `make verify` — 759 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
 
 Temporary absence or invalid configuration of the plan-only runner is now also
 recorded as recoverable status uncertainty for an already-bound build. Once the
@@ -202,6 +202,30 @@ and network `davdeploy-pr325-review-final_default` remain. The worktree `.venv`
 and `.local` were absent when checked after the proof; no command to remove those
 files was run. Existing local worktrees, volumes and data were not touched. No
 AWS calls or customer workloads occurred.
+
+## Final callback-recovery clean-room evidence
+
+The required fresh local cycle passed on 2026-11-10 at commit
+`0e802d06b47a19e51f8581dce62ac69a3f273381` in detached worktree
+`/private/tmp/davdeploy-pr325-callback-cleanroom`, using unique Compose project
+`davdeploy-pr325-callback`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr325-callback make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr325-callback docker compose stop
+COMPOSE_PROJECT_NAME=davdeploy-pr325-callback docker compose rm -f
+```
+
+Fresh Python 3.12 bootstrap and image builds passed. Smoke, API contract,
+customer-plan E2E, fixture seed, trace check, full verification (690 tests),
+Ruff, Actions configuration, OpenAPI snapshot and Compose checks passed. The
+existing Starlette/httpx deprecation warning remains. Only uniquely named
+disposable containers were stopped and removed; absence was verified. The new
+Compose volume `davdeploy-pr325-callback_davdeploy-postgres` and network
+`davdeploy-pr325-callback_default` remain. The worktree `.venv` and `.local`
+were absent after the proof, with no command issued to remove those files. No
+existing local worktrees, volumes or data were touched. No AWS calls or customer
+workloads occurred.
 
 ## Known limitations
 
