@@ -1,12 +1,12 @@
 # test328 - fixed Nova plan-only Terraform runner
 
-Date: 2026-11-05
+Date: 2026-11-09
 Execution type: Local unit, API, infrastructure-contract, and Terraform validation; no customer workload
 Repository: `Bepoadewale/davdeploy`
 Customer repository: N/A; no customer repository or workload was used
 Branch: `feat/nova-plan-only-runner-328`, stacked on PR #326
-PR: #328 (draft; final CI pending push)
-Commit: `b1c33e4` (implementation under test; evidence-only commit follows)
+PR: #328 (draft; clean-room evidence added after implementation)
+Commit: `6ef504f3f0cf79361af23ae3820602c80c06dce5` (implementation under test)
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -46,9 +46,16 @@ No AWS resources, customer workloads, or persistent test services. Terraform ini
 
 No cloud teardown is needed. No cleanup command was run.
 
-## Pending clean-room gate
+## Clean-room evidence
 
-The repository clean-room cycle remains pending because `make clean-local` would remove the existing worktree paths `/private/tmp/davdeploy-pr328/.venv/` and `/private/tmp/davdeploy-pr328/.local/`, and would run Compose teardown for project `davdeploy-pr328` (including volume `davdeploy-pr328_davdeploy-postgres`, which is currently absent). These targets were preserved. Existing volumes belonging to other project names were not touched.
+The isolated clean-room cycle passed on 2026-11-09 in detached worktree `/private/tmp/davdeploy-pr328-cleanroom` at commit `6ef504f3f0cf79361af23ae3820602c80c06dce5`, using the unique Compose project `davdeploy-pr328-cleanroom`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr328-cleanroom make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr328-cleanroom make clean-local
+```
+
+Fresh dependency installation and Docker image builds passed. Smoke reported API, worker, executor, Prometheus, Grafana, Tempo, and OPA ready. The API contract and customer-plan end-to-end passed, including governed destroy in the local fixture. Trace checks passed. Full verification passed 796 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration; one existing Starlette/httpx deprecation warning was reported. Final cleanup removed only the uniquely named clean-room containers, network, and PostgreSQL volume plus the new worktree's `.venv` and `.local`. A follow-up check confirmed no matching containers or volume and no remaining `.venv` or `.local`. The clean-room worktree is retained. No AWS resources or unrelated project data were accessed or removed.
 
 ## Final boundary
 

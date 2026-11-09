@@ -75,7 +75,7 @@ The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact buc
 - [x] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
 - [x] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
 - [x] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
-- [ ] Focused/full validation and PR CI pass; clean-room status is recorded truthfully. Local focused/full validation is recorded; PR CI and clean-room gate are pending.
+- [ ] Focused/full validation, clean-room validation, and PR CI pass. Focused/full and clean-room validation passed; current-head PR CI is pending.
 
 ## Acceptance status
 
@@ -84,7 +84,7 @@ Draft PR and ticket were created before implementation. The backend-free initial
 ## Tests / validation performed
 
 - Local focused feature tests, full `make verify`, Terraform formatting, and Terraform validation are recorded in `docs/test/test328.md`; no customer workload or AWS account was used.
-- The required clean-room cycle is pending because `make clean-local` would delete the worktree `.venv/`, `.local/`, and project-scoped Compose PostgreSQL volume. Those targets are preserved pending explicit approval.
+- The isolated clean-room cycle passed on 2026-11-09 at commit `6ef504f`; details and scoped cleanup verification are in `docs/test/test328.md`.
 
 ## Evidence files produced
 
