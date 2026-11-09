@@ -1,6 +1,6 @@
 # test324 - isolated Nova plan-only CodeBuild boundary
 
-Date: 2026-11-04
+Date: 2026-11-09
 Execution type: Local static and automated validation; no customer workload
 Customer repository: N/A; no customer repository was used
 Commit: `8890acf11d6025b188f82b6697d0dbf777880b75` (implementation under test)
@@ -135,3 +135,25 @@ The focused contract tests passed (5 tests), Terraform formatting and validation
 `git diff --check` passed. Terraform validation used the existing initialized local providers;
 no AWS calls or apply were performed. The protected untracked `--only-show-errors` file was
 preserved.
+
+## Fresh isolated clean-room final-clean evidence
+
+The final isolated cycle passed on 2026-11-09 at commit
+`d5d2a486fbcdc29c63916cdca415a8e20216f508` in detached worktree
+`/private/tmp/davdeploy-pr324-cleanroom`, using the unique Compose project
+`davdeploy-pr324-cleanroom`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr324-cleanroom make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr324-cleanroom make clean-local
+```
+
+Fresh dependency installation and image builds passed. Smoke reported the API, worker,
+executor, Prometheus, Grafana, Tempo, and OPA ready. The API contract and customer-plan
+end-to-end passed; fixture seeding and trace checks passed. Full verification passed 689 tests,
+Ruff, Actions configuration, OpenAPI, and Compose configuration, with one existing
+Starlette/httpx deprecation warning. Final cleanup removed only this run's uniquely named
+containers, network, PostgreSQL volume, and fresh worktree `.venv` and `.local`. Follow-up
+checks found no matching containers or volume and confirmed the worktree's `.venv` and
+`.local` were absent. The detached clean-room worktree is retained. No AWS resources or
+unrelated project data were accessed or deleted.
