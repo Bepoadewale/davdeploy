@@ -99,6 +99,11 @@ variable "enable_nova_plan_only_runner" {
     condition     = !var.enable_nova_plan_only_runner || (var.nova_plan_artifact_bucket != "" && var.nova_plan_kms_key_arn != "")
     error_message = "The Nova plan-only runner requires the existing plan artifact bucket and KMS key."
   }
+
+  validation {
+    condition     = !var.enable_nova_plan_only_runner || var.enable_nova_plan_reviews
+    error_message = "The Nova plan-only runner requires Nova plan reviews so the API has the permissions needed to stage and reconcile requests."
+  }
 }
 
 variable "enable_customer_cloud_execution" {

@@ -2,7 +2,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ReadTimeoutError
 from davdeploy.contracts import JobEnvelope, JobKind, ModelPurpose, ModelRequest, TenantScope
 from davdeploy.db import run_migrations
 from davdeploy.model_gateway import (
@@ -95,6 +95,39 @@ def test_fixture_model_gateway_returns_typed_non_authoritative_response():
     assert response.output["mode"] == "SIMULATED"
     assert response.evidence[0].kind.value == "fixture"
     assert response.usage is not None
+
+
+def test_fallback_gateway_does_not_replay_uncertain_provider_calls():
+    document = {"prompt": "deploy"}
+    request = ModelRequest(
+        tenant=tenant(),
+        purpose=ModelPurpose.INTENT_EXTRACTION,
+        provider="bedrock",
+        model=NOVA_2_LITE_MODEL_ID,
+        prompt_version="intent-v1",
+        input_digest=model_input_digest(document),
+    )
+
+    class UncertainPrimary:
+        def complete(self, *_args, **_kwargs):
+            raise ModelGatewayUnavailable("response lost", outcome_uncertain=True)
+
+    class CountingFallback(DeterministicModelGateway):
+        def __init__(self):
+            self.calls = 0
+
+        def complete(self, *args, **kwargs):
+            self.calls += 1
+            return super().complete(*args, **kwargs)
+
+    fallback = CountingFallback()
+    gateway = FallbackModelGateway(UncertainPrimary(), fallback)
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.complete(request, document)
+
+    assert error.value.outcome_uncertain
+    assert fallback.calls == 0
 
 
 def test_disabled_model_gateway_fails_closed():
@@ -322,6 +355,116 @@ def test_nova_gateway_timeout_failure_preserves_partial_safe_usage_evidence(monk
     assert len(error.value.evidence) == 1
     assert error.value.evidence[0].location == "bedrock-request:first-request"
     assert "ignored" not in str(error.value)
+
+
+def test_nova_gateway_transport_timeout_marks_provider_outcome_uncertain():
+    document = {"customer_request": "deploy"}
+
+    class TimeoutRuntime:
+        def converse(self, **_kwargs):
+            raise ReadTimeoutError(endpoint_url="https://bedrock-runtime.example.test")
+
+    gateway = BedrockNovaGateway(nova_config(), TimeoutRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.outcome_uncertain
+
+
+def test_nova_gateway_definite_pre_call_rejection_is_not_uncertain():
+    document = {"customer_request": "deploy"}
+    client = FakeBedrockRuntime()
+    gateway = BedrockNovaGateway(nova_config(), client)
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document, model="unconfigured-model"),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert not error.value.outcome_uncertain
+    assert client.calls == []
+
+
+def test_nova_gateway_provider_4xx_rejection_is_not_uncertain():
+    document = {"customer_request": "deploy"}
+
+    class RejectedRuntime:
+        def converse(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "ValidationException"},
+                    "ResponseMetadata": {"HTTPStatusCode": 400},
+                },
+                "Converse",
+            )
+
+    gateway = BedrockNovaGateway(nova_config(), RejectedRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert not error.value.outcome_uncertain
+
+
+def test_nova_gateway_provider_5xx_is_uncertain():
+    document = {"customer_request": "deploy"}
+
+    class FailedRuntime:
+        def converse(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "InternalServerException"},
+                    "ResponseMetadata": {"HTTPStatusCode": 503},
+                },
+                "Converse",
+            )
+
+    gateway = BedrockNovaGateway(nova_config(), FailedRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.outcome_uncertain
+
+
+def test_nova_gateway_provider_408_timeout_is_uncertain():
+    document = {"customer_request": "deploy"}
+
+    class TimeoutRuntime:
+        def converse(self, **_kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "ModelTimeoutException"},
+                    "ResponseMetadata": {"HTTPStatusCode": 408},
+                },
+                "Converse",
+            )
+
+    gateway = BedrockNovaGateway(nova_config(), TimeoutRuntime())
+
+    with pytest.raises(ModelGatewayUnavailable) as error:
+        gateway.generate_structured(
+            nova_request(document),
+            document,
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+
+    assert error.value.outcome_uncertain
 
 
 def test_nova_gateway_exhausted_json_repair_preserves_complete_cost_and_evidence():

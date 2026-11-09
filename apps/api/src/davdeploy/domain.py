@@ -379,6 +379,24 @@ class GeneratedPlanArtifactApprovalRequest(BaseModel):
     manifest_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class GeneratedPlanRunRequest(BaseModel):
+    """Request a generated plan for one exact immutable customer revision."""
+
+    content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class GeneratedPlanInputReconciliationRequest(BaseModel):
+    """Resolve only an ambiguous S3 input-stage attempt before any build starts."""
+
+    abandon_attempt: bool = False
+
+
+class GeneratedPlanGenerationReconciliationRequest(BaseModel):
+    """Require explicit confirmation before abandoning an uncertain or pre-call attempt."""
+
+    abandon_attempt: Literal[True]
+
+
 class InfrastructurePlanDecisionRequest(BaseModel):
     decision: InfrastructurePlanDecision
     content_digest: str = Field(min_length=64, max_length=64)
