@@ -71,10 +71,16 @@ leaving the run permanently unrecoverable. Terminal completion uses a conditiona
 database update bound to the exact project, build ID, and eligible run state, so
 a late completion cannot overwrite a separately queued retry.
 
-- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 32 passed, including transient status reconciliation, stale build completion fencing, stale status-error fencing, delayed input inspection fencing, and explicit recovery of pre-call lease expiry.
+- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 33 passed, including transient status reconciliation, temporary runner disable/re-enable recovery, stale build completion fencing, stale status-error fencing, delayed input inspection fencing, and explicit recovery of pre-call lease expiry.
 - `.venv/bin/ruff check apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py` — passed.
 - `make openapi-update` updated the reconciliation-generation description for the explicit pre-call recovery path.
-- `make verify` — 757 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
+- `make verify` — 758 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
+
+Temporary absence or invalid configuration of the plan-only runner is now also
+recorded as recoverable status uncertainty for an already-bound build. Once the
+runner is restored, the authenticated `reconcile-build` route can query that
+exact build; a successful CodeBuild state remains unverified until result
+ingestion is implemented.
 
 ## First review-fix clean-room evidence
 

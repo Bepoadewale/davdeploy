@@ -2654,7 +2654,8 @@ class ProductService:
         )
         uncertain_status = (
             run.state == "RECONCILIATION_REQUIRED"
-            and run.error_code == "BUILD_STATUS_UNCONFIRMED"
+            and run.error_code
+            in {"BUILD_STATUS_UNCONFIRMED", "RUNNER_CONFIGURATION_UNAVAILABLE"}
             and run.preparation_phase is None
             and bool(run.codebuild_build_id)
         )
@@ -3732,57 +3733,36 @@ class ProductService:
             return False
         if run.state not in {"BUILD_STARTED", "RECONCILIATION_REQUIRED"}:
             return True
-        dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        try:
+            dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
+        except NovaPlanDispatchError:
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The configured runner could not be loaded. Retry status reconciliation after fixing its configuration.",
+            )
         if dispatcher is None:
-            run.state = "RECONCILIATION_REQUIRED"
-            run.error_code = "RUNNER_CONFIGURATION_UNAVAILABLE"
-            run.error_summary = "The configured runner is unavailable for status reconciliation."
-            self.db.commit()
-            return False
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The configured runner is unavailable. Retry status reconciliation after it is enabled.",
+            )
         try:
             build = dispatcher.describe_build(normalized_build_id)
         except NovaPlanDispatchError:
             # The SQS wake-up can be acknowledged after this method returns.
-            # Persist a state that the authenticated reconcile-build action can
-            # retry against this exact, already-bound build ID.
-            status_uncertain = self.db.execute(
-                update(GeneratedPlanRun)
-                .where(
-                    GeneratedPlanRun.id == run.id,
-                    GeneratedPlanRun.codebuild_project == run.codebuild_project,
-                    GeneratedPlanRun.codebuild_build_id == normalized_build_id,
-                    GeneratedPlanRun.state.in_(
-                        ("BUILD_STARTED", "RECONCILIATION_REQUIRED")
-                    ),
-                    or_(
-                        GeneratedPlanRun.error_code.is_(None),
-                        GeneratedPlanRun.error_code.in_(
-                            (
-                                "BUILD_START_RECONCILIATION_REQUIRED",
-                                "BUILD_STATUS_UNCONFIRMED",
-                                "PREPARATION_LEASE_EXPIRED",
-                            )
-                        ),
-                    ),
-                )
-                .values(
-                    state="RECONCILIATION_REQUIRED",
-                    error_code="BUILD_STATUS_UNCONFIRMED",
-                    error_summary=(
-                        "The runner result could not be confirmed. Retry status reconciliation."
-                    ),
-                    updated_at=datetime.now(UTC),
-                )
-                .execution_options(synchronize_session=False)
+            # Keep the run recoverable through the authenticated exact-build route.
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The runner result could not be confirmed. Retry status reconciliation.",
             )
-            if status_uncertain.rowcount != 1:
-                self.db.rollback()
-                return True
-            self.db.commit()
-            self.db.expire(run)
-            return True
         if build.project_name != run.codebuild_project or build.build_id != normalized_build_id:
-            return False
+            return self._mark_nova_plan_build_status_unconfirmed(
+                run,
+                normalized_build_id,
+                "The runner returned a different build identity. Retry status reconciliation after checking its configuration.",
+            )
         if build.status in {"IN_PROGRESS", "QUEUED"}:
             return False
         now = datetime.now(UTC)
@@ -3847,6 +3827,46 @@ class ProductService:
                 "error_code": terminal_error_code,
             },
         )
+        self.db.commit()
+        self.db.expire(run)
+        return True
+
+    def _mark_nova_plan_build_status_unconfirmed(
+        self, run: GeneratedPlanRun, build_id: str, summary: str
+    ) -> bool:
+        """Preserve recovery for an exact bound build when status cannot be trusted."""
+        status_uncertain = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.codebuild_project == run.codebuild_project,
+                GeneratedPlanRun.codebuild_build_id == build_id,
+                GeneratedPlanRun.state.in_(
+                    ("BUILD_STARTED", "RECONCILIATION_REQUIRED")
+                ),
+                or_(
+                    GeneratedPlanRun.error_code.is_(None),
+                    GeneratedPlanRun.error_code.in_(
+                        (
+                            "BUILD_START_RECONCILIATION_REQUIRED",
+                            "BUILD_STATUS_UNCONFIRMED",
+                            "RUNNER_CONFIGURATION_UNAVAILABLE",
+                            "PREPARATION_LEASE_EXPIRED",
+                        )
+                    ),
+                ),
+            )
+            .values(
+                state="RECONCILIATION_REQUIRED",
+                error_code="BUILD_STATUS_UNCONFIRMED",
+                error_summary=summary,
+                updated_at=datetime.now(UTC),
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if status_uncertain.rowcount != 1:
+            self.db.rollback()
+            return True
         self.db.commit()
         self.db.expire(run)
         return True

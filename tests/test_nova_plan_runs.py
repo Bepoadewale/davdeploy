@@ -274,6 +274,33 @@ def test_unconfirmed_codebuild_status_can_be_retried_for_exact_bound_build():
     db.close()
 
 
+def test_disabled_runner_status_reconciliation_is_recoverable_after_reenable(monkeypatch):
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-disabled-runner-retry-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    build_id = run.codebuild_build_id
+    service.nova_plan_dispatcher = None
+    monkeypatch.setattr(
+        "davdeploy.service.NovaPlanOnlyDispatcher.from_environment",
+        classmethod(lambda _cls: None),
+    )
+
+    assert service.reconcile_generated_plan_build(build_id) is True
+    unavailable = service.generated_plan_run_detail(founder(), request["id"])
+    assert unavailable["state"] == "RECONCILIATION_REQUIRED"
+    assert unavailable["error_code"] == "BUILD_STATUS_UNCONFIRMED"
+
+    service.nova_plan_dispatcher = dispatcher
+    recovered = service.reconcile_generated_plan_build_attempt(founder(), request["id"])
+    assert recovered["state"] == "BUILD_SUCCEEDED_UNVERIFIED"
+    db.close()
+
+
 def test_old_build_completion_cannot_overwrite_a_new_queued_attempt():
     service, db, _, dispatcher = service_with_dispatcher(status="FAILED")
     _, _, revision = make_submitted_revision(service)
