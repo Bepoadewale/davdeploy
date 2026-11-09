@@ -1,9 +1,9 @@
 # test325 - durable hosted Nova plan requests
 
-Date: 2026-11-09
+Date: 2026-11-10
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `c3e57218522c9ffe608846247c7f4f789d035bda` (final review fixes); no customer workload was used.
+Commit: `ae49f4300ade1044dbeb48764d46e21f09a91a26` (final review fixes); no customer workload was used.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -105,6 +105,30 @@ and network `davdeploy-pr325-status_default` remain. The worktree `.venv` and
 `.local` were absent when checked after the proof; no command to remove those
 files was run. Existing local worktrees, volumes and data were not touched. No
 AWS calls or customer workloads occurred.
+
+## ORM phase-state clean-room evidence
+
+The required fresh local cycle passed on 2026-11-10 at commit
+`ae49f4300ade1044dbeb48764d46e21f09a91a26` in detached worktree
+`/private/tmp/davdeploy-pr325-phase-cleanroom`, using unique Compose project
+`davdeploy-pr325-phase`:
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr325-phase make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr325-phase docker compose stop
+COMPOSE_PROJECT_NAME=davdeploy-pr325-phase docker compose rm -f
+```
+
+Fresh Python 3.12 bootstrap and image builds passed. Smoke, API contract,
+customer-plan E2E, fixture seed, trace check, full verification (690 tests),
+Ruff, Actions configuration, OpenAPI snapshot and Compose checks passed. The
+existing Starlette/httpx deprecation warning remains. Only the uniquely named
+disposable containers were stopped and removed; absence was verified. The new
+Compose volume `davdeploy-pr325-phase_davdeploy-postgres` and network
+`davdeploy-pr325-phase_default` remain. The worktree `.venv` and `.local` were
+absent after the proof, with no command issued to remove them. No existing local
+worktrees, volumes or data were touched. No AWS calls or customer workloads
+occurred.
 
 ## First review-fix clean-room evidence
 
