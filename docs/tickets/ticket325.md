@@ -66,6 +66,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - [x] Failed, expired, or uncertain work remains visibly failed or requires reconciliation; no fake plan/artifact success is recorded.
 - [x] Lost input-stage responses cannot trigger an unsafe overwrite or duplicate write; durable reconciliation resumes a matching object, confirms absence, or requires explicit attempt abandonment before a fresh-key retry.
 - [x] Lost CodeBuild start responses are protected by a durable per-attempt token and can be reconciled only by one exact runner-ID match in the dedicated CodeBuild project. Zero, multiple, incomplete, or unavailable results remain blocked without retry.
+- [x] Transient status-lookup failures for an already-bound build remain manually reconcilable, and a stale completion cannot overwrite a newer retry attempt.
 - [x] An uncertain generation lease can be explicitly abandoned and retried with a fresh key; no generation attempt is automatically replayed.
 - [x] Bedrock response loss/transport timeout is not treated as a confirmed generation failure; definite pre-call or known 4xx rejection other than HTTP 408 remains retryable.
 - [x] Bedrock HTTP 408 and ambiguous CodeBuild `StartBuild` failures cannot be retried until explicit reconciliation or abandonment; known rejected requests remain retryable.
@@ -76,7 +77,7 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 
 ## Acceptance status
 
-Focused validation (114 tests), full `make verify` (750 tests), Terraform formatting, and `terraform validate` pass on migration 31 and both reconciliation paths. An isolated clean-room cycle also passed at current branch head `c8141ae` (751 tests); its unique local environment and Compose resources were cleaned and absence verified. Bedrock HTTP 408 and transport timeouts, plus ambiguous CodeBuild `StartBuild` errors, require explicit reconciliation or abandonment; known pre-call failures and confirmed provider/CodeBuild rejections without timeout semantics remain retryable. The PR remains open for review and current-head CI.
+The original focused validation (114 tests), full verification (750 tests), Terraform formatting, `terraform validate`, and isolated clean-room cycle at `c8141ae` passed. After review follow-up, the focused Nova-run/worker suite passed 28 tests, Ruff passed, and `make verify` passed with 753 tests plus Actions configuration, OpenAPI, and Compose checks. A fresh isolated clean-room cycle for the review fix is in progress. Bedrock HTTP 408 and transport timeouts, plus ambiguous CodeBuild `StartBuild` errors, require explicit reconciliation or abandonment; known pre-call failures and confirmed provider/CodeBuild rejections without timeout semantics remain retryable. Current-head CI and review must pass before merge.
 
 ## Tests / validation performed
 

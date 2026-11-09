@@ -18,7 +18,7 @@ import httpx
 from botocore.exceptions import BotoCoreError, ClientError
 from httpx import HTTPError
 from opentelemetry import trace
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -2606,13 +2606,20 @@ class ProductService:
             raise PermissionError("generated plan request not found in this organization")
         if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
             raise PermissionError("generated plan request is not visible to this user")
-        if (
-            run.state != "RECONCILIATION_REQUIRED"
-            or run.error_code != "BUILD_START_RECONCILIATION_REQUIRED"
-            or run.preparation_phase != "STARTING_BUILD"
-            or not run.runner_run_id
-            or run.codebuild_idempotency_token != run.runner_run_id
-        ):
+        uncertain_start = (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code == "BUILD_START_RECONCILIATION_REQUIRED"
+            and run.preparation_phase == "STARTING_BUILD"
+            and bool(run.runner_run_id)
+            and run.codebuild_idempotency_token == run.runner_run_id
+        )
+        uncertain_status = (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code == "BUILD_STATUS_UNCONFIRMED"
+            and run.preparation_phase is None
+            and bool(run.codebuild_build_id)
+        )
+        if not (uncertain_start or uncertain_status):
             raise ValueError("only an ambiguous CodeBuild start can be reconciled here")
 
         dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
@@ -3696,29 +3703,67 @@ class ProductService:
         try:
             build = dispatcher.describe_build(normalized_build_id)
         except NovaPlanDispatchError:
+            # The SQS wake-up can be acknowledged after this method returns.
+            # Persist a state that the authenticated reconcile-build action can
+            # retry against this exact, already-bound build ID.
             run.state = "RECONCILIATION_REQUIRED"
             run.error_code = "BUILD_STATUS_UNCONFIRMED"
-            run.error_summary = "The runner result could not be confirmed."
+            run.error_summary = "The runner result could not be confirmed. Retry status reconciliation."
             self.db.commit()
-            return False
+            return True
         if build.project_name != run.codebuild_project or build.build_id != normalized_build_id:
             return False
         if build.status in {"IN_PROGRESS", "QUEUED"}:
             return False
         now = datetime.now(UTC)
-        if build.status == "SUCCEEDED":
-            run.state = "BUILD_SUCCEEDED_UNVERIFIED"
-            run.error_code = "PLAN_RESULT_NOT_VERIFIED"
-            run.error_summary = (
-                "The build finished, but no trusted result handler is enabled; "
-                "no Terraform plan is available for approval."
+        terminal_state = "BUILD_SUCCEEDED_UNVERIFIED" if build.status == "SUCCEEDED" else "FAILED"
+        terminal_error_code = (
+            "PLAN_RESULT_NOT_VERIFIED" if build.status == "SUCCEEDED" else f"CODEBUILD_{build.status}"
+        )
+        terminal_error_summary = (
+            "The build finished, but no trusted result handler is enabled; "
+            "no Terraform plan is available for approval."
+            if build.status == "SUCCEEDED"
+            else "Nova plan generation did not complete successfully."
+        )
+        # Reconcile with compare-and-set semantics. Another delivery may finish
+        # this build while a retry has already started; the old build must not
+        # overwrite the new attempt's state.
+        reconciled = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.codebuild_project == run.codebuild_project,
+                GeneratedPlanRun.codebuild_build_id == normalized_build_id,
+                GeneratedPlanRun.state.in_(("BUILD_STARTED", "RECONCILIATION_REQUIRED")),
+                or_(
+                    GeneratedPlanRun.error_code.is_(None),
+                    GeneratedPlanRun.error_code.in_(
+                        (
+                            "BUILD_START_RECONCILIATION_REQUIRED",
+                            "BUILD_STATUS_UNCONFIRMED",
+                            "PREPARATION_LEASE_EXPIRED",
+                        )
+                    ),
+                ),
             )
+            .values(
+                state=terminal_state,
+                error_code=terminal_error_code,
+                error_summary=terminal_error_summary,
+                finished_at=now,
+                preparation_lease_expires_at=None,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if reconciled.rowcount != 1:
+            self.db.rollback()
+            return True
+        if build.status == "SUCCEEDED":
+            audit_state = "BUILD_SUCCEEDED_UNVERIFIED"
         else:
-            run.state = "FAILED"
-            run.error_code = f"CODEBUILD_{build.status}"
-            run.error_summary = "Nova plan generation did not complete successfully."
-        run.finished_at = now
-        run.preparation_lease_expires_at = None
+            audit_state = "FAILED"
         self.audit(
             Principal("system-nova-plan-worker", run.organization_id, "operator"),
             "generated_plan_run.build_reconciled",
@@ -3728,11 +3773,12 @@ class ProductService:
                 "codebuild_project": run.codebuild_project,
                 "codebuild_build_id": normalized_build_id,
                 "build_status": build.status,
-                "state": run.state,
-                "error_code": run.error_code,
+                "state": audit_state,
+                "error_code": terminal_error_code,
             },
         )
         self.db.commit()
+        self.db.expire(run)
         return True
 
     def persist_generated_plan_artifact(

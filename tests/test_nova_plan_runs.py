@@ -245,6 +245,67 @@ def test_successful_codebuild_is_not_promoted_to_a_verified_plan():
     db.close()
 
 
+def test_unconfirmed_codebuild_status_can_be_retried_for_exact_bound_build():
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-status-retry-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    build_id = run.codebuild_build_id
+
+    def temporary_failure(_build_id):
+        raise NovaPlanDispatchError("temporary CodeBuild API timeout", outcome_uncertain=True)
+
+    dispatcher.describe_build = temporary_failure
+    assert service.reconcile_generated_plan_build(build_id) is True
+    failed_lookup = service.generated_plan_run_detail(founder(), request["id"])
+    assert failed_lookup["state"] == "RECONCILIATION_REQUIRED"
+    assert failed_lookup["error_code"] == "BUILD_STATUS_UNCONFIRMED"
+
+    dispatcher.describe_build = lambda exact_id: type("Build", (), {
+        "build_id": exact_id, "project_name": PROJECT, "status": "SUCCEEDED"
+    })()
+    recovered = service.reconcile_generated_plan_build_attempt(founder(), request["id"])
+    assert recovered["state"] == "BUILD_SUCCEEDED_UNVERIFIED"
+    assert recovered["error_code"] == "PLAN_RESULT_NOT_VERIFIED"
+    db.close()
+
+
+def test_old_build_completion_cannot_overwrite_a_new_queued_attempt():
+    service, db, _, dispatcher = service_with_dispatcher(status="FAILED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-old-build-race-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    old_build_id = run.codebuild_build_id
+
+    def finish_after_retry(exact_build_id):
+        assert exact_build_id == old_build_id
+        run.state = "QUEUED"
+        run.codebuild_build_id = None
+        run.runner_run_id = "new-runner-attempt-after-retry"
+        run.error_code = None
+        run.error_summary = None
+        db.commit()
+        from davdeploy.nova_plan_dispatch import NovaPlanBuild
+
+        return NovaPlanBuild(exact_build_id, PROJECT, "FAILED")
+
+    dispatcher.describe_build = finish_after_retry
+    assert service.reconcile_generated_plan_build(old_build_id) is True
+    db.refresh(run)
+    assert run.state == "QUEUED"
+    assert run.codebuild_build_id is None
+    assert run.runner_run_id == "new-runner-attempt-after-retry"
+    db.close()
+
+
 def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild():
     service, db, _, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)

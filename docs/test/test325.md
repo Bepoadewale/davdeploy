@@ -3,7 +3,7 @@
 Date: 2026-11-09
 Execution type: Local unit, API-code, and database-migration validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `c8141ae` (Migration-31 recovery branch with PR #324 and latest main merged); no customer workload was used
+Commit: `c8141ae` is the prior migration-31 clean-room proof; review fixes are in this PR follow-up, with no customer workload used.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -61,6 +61,19 @@ uniquely named containers, network, PostgreSQL volume, and newly created worktre
 `.venv`/`.local`; post-clean checks found none remaining. The worktree is retained.
 The original `davdeploy-pr325` worktree and its previously existing local artifacts were
 not changed. No AWS resources or customer workloads were used.
+
+## Review follow-up validation
+
+The review follow-up permits the authenticated `reconcile-build` action to retry
+status lookup for a build ID already bound to the run after a transient CodeBuild
+API failure. The event handler can then acknowledge that completion event without
+leaving the run permanently unrecoverable. Terminal completion uses a conditional
+database update bound to the exact project, build ID, and eligible run state, so
+a late completion cannot overwrite a separately queued retry.
+
+- `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 28 passed, including transient status reconciliation and stale build completion fencing.
+- `.venv/bin/ruff check apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py` — passed.
+- `make verify` — 753 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
 
 ## Known limitations
 
