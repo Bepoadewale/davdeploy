@@ -72,7 +72,7 @@ execution is claimed.
 - `uv run ruff check apps/api/src/davdeploy/main.py apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py`: passed after import formatting.
 - `make openapi-update` regenerated `contracts/openapi-v1.json`; `make openapi-check` passed.
 - Full `make verify`: 865 passed; Ruff, Actions configuration, OpenAPI, and Docker Compose configuration passed.
-- Fresh isolated `make local-proof` passed on `e046917`; all 865 tests, API contract, customer-plan E2E, trace check, and cleanup passed. Exact resources and cleanup evidence are in `docs/test/test333.md`.
+- Fresh isolated `make local-proof` passed on the final runtime commit `43ba947`; all 865 tests, API contract, customer-plan E2E, trace check, and cleanup passed. Exact resources and cleanup evidence are in `docs/test/test333.md`.
 - Documentation convention validation and `git diff --check` passed.
 - Runtime and API evidence: `docs/test/test333.md`.
 

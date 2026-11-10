@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local API/service tests and static contract verification; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `e046917`
+Commit: `43ba947`
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -23,7 +23,7 @@ make openapi-check
 python scripts/check_doc_conventions.py
 git diff --check
 make verify
-COMPOSE_PROJECT_NAME=davdeploy-pr333-cleanroom-20261110 make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr333-cleanroom-20261110 make local-proof  # e046917 and final source 43ba947
 COMPOSE_PROJECT_NAME=davdeploy-pr333-cleanroom-20261110 make clean-local
 ```
 
@@ -40,6 +40,10 @@ COMPOSE_PROJECT_NAME=davdeploy-pr333-cleanroom-20261110 make clean-local
   smoke, API contract, customer-plan E2E, demo data seed, trace check, and all
   865 tests. The customer-plan E2E used local fixtures; no AWS infrastructure
   was deployed.
+- After adding plan title and revision number to each history entry, the full
+  clean-room cycle was repeated on final runtime commit `43ba947`; bootstrap,
+  smoke, API contract, customer-plan E2E, seed, trace check, and all 865 tests
+  passed again.
 - `make clean-local` removed the exact PR #333 Compose containers, network,
   PostgreSQL volume, `.venv`, and `.local`. Docker inspection and filesystem
   checks confirmed these targets were absent afterward. The unrelated existing
