@@ -7,7 +7,7 @@ Customer repository: N/A; no customer repository or workload was used
 PR source branch: `feat/nova-plan-only-runner-328`
 Local validation worktree branch: `feat/nova-plan-only-runner-328-review`
 PR: #328 (draft; based on `main` after prerequisite PR #326 merged)
-Commit: `593dbc9` plus OpenAPI snapshot update (review fixes under test)
+Commit: `41a9b6a1bac32f701e0e9c8229d868e285ffd00d` (Nova retry identity and exact IAM policy follow-ups; documentation evidence is committed separately)
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -83,6 +83,30 @@ make clean-local
 ```
 
 The simple, complex, Day-2, degraded, policy-failure, and readiness-failure demos passed. Smoke reported API, worker, executor, Prometheus, Grafana, Tempo, and OPA ready. The API contract, local customer-plan end-to-end, seed, and trace checks passed. `make verify` passed 814 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration. All 15 configured Terraform roots passed formatting and validation. One pre-existing Starlette/httpx deprecation warning was emitted. The final cleanup removed only the uniquely named Compose project containers, network, PostgreSQL volume, and this PR worktree's generated `.venv` and `.local`. No AWS calls, customer workloads, or unrelated resources were used.
+
+## Retry identity and IAM review follow-up — 2026-11-10
+
+The independent review found that retries use two distinct IDs: the durable plan request ID and a fresh CodeBuild attempt ID. It also asked for clearer proof that staged-input inspection can use an unversioned read. The worker now validates these IDs separately, and the API still binds the staged input's `control_plane_run_id` to the durable database row while the artifact is keyed to the attempt ID. The API IAM policy lists `s3:GetObject` and `s3:GetObjectVersion` together on the exact build-input key; no prefix listing permission was added.
+
+Focused tests passed (61 tests), covering a distinct attempt/request pair, rejection of an invalid durable request ID before customer role assumption, mismatched result-attempt rejection, and exact IAM action/resource scope. Ruff passed. The complete isolated cycle was rerun:
+
+```text
+make clean-local
+make bootstrap-local
+make smoke
+make demo-simple
+make demo-complex
+make demo-day2
+make demo-degraded
+make demo-failure
+make demo-readiness-failure
+make trace-check
+make verify
+make terraform-validate
+make clean-local
+```
+
+All six local demos passed. Smoke, API contract, fixture end-to-end, seed, and trace checks passed. `make verify` passed 816 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration; all 15 configured Terraform roots passed formatting and validation. The only warning was the existing Starlette/httpx deprecation. Final cleanup removed only the unique PR Compose project and its generated `.venv` and `.local`. No AWS calls, customer workloads, or unrelated resources were used.
 
 ## Final boundary
 

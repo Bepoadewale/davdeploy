@@ -75,16 +75,17 @@ The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact buc
 - [x] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
 - [x] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
 - [x] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
-- [ ] Focused/full validation and clean-room validation pass; current-head PR CI and review are pending after these fixes are pushed.
+- [x] Focused/full validation and clean-room validation pass.
+- [ ] Current-head PR CI and review pass.
 
 ## Acceptance status
 
-Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, explicit input-handoff recovery, and three review fixes: exact API build-input reads, transient result-read reconciliation, and returning the artifact ID only for a review-ready run. Integrated clean-room verification passed 814 tests and all 15 configured Terraform roots after PR #326 merged. Current-head CI and review remain pending. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
+Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, explicit input-handoff recovery, distinct durable request and per-attempt IDs, exact API build-input reads, transient result-read reconciliation, and returning the artifact ID only for a review-ready run. Integrated clean-room verification passed 816 tests and all 15 configured Terraform roots after PR #326 merged. Current-head CI and review remain pending. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
 
 ## Tests / validation performed
 
-- The integrated clean-room cycle passed on 2026-11-10: all six local demos, customer-plan fixture flow, 814-test `make verify`, and `make terraform-validate` across 15 roots. Details and scoped cleanup verification are in `docs/test/test328.md`.
-- Focused tests for runner recovery and connection contracts passed (121 tests); no customer workload or AWS account was used.
+- The integrated clean-room cycle passed on 2026-11-10: all six local demos, customer-plan fixture flow, 816-test `make verify`, and `make terraform-validate` across 15 roots. Details and scoped cleanup verification are in `docs/test/test328.md`.
+- Focused tests for runner recovery and connection contracts passed (61 tests); no customer workload or AWS account was used.
 
 ## Evidence files produced
 
