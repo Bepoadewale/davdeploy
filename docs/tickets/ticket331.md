@@ -43,23 +43,26 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 
 ## Acceptance criteria
 
-- [ ] State identifiers and credentials are bound to one execution scope and cannot select arbitrary tenant/object paths.
-- [ ] Only the dedicated state routes accept the short-lived Terraform Basic Auth token; ordinary authenticated API routes retain their current edge/auth controls. Bootstrap accepts SigV4 only through an exact API Gateway IAM route and verifies the active fixed-project build before issuing credentials.
-- [ ] State writes use versioned encrypted storage, and durable metadata identifies exact object version, lineage, serial, and digest.
-- [ ] Lock/unlock is tenant-safe, ownership-checked, bounded, and race-tested; stale locks have an explicit recovery path.
-- [ ] Oversized, malformed, cross-tenant, stale, and unauthenticated requests fail closed without leaking state contents.
-- [ ] Interrupted persistence is detectable and cannot be reported as a completed state write.
-- [ ] Database migrations, focused tests, `make verify`, and required clean-room lifecycle checks pass.
+- [x] State identifiers and credentials are bound to one execution scope and cannot select arbitrary tenant/object paths.
+- [x] Only the dedicated state routes accept the short-lived Terraform Basic Auth token; ordinary authenticated API routes retain their current edge/auth controls. Bootstrap accepts SigV4 only through an exact API Gateway IAM route and verifies the active fixed-project build before issuing credentials.
+- [x] State writes use versioned encrypted storage, and durable metadata identifies exact object version, lineage, serial, and digest.
+- [x] Lock/unlock is tenant-safe, ownership-checked, bounded, and race-tested; stale locks have an explicit recovery path.
+- [x] Oversized, malformed, cross-tenant, stale, and unauthenticated requests fail closed without leaking state contents.
+- [x] Interrupted persistence is detectable and cannot be reported as a completed state write.
+- [x] Database migrations, focused tests, `make verify`, and required clean-room lifecycle checks pass.
 - [x] No runner enablement, AWS infrastructure deployment, pricing bypass, customer plan/apply, or destroy is included.
 
 ## Acceptance status
 
-Implementation remains in progress. Review found that a `PENDING` state-write row could block a later build forever after an upload failed. The fix records each attempt's build digest and history, then—under the current lock—adopts an exact verified prior S3 version or records an absent/invalid attempt and rotates to a fresh object key. If a later build submits different bytes at the pending serial, it commits a valid prior version and rejects the conflicting payload; an absent or invalid prior object is abandoned before writing the new payload. Tests cover lost upload responses, 403/404 missing-object responses, invalid metadata, changed payloads, and lock recovery only after terminal-build evidence. The earlier 403 `HeadObject` fix still uses conditional `PutObject` without `s3:ListBucket`. Successful TestClient bootstrap verifies exact active-build matching, tenant scope binding, password-hash persistence, and cross-tenant read denial. Schema v33 remains additive; storage provisioning defaults off, the state API feature flag remains hard-disabled, the API URL remains empty, and the plan runner remains backend-free. Local verification passes. Hosted AWS behavior, true concurrent database races, Terraform CLI retry behavior, and a fresh full clean-room run against the current recovery code remain outstanding; keep the PR draft.
+The implementation and required local/CI verification pass at code commit `b09d211`; independent review found no remaining blocker in either failed-write recovery case. Prior pending S3 versions are checked by exact key, encryption, metadata, version, and state digest before adoption. Changed bytes at that serial are rejected after the valid prior version is committed; absent or invalid objects are recorded in bounded attempt history and rotated under the current lock. A forced two-session lock-acquisition race passes against a local SQLite database; a production PostgreSQL/Aurora race and hosted AWS behavior remain unverified. Schema v33 remains additive. The bucket toggle defaults off, the state API feature flag remains hard-disabled, and the runner is still backend-free. Worker restart recovery and Terraform CLI retry behavior also remain unverified, so keep the PR draft and state feature disabled.
 
 ## Tests / validation performed
 
-- Focused suites: `tests/test_terraform_state.py tests/test_db_config.py` — 33 passed, including pending-write recovery and schema-field coverage.
-- `make verify` with Python 3.12 — 845 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- Focused suites: `tests/test_terraform_state.py tests/test_db_config.py` — 34 passed, including pending-write recovery, schema-field coverage, and the concurrent SQLite lock-acquisition race.
+- `make verify` with Python 3.12 — 846 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- Full isolated clean-room sequence passed at code commit `b09d211`: bootstrap, readiness, all demos, API contract, customer-plan E2E, seed, API restart/persistence, trace check, `make verify`, and MCP tools-list request. The exact project containers, network, Postgres volume, `.venv`, and `.local` database were removed and absence verified.
+- GitHub Actions run `42873278635` — all seven required checks passed for `b09d211`, including fresh-runner local E2E.
+- The local race test uses separate SQLite sessions. It validates one-lock ownership under forced concurrent inserts but does not establish PostgreSQL/Aurora locking behavior.
 - `scripts/terraform-validate.sh` — all configured roots passed.
 - Documentation conventions and `git diff --check` passed.
 - Runtime test/evidence file: `docs/test/test331.md` records the local validation commands/results and unverified hosted behavior.

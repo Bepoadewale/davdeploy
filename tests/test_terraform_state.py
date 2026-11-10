@@ -1,7 +1,9 @@
 import hashlib
 import io
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -1032,4 +1034,80 @@ def test_expired_lock_requires_exact_terminal_build_before_reclaim():
     )
     assert document["ID"] == "lock-2"
     db.close()
+    engine.dispose()
+
+
+def test_concurrent_state_lock_acquisition_keeps_one_owner(tmp_path):
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'terraform-state-lock-race.db'}",
+        connect_args={"timeout": 10},
+    )
+    Base.metadata.create_all(engine)
+    state = TerraformRemoteState(
+        scope_sha256=hashlib.sha256(str(uuid4()).encode()).hexdigest(),
+        organization_id=ORG,
+        project_id=PROJECT,
+        environment_id=ENVIRONMENT,
+        target_account_id="654654474502",
+        region="us-east-1",
+    )
+    with Session(engine) as setup:
+        setup.add(state)
+        setup.commit()
+        state_id = state.id
+
+    barrier = Barrier(2)
+
+    def attempt(run_id: str, build_id: str, lock_id: str) -> str:
+        with Session(engine) as db:
+            storage = TerraformStateStorage(
+                db,
+                s3_client=_FakeS3(),
+                bucket="davdeploy-test-state",
+                kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/state-key",
+                expected_bucket_owner="654654474502",
+            )
+            original_get = db.get
+            first_lock_read = True
+
+            def synchronized_get(entity, *args, **kwargs):
+                nonlocal first_lock_read
+                result = original_get(entity, *args, **kwargs)
+                if entity is TerraformStateLock and first_lock_read:
+                    first_lock_read = False
+                    barrier.wait(timeout=5)
+                return result
+
+            db.get = synchronized_get
+            try:
+                storage.lock(
+                    state_id=state_id,
+                    run_id=run_id,
+                    build_id=build_id,
+                    raw=_lock_bytes(lock_id),
+                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                )
+                return "ACQUIRED"
+            except TerraformStateLocked:
+                return "LOCKED"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(
+            executor.map(
+                lambda values: attempt(*values),
+                (
+                    ("run-1", "project:build-1", "lock-1"),
+                    ("run-2", "project:build-2", "lock-2"),
+                ),
+            )
+        )
+
+    assert sorted(outcomes) == ["ACQUIRED", "LOCKED"]
+    with Session(engine) as db:
+        active = db.get(TerraformStateLock, state_id)
+        assert active is not None
+        assert (active.run_id, active.codebuild_build_id) in {
+            ("run-1", "project:build-1"),
+            ("run-2", "project:build-2"),
+        }
     engine.dispose()

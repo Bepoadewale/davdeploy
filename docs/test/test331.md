@@ -1,9 +1,9 @@
 # test331 — PR #331 local implementation evidence
 
 Date: 2026-11-10
-Execution type: Local unit, API, migration, infrastructure-contract, and Terraform validation; no customer workload
+Execution type: Local unit/API validation, static infrastructure validation, and isolated clean-room demos; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: Recovery implementation in progress; source commit will be recorded after final validation
+Commit: `b09d211` (recovery implementation)
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -22,16 +22,19 @@ disabled.
 
 ## Validation performed
 
-- `uv run pytest tests/test_terraform_state.py tests/test_nova_plan_only_infra.py tests/test_serverless_runtime.py -q` — 57 passed, including exact HTTP state-write lock-ID validation.
-- `make verify` — passed: 835 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration.
+- `tests/test_terraform_state.py tests/test_db_config.py` — 34 passed, including pending-write recovery, schema-field coverage, and a forced concurrent lock-acquisition race.
+- `make verify` — passed: 846 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration.
 - `make terraform-validate` — passed for all roots selected by `scripts/terraform-validate.sh`.
 - `python scripts/check_doc_conventions.py` — passed for the updated ticket and evidence.
 - `git diff --check` — passed.
+- The full clean-room lifecycle and MCP tools-list check passed at code commit `b09d211`.
+- GitHub Actions run `42873278635` passed all seven required checks for `b09d211`.
 
 ## Resources created
 
-No AWS resources, customer state, workloads, containers, or persistent local
-services were created. Terraform validation used local provider/module caches.
+No AWS resources, customer state, or workloads were created. The isolated
+clean-room cycle created a project-specific Compose stack, network, Postgres
+volume, `.venv`, and `.local` database; all were removed and absence verified.
 
 ## Observed result
 
@@ -68,9 +71,16 @@ runner remain disabled, and no customer or AWS execution occurred.
   accepts a 412 only after rereading and matching exact metadata, and retries a
   409 at most once. A TestClient route test verifies active-build bootstrap,
   tenant scope/hash persistence, and cross-tenant state denial. The focused
-  state suite passed 23 tests.
+  state suite passed 24 tests, including a forced concurrent acquisition race
+  using separate database sessions.
 - Full `make verify` passed with 845 tests. Terraform validation, documentation
   conventions, and diff checks also passed.
+- The full local clean-room sequence passed in a fresh detached worktree at
+  code commit `b09d211` (before the additional race test): initial clean, bootstrap, smoke, all six demos, API contract,
+  customer-plan E2E, seed, API restart/persistence, trace check, `make verify`,
+  and MCP tools-list request.
+- GitHub Actions run `42873278635` passed all seven required checks for
+  `b09d211`, including the fresh-runner `local-e2e` workflow.
 - Static infrastructure checks for an exact AWS-IAM bootstrap route, trusted
   API Gateway identity mapping, an exact CodeBuild role invoke grant, and
   Basic-auth state routes behind the edge-origin guard.
@@ -93,24 +103,40 @@ runner remain disabled, and no customer or AWS execution occurred.
 - Concurrent database races, worker restart recovery, and Terraform CLI retry
   behavior still need dedicated tests. Stale-lock release is unit-tested with
   exact terminal-build evidence, but its AWS CodeBuild lookup is not.
-- The full clean-room lifecycle gate has not yet been rerun against the pending
-  recovery fix. PR #331 remains draft and must not be treated as
-  deployment-ready.
 
 ## Commands executed
 
 ```text
-uv run pytest tests/test_terraform_state.py tests/test_nova_plan_only_infra.py tests/test_serverless_runtime.py -q
+make clean-local
+make bootstrap-local
+make smoke
+make api-contract
+make demo-simple
+make demo-complex
+make demo-degraded
+make demo-day2
+make demo
+make demo-failure
+make demo-readiness-failure
+make customer-plan-e2e
+make seed-demo-data
+docker compose restart api
+make smoke
+make customer-plan-persistence
+make trace-check
 make verify
-make terraform-validate
-git diff --check
-python scripts/check_doc_conventions.py
+printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | DAVDEPLOY_TOKEN=fixture-token .venv/bin/davdeploy-mcp
+make clean-local
 ```
 
 ## Teardown
 
-No cloud teardown was needed. The recovery tests use in-memory SQLite and fake
-S3; no persistent local services were started for the current source checks.
+No cloud teardown was needed. The isolated clean-room test used the
+`davdeploy-pr331-cleanroom` Compose project, including its containers, default
+network, and `davdeploy-postgres` volume, plus that worktree's `.venv` and
+`.local`. `make clean-local` removed them; follow-up checks found no matching
+container, network, volume, `.venv`, or `.local`. The unrelated
+`davdeploy-nova-cleanroom-20261105a` container remained running.
 
 ## Final boundary
 
