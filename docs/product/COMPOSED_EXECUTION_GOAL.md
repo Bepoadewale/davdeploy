@@ -68,14 +68,15 @@ Allowed status values: `not started`, `in progress`, `implemented`,
   initial Terraform plans. Its artifacts are review-only, unapprovable, and
   non-deployable; the source change is not deployed and regional pricing remains
   unavailable.
-- Durable remote state is a separate blocker. The shared CodeBuild role must
-  not receive access to every tenant's state prefix. Options for a later
-  reviewed milestone are: a separately installed per-customer state bucket and
-  role; a durable per-tenant DavDeploy backend role with exact key/lock access;
-  or a DavDeploy-managed state service with exact version and lock handling.
-  Each requires its own provisioning, recovery, tenant-isolation, and lifecycle
-  evidence. No option is implemented by #328, and no backend-free plan may be
-  counted as stateful deployment evidence.
+- Durable remote state remains a blocker. Proposed ADR-013 selects Terraform's
+  built-in HTTP backend, with DavDeploy enforcing tenant/workspace/project/
+  environment access and storing encrypted versioned state objects in a
+  dedicated S3 bucket, plus locks in PostgreSQL. CodeBuild receives no direct
+  state-bucket access. The ADR is a design proposal, not implementation or
+  enablement; size, availability, and interrupted-write recovery must be tested
+  before customer apply. Direct S3 backend roles remain a fallback, using native
+  `use_lockfile=true` and bucket versioning rather than deprecated DynamoDB
+  locking. No backend-free plan may count as stateful deployment evidence.
 - Plan-runner object access is scoped to the exact CodeBuild ARN in S3 resources;
   the API-only request prefix is inaccessible to CodeBuild. The shared CodeBuild
   role's STS permission still matches the `davdeployPlan-*` role-name pattern.
