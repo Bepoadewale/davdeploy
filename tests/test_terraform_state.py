@@ -18,6 +18,7 @@ from davdeploy.terraform_state import (
     parse_terraform_state,
     terraform_state_scope_digest,
     trusted_codebuild_role_matches,
+    validate_terraform_state_lock_id,
 )
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -84,6 +85,13 @@ def test_lock_parser_requires_terraform_lock_shape():
     assert parse_terraform_lock(json.dumps(lock).encode()) == ("lock-1", lock)
     with pytest.raises(TerraformStateError, match="lock ID"):
         parse_terraform_lock(b'{"ID":""}')
+
+
+def test_state_write_requires_exact_lock_id_from_http_backend():
+    validate_terraform_state_lock_id("lock-1", "lock-1")
+    for supplied in (None, "", "another-lock"):
+        with pytest.raises(TerraformStateError, match="lock ID"):
+            validate_terraform_state_lock_id(supplied, "lock-1")
 
 
 def test_state_credential_is_high_entropy_and_expires_or_revokes():

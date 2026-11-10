@@ -95,6 +95,7 @@ from davdeploy.terraform_state import (
     issue_terraform_state_credential,
     terraform_state_scope_digest,
     trusted_codebuild_role_matches,
+    validate_terraform_state_lock_id,
 )
 
 REQUESTS = Counter("davdeploy_api_requests_total", "API requests by route", ["route"])
@@ -550,6 +551,7 @@ async def write_terraform_state(
         lock = db.get(TerraformStateLock, state_id)
         if lock is None:
             raise TerraformStateError("state write requires an active Terraform lock")
+        validate_terraform_state_lock_id(request.query_params.get("ID"), lock.lock_id)
         metadata = _terraform_state_storage(db).write(
             state_id=state_id,
             run_id=run.id,

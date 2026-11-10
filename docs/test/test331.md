@@ -22,8 +22,8 @@ disabled.
 
 ## Validation performed
 
-- `uv run pytest tests/test_terraform_state.py tests/test_nova_plan_only_infra.py tests/test_serverless_runtime.py -q` — 56 passed after exact build-attempt binding and tenant-environment checks.
-- `make verify` — passed: 834 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration.
+- `uv run pytest tests/test_terraform_state.py tests/test_nova_plan_only_infra.py tests/test_serverless_runtime.py -q` — 57 passed, including exact HTTP state-write lock-ID validation.
+- `make verify` — passed: 835 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration.
 - `make terraform-validate` — passed for all roots selected by `scripts/terraform-validate.sh`.
 - `python scripts/check_doc_conventions.py` — passed for the updated ticket and evidence.
 - `git diff --check` — passed.
@@ -44,6 +44,7 @@ runner remain disabled, and no customer or AWS execution occurred.
   AWS account, and region; a missing environment is denied.
 - State and lock JSON shape/size checks, credential digest/expiry handling,
   and exact assumed-role matching.
+- State writes reject a missing or mismatched lock ID from the HTTP backend.
 - The bootstrap endpoint defaults to disabled and rejects an untrusted role
   before attempting a CodeBuild lookup.
 - Additive migration from schema version 32 and idempotent state-table setup.

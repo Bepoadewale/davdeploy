@@ -171,6 +171,17 @@ def parse_terraform_lock(raw: bytes) -> tuple[str, dict[str, Any]]:
     return lock_id, document
 
 
+def validate_terraform_state_lock_id(supplied_lock_id: str | None, active_lock_id: str) -> None:
+    """Require the HTTP backend's state update lock ID to match its active lock."""
+    if (
+        not isinstance(supplied_lock_id, str)
+        or not supplied_lock_id
+        or not isinstance(active_lock_id, str)
+        or not hmac.compare_digest(supplied_lock_id, active_lock_id)
+    ):
+        raise TerraformStateError("state update lock ID does not match the active Terraform lock")
+
+
 def issue_terraform_state_credential() -> tuple[TerraformStateCredentialValue, str]:
     """Create high-entropy Basic Auth credentials and return only a digest for storage."""
     username = secrets.token_urlsafe(24)

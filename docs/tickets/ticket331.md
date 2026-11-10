@@ -20,6 +20,7 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 
 - [ADR-013: tenant-isolated Terraform state](../decisions/ADR-013-tenant-isolated-terraform-state.md)
 - [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/backend/http)
+- [Terraform state locking](https://developer.hashicorp.com/terraform/language/state/locking)
 - [Terraform saved plans](https://developer.hashicorp.com/terraform/cli/commands/plan)
 - [API Gateway HTTP API IAM authorization](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-access-control-iam.html)
 - [API Gateway HTTP API Lambda proxy payload](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-lambda.html)
@@ -33,6 +34,7 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - Persist state as versioned S3 objects through a least-privilege API role; retain immutable version metadata and reconcile interrupted writes.
 - Add separately gated optional private S3/KMS state storage with versioning, TLS-only access, and a prefix-scoped API role; keep both storage provisioning and state API disabled by default.
 - Add strict HTTP backend GET/POST/lock/unlock semantics, request-size and content validation, and fail-closed authorization.
+- Require the HTTP backend's lock ID query parameter on state writes to match the active database lock; the runner must configure the custom POST/DELETE lock methods explicitly when backend integration is added.
 - Add tests for tenant crossing, stale/forged tokens, lock conflicts/expiry, object versioning, interrupted writes, and HTTP status mapping.
 - Keep the plan runner disabled and do not provision AWS resources or apply customer infrastructure in this PR.
 
@@ -49,7 +51,7 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 
 ## Acceptance status
 
-Implementation is in progress. This draft now contains additive state/credential/lock/write models, a schema v33 migration, strict scope/state/lock/token validation, S3 version-pointer logic with pending-write reconciliation, Terraform HTTP routes, exact API Gateway IAM credential bootstrap, expired-lock reclamation tied to terminal CodeBuild status and the exact lock/run/build identity, and separately gated optional private S3/KMS storage. Storage provisioning defaults off; the state API feature flag remains hard-disabled, the state API URL remains empty, and the plan runner remains backend-free. Criteria remain unmet until missing lifecycle/race tests, runner integration, clean-room evidence, and required GitHub CI/review are complete.
+Implementation is in progress. This draft now contains additive state/credential/lock/write models, a schema v33 migration, strict scope/state/lock/token validation, S3 version-pointer logic with pending-write reconciliation, Terraform HTTP routes, exact API Gateway IAM credential bootstrap, expired-lock reclamation tied to terminal CodeBuild status and the exact lock/run/build identity, separately gated optional private S3/KMS storage, and strict state-write lock-ID matching. Storage provisioning defaults off; the state API feature flag remains hard-disabled, the state API URL remains empty, and the plan runner remains backend-free. Criteria remain unmet until missing lifecycle/race tests, runner integration, clean-room evidence, and required GitHub review are complete.
 
 ## Tests / validation performed
 
