@@ -206,7 +206,7 @@ def test_api_artifact_permissions_and_completion_events_are_exactly_scoped() -> 
     assert "nova_plan_only_build_result_key" in api_artifacts
     assert '"kms:EncryptionContext:aws:s3:arn"' in api_artifacts
     assert re.search(
-        r'Action\s*=\s*\["s3:GetObject"\]\s*Resource\s*=\s*'
+        r'Action\s*=\s*\["s3:GetObject",\s*"s3:GetObjectVersion"\]\s*Resource\s*=\s*'
         r'"arn:\$\{data\.aws_partition\.current\.partition\}:s3:::'
         r'\$\{var\.nova_plan_artifact_bucket\}/\$\{local\.nova_plan_only_build_input_key\}"',
         api_artifacts,
@@ -246,7 +246,7 @@ def test_plan_only_object_keys_require_object_level_sse_kms_context() -> None:
     )
     assert api_artifacts.count(bucket_context) == 3
     assert re.search(
-        r'Action\s*=\s*\["s3:GetObject"\]\s*Resource\s*=\s*'
+        r'Action\s*=\s*\["s3:GetObject",\s*"s3:GetObjectVersion"\]\s*Resource\s*=\s*'
         r'"arn:\$\{data\.aws_partition\.current\.partition\}:s3:::'
         r'\$\{var\.nova_plan_artifact_bucket\}/\$\{local\.nova_plan_only_build_input_key\}"',
         api_artifacts,

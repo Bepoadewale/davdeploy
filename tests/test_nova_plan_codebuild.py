@@ -53,6 +53,7 @@ def make_input_document(
     project_id="project-a",
     plan_id="plan-a",
     revision_id="revision-a",
+    control_plane_run_id=None,
 ):
     build_arn = build_arn or build_arn_for(run_id)
     region = "us-east-1"
@@ -105,7 +106,7 @@ def make_input_document(
     return {
         "contract": codebuild_runner.INPUT_CONTRACT,
         "run_id": run_id,
-        "control_plane_run_id": run_id,
+        "control_plane_run_id": control_plane_run_id or run_id,
         "runner_project": PROJECT,
         "codebuild_build_arn": build_arn,
         "request_document": request_document,
@@ -387,6 +388,47 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
     assert result["saved_plan"].version_id == "output-version-1"
     assert not hasattr(runner, "apply")
     assert not hasattr(runner, "destroy")
+
+
+def test_retry_attempt_can_bind_a_distinct_control_plane_request_id(monkeypatch, tmp_path):
+    control_plane_run_id = "87654321-4321-4321-4321-210987654321"
+    document = make_input_document(control_plane_run_id=control_plane_run_id)
+
+    _, _, _, _, s3, _, runner = run_build(monkeypatch, tmp_path, document=document)
+    result_document = next(
+        json.loads(payload)
+        for call, payload in s3.put_calls
+        if call["Key"].endswith("result.json")
+    )
+
+    assert result_document["run_id"] == RUN_ID
+    assert result_document["run_id"] != control_plane_run_id
+    assert len(runner.calls) == 1
+
+
+def test_invalid_control_plane_request_id_is_rejected_before_assume_role(monkeypatch, tmp_path):
+    document = make_input_document(control_plane_run_id="not-a-uuid")
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="control-plane request ID"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert sts.calls == []
+    assert runner.calls == []
+    assert s3.put_calls == []
 
 
 @pytest.mark.parametrize(

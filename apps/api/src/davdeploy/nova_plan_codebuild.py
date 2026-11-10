@@ -353,10 +353,15 @@ def _validate_input_document(
 ) -> dict[str, Any]:
     request_document = document.get("request_document")
     request_sha256 = document.get("request_sha256")
+    control_plane_run_id = document.get("control_plane_run_id")
+    try:
+        canonical_control_plane_run_id = str(uuid.UUID(control_plane_run_id))
+    except (AttributeError, TypeError, ValueError):
+        raise NovaPlanBuildError("durable control-plane request ID is invalid") from None
     if (
         document.get("contract") != INPUT_CONTRACT
         or document.get("run_id") != run_id
-        or document.get("control_plane_run_id") != run_id
+        or canonical_control_plane_run_id != control_plane_run_id
         or document.get("runner_project") != project_name
         or document.get("codebuild_build_arn") != build_arn
         or not isinstance(request_document, dict)

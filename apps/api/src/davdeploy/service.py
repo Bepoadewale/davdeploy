@@ -4458,7 +4458,7 @@ class ProductService:
         except (AttributeError, ValueError):
             raise ValueError("durable Nova run ID is invalid") from None
         if (
-            run_id != run.id
+            run_id != (run.runner_run_id or run.id)
             or result.get("run_id") != run_id
             or result.get("codebuild_project") != run.codebuild_project
             or result.get("codebuild_build_id") != run.codebuild_build_id

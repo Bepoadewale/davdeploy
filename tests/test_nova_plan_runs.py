@@ -629,7 +629,7 @@ def test_lost_generation_response_stays_blocked_until_explicit_abandon():
     db.close()
 
 
-def test_retry_after_input_staging_uses_a_new_durable_runner_key():
+def test_retry_after_input_staging_uses_a_new_durable_runner_key(monkeypatch):
     service, db, _, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)
     first_runner_id = None
@@ -681,6 +681,42 @@ def test_retry_after_input_staging_uses_a_new_durable_runner_key():
         dispatcher.build_arn(queued.runner_run_id)
     )
     assert retry_stage[2] == dispatcher.input_key(queued.runner_run_id)
+
+    queued = db.get(GeneratedPlanRun, run["id"])
+    assert queued.runner_run_id != queued.id
+    manifest = {}
+    retry_result = {
+        "contract": "davdeploy.nova-plan-result.v1",
+        "run_id": queued.runner_run_id,
+        "codebuild_project": queued.codebuild_project,
+        "codebuild_build_id": queued.codebuild_build_id,
+        "codebuild_build_arn": queued.result_metadata["codebuild_build_arn"],
+        "input": {},
+        "binding": {},
+        "policy_evidence": {},
+        "policy_sha256": "f" * 64,
+        "manifest": manifest,
+        "manifest_sha256": canonical_json_digest(manifest),
+        "planning_boundary": "INITIAL_PLAN_NO_REMOTE_STATE",
+    }
+
+    class ReachedDurableRevisionValidation(Exception):
+        pass
+
+    def stop_after_attempt_binding(*_args):
+        raise ReachedDurableRevisionValidation
+
+    monkeypatch.setattr(service, "_infrastructure_revision", stop_after_attempt_binding)
+    with pytest.raises(ReachedDurableRevisionValidation):
+        service._persist_verified_nova_plan_result(
+            queued, dispatcher, retry_result, "result-version", "e" * 64
+        )
+
+    retry_result["run_id"] = queued.id
+    with pytest.raises(ValueError, match="exact durable CodeBuild run"):
+        service._persist_verified_nova_plan_result(
+            queued, dispatcher, retry_result, "result-version", "e" * 64
+        )
     db.close()
 
 
