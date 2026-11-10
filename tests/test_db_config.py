@@ -86,6 +86,10 @@ def test_terraform_state_migration_adds_only_state_tables_to_v32_database():
     db.run_migrations(engine)
 
     assert new_tables <= set(inspect(engine).get_table_names())
+    state_write_columns = {
+        column["name"] for column in inspect(engine).get_columns("terraform_state_writes")
+    }
+    assert {"build_id_sha256", "attempt_history"} <= state_write_columns
     with engine.connect() as connection:
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")

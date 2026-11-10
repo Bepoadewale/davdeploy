@@ -22,6 +22,8 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/backend/http)
 - [Terraform state locking](https://developer.hashicorp.com/terraform/language/state/locking)
 - [Terraform saved plans](https://developer.hashicorp.com/terraform/cli/commands/plan)
+- [Amazon S3 `HeadObject` missing-object permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
+- [Amazon S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
 - [API Gateway HTTP API IAM authorization](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-access-control-iam.html)
 - [API Gateway HTTP API Lambda proxy payload](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-lambda.html)
 - [API Gateway HTTP API parameter mapping](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-parameter-mapping.html)
@@ -32,6 +34,7 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - Add a state identity bound to organization, workspace, project, stable environment, target account/region, and approved execution context; never trust caller-selected object keys. Refuse state bootstrap when the revision has no environment ID.
 - Add short-lived, run/attempt-bound Basic Auth credentials and lock ownership with bounded TTL and explicit conflict handling.
 - Persist state as versioned S3 objects through a least-privilege API role; retain immutable version metadata and reconcile interrupted writes.
+- Reconcile missing-object `HeadObject` 403 responses without granting broad bucket listing: use an `IfNoneMatch="*"` conditional write, verify matching object metadata on 412, and retry a 409 only within a fixed bound.
 - Add separately gated optional private S3/KMS state storage with versioning, TLS-only access, and a prefix-scoped API role; keep both storage provisioning and state API disabled by default.
 - Add strict HTTP backend GET/POST/lock/unlock semantics, request-size and content validation, and fail-closed authorization.
 - Require the HTTP backend's lock ID query parameter on state writes to match the active database lock; the runner must configure the custom POST/DELETE lock methods explicitly when backend integration is added.
@@ -40,21 +43,28 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 
 ## Acceptance criteria
 
-- [ ] State identifiers and credentials are bound to one execution scope and cannot select arbitrary tenant/object paths.
-- [ ] Only the dedicated state routes accept the short-lived Terraform Basic Auth token; ordinary authenticated API routes retain their current edge/auth controls. Bootstrap accepts SigV4 only through an exact API Gateway IAM route and verifies the active fixed-project build before issuing credentials.
-- [ ] State writes use versioned encrypted storage, and durable metadata identifies exact object version, lineage, serial, and digest.
-- [ ] Lock/unlock is tenant-safe, ownership-checked, bounded, and race-tested; stale locks have an explicit recovery path.
-- [ ] Oversized, malformed, cross-tenant, stale, and unauthenticated requests fail closed without leaking state contents.
-- [ ] Interrupted persistence is detectable and cannot be reported as a completed state write.
-- [ ] Database migrations, focused tests, `make verify`, and required clean-room lifecycle checks pass.
+- [x] State identifiers and credentials are bound to one execution scope and cannot select arbitrary tenant/object paths.
+- [x] Only the dedicated state routes accept the short-lived Terraform Basic Auth token; ordinary authenticated API routes retain their current edge/auth controls. Bootstrap accepts SigV4 only through an exact API Gateway IAM route and verifies the active fixed-project build before issuing credentials.
+- [x] State writes use versioned encrypted storage, and durable metadata identifies exact object version, lineage, serial, and digest.
+- [x] Lock/unlock is tenant-safe, ownership-checked, bounded, and race-tested; stale locks have an explicit recovery path.
+- [x] Oversized, malformed, cross-tenant, stale, and unauthenticated requests fail closed without leaking state contents.
+- [x] Interrupted persistence is detectable and cannot be reported as a completed state write.
+- [x] Database migrations, focused tests, `make verify`, and required clean-room lifecycle checks pass.
 - [x] No runner enablement, AWS infrastructure deployment, pricing bypass, customer plan/apply, or destroy is included.
 
 ## Acceptance status
 
-Implementation is in progress. This draft now contains additive state/credential/lock/write models, a schema v33 migration, strict scope/state/lock/token validation, S3 version-pointer logic with pending-write reconciliation, Terraform HTTP routes, exact API Gateway IAM credential bootstrap, expired-lock reclamation tied to terminal CodeBuild status and the exact lock/run/build identity, separately gated optional private S3/KMS storage, and strict state-write lock-ID matching. Storage provisioning defaults off; the state API feature flag remains hard-disabled, the state API URL remains empty, and the plan runner remains backend-free. Criteria remain unmet until missing lifecycle/race tests, runner integration, clean-room evidence, and required GitHub review are complete.
+The implementation and required local/CI verification pass at runtime code commit `b09d211`; independent review found no remaining blocker in either failed-write recovery case. Prior pending S3 versions are checked by exact key, encryption, metadata, version, and state digest before adoption. Changed bytes at that serial are rejected after the valid prior version is committed; absent or invalid objects are recorded in bounded attempt history and rotated under the current lock. Forced two-session tests cover simultaneous acquisition and stale-lock reclaim racing a new acquisition against local SQLite. Production PostgreSQL/Aurora race behavior and hosted AWS behavior remain unverified. Schema v33 remains additive. The bucket toggle defaults off, the state API feature flag remains hard-disabled, and the runner is still backend-free. Worker restart recovery and Terraform CLI retry behavior also remain unverified, so keep the PR draft and state feature disabled.
 
 ## Tests / validation performed
 
+- Focused suites: `tests/test_terraform_state.py tests/test_db_config.py` — 35 passed, including pending-write recovery, schema-field coverage, simultaneous acquisition, and stale-reclaim/reacquisition races.
+- `make verify` with Python 3.12 — 847 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- Full isolated clean-room sequence passed at runtime code commit `b09d211`: bootstrap, readiness, all demos, API contract, customer-plan E2E, seed, API restart/persistence, trace check, `make verify`, and MCP tools-list request. The exact project containers, network, Postgres volume, `.venv`, and `.local` database were removed and absence verified.
+- GitHub Actions run `42876621371` — all seven required checks passed for final test/evidence head `240079a`, including fresh-runner local E2E with 847 tests.
+- The local race tests use separate SQLite sessions. They validate single-lock ownership under forced concurrent inserts and reclaim/acquisition interleaving but do not establish PostgreSQL/Aurora locking behavior.
+- `scripts/terraform-validate.sh` — all configured roots passed.
+- Documentation conventions and `git diff --check` passed.
 - Runtime test/evidence file: `docs/test/test331.md` records the local validation commands/results and unverified hosted behavior.
 - No AWS state bucket, role, or customer workload has been created as part of this PR; infrastructure was statically validated only.
 
