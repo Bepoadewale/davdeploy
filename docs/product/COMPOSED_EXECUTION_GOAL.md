@@ -63,10 +63,11 @@ Allowed status values: `not started`, `in progress`, `implemented`,
 
 ## Nova plan-only runner milestone
 
-- PR #328 is a draft stacked on #326. Its allowed intermediate scope is a
-  backend-free initial Terraform plan with a fixed, versioned runner and the
-  reviewed Nova plan role. Such an artifact is review-only, permanently
-  unapprovable, and non-deployable; regional pricing remains unavailable too.
+- PR #328 merged as `64bfd2c55cf22b61c20305106dcbcec65ef48352` on 2026-11-10.
+  It adds a fixed, versioned, disabled-by-default runner for backend-free
+  initial Terraform plans. Its artifacts are review-only, unapprovable, and
+  non-deployable; the source change is not deployed and regional pricing remains
+  unavailable.
 - Durable remote state is a separate blocker. The shared CodeBuild role must
   not receive access to every tenant's state prefix. Options for a later
   reviewed milestone are: a separately installed per-customer state bucket and
