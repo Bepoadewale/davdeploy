@@ -1124,6 +1124,15 @@ def test_expired_build_input_handoff_reconciles_exact_build_without_restarting()
     assert build_id and len(dispatcher.started) == 1
     assert dispatcher.build_staged == []
 
+    def inaccessible_head(*_args):
+        raise NovaPlanDispatchError(
+            "fixture HeadObject returned 403 for a missing object",
+            outcome_uncertain=True,
+            phase="input_stage",
+        )
+
+    dispatcher.inspect_staged_input = inaccessible_head
+
     def count_stage(*args):
         stage_calls.append(args)
         return original_stage(*args)

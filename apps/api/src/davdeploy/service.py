@@ -3071,11 +3071,12 @@ class ProductService:
                 runner_run_id, expected_input_key, expected_input_sha256
             )
         except NovaPlanDispatchError:
-            raise NovaPlanDispatchError(
-                "build-scoped input object could not be safely inspected",
-                outcome_uncertain=True,
-                phase="build_input_stage",
-            ) from None
+            # The API role intentionally lacks bucket listing permission, so
+            # HeadObject may return 403 for an absent object. A conditional
+            # PutObject below can safely create the exact build key; if an
+            # object already exists, staging still fails closed unless its
+            # immutable version and content can be verified.
+            input_version_id = None
         if input_version_id is None:
             if build.status not in {"IN_PROGRESS", "QUEUED"}:
                 return False
