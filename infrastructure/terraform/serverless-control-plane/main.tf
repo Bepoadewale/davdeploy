@@ -8,9 +8,16 @@ locals {
 }
 
 locals {
-  nova_plan_only_project_name = "${local.name}-nova-plan-only"
-  nova_plan_only_input_key    = "plans/nova-generated/requests/*/input.json"
-  nova_plan_only_result_key   = "plans/nova-generated/requests/*/result.json"
+  nova_plan_only_project_name          = "${local.name}-nova-plan-only"
+  nova_plan_only_input_key             = "plans/nova-generated/requests/*/input.json"
+  nova_plan_only_build_prefix          = "plans/nova-generated/builds/*"
+  nova_plan_only_scoped_prefix         = "plans/nova-generated/builds/$${codebuild:buildArn}"
+  nova_plan_only_build_input_key       = "${local.nova_plan_only_build_prefix}/input.json"
+  nova_plan_only_build_result_key      = "${local.nova_plan_only_build_prefix}/result.json"
+  nova_plan_only_build_saved_plan_key  = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.tfplan"
+  nova_plan_only_scoped_input_key      = "${local.nova_plan_only_scoped_prefix}/input.json"
+  nova_plan_only_scoped_result_key     = "${local.nova_plan_only_scoped_prefix}/result.json"
+  nova_plan_only_scoped_saved_plan_key = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.tfplan"
   nova_plan_only_blocked_start_build_keys = [
     "codebuild:autoRetryLimit",
     "codebuild:source.buildspec",
@@ -233,6 +240,7 @@ resource "aws_iam_role_policy" "api" {
         Resource = [
           "arn:aws:iam::*:role/davdeployDiscovery-*",
           "arn:aws:iam::*:role/davdeployExecution-*",
+          "arn:aws:iam::*:role/davdeployPlan-*",
         ]
       },
       {
@@ -421,8 +429,36 @@ resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
       },
       {
         Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_input_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
         Action   = ["s3:GetObject"]
-        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}"
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_result_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}"
+      },
+      {
+        # Recovery can inspect the current immutable build-input object and
+        # read its exact version. Both actions are limited to that exact key.
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_input_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_saved_plan_key}"
       },
       {
         Effect   = "Allow"
@@ -433,9 +469,9 @@ resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
             "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
           }
           StringLike = {
-            "kms:EncryptionContext:aws:s3:arn" = [
-              "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}",
-            ]
+            # The plans bucket enables S3 Bucket Keys, so KMS receives the bucket ARN.
+            # Per-build isolation remains enforced by the S3 object Resource ARNs.
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
           }
         }
       },
@@ -448,12 +484,23 @@ resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
             "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
           }
           StringLike = {
-            "kms:EncryptionContext:aws:s3:arn" = [
-              "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}",
-            ]
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
           }
         }
-      }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
+          }
+        }
+      },
     ]
   })
 }
@@ -590,13 +637,24 @@ resource "aws_iam_role_policy" "nova_plan_only" {
       },
       {
         Effect   = "Allow"
-        Action   = ["s3:GetObject"]
-        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_scoped_input_key}"
       },
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
-        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}"
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_scoped_result_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_scoped_saved_plan_key}"
         Condition = {
           StringEquals = {
             "s3:x-amz-server-side-encryption"                = "aws:kms"
@@ -613,7 +671,7 @@ resource "aws_iam_role_policy" "nova_plan_only" {
             "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
           }
           StringLike = {
-            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_input_key}"
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
           }
         }
       },
@@ -626,10 +684,42 @@ resource "aws_iam_role_policy" "nova_plan_only" {
             "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
           }
           StringLike = {
-            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_result_key}"
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
           }
         }
-      }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.artifact_bucket}/${var.artifact_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.nova_plan_runner_release_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = [
+              "arn:${data.aws_partition.current.partition}:s3:::${var.artifact_bucket}",
+              "arn:${data.aws_partition.current.partition}:s3:::${var.artifact_bucket}/${var.artifact_key}",
+            ]
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sts:AssumeRole"]
+        Resource = "arn:${data.aws_partition.current.partition}:iam::*:role/davdeployPlan-*"
+        Condition = {
+          StringLike = {
+            "sts:ExternalId"      = "?*"
+            "sts:RoleSessionName" = "davdeploy-nova-plan-????????"
+          }
+        }
+      },
     ]
   })
 }
@@ -646,7 +736,7 @@ resource "aws_codebuild_project" "nova_plan_only" {
   count = var.enable_nova_plan_only_runner ? 1 : 0
 
   name                   = local.nova_plan_only_project_name
-  description            = "Fail-closed boundary for future trusted Nova Terraform plan-only runs."
+  description            = "Fixed initial-state Nova Terraform plan-only runner; no remote state, approval, apply, or destroy."
   service_role           = aws_iam_role.nova_plan_only[0].arn
   build_timeout          = 15
   queued_timeout         = 5
@@ -660,19 +750,70 @@ resource "aws_codebuild_project" "nova_plan_only" {
     type                        = "LINUX_CONTAINER"
     privileged_mode             = false
     image_pull_credentials_type = "CODEBUILD"
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET"
+      value = var.nova_plan_artifact_bucket
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN"
+      value = var.nova_plan_kms_key_arn
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER"
+      value = data.aws_caller_identity.current.account_id
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_PROJECT_NAME"
+      value = local.nova_plan_only_project_name
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_CODE_BUCKET"
+      value = var.artifact_bucket
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_CODE_KEY"
+      value = var.artifact_key
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_CODE_VERSION"
+      value = coalesce(var.artifact_object_version, "disabled")
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_CODE_BUCKET_OWNER"
+      value = data.aws_caller_identity.current.account_id
+      type  = "PLAINTEXT"
+    }
   }
 
   source {
-    type = "NO_SOURCE"
-    # This stub intentionally cannot produce a successful build. Replace it
-    # only with the reviewed fixed runner in a follow-up change.
+    type      = "NO_SOURCE"
     buildspec = <<-EOT
       version: 0.2
+      env:
+        variables:
+          DAVDEPLOY_NOVA_PLAN_RUNNER_RELEASE_VERSION: "1"
       phases:
+        install:
+          runtime-versions:
+            python: 3.12
+          commands:
+            - mkdir -p /tmp/davdeploy-nova-runner/code /tmp/davdeploy-nova-runner/terraform
+            - aws s3api get-object --bucket "$DAVDEPLOY_NOVA_PLAN_CODE_BUCKET" --key "$DAVDEPLOY_NOVA_PLAN_CODE_KEY" --version-id "$DAVDEPLOY_NOVA_PLAN_CODE_VERSION" --expected-bucket-owner "$DAVDEPLOY_NOVA_PLAN_CODE_BUCKET_OWNER" /tmp/davdeploy-nova-runner/code.zip >/dev/null
+            - unzip -q /tmp/davdeploy-nova-runner/code.zip -d /tmp/davdeploy-nova-runner/code
+            - curl -fsSL -o /tmp/davdeploy-nova-runner/terraform.zip https://releases.hashicorp.com/terraform/1.14.7/terraform_1.14.7_linux_amd64.zip
+            - echo "e8bbcefea8015156e04e2a325cde37a0b2fb761728bda548e2fe3b8ad7c18c96  /tmp/davdeploy-nova-runner/terraform.zip" | sha256sum --check --status
+            - unzip -q /tmp/davdeploy-nova-runner/terraform.zip -d /tmp/davdeploy-nova-runner/terraform
+            - chmod 700 /tmp/davdeploy-nova-runner/terraform/terraform
         build:
           commands:
-            - echo "Nova plan-only runner is not wired; refusing to execute."
-            - exit 78
+            - PATH="/tmp/davdeploy-nova-runner/terraform:$PATH" PYTHONPATH="/tmp/davdeploy-nova-runner/code" python3.12 -m davdeploy.nova_plan_codebuild
     EOT
   }
 
@@ -887,11 +1028,12 @@ locals {
     DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED                 = "true"
     DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN                  = aws_iam_role.api.arn
     DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
+    DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN                  = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
+    DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
+    DAVDEPLOY_NOVA_PLAN_RUNNER_READY                     = tostring(var.enable_nova_plan_only_runner)
     DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED              = tostring(var.enable_nova_plan_role_verification)
     DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
     DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
-    DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
-    DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN                  = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_CLOUD_EXECUTION_BACKEND                    = "codebuild"
     DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED            = tostring(var.enable_customer_cloud_execution)
     DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION                = tostring(var.enable_customer_cloud_execution)

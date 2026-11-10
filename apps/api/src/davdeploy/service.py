@@ -10,6 +10,7 @@ import time
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -58,8 +59,18 @@ from davdeploy.generated_plan_artifacts import (
     policy_allows_human_review,
     policy_evidence,
 )
+from davdeploy.generated_plan_inspection import TerraformPlanSummary
 from davdeploy.generated_plan_ownership import PlanOwnershipScope
-from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
+from davdeploy.generated_plan_policy import (
+    GeneratedPlanPolicyResult,
+    PlanPolicyFinding,
+    PlanPolicyVerdict,
+)
+from davdeploy.generated_terraform_plan import (
+    PINNED_AWS_PROVIDER_VERSION,
+    PINNED_TERRAFORM_VERSION,
+    GeneratedTerraformPlan,
+)
 from davdeploy.integrations import (
     FixtureAwsDiscovery,
     GitHubConnection,
@@ -1988,6 +1999,15 @@ class ProductService:
             or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region)
         ):
             raise ValueError("plan target must match a verified AWS account and region")
+        expected_plan_role_arn = (
+            f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
+        )
+        if (
+            connection.plan_role_setup_state != "VERIFIED"
+            or connection.plan_role_arn != expected_plan_role_arn
+            or not connection.external_id_secret_ref
+        ):
+            raise ValueError("plan target must have its exact customer plan-only role verified")
         project = self._project(principal, customer_plan.project_id)
         source_id = content.get("source_deployment_plan_id")
         if not source_id:
@@ -2001,6 +2021,9 @@ class ProductService:
             "plan_id": customer_plan.id,
             "revision_id": revision.id,
             "revision_sha256": revision.content_digest,
+            "source_deployment_plan_id": str(source_id),
+            "connection_id": connection.id,
+            "plan_role_arn": connection.plan_role_arn,
             "target_account_id": account_id,
             "region": region,
             "generator_model": self.terraform_generator.model_id,
@@ -2368,6 +2391,13 @@ class ProductService:
         if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
             raise PermissionError("generated plan request is not visible to this user")
         if (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code == "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+        ):
+            if abandon_attempt:
+                raise ValueError("a started CodeBuild attempt cannot be abandoned or replayed here")
+            return self.reconcile_generated_plan_build_attempt(principal, run.id)
+        if (
             run.state != "RECONCILIATION_REQUIRED"
             or run.error_code != "INPUT_STAGE_RECONCILIATION_REQUIRED"
             or run.codebuild_build_id is not None
@@ -2633,7 +2663,7 @@ class ProductService:
     def reconcile_generated_plan_build_attempt(
         self, principal: Principal, run_id: str
     ) -> dict[str, Any]:
-        """Find and bind one exact build after a possibly lost StartBuild response."""
+        """Find an exact build and finish its build-scoped input handoff safely."""
         run = self.db.scalar(
             select(GeneratedPlanRun)
             .where(
@@ -2653,6 +2683,22 @@ class ProductService:
             and bool(run.runner_run_id)
             and run.codebuild_idempotency_token == run.runner_run_id
         )
+        uncertain_input_stage = (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code == "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+            and run.preparation_phase == "STAGING_BUILD_INPUT"
+            and bool(run.codebuild_build_id)
+            and run.codebuild_idempotency_token == run.runner_run_id
+            and bool(run.runner_run_id)
+        )
+        uncertain_result_read = (
+            run.state == "RECONCILIATION_REQUIRED"
+            and run.error_code == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+            and run.preparation_phase is None
+            and bool(run.codebuild_build_id)
+            and bool(run.runner_run_id)
+            and run.codebuild_idempotency_token == run.runner_run_id
+        )
         uncertain_status = (
             run.state == "RECONCILIATION_REQUIRED"
             and run.error_code
@@ -2660,8 +2706,10 @@ class ProductService:
             and run.preparation_phase is None
             and bool(run.codebuild_build_id)
         )
-        if not (uncertain_start or uncertain_status):
-            raise ValueError("only an ambiguous CodeBuild start can be reconciled here")
+        if not (
+            uncertain_start or uncertain_input_stage or uncertain_result_read or uncertain_status
+        ):
+            raise ValueError("only an ambiguous CodeBuild start, input stage, or result can be reconciled")
 
         dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
         if dispatcher is None or dispatcher.project_name != run.codebuild_project:
@@ -2677,11 +2725,13 @@ class ProductService:
                     outcome_uncertain=True,
                     phase="build_start",
                 )
-            self.reconcile_generated_plan_build(run.codebuild_build_id)
-            return self.generated_plan_run_detail(principal, run.id)
-        # A failed or incomplete search is never evidence that StartBuild did not
-        # create a build; leave the durable start-uncertain state intact.
-        build = dispatcher.find_build_by_run_id(run.runner_run_id)
+            build = dispatcher.describe_build(run.codebuild_build_id)
+        else:
+            if run.error_code != "BUILD_START_RECONCILIATION_REQUIRED":
+                raise ValueError("build input reconciliation requires a durable CodeBuild ID")
+            # A failed or incomplete search is never evidence that StartBuild did
+            # not create a build; leave the durable start-uncertain state intact.
+            build = dispatcher.find_build_by_run_id(run.runner_run_id)
         if build is None:
             self.audit(
                 principal,
@@ -2700,6 +2750,8 @@ class ProductService:
             build.project_name != run.codebuild_project
             or not isinstance(build.build_id, str)
             or not build.build_id.startswith(f"{run.codebuild_project}:")
+            or build.run_id != run.runner_run_id
+            or not build.build_arn
         ):
             raise NovaPlanDispatchError(
                 "the matched Nova plan build did not match its durable project",
@@ -2707,57 +2759,66 @@ class ProductService:
                 phase="build_start",
             )
 
-        now = datetime.now(UTC)
-        try:
-            bound = self.db.execute(
-                update(GeneratedPlanRun)
-                .where(
-                    GeneratedPlanRun.id == run.id,
-                    GeneratedPlanRun.organization_id == principal.organization_id,
-                    GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
-                    GeneratedPlanRun.error_code == "BUILD_START_RECONCILIATION_REQUIRED",
-                    GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
-                    GeneratedPlanRun.codebuild_build_id.is_(None),
-                    GeneratedPlanRun.runner_run_id == run.runner_run_id,
-                    GeneratedPlanRun.codebuild_idempotency_token
-                    == run.codebuild_idempotency_token,
+        if run.codebuild_build_id is None:
+            now = datetime.now(UTC)
+            try:
+                bound = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.organization_id == principal.organization_id,
+                        GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                        GeneratedPlanRun.error_code == "BUILD_START_RECONCILIATION_REQUIRED",
+                        GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
+                        GeneratedPlanRun.codebuild_build_id.is_(None),
+                        GeneratedPlanRun.runner_run_id == run.runner_run_id,
+                        GeneratedPlanRun.codebuild_idempotency_token
+                        == run.codebuild_idempotency_token,
+                    )
+                    .values(
+                        codebuild_build_id=build.build_id,
+                        result_metadata={"codebuild_build_arn": build.build_arn},
+                        state="RECONCILIATION_REQUIRED",
+                        error_code="BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED",
+                        error_summary=(
+                            "The exact build was found; its build-scoped input handoff is being reconciled."
+                        ),
+                        preparation_phase="STAGING_BUILD_INPUT",
+                        started_at=now,
+                        updated_at=now,
+                    )
+                    .execution_options(synchronize_session=False)
                 )
-                .values(
-                    state="BUILD_STARTED",
-                    codebuild_build_id=build.build_id,
-                    error_code=None,
-                    error_summary=None,
-                    preparation_phase=None,
-                    preparation_lease_token=None,
-                    preparation_lease_expires_at=None,
-                    started_at=now,
-                    updated_at=now,
+                if bound.rowcount != 1:
+                    self.db.rollback()
+                    return self.generated_plan_run_detail(principal, run.id)
+                self.audit(
+                    principal,
+                    "generated_plan_run.build_id_recovered",
+                    "generated_plan_run",
+                    run.id,
+                    {
+                        "codebuild_project": run.codebuild_project,
+                        "codebuild_build_id": build.build_id,
+                        "codebuild_build_arn": build.build_arn,
+                        "runner_run_id": run.runner_run_id,
+                        "state": "RECONCILIATION_REQUIRED",
+                    },
                 )
-                .execution_options(synchronize_session=False)
-            )
-            if bound.rowcount != 1:
+                self.db.commit()
+                run.codebuild_build_id = build.build_id
+                run.result_metadata = {"codebuild_build_arn": build.build_arn}
+                run.error_code = "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+                run.preparation_phase = "STAGING_BUILD_INPUT"
+            except IntegrityError:
                 self.db.rollback()
-                return self.generated_plan_run_detail(principal, run.id)
-            self.audit(
-                principal,
-                "generated_plan_run.build_id_recovered",
-                "generated_plan_run",
-                run.id,
-                {
-                    "codebuild_project": run.codebuild_project,
-                    "codebuild_build_id": build.build_id,
-                    "runner_run_id": run.runner_run_id,
-                    "state": "BUILD_STARTED",
-                },
-            )
-            self.db.commit()
-        except IntegrityError:
-            self.db.rollback()
-            raise NovaPlanDispatchError(
-                "the matched Nova plan build is already bound to another request",
-                outcome_uncertain=True,
-                phase="build_start",
-            ) from None
+                raise NovaPlanDispatchError(
+                    "the matched Nova plan build is already bound to another request",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                ) from None
+
+        self._recover_build_scoped_input(principal, run, dispatcher, build)
 
         # A live build remains BUILD_STARTED. A terminal build is processed by
         # the existing exact-build reconciler before returning the request.
@@ -2774,6 +2835,351 @@ class ProductService:
             raise NovaPlanDispatchError(
                 "Nova plan request is queued, but its worker wake-up could not be confirmed"
             ) from error
+
+    def _persist_build_start_and_stage_scoped_input(
+        self,
+        run: GeneratedPlanRun,
+        lease_token: str,
+        dispatcher: NovaPlanOnlyDispatcher,
+        build,
+        *,
+        request_payload: dict[str, Any] | None,
+    ) -> None:
+        """Bind the exact build before copying its input into build-scoped S3 access."""
+        runner_run_id = run.runner_run_id or run.id
+        build_arn = build.build_arn
+        if (
+            build.project_name != run.codebuild_project
+            or build.run_id != runner_run_id
+            or not isinstance(build_arn, str)
+            or not run.input_key
+            or not run.input_sha256
+            or not run.input_version_id
+        ):
+            raise NovaPlanDispatchError(
+                "Nova plan build or staged input did not match its durable attempt",
+                outcome_uncertain=True,
+                phase="build_start",
+            )
+        if request_payload is None:
+            request_payload = dispatcher.read_staged_input_document(
+                runner_run_id,
+                run.input_key,
+                run.input_version_id,
+                run.input_sha256,
+            )
+        if canonical_json_digest(request_payload) != run.input_sha256:
+            raise NovaPlanDispatchError(
+                "Nova plan staged input failed its durable digest check",
+                outcome_uncertain=True,
+                phase="input_stage",
+            )
+        build_payload = {**request_payload, "codebuild_build_arn": build_arn}
+        build_input_sha256 = canonical_json_digest(build_payload)
+        build_input_key = dispatcher.build_input_key(build_arn)
+        build_result_key = dispatcher.build_result_key(build_arn)
+        now = datetime.now(UTC)
+        metadata = {
+            "codebuild_build_arn": build_arn,
+            "build_input_key": build_input_key,
+            "build_input_sha256": build_input_sha256,
+            "build_result_key": build_result_key,
+        }
+        started = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.state == "PREPARING",
+                GeneratedPlanRun.preparation_lease_token == lease_token,
+                GeneratedPlanRun.codebuild_build_id.is_(None),
+            )
+            .values(
+                codebuild_build_id=build.build_id,
+                result_metadata=metadata,
+                preparation_phase="STAGING_BUILD_INPUT",
+                started_at=now,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if started.rowcount != 1:
+            self.db.rollback()
+            raise NovaPlanDispatchError(
+                "Nova plan build started but could not be bound to its durable request",
+                outcome_uncertain=True,
+                phase="build_start",
+            )
+        self.audit(
+            Principal("system-nova-plan-worker", run.organization_id, "operator"),
+            "generated_plan_run.build_started",
+            "generated_plan_run",
+            run.id,
+            {
+                "codebuild_project": run.codebuild_project,
+                "codebuild_build_id": build.build_id,
+                "codebuild_build_arn": build_arn,
+                "runner_run_id": runner_run_id,
+                "request_sha256": run.request_sha256,
+                "proposal_sha256": run.proposal_sha256,
+                "input_sha256": run.input_sha256,
+                "state": "PREPARING",
+            },
+        )
+        self.db.commit()
+        set_committed_value(run, "codebuild_build_id", build.build_id)
+        set_committed_value(run, "result_metadata", metadata)
+        set_committed_value(run, "preparation_phase", "STAGING_BUILD_INPUT")
+        set_committed_value(run, "started_at", now)
+
+        try:
+            staged_key, staged_sha256, staged_version_id = dispatcher.stage_build_input(
+                runner_run_id, build_arn, build_payload
+            )
+        except NovaPlanDispatchError as error:
+            raise NovaPlanDispatchError(
+                "build-scoped input could not be confirmed; reconcile the exact build input",
+                outcome_uncertain=True,
+                phase="build_input_stage",
+            ) from error
+        if staged_key != build_input_key or staged_sha256 != build_input_sha256:
+            raise NovaPlanDispatchError(
+                "build-scoped input did not match its durable digest",
+                outcome_uncertain=True,
+                phase="build_input_stage",
+            )
+        finished_at = datetime.now(UTC)
+        published = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.state == "PREPARING",
+                GeneratedPlanRun.preparation_lease_token == lease_token,
+                GeneratedPlanRun.preparation_phase == "STAGING_BUILD_INPUT",
+                GeneratedPlanRun.codebuild_build_id == build.build_id,
+            )
+            .values(
+                input_key=staged_key,
+                input_sha256=staged_sha256,
+                input_version_id=staged_version_id,
+                result_key=build_result_key,
+                result_metadata={"codebuild_build_arn": build_arn},
+                state="BUILD_STARTED",
+                preparation_phase=None,
+                preparation_lease_token=None,
+                preparation_lease_expires_at=None,
+                error_code=None,
+                error_summary=None,
+                updated_at=finished_at,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if published.rowcount != 1:
+            self.db.rollback()
+            raise NovaPlanDispatchError(
+                "build-scoped input was stored but could not be durably bound",
+                outcome_uncertain=True,
+                phase="build_input_stage",
+            )
+        self.audit(
+            Principal("system-nova-plan-worker", run.organization_id, "operator"),
+            "generated_plan_run.build_input_staged",
+            "generated_plan_run",
+            run.id,
+            {
+                "codebuild_build_arn": build_arn,
+                "input_key": staged_key,
+                "input_sha256": staged_sha256,
+                "input_version_id": staged_version_id,
+                "state": "BUILD_STARTED",
+            },
+        )
+        self.db.commit()
+        set_committed_value(run, "input_key", staged_key)
+        set_committed_value(run, "input_sha256", staged_sha256)
+        set_committed_value(run, "input_version_id", staged_version_id)
+        set_committed_value(run, "result_key", build_result_key)
+        set_committed_value(run, "result_metadata", {"codebuild_build_arn": build_arn})
+        set_committed_value(run, "state", "BUILD_STARTED")
+        set_committed_value(run, "preparation_phase", None)
+        set_committed_value(run, "preparation_lease_token", None)
+        set_committed_value(run, "preparation_lease_expires_at", None)
+        set_committed_value(run, "error_code", None)
+        set_committed_value(run, "error_summary", None)
+
+    def _recover_build_scoped_input(
+        self,
+        principal: Principal,
+        run: GeneratedPlanRun,
+        dispatcher: NovaPlanOnlyDispatcher,
+        build,
+    ) -> bool:
+        """Resume an exact build's input copy without exposing other run prefixes."""
+        runner_run_id = run.runner_run_id or run.id
+        build_arn = build.build_arn
+        if (
+            build.project_name != run.codebuild_project
+            or build.build_id != run.codebuild_build_id
+            or build.run_id != runner_run_id
+            or not isinstance(build_arn, str)
+        ):
+            raise NovaPlanDispatchError(
+                "recovered build did not match the durable run and project",
+                outcome_uncertain=True,
+                phase="build_input_stage",
+            )
+        expected_input_key = dispatcher.build_input_key(build_arn)
+        expected_result_key = dispatcher.build_result_key(build_arn)
+        if (
+            run.input_key == expected_input_key
+            and run.result_key == expected_result_key
+            and run.input_version_id
+            and run.input_sha256
+        ):
+            return True
+        if (
+            run.input_key != dispatcher.input_key(runner_run_id)
+            or not run.input_sha256
+            or not run.input_version_id
+        ):
+            raise NovaPlanDispatchError(
+                "pending API-only input is not available for the recovered build",
+                outcome_uncertain=True,
+                phase="build_input_stage",
+            )
+        pending_document = dispatcher.read_staged_input_document(
+            runner_run_id,
+            run.input_key,
+            run.input_version_id,
+            run.input_sha256,
+        )
+        build_document = {**pending_document, "codebuild_build_arn": build_arn}
+        expected_input_sha256 = canonical_json_digest(build_document)
+        metadata = run.result_metadata if isinstance(run.result_metadata, dict) else {}
+        if (
+            metadata.get("codebuild_build_arn") not in {None, build_arn}
+            or metadata.get("build_input_key") not in {None, expected_input_key}
+            or metadata.get("build_input_sha256") not in {None, expected_input_sha256}
+            or metadata.get("build_result_key") not in {None, expected_result_key}
+        ):
+            raise NovaPlanDispatchError(
+                "durable build input binding did not match the exact CodeBuild ARN",
+                outcome_uncertain=True,
+                phase="build_input_stage",
+            )
+        try:
+            input_version_id = dispatcher.inspect_staged_input(
+                runner_run_id, expected_input_key, expected_input_sha256
+            )
+        except NovaPlanDispatchError:
+            # The API role intentionally lacks bucket listing permission, so
+            # HeadObject may return 403 for an absent object. A conditional
+            # PutObject below can safely create the exact build key; if an
+            # object already exists, staging still fails closed unless its
+            # immutable version and content can be verified.
+            input_version_id = None
+        if input_version_id is None:
+            if build.status not in {"IN_PROGRESS", "QUEUED"}:
+                return False
+            metadata = {
+                "codebuild_build_arn": build_arn,
+                "build_input_key": expected_input_key,
+                "build_input_sha256": expected_input_sha256,
+                "build_result_key": expected_result_key,
+            }
+            run.result_metadata = metadata
+            self.db.commit()
+            try:
+                staged_key, staged_sha256, input_version_id = dispatcher.stage_build_input(
+                    runner_run_id, build_arn, build_document
+                )
+            except NovaPlanDispatchError:
+                raise NovaPlanDispatchError(
+                    "build-scoped input could not be staged for the exact active build",
+                    outcome_uncertain=True,
+                    phase="build_input_stage",
+                ) from None
+            if staged_key != expected_input_key or staged_sha256 != expected_input_sha256:
+                raise NovaPlanDispatchError(
+                    "build-scoped input differed from its durable attempt digest",
+                    outcome_uncertain=True,
+                    phase="build_input_stage",
+                )
+        else:
+            exact_document = dispatcher.read_staged_input_document(
+                runner_run_id,
+                expected_input_key,
+                input_version_id,
+                expected_input_sha256,
+            )
+            if exact_document != build_document:
+                raise NovaPlanDispatchError(
+                    "build-scoped input content did not match its durable request",
+                    outcome_uncertain=True,
+                    phase="build_input_stage",
+                )
+
+        now = datetime.now(UTC)
+        recovered = self.db.execute(
+            update(GeneratedPlanRun)
+            .where(
+                GeneratedPlanRun.id == run.id,
+                GeneratedPlanRun.organization_id == principal.organization_id,
+                GeneratedPlanRun.state == "RECONCILIATION_REQUIRED",
+                GeneratedPlanRun.error_code.in_(
+                    [
+                        "BUILD_START_RECONCILIATION_REQUIRED",
+                        "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED",
+                    ]
+                ),
+                GeneratedPlanRun.codebuild_build_id == build.build_id,
+                GeneratedPlanRun.runner_run_id == runner_run_id,
+            )
+            .values(
+                input_key=expected_input_key,
+                input_sha256=expected_input_sha256,
+                input_version_id=input_version_id,
+                result_key=expected_result_key,
+                result_metadata={"codebuild_build_arn": build_arn},
+                state="BUILD_STARTED",
+                error_code=None,
+                error_summary=None,
+                preparation_phase=None,
+                preparation_lease_token=None,
+                preparation_lease_expires_at=None,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if recovered.rowcount != 1:
+            self.db.rollback()
+            return False
+        self.audit(
+            principal,
+            "generated_plan_run.build_input_reconciled",
+            "generated_plan_run",
+            run.id,
+            {
+                "codebuild_build_id": build.build_id,
+                "codebuild_build_arn": build_arn,
+                "input_key": expected_input_key,
+                "input_sha256": expected_input_sha256,
+                "input_version_id": input_version_id,
+                "state": "BUILD_STARTED",
+            },
+        )
+        self.db.commit()
+        run.input_key = expected_input_key
+        run.input_sha256 = expected_input_sha256
+        run.input_version_id = input_version_id
+        run.result_key = expected_result_key
+        run.result_metadata = {"codebuild_build_arn": build_arn}
+        run.state = "BUILD_STARTED"
+        run.error_code = None
+        run.error_summary = None
+        run.preparation_phase = None
+        run.preparation_lease_token = None
+        run.preparation_lease_expires_at = None
+        return True
 
     def run_next_generated_plan_run(self) -> bool:
         """Claim and prepare one durable Nova plan request from the SQS wake-up."""
@@ -2811,6 +3217,10 @@ class ProductService:
         try:
             revision = self._infrastructure_revision(actor, run.revision_id)
             customer_plan = self._infrastructure_plan(actor, revision.infrastructure_plan_id)
+            target = (revision.content or {}).get("target") or {}
+            connection = self._cloud_connection(
+                actor, str(target.get("connection_id") or "")
+            )
             request_document = run.request_document
             if (
                 not isinstance(request_document, dict)
@@ -2821,12 +3231,12 @@ class ProductService:
                 or request_document.get("revision_id") != revision.id
                 or request_document.get("revision_sha256") != run.revision_sha256
                 or request_document.get("runner_project") != run.codebuild_project
+                or request_document.get("plan_role_arn") != connection.plan_role_arn
+                or request_document.get("connection_id") != connection.id
             ):
                 raise ValueError("durable Nova plan request did not match its stored digest")
-            target = (revision.content or {}).get("target") or {}
             account_id = str(target.get("account_id") or "")
             region = str(target.get("region") or "")
-            connection = self._cloud_connection(actor, str(target.get("connection_id") or ""))
             source_plan_id = (revision.content or {}).get("source_deployment_plan_id")
             latest = self.db.scalar(
                 select(InfrastructurePlanRevision)
@@ -2848,12 +3258,19 @@ class ProductService:
                 or connection.provider != "aws"
                 or connection.setup_state != "VERIFIED"
                 or connection.account_id != account_id
+                or connection.plan_role_setup_state != "VERIFIED"
+                or connection.plan_role_arn
+                != f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
+                or not connection.external_id_secret_ref
                 or not re.fullmatch(r"\d{12}", account_id)
                 or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region)
                 or request_document.get("target_account_id") != account_id
                 or request_document.get("region") != region
                 or request_document.get("generator_model") != self.terraform_generator.model_id
                 or request_document.get("runner_project") != dispatcher.project_name
+                or request_document.get("connection_id") != connection.id
+                or request_document.get("plan_role_arn") != connection.plan_role_arn
+                or request_document.get("source_deployment_plan_id") != str(source_plan_id)
                 or not source_plan_id
             ):
                 raise ValueError("durable Nova plan request no longer matches its submitted revision")
@@ -2915,6 +3332,12 @@ class ProductService:
                 error_summary = (
                     "Input storage could not be confirmed. Verify the exact staged object or "
                     "abandon this attempt before retrying."
+                )
+            elif phase == "STAGING_BUILD_INPUT":
+                error_code = "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "CodeBuild has a durable build ID, but its build-scoped input may not have "
+                    "been confirmed. Reconcile the exact build input before continuing."
                 )
             elif phase == "GENERATING_PROPOSAL":
                 error_code = "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
@@ -3067,6 +3490,7 @@ class ProductService:
         error_summary: str,
         action: str,
         codebuild_build_id: str | None = None,
+        codebuild_build_arn: str | None = None,
         expected_runner_run_id: str | None = None,
         expected_idempotency_token: str | None = None,
     ) -> bool:
@@ -3085,6 +3509,16 @@ class ProductService:
             values["preparation_phase"] = None
         if codebuild_build_id and codebuild_build_id.startswith(f"{run.codebuild_project}:"):
             values["codebuild_build_id"] = codebuild_build_id
+            if codebuild_build_arn and state == "RECONCILIATION_REQUIRED":
+                values["result_metadata"] = {"codebuild_build_arn": codebuild_build_arn}
+                if run.preparation_phase == "STARTING_BUILD":
+                    values["error_code"] = "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+                    values["error_summary"] = (
+                        "CodeBuild has a durable build ID, but its build-scoped input may not "
+                        "have been confirmed. Reconcile the exact build input before continuing."
+                    )
+                    values["preparation_phase"] = "STAGING_BUILD_INPUT"
+                    values["started_at"] = now
         finished = self.db.execute(
             update(GeneratedPlanRun)
             .where(
@@ -3117,11 +3551,27 @@ class ProductService:
                         == expected_idempotency_token,
                     )
                     .values(
-                        state="BUILD_STARTED",
+                        state="RECONCILIATION_REQUIRED",
                         codebuild_build_id=codebuild_build_id,
-                        error_code=None,
-                        error_summary=None,
-                        preparation_phase=None,
+                        result_metadata=(
+                            {"codebuild_build_arn": codebuild_build_arn}
+                            if codebuild_build_arn
+                            else None
+                        ),
+                        error_code=(
+                            "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+                            if codebuild_build_arn
+                            else "BUILD_START_RECONCILIATION_REQUIRED"
+                        ),
+                        error_summary=(
+                            "CodeBuild has a durable build ID, but its build-scoped input may not "
+                            "have been confirmed. Reconcile the exact build input before continuing."
+                            if codebuild_build_arn
+                            else error_summary
+                        ),
+                        preparation_phase=(
+                            "STAGING_BUILD_INPUT" if codebuild_build_arn else "STARTING_BUILD"
+                        ),
                         preparation_lease_token=None,
                         preparation_lease_expires_at=None,
                         started_at=now,
@@ -3138,6 +3588,7 @@ class ProductService:
                         {
                             "codebuild_project": run.codebuild_project,
                             "codebuild_build_id": codebuild_build_id,
+                            "codebuild_build_arn": codebuild_build_arn,
                             "state": "RECONCILIATION_REQUIRED",
                         },
                     )
@@ -3202,6 +3653,12 @@ class ProductService:
             error_summary = (
                 "CodeBuild may have started without returning a build ID. Do not retry this run; "
                 "use reconcile-build to search for one exact build in the configured project."
+            )
+        elif phase == "STAGING_BUILD_INPUT":
+            error_code = "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+            error_summary = (
+                "CodeBuild has a durable build ID, but its build-scoped input may not have been "
+                "confirmed. Reconcile the exact build input before continuing."
             )
         else:
             error_code = "PREPARATION_LEASE_EXPIRED"
@@ -3270,6 +3727,9 @@ class ProductService:
         ):
             raise ValueError("durable Nova plan attempt keys did not match the stored runner ID")
         target = (revision.content or {}).get("target") or {}
+        connection = self._cloud_connection(
+            principal, str(target.get("connection_id") or "")
+        )
         ownership_scope = self._generated_plan_ownership_scope(
             principal,
             customer_plan.project_id,
@@ -3282,6 +3742,7 @@ class ProductService:
         proposal_sha256 = run.proposal_sha256
         input_sha256 = run.input_sha256
         input_version_id = run.input_version_id
+        request_payload: dict[str, Any] | None = None
         try:
             if lease_lost.is_set() or not self._generated_plan_run_lease_is_current(
                 run.id, lease_token
@@ -3335,8 +3796,19 @@ class ProductService:
                 proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
                 request_payload = {
                     **request_document,
+                    "request_document": request_document,
+                    "request_sha256": run.request_sha256,
                     "run_id": runner_run_id,
                     "control_plane_run_id": run.id,
+                    "revision_id": revision.id,
+                    "revision_sha256": revision.content_digest,
+                    "customer_revision": revision.content,
+                    "plan_role": {
+                        "arn": connection.plan_role_arn,
+                        "external_id": self.connection_secrets.get_external_id(
+                            connection.external_id_secret_ref
+                        ),
+                    },
                     "proposal_sha256": proposal_sha256,
                     "ownership_scope": {
                         "organization_id": ownership_scope.organization_id,
@@ -3481,54 +3953,23 @@ class ProductService:
                     phase="input_stage",
                 )
             build = dispatcher.start_build(runner_run_id, idempotency_token)
-            if build.project_name != run.codebuild_project:
+            if (
+                build.project_name != run.codebuild_project
+                or build.run_id != runner_run_id
+                or not build.build_arn
+            ):
                 raise NovaPlanDispatchError(
-                    "Nova plan build project did not match its durable request",
+                    "Nova plan build identity did not match its durable request",
                     outcome_uncertain=True,
+                    phase="build_start",
                 )
-            started_at = datetime.now(UTC)
-            started = self.db.execute(
-                update(GeneratedPlanRun)
-                .where(
-                    GeneratedPlanRun.id == run.id,
-                    GeneratedPlanRun.state == "PREPARING",
-                    GeneratedPlanRun.preparation_lease_token == lease_token,
-                )
-                .values(
-                    codebuild_build_id=build.build_id,
-                    state="BUILD_STARTED",
-                    preparation_phase=None,
-                    started_at=started_at,
-                    preparation_lease_token=None,
-                    preparation_lease_expires_at=None,
-                    error_code=None,
-                    error_summary=None,
-                    updated_at=started_at,
-                )
-                .execution_options(synchronize_session=False)
+            self._persist_build_start_and_stage_scoped_input(
+                run,
+                lease_token,
+                dispatcher,
+                build,
+                request_payload=request_payload,
             )
-            if started.rowcount != 1:
-                self.db.rollback()
-                raise NovaPlanDispatchError(
-                    "Nova plan build started but could not be bound to its durable request",
-                    outcome_uncertain=True,
-                )
-            self.audit(
-                Principal("system-nova-plan-worker", run.organization_id, "operator"),
-                "generated_plan_run.build_started",
-                "generated_plan_run",
-                run.id,
-                {
-                    "codebuild_project": run.codebuild_project,
-                    "codebuild_build_id": build.build_id,
-                    "runner_run_id": runner_run_id,
-                    "request_sha256": run.request_sha256,
-                    "proposal_sha256": proposal_sha256,
-                    "input_sha256": input_sha256,
-                    "state": run.state,
-                },
-            )
-            self.db.commit()
         except NovaTerraformGenerationFailed as error:
             self.db.rollback()
             generation_uncertain = error.outcome_uncertain
@@ -3574,6 +4015,7 @@ class ProductService:
             self.db.rollback()
             uncertain = error.outcome_uncertain
             input_stage_failure = error.phase == "input_stage"
+            build_input_stage_failure = error.phase == "build_input_stage"
             proposal_uncertain = uncertain and run.preparation_phase == "GENERATING_PROPOSAL"
             build_start_uncertain = uncertain and run.preparation_phase == "STARTING_BUILD"
             self._finish_generated_plan_run_claim(
@@ -3581,7 +4023,9 @@ class ProductService:
                 lease_token,
                 state="RECONCILIATION_REQUIRED" if uncertain else "FAILED",
                 error_code=(
-                    "INPUT_STAGE_RECONCILIATION_REQUIRED"
+                    "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+                    if build_input_stage_failure and uncertain
+                    else "INPUT_STAGE_RECONCILIATION_REQUIRED"
                     if input_stage_failure and uncertain
                     else "INPUT_STAGE_FAILED"
                     if input_stage_failure
@@ -3594,7 +4038,9 @@ class ProductService:
                     else "DISPATCH_FAILED"
                 ),
                 error_summary=(
-                    "Input storage could not be confirmed. Verify the exact staged object or "
+                    "The build-scoped input could not be confirmed. Reconcile the exact build input before retrying."
+                    if build_input_stage_failure and uncertain
+                    else "Input storage could not be confirmed. Verify the exact staged object or "
                     "abandon this attempt before retrying."
                     if input_stage_failure and uncertain
                     else str(error)
@@ -3611,6 +4057,7 @@ class ProductService:
                 ),
                 action="generated_plan_run.dispatch_failed",
                 codebuild_build_id=build.build_id if build else None,
+                codebuild_build_arn=build.build_arn if build else None,
                 expected_runner_run_id=runner_run_id,
                 expected_idempotency_token=idempotency_token,
             )
@@ -3651,7 +4098,14 @@ class ProductService:
         except SQLAlchemyError:
             self.db.rollback()
             phase = run.preparation_phase
-            if build or phase == "STARTING_BUILD":
+            if phase == "STAGING_BUILD_INPUT":
+                error_code = "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED"
+                error_summary = (
+                    "CodeBuild has a durable build ID, but its build-scoped input may not have "
+                    "been confirmed. Reconcile the exact build input before continuing."
+                )
+                action = "generated_plan_run.build_input_stage_uncertain"
+            elif build or phase == "STARTING_BUILD":
                 error_code = "BUILD_START_RECONCILIATION_REQUIRED"
                 error_summary = (
                     "CodeBuild may have started without a durable completion record. Do not retry "
@@ -3684,6 +4138,7 @@ class ProductService:
                 error_summary=error_summary,
                 action=action,
                 codebuild_build_id=build.build_id if build else None,
+                codebuild_build_arn=build.build_arn if build else None,
                 expected_runner_run_id=runner_run_id,
                 expected_idempotency_token=idempotency_token,
             )
@@ -3724,6 +4179,13 @@ class ProductService:
             "revision_sha256": run.revision_sha256,
             "proposal_sha256": run.proposal_sha256,
             "state": run.state,
+            "artifact_id": (
+                run.result_metadata.get("artifact_id")
+                if run.state == "PLAN_READY_REVIEW_ONLY"
+                and isinstance(run.result_metadata, dict)
+                and isinstance(run.result_metadata.get("artifact_id"), str)
+                else None
+            ),
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "started_at": run.started_at.isoformat() if run.started_at else None,
             "finished_at": run.finished_at.isoformat() if run.finished_at else None,
@@ -3737,7 +4199,7 @@ class ProductService:
         }
 
     def reconcile_generated_plan_build(self, build_id: str) -> bool:
-        """Record a completion only for the exact build bound to one plan run."""
+        """Verify one exact CodeBuild result and persist its review-only artifact."""
         normalized_build_id = build_id.rsplit("/", 1)[-1]
         run = self.db.scalar(
             select(GeneratedPlanRun).where(
@@ -3746,8 +4208,14 @@ class ProductService:
         )
         if not run:
             return False
-        if run.state not in {"BUILD_STARTED", "RECONCILIATION_REQUIRED"}:
+        if run.state == "PLAN_READY_REVIEW_ONLY":
             return True
+        if run.state not in {
+            "BUILD_STARTED",
+            "BUILD_SUCCEEDED_UNVERIFIED",
+            "RECONCILIATION_REQUIRED",
+        }:
+            return False
         try:
             dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
         except NovaPlanDispatchError:
@@ -3765,58 +4233,142 @@ class ProductService:
         try:
             build = dispatcher.describe_build(normalized_build_id)
         except NovaPlanDispatchError:
-            # The SQS wake-up can be acknowledged after this method returns.
-            # Keep the run recoverable through the authenticated exact-build route.
             return self._mark_nova_plan_build_status_unconfirmed(
                 run,
                 normalized_build_id,
                 "The runner result could not be confirmed. Retry status reconciliation.",
             )
-        if build.project_name != run.codebuild_project or build.build_id != normalized_build_id:
+        if (
+            build.project_name != run.codebuild_project
+            or build.build_id != normalized_build_id
+            or build.run_id != run.runner_run_id
+            or not build.build_arn
+            or build.build_arn != (run.result_metadata or {}).get("codebuild_build_arn")
+        ):
             return self._mark_nova_plan_build_status_unconfirmed(
                 run,
                 normalized_build_id,
-                "The runner returned a different build identity. Retry status reconciliation after checking its configuration.",
+                "The runner returned a build identity that does not match this plan request. Retry reconciliation after checking the runner.",
             )
         if build.status in {"IN_PROGRESS", "QUEUED"}:
             return False
+
         now = datetime.now(UTC)
-        terminal_state = "BUILD_SUCCEEDED_UNVERIFIED" if build.status == "SUCCEEDED" else "FAILED"
-        terminal_error_code = (
-            "PLAN_RESULT_NOT_VERIFIED" if build.status == "SUCCEEDED" else f"CODEBUILD_{build.status}"
+        result_metadata: dict[str, Any] | None = None
+        artifact_id: str | None = None
+        if build.status == "SUCCEEDED":
+            try:
+                result, result_version_id, result_sha256 = dispatcher.read_result(
+                    run.runner_run_id or run.id,
+                    run.result_key,
+                    normalized_build_id,
+                    build.build_arn,
+                )
+                artifact = self._persist_verified_nova_plan_result(
+                    run,
+                    dispatcher,
+                    result,
+                    result_version_id,
+                    result_sha256,
+                )
+                manifest_artifact = result["manifest"]["artifact"]
+                result_metadata = {
+                    "codebuild_build_arn": build.build_arn,
+                    "result_key": run.result_key,
+                    "result_version_id": result_version_id,
+                    "result_sha256": result_sha256,
+                    "manifest_sha256": result["manifest_sha256"],
+                    "saved_plan_bucket": manifest_artifact["bucket"],
+                    "saved_plan_key": manifest_artifact["key"],
+                    "saved_plan_version_id": manifest_artifact["version_id"],
+                    "saved_plan_sha256": result["manifest"]["digests"]["saved_plan_sha256"],
+                    "artifact_id": artifact.id,
+                    "planning_boundary": "INITIAL_PLAN_NO_REMOTE_STATE",
+                }
+                artifact_id = artifact.id
+            except (
+                BotoCoreError,
+                ClientError,
+                GeneratedPlanArtifactError,
+                NovaPlanDispatchError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+            ):
+                self.db.rollback()
+                failed_read = self.db.execute(
+                    update(GeneratedPlanRun)
+                    .where(
+                        GeneratedPlanRun.id == run.id,
+                        GeneratedPlanRun.codebuild_project == run.codebuild_project,
+                        GeneratedPlanRun.codebuild_build_id == normalized_build_id,
+                        GeneratedPlanRun.runner_run_id == run.runner_run_id,
+                        GeneratedPlanRun.codebuild_idempotency_token == run.runner_run_id,
+                        GeneratedPlanRun.state.in_(
+                            ("BUILD_STARTED", "BUILD_SUCCEEDED_UNVERIFIED", "RECONCILIATION_REQUIRED")
+                        ),
+                    )
+                    .values(
+                        state="RECONCILIATION_REQUIRED",
+                        error_code="PLAN_RESULT_RECONCILIATION_REQUIRED",
+                        error_summary=(
+                            "The successful build result or saved-plan object could not be matched to "
+                            "the durable tenant, revision, account, input, and build. No plan is approvable."
+                        ),
+                        preparation_phase=None,
+                        updated_at=datetime.now(UTC),
+                    )
+                    .execution_options(synchronize_session=False)
+                )
+                if failed_read.rowcount == 1:
+                    self.db.commit()
+                else:
+                    self.db.rollback()
+                return True
+            state = "PLAN_READY_REVIEW_ONLY"
+            error_code = None
+            error_summary = None
+            audit_state = state
+        else:
+            state = "FAILED"
+            error_code = f"CODEBUILD_{build.status}"
+            error_summary = "Nova plan generation did not complete successfully."
+            audit_state = state
+
+        allowed_errors = (
+            "BUILD_START_RECONCILIATION_REQUIRED",
+            "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED",
+            "BUILD_STATUS_UNCONFIRMED",
+            "RUNNER_CONFIGURATION_UNAVAILABLE",
+            "PREPARATION_LEASE_EXPIRED",
+            "PLAN_RESULT_NOT_VERIFIED",
+            "PLAN_RESULT_RECONCILIATION_REQUIRED",
         )
-        terminal_error_summary = (
-            "The build finished, but no trusted result handler is enabled; "
-            "no Terraform plan is available for approval."
-            if build.status == "SUCCEEDED"
-            else "Nova plan generation did not complete successfully."
-        )
-        # Reconcile with compare-and-set semantics. Another delivery may finish
-        # this build while a retry has already started; the old build must not
-        # overwrite the new attempt's state.
         reconciled = self.db.execute(
             update(GeneratedPlanRun)
             .where(
                 GeneratedPlanRun.id == run.id,
                 GeneratedPlanRun.codebuild_project == run.codebuild_project,
                 GeneratedPlanRun.codebuild_build_id == normalized_build_id,
-                GeneratedPlanRun.state.in_(("BUILD_STARTED", "RECONCILIATION_REQUIRED")),
+                GeneratedPlanRun.runner_run_id == run.runner_run_id,
+                GeneratedPlanRun.codebuild_idempotency_token == run.runner_run_id,
+                GeneratedPlanRun.state.in_(
+                    ("BUILD_STARTED", "BUILD_SUCCEEDED_UNVERIFIED", "RECONCILIATION_REQUIRED")
+                ),
                 or_(
                     GeneratedPlanRun.error_code.is_(None),
-                    GeneratedPlanRun.error_code.in_(
-                        (
-                            "BUILD_START_RECONCILIATION_REQUIRED",
-                            "BUILD_STATUS_UNCONFIRMED",
-                            "PREPARATION_LEASE_EXPIRED",
-                        )
-                    ),
+                    GeneratedPlanRun.error_code.in_(allowed_errors),
                 ),
             )
             .values(
-                state=terminal_state,
-                error_code=terminal_error_code,
-                error_summary=terminal_error_summary,
+                state=state,
+                error_code=error_code,
+                error_summary=error_summary,
+                result_metadata=result_metadata or run.result_metadata,
                 finished_at=now,
+                preparation_phase=None,
+                preparation_lease_token=None,
                 preparation_lease_expires_at=None,
                 updated_at=now,
             )
@@ -3825,10 +4377,6 @@ class ProductService:
         if reconciled.rowcount != 1:
             self.db.rollback()
             return True
-        if build.status == "SUCCEEDED":
-            audit_state = "BUILD_SUCCEEDED_UNVERIFIED"
-        else:
-            audit_state = "FAILED"
         self.audit(
             Principal("system-nova-plan-worker", run.organization_id, "operator"),
             "generated_plan_run.build_reconciled",
@@ -3839,7 +4387,8 @@ class ProductService:
                 "codebuild_build_id": normalized_build_id,
                 "build_status": build.status,
                 "state": audit_state,
-                "error_code": terminal_error_code,
+                "artifact_id": artifact_id,
+                "error_code": error_code,
             },
         )
         self.db.commit()
@@ -3886,6 +4435,393 @@ class ProductService:
         self.db.commit()
         self.db.expire(run)
         return True
+
+    def _persist_verified_nova_plan_result(
+        self,
+        run: GeneratedPlanRun,
+        dispatcher: NovaPlanOnlyDispatcher,
+        result: dict[str, Any],
+        result_version_id: str,
+        result_sha256: str,
+    ) -> GeneratedPlanArtifact:
+        """Bind a secret-free runner result and exact saved-plan version to DB rows."""
+        required_result_fields = {
+            "contract",
+            "run_id",
+            "codebuild_project",
+            "codebuild_build_id",
+            "codebuild_build_arn",
+            "input",
+            "binding",
+            "policy_evidence",
+            "policy_sha256",
+            "manifest",
+            "manifest_sha256",
+            "planning_boundary",
+        }
+        if set(result) != required_result_fields or result.get("planning_boundary") != (
+            "INITIAL_PLAN_NO_REMOTE_STATE"
+        ):
+            raise ValueError("Nova plan result envelope shape is invalid")
+        try:
+            run_id = str(uuid.UUID(run.runner_run_id or run.id))
+        except (AttributeError, ValueError):
+            raise ValueError("durable Nova run ID is invalid") from None
+        if (
+            run_id != (run.runner_run_id or run.id)
+            or result.get("run_id") != run_id
+            or result.get("codebuild_project") != run.codebuild_project
+            or result.get("codebuild_build_id") != run.codebuild_build_id
+            or result.get("codebuild_build_arn")
+            != (run.result_metadata or {}).get("codebuild_build_arn")
+            or not re.fullmatch(r"[a-f0-9]{64}", result_sha256)
+            or not result_version_id
+            or result_version_id == "null"
+            or canonical_json_digest(result.get("manifest")) != result.get("manifest_sha256")
+        ):
+            raise ValueError("Nova result did not match the exact durable CodeBuild run")
+        request_document = run.request_document
+        if (
+            not isinstance(request_document, dict)
+            or canonical_json_digest(request_document) != run.request_sha256
+        ):
+            raise ValueError("durable Nova request digest is invalid")
+        actor = Principal(run.requester_subject, run.organization_id, "operator")
+        revision = self._infrastructure_revision(actor, run.revision_id)
+        customer_plan = self._infrastructure_plan(actor, revision.infrastructure_plan_id)
+        self._project(actor, customer_plan.project_id)
+        latest = self.db.scalar(
+            select(InfrastructurePlanRevision)
+            .where(
+                InfrastructurePlanRevision.infrastructure_plan_id == customer_plan.id,
+                InfrastructurePlanRevision.organization_id == run.organization_id,
+            )
+            .order_by(InfrastructurePlanRevision.revision_number.desc())
+            .limit(1)
+        )
+        revision_content = revision.content or {}
+        if (
+            revision.organization_id != run.organization_id
+            or customer_plan.project_id != run.project_id
+            or revision.id != run.revision_id
+            or revision.state
+            not in {InfrastructurePlanState.SUBMITTED, InfrastructurePlanState.APPROVED}
+            or not latest
+            or latest.id != revision.id
+            or revision.content_digest != run.revision_sha256
+            or revision.content_digest != plan_hash(revision_content)
+        ):
+            raise ValueError("Nova result is stale or belongs to another revision")
+        if revision.state == InfrastructurePlanState.APPROVED:
+            decision = self.db.scalar(
+                select(InfrastructurePlanDecisionRecord).where(
+                    InfrastructurePlanDecisionRecord.revision_id == revision.id,
+                    InfrastructurePlanDecisionRecord.organization_id == run.organization_id,
+                )
+            )
+            if (
+                not decision
+                or decision.decision != InfrastructurePlanDecision.APPROVED
+                or decision.approved_digest != revision.content_digest
+            ):
+                raise ValueError("approved Nova revision has no matching approval record")
+
+        target = revision_content.get("target") or {}
+        connection_id = str(target.get("connection_id") or "")
+        connection = self._cloud_connection(actor, connection_id)
+        account_id = str(target.get("account_id") or "")
+        region = str(target.get("region") or "")
+        exact_role_arn = f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
+        if (
+            request_document.get("organization_id") != run.organization_id
+            or request_document.get("project_id") != run.project_id
+            or request_document.get("plan_id") != customer_plan.id
+            or request_document.get("revision_id") != revision.id
+            or request_document.get("revision_sha256") != run.revision_sha256
+            or request_document.get("connection_id") != connection.id
+            or request_document.get("plan_role_arn") != exact_role_arn
+            or connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or connection.account_id != account_id
+            or connection.plan_role_setup_state != "VERIFIED"
+            or connection.plan_role_arn != exact_role_arn
+            or not connection.external_id_secret_ref
+            or request_document.get("target_account_id") != account_id
+            or request_document.get("region") != region
+            or request_document.get("runner_project") != run.codebuild_project
+        ):
+            raise ValueError("Nova result target or plan role no longer matches its tenant")
+        external_id = self.connection_secrets.get_external_id(connection.external_id_secret_ref)
+        staged_input = dispatcher.read_staged_input_document(
+            run_id,
+            run.input_key,
+            run.input_version_id or "",
+            run.input_sha256 or "",
+        )
+        if (
+            staged_input.get("run_id") != run_id
+            or staged_input.get("control_plane_run_id") != run.id
+            or staged_input.get("request_document") != request_document
+            or staged_input.get("request_sha256") != run.request_sha256
+            or staged_input.get("revision_id") != revision.id
+            or staged_input.get("revision_sha256") != revision.content_digest
+            or staged_input.get("customer_revision") != revision_content
+            or staged_input.get("proposal_sha256") != run.proposal_sha256
+            or staged_input.get("plan_role")
+            != {"arn": exact_role_arn, "external_id": external_id}
+        ):
+            raise ValueError("exact staged Nova input no longer matches its durable row")
+
+        proposal = GeneratedDeploymentProposal.model_validate(staged_input.get("proposal"))
+        proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
+        expected_context_sha256 = generation_context_digest(revision_content, revision.id)
+        if (
+            proposal_sha256 != run.proposal_sha256
+            or proposal.source_revision != revision.id
+            or proposal.context_digest != expected_context_sha256
+            or proposal.requirements.region != region
+        ):
+            raise ValueError("Nova result proposal or context digest is invalid")
+        ownership_scope = self._generated_plan_ownership_scope(
+            actor,
+            customer_plan.project_id,
+            customer_plan.id,
+            revision.id,
+            target.get("environment_id"),
+        )
+        result_input = result.get("input")
+        if (
+            not isinstance(result_input, dict)
+            or result_input.get("key") != run.input_key
+            or result_input.get("version_id") != run.input_version_id
+            or result_input.get("sha256") != run.input_sha256
+        ):
+            raise ValueError("Nova result staged input version did not match the durable run")
+        binding = {
+            "organization_id": run.organization_id,
+            "project_id": run.project_id,
+            "plan_id": customer_plan.id,
+            "revision_id": revision.id,
+            "revision_sha256": revision.content_digest,
+            "account_id": account_id,
+            "region": region,
+            "proposal_sha256": proposal_sha256,
+            "context_sha256": expected_context_sha256,
+        }
+        if result.get("binding") != binding:
+            raise ValueError("Nova result tenant, revision, or target binding failed")
+        rendered_result = json.dumps(
+            result, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        if external_id and external_id in rendered_result:
+            raise ValueError("Nova result contains customer trust material")
+
+        manifest = result.get("manifest")
+        if not isinstance(manifest, dict):
+            raise TypeError("Nova result manifest is invalid")
+        toolchain = manifest.get("toolchain")
+        lockfile_path = Path(__file__).with_name("terraform-provider.lock.hcl")
+        if lockfile_path.is_symlink() or not lockfile_path.is_file():
+            raise ValueError("trusted Terraform provider lockfile is unavailable")
+        lockfile_sha256 = hashlib.sha256(lockfile_path.read_bytes()).hexdigest()
+        if (
+            not isinstance(toolchain, dict)
+            or toolchain.get("terraform_version") != PINNED_TERRAFORM_VERSION
+            or toolchain.get("aws_provider_version") != PINNED_AWS_PROVIDER_VERSION
+            or toolchain.get("provider_lockfile_sha256") != lockfile_sha256
+        ):
+            raise ValueError("Nova result toolchain did not match the fixed runner")
+        policy_doc = result.get("policy_evidence")
+        if (
+            not isinstance(policy_doc, dict)
+            or set(policy_doc) != {"version", "verdict", "human_approval_required", "findings"}
+            or type(policy_doc.get("human_approval_required")) is not bool
+            or policy_doc.get("human_approval_required") is not True
+            or not isinstance(policy_doc.get("findings"), list)
+            or len(policy_doc["findings"]) > 5000
+            or canonical_json_digest(policy_doc) != result.get("policy_sha256")
+        ):
+            raise ValueError("Nova result policy evidence is invalid")
+        try:
+            policy_verdict = PlanPolicyVerdict(policy_doc.get("verdict"))
+            findings = tuple(
+                PlanPolicyFinding(
+                    code=item["code"],
+                    severity=item["severity"],
+                    address=item["address"],
+                    message=item["message"],
+                )
+                for item in policy_doc["findings"]
+                if isinstance(item, dict)
+                and set(item) == {"code", "severity", "address", "message"}
+                and all(
+                    item.get(field) is None or isinstance(item.get(field), str)
+                    for field in ("code", "severity", "address", "message")
+                )
+            )
+        except (TypeError, ValueError, KeyError):
+            raise ValueError("Nova result policy findings are invalid") from None
+        if len(findings) != len(policy_doc["findings"]):
+            raise ValueError("Nova result policy finding shape is invalid")
+        policy = GeneratedPlanPolicyResult(
+            verdict=policy_verdict,
+            policy_version=str(policy_doc.get("version") or ""),
+            findings=findings,
+            human_approval_required=True,
+        )
+        if not policy_allows_human_review(policy):
+            raise ValueError("strict Nova plan policy denied human review")
+
+        summary_doc = manifest.get("summary")
+        summary_keys = {
+            "create_count",
+            "update_count",
+            "delete_count",
+            "replacement_count",
+            "read_count",
+            "no_op_count",
+            "drift_count",
+            "contains_sensitive_changes",
+        }
+        if (
+            not isinstance(summary_doc, dict)
+            or set(summary_doc) != summary_keys
+            or any(type(summary_doc.get(key)) is not int or summary_doc[key] < 0 for key in summary_keys - {"contains_sensitive_changes"})
+            or type(summary_doc.get("contains_sensitive_changes")) is not bool
+        ):
+            raise ValueError("Nova result safe summary is invalid")
+        summary = TerraformPlanSummary(
+            format_version="1.0",
+            applyable=True,
+            errored=False,
+            resource_changes=(),
+            create_count=summary_doc["create_count"],
+            update_count=summary_doc["update_count"],
+            delete_count=summary_doc["delete_count"],
+            replacement_count=summary_doc["replacement_count"],
+            read_count=summary_doc["read_count"],
+            no_op_count=summary_doc["no_op_count"],
+            drift_count=summary_doc["drift_count"],
+            contains_sensitive_changes=summary_doc["contains_sensitive_changes"],
+        )
+        digests = manifest.get("digests")
+        artifact_doc = manifest.get("artifact")
+        if not isinstance(digests, dict) or not isinstance(artifact_doc, dict):
+            raise TypeError("Nova result artifact binding is invalid")
+        saved_plan_sha256 = digests.get("saved_plan_sha256")
+        if not isinstance(saved_plan_sha256, str) or not re.fullmatch(
+            r"[a-f0-9]{64}", saved_plan_sha256
+        ):
+            raise ValueError("Nova saved-plan digest is invalid")
+        stored_plan = StoredPlanObject(
+            bucket=artifact_doc.get("bucket"),
+            key=artifact_doc.get("key"),
+            version_id=artifact_doc.get("version_id"),
+            size_bytes=artifact_doc.get("size_bytes"),
+            sha256=saved_plan_sha256,
+        )
+        if (
+            digests.get("customer_revision_sha256") != revision.content_digest
+            or digests.get("proposal_sha256") != proposal_sha256
+            or digests.get("trusted_context_sha256") != expected_context_sha256
+            or digests.get("ownership_scope_sha256") != ownership_scope.scope_sha256()
+            or digests.get("ownership_plan_id_sha256") != ownership_scope.plan_id_sha256()
+            or digests.get("policy_sha256") != result.get("policy_sha256")
+            or manifest.get("planning_boundary")
+            != {
+                "mode": "INITIAL_PLAN_NO_REMOTE_STATE",
+                "approval_allowed": False,
+                "execution_allowed": False,
+            }
+        ):
+            raise ValueError("Nova result manifest digest binding is invalid")
+        generated_plan = GeneratedTerraformPlan(
+            summary=summary,
+            policy=policy,
+            target_account_id=account_id,
+            region=region,
+            terraform_version=toolchain["terraform_version"],
+            aws_provider_version=toolchain["aws_provider_version"],
+            provider_lockfile_sha256=toolchain["provider_lockfile_sha256"],
+            proposal_sha256=proposal_sha256,
+            context_sha256=expected_context_sha256,
+            configuration_sha256=digests.get("configuration_sha256"),
+            ownership_scope_sha256=ownership_scope.scope_sha256(),
+            ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
+            saved_plan_sha256=saved_plan_sha256,
+            saved_plan_path="",
+        )
+        expected_manifest = generated_plan_manifest(
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            revision_id=revision.id,
+            revision_sha256=revision.content_digest,
+            stored_object=stored_plan,
+            plan=generated_plan,
+            policy_digest=result["policy_sha256"],
+            created_at=manifest.get("created_at"),
+        )
+        if expected_manifest != manifest:
+            raise ValueError("Nova result manifest differs from verified run evidence")
+
+        artifact_store = (
+            self.generated_plan_artifact_store or configured_generated_plan_artifact_store()
+        )
+        if artifact_store is None:
+            raise ValueError("generated Terraform plan review storage is not enabled")
+        artifact_store.verify_stored_plan(
+            stored_plan,
+            run_id=run_id,
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            revision_id=revision.id,
+            build_arn=(run.result_metadata or {}).get("codebuild_build_arn"),
+        )
+        existing = self.db.scalar(
+            select(GeneratedPlanArtifact).where(
+                GeneratedPlanArtifact.organization_id == run.organization_id,
+                GeneratedPlanArtifact.run_id == run_id,
+            )
+        )
+        manifest_sha256 = canonical_json_digest(manifest)
+        if existing:
+            if existing.manifest_sha256 != manifest_sha256:
+                raise ValueError("another Nova artifact is already bound to this run")
+            return existing
+        policy_sha256 = result["policy_sha256"]
+        artifact = GeneratedPlanArtifact(
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            revision_id=revision.id,
+            run_id=run_id,
+            target_account_id=account_id,
+            region=region,
+            terraform_version=generated_plan.terraform_version,
+            aws_provider_version=generated_plan.aws_provider_version,
+            provider_lockfile_sha256=generated_plan.provider_lockfile_sha256,
+            proposal_sha256=proposal_sha256,
+            context_sha256=expected_context_sha256,
+            configuration_sha256=generated_plan.configuration_sha256,
+            saved_plan_sha256=saved_plan_sha256,
+            policy_sha256=policy_sha256,
+            manifest_sha256=manifest_sha256,
+            manifest=manifest,
+            policy_version=policy.policy_version,
+            policy_verdict=policy.verdict.value,
+            policy_human_approval_required=True,
+            policy_findings=policy_doc["findings"],
+            safe_summary=summary_doc,
+            artifact_bucket=stored_plan.bucket,
+            artifact_key=stored_plan.key,
+            artifact_version_id=stored_plan.version_id,
+            artifact_size_bytes=stored_plan.size_bytes,
+            created_by_subject=run.requester_subject,
+            created_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        self.db.add(artifact)
+        self.db.flush()
+        return artifact
 
     def persist_generated_plan_artifact(
         self,
@@ -3950,10 +4886,7 @@ class ProductService:
         ):
             raise ValueError("generated plan target does not match the verified customer account")
 
-        proposal_bytes = json.dumps(
-            proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
-        proposal_sha256 = hashlib.sha256(proposal_bytes).hexdigest()
+        proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
         expected_context_sha256 = generation_context_digest(revision.content, revision.id)
         try:
             with open(generated_plan.saved_plan_path, "rb") as saved_plan_file:
@@ -4036,6 +4969,8 @@ class ProductService:
                 "update_count": generated_plan.summary.update_count,
                 "delete_count": generated_plan.summary.delete_count,
                 "replacement_count": generated_plan.summary.replacement_count,
+                "read_count": generated_plan.summary.read_count,
+                "no_op_count": generated_plan.summary.no_op_count,
                 "drift_count": generated_plan.summary.drift_count,
                 "contains_sensitive_changes": generated_plan.summary.contains_sensitive_changes,
             },
@@ -4093,6 +5028,30 @@ class ProductService:
             expires_at = expires_at.replace(tzinfo=UTC)
         expired = expires_at <= datetime.now(UTC)
         pricing_complete = has_complete_pricing_evidence(artifact.manifest)
+        manifest_boundary = artifact.manifest.get("planning_boundary")
+        planning_boundary = (
+            manifest_boundary if isinstance(manifest_boundary, dict) else {}
+        )
+        boundary_mode = planning_boundary.get("mode", "INITIAL_PLAN_NO_REMOTE_STATE")
+        boundary_allows_approval = (
+            boundary_mode != "INITIAL_PLAN_NO_REMOTE_STATE"
+            and planning_boundary.get("approval_allowed") is True
+            and planning_boundary.get("execution_allowed") is True
+        )
+        approval_blockers = []
+        if not boundary_allows_approval:
+            approval_blockers.append(
+                "DURABLE_REMOTE_STATE_UNAVAILABLE"
+                if boundary_mode == "INITIAL_PLAN_NO_REMOTE_STATE"
+                else "PLANNING_BOUNDARY_BLOCKED"
+            )
+        if not pricing_complete:
+            approval_blockers.append("COST_EVIDENCE_INCOMPLETE")
+        if expired:
+            approval_blockers.append("PLAN_EXPIRED")
+        if approval:
+            approval_blockers.append("ALREADY_APPROVED")
+        approval_allowed = not approval_blockers
         manifest_pricing = artifact.manifest.get("pricing")
         manifest_pricing = manifest_pricing if isinstance(manifest_pricing, dict) else {}
         pricing = {
@@ -4103,12 +5062,16 @@ class ProductService:
             "reason_code": manifest_pricing.get(
                 "reason_code", "regional_pricing_evaluator_not_integrated"
             ),
-            "approval_allowed": pricing_complete,
+            "evidence_complete": pricing_complete,
         }
         if not pricing_complete:
             pricing["message"] = "Waiting for complete regional cost evidence."
         state = (
-            "APPROVED_EXPIRED"
+            "BLOCKED_NO_REMOTE_STATE"
+            if boundary_mode == "INITIAL_PLAN_NO_REMOTE_STATE"
+            else "BLOCKED_PLANNING_BOUNDARY"
+            if not boundary_allows_approval
+            else "APPROVED_EXPIRED"
             if approval and expired
             else "APPROVED"
             if approval and pricing_complete
@@ -4136,7 +5099,15 @@ class ProductService:
                 "findings": artifact.policy_findings,
             },
             "summary": artifact.safe_summary,
+            "planning_boundary": planning_boundary
+            or {
+                "mode": "INITIAL_PLAN_NO_REMOTE_STATE",
+                "approval_allowed": False,
+                "execution_allowed": False,
+            },
             "pricing": pricing,
+            "approval_allowed": approval_allowed,
+            "approval_blockers": approval_blockers,
             "state": state,
             "approval": None
             if not approval
@@ -4176,6 +5147,10 @@ class ProductService:
         if not has_complete_pricing_evidence(manifest):
             raise ValueError(
                 "complete regional cost evidence is unavailable; generated plan cannot be approved"
+            )
+        if (manifest.get("planning_boundary") or {}).get("mode") == "INITIAL_PLAN_NO_REMOTE_STATE":
+            raise ValueError(
+                "durable remote Terraform state is unavailable; initial-state plans cannot be approved"
             )
         tenant = manifest.get("tenant") or {}
         target = manifest.get("target") or {}

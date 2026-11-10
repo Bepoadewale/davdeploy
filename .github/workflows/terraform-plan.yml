@@ -34,6 +34,7 @@ jobs:
       TF_VAR_region: ${{ vars.AWS_REGION }}
       TF_VAR_frontend_origin: ${{ vars.FRONTEND_ORIGIN }}
       TF_VAR_artifact_bucket: ${{ vars.TF_RELEASE_BUCKET }}
+      TF_VAR_nova_plan_runner_release_kms_key_arn: ${{ vars.TF_RELEASE_KMS_KEY_ARN }}
       TF_VAR_customer_execution_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_customer_execution_lock_table: ${{ vars.TF_STATE_LOCK_TABLE }}
       TF_VAR_customer_execution_kms_key_arns: '["${{ vars.TF_RELEASE_KMS_KEY_ARN }}", "${{ vars.TF_PLAN_KMS_KEY_ARN }}"]'

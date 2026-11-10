@@ -61,6 +61,29 @@ Allowed status values: `not started`, `in progress`, `implemented`,
   authorization is not a health check. Record only authenticated, authorized
   observations as runtime evidence.
 
+## Nova plan-only runner milestone
+
+- PR #328 is a draft stacked on #326. Its allowed intermediate scope is a
+  backend-free initial Terraform plan with a fixed, versioned runner and the
+  reviewed Nova plan role. Such an artifact is review-only, permanently
+  unapprovable, and non-deployable; regional pricing remains unavailable too.
+- Durable remote state is a separate blocker. The shared CodeBuild role must
+  not receive access to every tenant's state prefix. Options for a later
+  reviewed milestone are: a separately installed per-customer state bucket and
+  role; a durable per-tenant DavDeploy backend role with exact key/lock access;
+  or a DavDeploy-managed state service with exact version and lock handling.
+  Each requires its own provisioning, recovery, tenant-isolation, and lifecycle
+  evidence. No option is implemented by #328, and no backend-free plan may be
+  counted as stateful deployment evidence.
+- Plan-runner object access is scoped to the exact CodeBuild ARN in S3 resources;
+  the API-only request prefix is inaccessible to CodeBuild. The shared CodeBuild
+  role's STS permission still matches the `davdeployPlan-*` role-name pattern.
+  The fixed runner binds the ARN to the validated connection/account, each
+  customer trust requires its exact ExternalId, and those customer roles deny
+  all service actions. Cross-tenant trust tests are mocked contracts, not a live
+  IAM simulation. Keep the runner disabled by default, and require an isolated
+  per-tenant broker before any plan role receives customer service permissions.
+
 ## Evidence update rule
 
 For each step, link the exact PR, merged commit, CI run, evidence file, AWS

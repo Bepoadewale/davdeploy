@@ -13,6 +13,8 @@ from typing import Any
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from davdeploy.generated_plan_artifacts import canonical_json_digest
+
 
 class NovaPlanDispatchError(RuntimeError):
     """A plan-only request could not be safely staged or dispatched."""
@@ -34,6 +36,8 @@ class NovaPlanBuild:
     build_id: str
     project_name: str
     status: str
+    run_id: str | None = None
+    build_arn: str | None = None
 
 
 class NovaPlanOnlyDispatcher:
@@ -106,9 +110,29 @@ class NovaPlanOnlyDispatcher:
     def result_key(run_id: str) -> str:
         return f"plans/nova-generated/requests/{_validate_run_id(run_id)}/result.json"
 
+    @staticmethod
+    def build_input_key(build_arn: str) -> str:
+        return f"plans/nova-generated/builds/{_validate_build_arn(build_arn)}/input.json"
+
+    @staticmethod
+    def build_result_key(build_arn: str) -> str:
+        return f"plans/nova-generated/builds/{_validate_build_arn(build_arn)}/result.json"
+
     def stage_input(self, run_id: str, document: dict[str, Any]) -> tuple[str, str, str]:
         run_id = _validate_run_id(run_id)
         key = self.input_key(run_id)
+        return self._stage_input_at_key(run_id, key, document)
+
+    def stage_build_input(
+        self, run_id: str, build_arn: str, document: dict[str, Any]
+    ) -> tuple[str, str, str]:
+        return self._stage_input_at_key(
+            _validate_run_id(run_id), self.build_input_key(build_arn), document
+        )
+
+    def _stage_input_at_key(
+        self, run_id: str, key: str, document: dict[str, Any]
+    ) -> tuple[str, str, str]:
         payload = _canonical_json(document)
         if len(payload) > self.max_input_bytes:
             raise NovaPlanDispatchError("Nova plan input exceeds its configured size limit")
@@ -118,7 +142,11 @@ class NovaPlanOnlyDispatcher:
         except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
             response = None
 
-        version_id = self._version_id(response)
+        version_id = (
+            self._version_id(response)
+            if isinstance(response, dict) and response.get("BucketKeyEnabled") is True
+            else None
+        )
         if version_id:
             return key, digest, version_id
 
@@ -134,7 +162,11 @@ class NovaPlanOnlyDispatcher:
             response = self._put_input_object(run_id, key, payload, digest)
         except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
             response = None
-        version_id = self._version_id(response)
+        version_id = (
+            self._version_id(response)
+            if isinstance(response, dict) and response.get("BucketKeyEnabled") is True
+            else None
+        )
         if version_id:
             return key, digest, version_id
         version_id = self.inspect_staged_input(run_id, key, digest)
@@ -148,7 +180,13 @@ class NovaPlanOnlyDispatcher:
     def inspect_staged_input(self, run_id: str, key: str, digest: str) -> str | None:
         """Return the exact stored version, None for confirmed absence, or fail closed."""
         run_id = _validate_run_id(run_id)
-        if key != self.input_key(run_id) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        if (
+            key != self.input_key(run_id)
+            and not re.fullmatch(
+                r"plans/nova-generated/builds/arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/[A-Za-z0-9_-]+:[A-Za-z0-9-]+/input\.json",
+                key,
+            )
+        ) or not re.fullmatch(r"[a-f0-9]{64}", digest):
             raise NovaPlanDispatchError(
                 "Nova plan input inspection did not match the durable attempt key",
                 outcome_uncertain=True,
@@ -196,6 +234,9 @@ class NovaPlanOnlyDispatcher:
         if (
             metadata.get("davdeploy-run-id") != run_id
             or metadata.get("davdeploy-input-sha256") != digest
+            or response.get("BucketKeyEnabled") is not True
+            or response.get("ServerSideEncryption") != "aws:kms"
+            or response.get("SSEKMSKeyId") != self.kms_key_arn
         ):
             raise NovaPlanDispatchError(
                 "Nova plan input object metadata does not match this attempt; reconcile it",
@@ -211,6 +252,83 @@ class NovaPlanOnlyDispatcher:
             )
         return version_id
 
+    def read_staged_input_document(
+        self,
+        run_id: str,
+        key: str,
+        version_id: str,
+        expected_sha256: str,
+    ) -> dict[str, Any]:
+        """Read and verify the exact encrypted input version bound to the run."""
+        run_id = _validate_run_id(run_id)
+        if (
+            key != self.input_key(run_id)
+            and not re.fullmatch(
+                r"plans/nova-generated/builds/arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/[A-Za-z0-9_-]+:[A-Za-z0-9-]+/input\.json",
+                key,
+            )
+            or not isinstance(version_id, str)
+            or not version_id
+            or version_id == "null"
+            or not re.fullmatch(r"[a-f0-9]{64}", expected_sha256)
+        ):
+            raise NovaPlanDispatchError("durable Nova input version binding is invalid")
+        try:
+            response = self.s3.get_object(
+                Bucket=self.bucket,
+                Key=key,
+                VersionId=version_id,
+                ExpectedBucketOwner=self.expected_bucket_owner,
+            )
+            body = response.get("Body")
+            if body is None:
+                raise NovaPlanDispatchError("durable Nova input body is unavailable")
+            try:
+                raw = body.read(self.max_input_bytes + 1)
+            finally:
+                body.close()
+        except NovaPlanDispatchError:
+            raise
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError, AttributeError):
+            raise NovaPlanDispatchError(
+                "durable Nova input version could not be read", outcome_uncertain=True
+            ) from None
+        if (
+            not isinstance(response, dict)
+            or not isinstance(raw, bytes)
+            or response.get("VersionId") != version_id
+            or response.get("ServerSideEncryption") != "aws:kms"
+            or response.get("SSEKMSKeyId") != self.kms_key_arn
+            or response.get("BucketKeyEnabled") is not True
+            or response.get("ContentLength") != len(raw)
+            or len(raw) > self.max_input_bytes
+        ):
+            raise NovaPlanDispatchError(
+                "durable Nova input version has invalid metadata", outcome_uncertain=True
+            )
+        metadata = response.get("Metadata")
+        if not isinstance(metadata, dict):
+            raise NovaPlanDispatchError(
+                "durable Nova input version has invalid metadata", outcome_uncertain=True
+            )
+        try:
+            document = json.loads(raw)
+            digest = canonical_json_digest(document)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            raise NovaPlanDispatchError(
+                "durable Nova input version is malformed", outcome_uncertain=True
+            ) from None
+        if (
+            not isinstance(document, dict)
+            or digest != expected_sha256
+            or metadata.get("davdeploy-run-id") != run_id
+            or metadata.get("davdeploy-input-sha256") != expected_sha256
+        ):
+            raise NovaPlanDispatchError(
+                "durable Nova input version failed its digest binding", outcome_uncertain=True
+            )
+        return document
+
     def _put_input_object(
         self, run_id: str, key: str, payload: bytes, digest: str
     ) -> dict[str, Any]:
@@ -222,7 +340,7 @@ class NovaPlanOnlyDispatcher:
             ContentType="application/json",
             ServerSideEncryption="aws:kms",
             SSEKMSKeyId=self.kms_key_arn,
-            BucketKeyEnabled=False,
+            BucketKeyEnabled=True,
             IfNoneMatch="*",
             ExpectedBucketOwner=self.expected_bucket_owner,
             Metadata={"davdeploy-run-id": run_id, "davdeploy-input-sha256": digest},
@@ -298,7 +416,8 @@ class NovaPlanOnlyDispatcher:
                 outcome_uncertain=True,
                 phase="build_start",
             )
-        return NovaPlanBuild(build_id, returned_project, status)
+        build_arn = _validate_build_arn(build.get("arn"), build_id=build_id)
+        return NovaPlanBuild(build_id, returned_project, status, run_id, build_arn)
 
     def find_build_by_run_id(self, run_id: str) -> NovaPlanBuild | None:
         """Find one build by its exact server-owned run-ID override, fail closed otherwise."""
@@ -362,6 +481,12 @@ class NovaPlanOnlyDispatcher:
                     outcome_uncertain=True,
                     phase="build_start",
                 ) from None
+            if not isinstance(response, dict):
+                raise NovaPlanDispatchError(
+                    "Nova plan build details returned an invalid response",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                )
             builds = response.get("builds")
             if (
                 not isinstance(builds, list)
@@ -451,7 +576,10 @@ class NovaPlanOnlyDispatcher:
                             outcome_uncertain=True,
                             phase="build_start",
                         )
-                    matches.append(NovaPlanBuild(build_id, self.project_name, status))
+                    build_arn = _validate_build_arn(build.get("arn"), build_id=build_id)
+                    matches.append(
+                        NovaPlanBuild(build_id, self.project_name, status, run_id, build_arn)
+                    )
 
         if len(matches) > 1:
             raise NovaPlanDispatchError(
@@ -466,12 +594,22 @@ class NovaPlanOnlyDispatcher:
             raise NovaPlanDispatchError("Nova plan build identity is invalid")
         try:
             response = self.codebuild.batch_get_builds(ids=[build_id])
-        except (BotoCoreError, ClientError):
-            raise NovaPlanDispatchError("Nova plan build status could not be checked") from None
-        builds = response.get("builds") or []
-        if len(builds) != 1:
+        except (BotoCoreError, ClientError, OSError, TimeoutError, ValueError, TypeError, AttributeError):
+            raise NovaPlanDispatchError(
+                "Nova plan build status could not be checked", outcome_uncertain=True
+            ) from None
+        if not isinstance(response, dict):
+            raise NovaPlanDispatchError(
+                "Nova plan build status returned an invalid response", outcome_uncertain=True
+            )
+        builds = response.get("builds")
+        if not isinstance(builds, list) or len(builds) != 1:
             raise NovaPlanDispatchError("Nova plan build status is unavailable", outcome_uncertain=True)
         build = builds[0]
+        if not isinstance(build, dict):
+            raise NovaPlanDispatchError(
+                "Nova plan build status returned an invalid entry", outcome_uncertain=True
+            )
         if build.get("id") != build_id or build.get("projectName") != self.project_name:
             raise NovaPlanDispatchError("Nova plan build belongs to a different project")
         status = build.get("buildStatus")
@@ -487,7 +625,100 @@ class NovaPlanOnlyDispatcher:
             raise NovaPlanDispatchError(
                 "Nova plan build returned an unrecognized status", outcome_uncertain=True
             )
-        return NovaPlanBuild(build_id, self.project_name, status)
+        environment = build.get("environment")
+        variables = environment.get("environmentVariables") if isinstance(environment, dict) else None
+        if not isinstance(variables, list) or any(not isinstance(item, dict) for item in variables):
+            raise NovaPlanDispatchError(
+                "Nova plan build run ID could not be confirmed", outcome_uncertain=True
+            )
+        run_id_variables = [
+            item for item in variables if item.get("name") == self._RUN_ID_ENVIRONMENT_VARIABLE
+        ]
+        if (
+            len(run_id_variables) != 1
+            or not isinstance(run_id_variables[0].get("value"), str)
+            or run_id_variables[0].get("type") != "PLAINTEXT"
+        ):
+            raise NovaPlanDispatchError(
+                "Nova plan build run ID could not be confirmed", outcome_uncertain=True
+            )
+        build_arn = _validate_build_arn(build.get("arn"), build_id=build_id)
+        return NovaPlanBuild(
+            build_id, self.project_name, status, run_id_variables[0]["value"], build_arn
+        )
+
+    def read_result(
+        self, run_id: str, key: str, expected_build_id: str, expected_build_arn: str
+    ) -> tuple[dict[str, Any], str, str]:
+        """Read and authenticate one exact run/build result object version."""
+        run_id = _validate_run_id(run_id)
+        expected_build_arn = _validate_build_arn(expected_build_arn, build_id=expected_build_id)
+        if key != self.build_result_key(expected_build_arn):
+            raise NovaPlanDispatchError("Nova plan result key did not match its exact build")
+        if not isinstance(expected_build_id, str) or not expected_build_id.startswith(
+            f"{self.project_name}:"
+        ):
+            raise NovaPlanDispatchError("Nova plan result build identity is invalid")
+        try:
+            response = self.s3.get_object(
+                Bucket=self.bucket,
+                Key=key,
+                ExpectedBucketOwner=self.expected_bucket_owner,
+            )
+            body = response.get("Body")
+            if body is None:
+                raise NovaPlanDispatchError("Nova plan result body is unavailable")
+            try:
+                raw = body.read(self.max_result_bytes + 1)
+            finally:
+                body.close()
+        except NovaPlanDispatchError:
+            raise
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError, AttributeError):
+            raise NovaPlanDispatchError(
+                "Nova plan result could not be read", outcome_uncertain=True
+            ) from None
+        if not isinstance(response, dict) or not isinstance(raw, bytes):
+            raise NovaPlanDispatchError(
+                "Nova plan result response has an invalid shape", outcome_uncertain=True
+            )
+        version_id = self._version_id(response)
+        metadata = response.get("Metadata")
+        digest = hashlib.sha256(raw).hexdigest()
+        if (
+            not version_id
+            or not isinstance(metadata, dict)
+            or len(raw) > self.max_result_bytes
+            or response.get("ContentLength") != len(raw)
+            or response.get("ServerSideEncryption") != "aws:kms"
+            or response.get("SSEKMSKeyId") != self.kms_key_arn
+            or response.get("BucketKeyEnabled") is not True
+            or metadata.get("davdeploy-run-id") != run_id
+            or metadata.get("davdeploy-build-id") != expected_build_id
+            or metadata.get("davdeploy-result-sha256") != digest
+        ):
+            raise NovaPlanDispatchError(
+                "Nova plan result metadata did not match this exact build", outcome_uncertain=True
+            )
+        try:
+            result = json.loads(raw)
+            if not isinstance(result, dict) or _canonical_json(result) != raw:
+                raise ValueError("non-canonical result")
+        except (json.JSONDecodeError, TypeError, ValueError):
+            raise NovaPlanDispatchError(
+                "Nova plan result is not canonical JSON", outcome_uncertain=True
+            ) from None
+        if (
+            result.get("contract") != "davdeploy.nova-plan-result.v1"
+            or result.get("run_id") != run_id
+            or result.get("codebuild_project") != self.project_name
+            or result.get("codebuild_build_id") != expected_build_id
+            or result.get("codebuild_build_arn") != expected_build_arn
+        ):
+            raise NovaPlanDispatchError(
+                "Nova plan result did not match its exact run and build", outcome_uncertain=True
+            )
+        return result, version_id, digest
 
 
 def _validate_run_id(run_id: str) -> str:
@@ -498,6 +729,17 @@ def _validate_run_id(run_id: str) -> str:
     if str(parsed) != run_id.lower():
         raise NovaPlanDispatchError("Nova plan run identifier is invalid")
     return str(parsed)
+
+
+def _validate_build_arn(value: Any, *, build_id: str | None = None) -> str:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/[A-Za-z0-9_-]+:[A-Za-z0-9-]+",
+        value,
+    ):
+        raise NovaPlanDispatchError("Nova plan CodeBuild ARN is invalid")
+    if build_id is not None and not value.endswith(f":build/{build_id}"):
+        raise NovaPlanDispatchError("Nova plan CodeBuild ARN does not match its build ID")
+    return value
 
 
 def _canonical_json(document: dict[str, Any]) -> bytes:

@@ -6,6 +6,7 @@ import os
 import uuid
 from pathlib import Path
 
+import davdeploy.service as service_module
 import pytest
 from davdeploy.db import make_engine, run_migrations
 from davdeploy.domain import InfrastructurePlanDecision
@@ -79,6 +80,11 @@ def make_submitted_revision(service):
     )
     connection.account_id = ACCOUNT_ID
     connection.setup_state = "VERIFIED"
+    connection.plan_role_arn = f"arn:aws:iam::{ACCOUNT_ID}:role/davdeployPlan-{connection.id}"
+    connection.plan_role_setup_state = "VERIFIED"
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "fixture-nova-plan-external-id"
+    )
     service.db.commit()
     snapshot = service.cloud_discovery.inventory("local-aws-fixture", "us-east-1")
     service.record_cloud_inventory_snapshot(
@@ -115,7 +121,9 @@ def make_approved_revision(service):
     return project, connection, approved
 
 
-def generated_runner_result(tmp_path, revision, project):
+def generated_runner_result(
+    tmp_path, revision, project, *, rationale="Private application storage."
+):
     plan_file = tmp_path / "saved.tfplan"
     plan_file.write_bytes(PLAN_BYTES)
     os.chmod(plan_file, 0o600)
@@ -129,14 +137,12 @@ def generated_runner_result(tmp_path, revision, project):
                 resource_type="aws_s3_bucket",
                 name="app_data",
                 arguments={"bucket": "private-test-data"},
-                rationale="Private application storage.",
+                rationale=rationale,
             ),
         ),
         requirements=WorkloadRequirements(region="us-east-1"),
     )
-    proposal_digest = hashlib.sha256(
-        json.dumps(proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    proposal_digest = canonical_json_digest(proposal.model_dump(mode="json"))
     policy = GeneratedPlanPolicyResult(
         PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW, "generated-plan-policy-test", ()
     )
@@ -204,23 +210,30 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
     store = ArtifactStoreFixture()
     service, db = service_with_artifact_store(store)
     project, _, revision = make_submitted_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision, project)
+    proposal, generated = generated_runner_result(
+        tmp_path, revision, project, rationale="Stockage privé sécurisé."
+    )
 
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, RUN_ID, proposal, generated
     )
     detail = service.generated_plan_artifact_detail(founder(), artifact.id)
 
-    assert detail["state"] == "WAITING_FOR_COST_EVIDENCE"
+    assert detail["state"] == "BLOCKED_NO_REMOTE_STATE"
     assert detail["pricing"] == {
         "status": "UNAVAILABLE",
         "region": "us-east-1",
         "currency": None,
         "monthly_cost": None,
         "reason_code": "regional_pricing_evaluator_not_integrated",
-        "approval_allowed": False,
+        "evidence_complete": False,
         "message": "Waiting for complete regional cost evidence.",
     }
+    assert detail["approval_allowed"] is False
+    assert detail["approval_blockers"] == [
+        "DURABLE_REMOTE_STATE_UNAVAILABLE",
+        "COST_EVIDENCE_INCOMPLETE",
+    ]
     assert detail["execution"] == "NOT_APPLIED_REVIEW_ONLY"
     assert detail["manifest_sha256"] == canonical_json_digest(artifact.manifest)
     assert "artifact_bucket" not in detail
@@ -259,6 +272,44 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
         service.infrastructure_plan_revision_detail(founder(), revision.id)["state"] == "SUBMITTED"
     )
     assert store.verified == []
+
+
+def test_complete_pricing_does_not_unblock_backend_free_plan_approval(tmp_path, monkeypatch):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    project, _, revision = make_submitted_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+
+    original_manifest_builder = service_module.generated_plan_manifest
+
+    def manifest_with_complete_pricing(**kwargs):
+        manifest = original_manifest_builder(**kwargs)
+        manifest["pricing"] = {
+            "status": "COMPLETE",
+            "region": "us-east-1",
+            "currency": "USD",
+            "monthly_cost": 12.5,
+            "evidence_sha256": "d" * 64,
+            "reason_code": None,
+        }
+        return manifest
+
+    monkeypatch.setattr(service_module, "generated_plan_manifest", manifest_with_complete_pricing)
+    artifact = service.persist_generated_plan_artifact(
+        founder(), revision.id, RUN_ID, proposal, generated
+    )
+
+    detail = service.generated_plan_artifact_detail(founder(), artifact.id)
+
+    assert detail["pricing"]["evidence_complete"] is True
+    assert "approval_allowed" not in detail["pricing"]
+    assert detail["approval_allowed"] is False
+    assert detail["approval_blockers"] == ["DURABLE_REMOTE_STATE_UNAVAILABLE"]
+    assert detail["state"] == "BLOCKED_NO_REMOTE_STATE"
+    with pytest.raises(ValueError, match="durable remote Terraform state is unavailable"):
+        service.approve_generated_plan_artifact(
+            administrator(), artifact.id, artifact.manifest_sha256
+        )
 
 
 def test_generated_plan_approval_rejects_manifest_digest_tampering(tmp_path):
