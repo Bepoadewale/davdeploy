@@ -212,17 +212,29 @@ class _FakeS3:
     def __init__(self):
         self.objects = {}
         self.put_count = 0
+        self.put_conditions = []
         self.lose_first_response = False
+        self.missing_head_code = "404"
+        self.conditional_precondition_once = False
+        self.conditional_conflict_once = False
 
     def head_object(self, *, Key, **_kwargs):
         if Key not in self.objects:
             from botocore.exceptions import ClientError
 
-            raise ClientError({"Error": {"Code": "404", "Message": "missing"}}, "HeadObject")
+            status = int(self.missing_head_code) if self.missing_head_code.isdecimal() else 403
+            raise ClientError(
+                {
+                    "Error": {"Code": self.missing_head_code, "Message": "missing"},
+                    "ResponseMetadata": {"HTTPStatusCode": status},
+                },
+                "HeadObject",
+            )
         return self.objects[Key]
 
-    def put_object(self, *, Key, Body, Metadata, **_kwargs):
+    def put_object(self, *, Key, Body, Metadata, IfNoneMatch=None, **_kwargs):
         self.put_count += 1
+        self.put_conditions.append(IfNoneMatch)
         self.objects[Key] = {
             "VersionId": f"version-{self.put_count}",
             "ServerSideEncryption": "aws:kms",
@@ -230,6 +242,29 @@ class _FakeS3:
             "Metadata": Metadata,
             "Body": Body,
         }
+        if self.conditional_conflict_once:
+            self.conditional_conflict_once = False
+            from botocore.exceptions import ClientError
+
+            self.objects.pop(Key)
+            raise ClientError(
+                {
+                    "Error": {"Code": "ConditionalRequestConflict", "Message": "conflict"},
+                    "ResponseMetadata": {"HTTPStatusCode": 409},
+                },
+                "PutObject",
+            )
+        if self.conditional_precondition_once:
+            self.conditional_precondition_once = False
+            from botocore.exceptions import ClientError
+
+            raise ClientError(
+                {
+                    "Error": {"Code": "PreconditionFailed", "Message": "exists"},
+                    "ResponseMetadata": {"HTTPStatusCode": 412},
+                },
+                "PutObject",
+            )
         if self.lose_first_response:
             self.lose_first_response = False
             from botocore.exceptions import ClientError
@@ -336,6 +371,90 @@ def test_state_storage_commits_exact_encrypted_object_version_and_lock_owner():
         build_id="project:build-1",
         raw=_lock_bytes(),
     )
+    db.close()
+    engine.dispose()
+
+
+def test_state_storage_first_write_uses_conditional_put_after_403_head_without_list_permission():
+    s3 = _FakeS3()
+    s3.missing_head_code = "403"
+    engine, db, state, storage = _state_storage(s3)
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+        raw=_state_bytes(serial=0),
+    )
+
+    assert result.serial == 0
+    assert s3.put_count == 1
+    assert s3.put_conditions == ["*"]
+    assert storage.read(state.id) == _state_bytes(serial=0)
+    db.close()
+    engine.dispose()
+
+
+def test_state_storage_reconciles_conditional_put_precondition_from_exact_metadata():
+    s3 = _FakeS3()
+    s3.conditional_precondition_once = True
+    engine, db, state, storage = _state_storage(s3)
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+        raw=_state_bytes(serial=0),
+    )
+
+    assert result.serial == 0
+    assert s3.put_count == 1
+    assert s3.put_conditions == ["*"]
+    assert storage.read(state.id) == _state_bytes(serial=0)
+    db.close()
+    engine.dispose()
+
+
+def test_state_storage_retries_one_conditional_conflict():
+    s3 = _FakeS3()
+    s3.conditional_conflict_once = True
+    engine, db, state, storage = _state_storage(s3)
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+        raw=_state_bytes(serial=0),
+    )
+
+    assert result.serial == 0
+    assert s3.put_count == 2
+    assert s3.put_conditions == ["*", "*"]
+    assert storage.read(state.id) == _state_bytes(serial=0)
     db.close()
     engine.dispose()
 

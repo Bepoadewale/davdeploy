@@ -50,6 +50,12 @@ runner remain disabled, and no customer or AWS execution occurred.
 - Additive migration from schema version 32 and idempotent state-table setup.
 - Fake-S3 tests for KMS-encrypted, versioned state writes, exact-version reads,
   lock ownership, serial checks, and recovery after a lost upload response.
+- A review follow-up covers the S3 missing-key `HeadObject` 403 case without
+  `s3:ListBucket`: the storage layer attempts an `IfNoneMatch="*"` write,
+  accepts a 412 only after rereading and matching exact metadata, and retries a
+  409 at most once. Focused state-storage tests passed 16 cases.
+- Full `make verify` passed with 838 tests. Terraform validation, documentation
+  conventions, and diff checks also passed.
 - Static infrastructure checks for an exact AWS-IAM bootstrap route, trusted
   API Gateway identity mapping, an exact CodeBuild role invoke grant, and
   Basic-auth state routes behind the edge-origin guard.
@@ -62,6 +68,8 @@ runner remain disabled, and no customer or AWS execution occurred.
 
 - No real S3 bucket, KMS permissions, API Gateway deployment, CodeBuild
   bootstrap request, or HTTP backend round trip has been verified.
+- No real S3 403/conditional-write response was exercised; the fix is proven
+  with a local fake client. The IAM role still has no `s3:ListBucket` grant.
 - The runner has not been changed to request the temporary credential or use
   the HTTP backend. It still runs with `-backend=false`.
 - The API feature flag is hard-disabled in Terraform and its state API URL is

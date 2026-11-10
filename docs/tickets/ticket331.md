@@ -22,6 +22,8 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/backend/http)
 - [Terraform state locking](https://developer.hashicorp.com/terraform/language/state/locking)
 - [Terraform saved plans](https://developer.hashicorp.com/terraform/cli/commands/plan)
+- [Amazon S3 `HeadObject` missing-object permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
+- [Amazon S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html)
 - [API Gateway HTTP API IAM authorization](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-access-control-iam.html)
 - [API Gateway HTTP API Lambda proxy payload](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-develop-integrations-lambda.html)
 - [API Gateway HTTP API parameter mapping](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-parameter-mapping.html)
@@ -32,6 +34,7 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - Add a state identity bound to organization, workspace, project, stable environment, target account/region, and approved execution context; never trust caller-selected object keys. Refuse state bootstrap when the revision has no environment ID.
 - Add short-lived, run/attempt-bound Basic Auth credentials and lock ownership with bounded TTL and explicit conflict handling.
 - Persist state as versioned S3 objects through a least-privilege API role; retain immutable version metadata and reconcile interrupted writes.
+- Reconcile missing-object `HeadObject` 403 responses without granting broad bucket listing: use an `IfNoneMatch="*"` conditional write, verify matching object metadata on 412, and retry a 409 only within a fixed bound.
 - Add separately gated optional private S3/KMS state storage with versioning, TLS-only access, and a prefix-scoped API role; keep both storage provisioning and state API disabled by default.
 - Add strict HTTP backend GET/POST/lock/unlock semantics, request-size and content validation, and fail-closed authorization.
 - Require the HTTP backend's lock ID query parameter on state writes to match the active database lock; the runner must configure the custom POST/DELETE lock methods explicitly when backend integration is added.
@@ -51,10 +54,14 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 
 ## Acceptance status
 
-Implementation is in progress. This draft now contains additive state/credential/lock/write models, a schema v33 migration, strict scope/state/lock/token validation, S3 version-pointer logic with pending-write reconciliation, Terraform HTTP routes, exact API Gateway IAM credential bootstrap, expired-lock reclamation tied to terminal CodeBuild status and the exact lock/run/build identity, separately gated optional private S3/KMS storage, and strict state-write lock-ID matching. Storage provisioning defaults off; the state API feature flag remains hard-disabled, the state API URL remains empty, and the plan runner remains backend-free. Criteria remain unmet until missing lifecycle/race tests, runner integration, clean-room evidence, and required GitHub review are complete.
+Implementation is in progress. An independent review found that `HeadObject` can return 403 for a missing key when `s3:ListBucket` is absent; the fake-S3 tests had only returned 404. This follow-up keeps bucket listing disabled and uses a conditional `PutObject` (`IfNoneMatch="*"`) to prove the key can be created, then reconciles a 412 from exact object metadata and retries one 409 conflict. The earlier state/credential/lock/write models, schema v33 migration, strict scope/state/lock/token validation, Terraform HTTP routes, exact API Gateway IAM credential bootstrap, expired-lock reclamation tied to terminal CodeBuild status and exact lock/run/build identity, and separately gated private S3/KMS storage remain unchanged. Storage provisioning defaults off; the state API feature flag remains hard-disabled, the API URL remains empty, and the plan runner remains backend-free. This fix and review pass local validation; hosted AWS behavior and required PR review remain unverified.
 
 ## Tests / validation performed
 
+- Focused state-storage suite: `tests/test_terraform_state.py` — 16 passed, including 403/missing-key conditional-create, 412 reconciliation, and bounded 409 retry cases.
+- `make verify` — 838 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- `scripts/terraform-validate.sh` — all configured roots passed.
+- Documentation conventions and `git diff --check` passed.
 - Runtime test/evidence file: `docs/test/test331.md` records the local validation commands/results and unverified hosted behavior.
 - No AWS state bucket, role, or customer workload has been created as part of this PR; infrastructure was statically validated only.
 

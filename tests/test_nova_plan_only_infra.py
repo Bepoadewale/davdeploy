@@ -82,6 +82,13 @@ def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
     assert 'var.enable_nova_terraform_state_storage ? [{' in api_policy
     assert '"s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"' in api_policy
     assert 'terraform-state/*' in api_policy
+    state_object_policy = api_policy.split(
+        'var.enable_nova_terraform_state_storage ? [{', 1
+    )[1].split('}] : []', 1)[0]
+    assert '"s3:ListBucket"' not in state_object_policy
+    state_storage_source = (ROOT / "apps/api/src/davdeploy/terraform_state.py").read_text()
+    assert 'IfNoneMatch="*"' in state_storage_source
+    assert "status == 412" in state_storage_source
     state_bucket = resource_block(MAIN, "aws_s3_bucket", "nova_terraform_state")
     assert "var.enable_nova_terraform_state_storage ? 1 : 0" in state_bucket
     assert "prevent_destroy = true" in state_bucket

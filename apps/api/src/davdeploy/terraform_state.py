@@ -371,7 +371,8 @@ class TerraformStateStorage:
                 ExpectedBucketOwner=self.expected_bucket_owner,
             )
         except ClientError as error:
-            if error.response.get("Error", {}).get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+            error_code = error.response.get("Error", {}).get("Code")
+            if error_code not in {"403", "AccessDenied", "404", "NoSuchKey", "NotFound"}:
                 raise TerraformStateError(
                     "Terraform state upload could not be reconciled"
                 ) from None
@@ -379,29 +380,62 @@ class TerraformStateStorage:
         except (BotoCoreError, OSError, TypeError, ValueError):
             raise TerraformStateError("Terraform state upload could not be reconciled") from None
         if head is None:
-            try:
-                response = self.s3.put_object(
-                    Bucket=self.bucket,
-                    Key=write.object_key,
-                    Body=raw,
-                    ContentLength=len(raw),
-                    ContentType="application/json",
-                    ServerSideEncryption="aws:kms",
-                    SSEKMSKeyId=self.kms_key_arn,
-                    BucketKeyEnabled=True,
-                    ExpectedBucketOwner=self.expected_bucket_owner,
-                    Metadata=object_metadata,
-                    IfNoneMatch="*",
-                )
-                version_id = response.get("VersionId") if isinstance(response, dict) else None
-                if not isinstance(version_id, str) or not version_id:
-                    raise TerraformStateError("state bucket versioning is required")
-            except TerraformStateError:
-                raise
-            except (BotoCoreError, ClientError, OSError, TypeError, ValueError):
-                raise TerraformStateError(
-                    "Terraform state upload is uncertain; retry this write"
-                ) from None
+            version_id = None
+            for attempt in range(2):
+                try:
+                    response = self.s3.put_object(
+                        Bucket=self.bucket,
+                        Key=write.object_key,
+                        Body=raw,
+                        ContentLength=len(raw),
+                        ContentType="application/json",
+                        ServerSideEncryption="aws:kms",
+                        SSEKMSKeyId=self.kms_key_arn,
+                        BucketKeyEnabled=True,
+                        ExpectedBucketOwner=self.expected_bucket_owner,
+                        Metadata=object_metadata,
+                        IfNoneMatch="*",
+                    )
+                    version_id = response.get("VersionId") if isinstance(response, dict) else None
+                    break
+                except ClientError as error:
+                    error_code = error.response.get("Error", {}).get("Code")
+                    status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                    if status == 412 or error_code in {"412", "PreconditionFailed"}:
+                        try:
+                            head = self.s3.head_object(
+                                Bucket=self.bucket,
+                                Key=write.object_key,
+                                ExpectedBucketOwner=self.expected_bucket_owner,
+                            )
+                        except (BotoCoreError, ClientError, OSError, TypeError, ValueError):
+                            raise TerraformStateError(
+                                "conditional Terraform state upload could not be reconciled"
+                            ) from None
+                        break
+                    if (status == 409 or error_code == "ConditionalRequestConflict") and attempt == 0:
+                        continue
+                    raise TerraformStateError(
+                        "Terraform state upload is uncertain; retry this write"
+                    ) from None
+                except (BotoCoreError, OSError, TypeError, ValueError):
+                    raise TerraformStateError(
+                        "Terraform state upload is uncertain; retry this write"
+                    ) from None
+            if head is not None:
+                version_id = head.get("VersionId")
+                if (
+                    not isinstance(version_id, str)
+                    or not version_id
+                    or head.get("ServerSideEncryption") != "aws:kms"
+                    or head.get("SSEKMSKeyId") != self.kms_key_arn
+                    or head.get("Metadata") != object_metadata
+                ):
+                    raise TerraformStateError(
+                        "pending Terraform state upload failed reconciliation checks"
+                    )
+            elif not isinstance(version_id, str) or not version_id:
+                raise TerraformStateError("state bucket versioning is required")
         else:
             version_id = head.get("VersionId")
             if (
