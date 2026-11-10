@@ -7,7 +7,18 @@ from uuid import uuid4
 
 import pytest
 from davdeploy import main
-from davdeploy.models import Base, TerraformRemoteState, TerraformStateLock
+from davdeploy.models import (
+    Base,
+    Environment,
+    GeneratedPlanRun,
+    InfrastructurePlan,
+    InfrastructurePlanRevision,
+    Organization,
+    Project,
+    TerraformRemoteState,
+    TerraformStateCredential,
+    TerraformStateLock,
+)
 from davdeploy.terraform_state import (
     TerraformStateError,
     TerraformStateLocked,
@@ -22,8 +33,9 @@ from davdeploy.terraform_state import (
 )
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 ORG = "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0"
 PROJECT = "e8ed4511-06cb-4f75-89ee-5022a4a535fd"
@@ -206,6 +218,173 @@ def test_state_credential_bootstrap_rejects_non_runner_role_before_aws_call(monk
         },
     )
     assert response.status_code == 403
+
+
+def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    db = Session(engine, expire_on_commit=False)
+    plan_id = "d1dd65f5-4f21-4e26-85b7-74d75fc7db8c"
+    revision_id = "fdac3a35-9b91-4b45-84a7-c6067106d485"
+    run_id = "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0"
+    attempt_id = "ed350f1b-61b1-4edc-9799-35332aa96283"
+    build_id = "fixed-plan:build-1"
+    build_arn = "arn:aws:codebuild:us-east-1:654654474502:build/fixed-plan:build-1"
+    account_id = "654654474502"
+    region = "us-east-1"
+    build_role = "arn:aws:iam::654654474502:role/fixed-plan"
+    assumed_build_role = (
+        "arn:aws:sts::654654474502:assumed-role/fixed-plan/AWSCodeBuild-session"
+    )
+    other_org = "27af5383-fba8-4b93-a7cb-37a603fc2ee8"
+    other_project = "a2c9862d-2203-47c1-a83b-46d6d7ef6ab0"
+    other_environment = "c87bc13e-c3bb-4b46-b852-9f2884c1c981"
+    other_state = "12345678-1234-4234-8234-123456789012"
+    plan_content = {
+        "target": {
+            "environment_id": ENVIRONMENT,
+            "account_id": account_id,
+            "region": region,
+        }
+    }
+    request_document = {"target_account_id": account_id, "region": region}
+    db.add_all(
+        [
+            Organization(id=ORG, name="state-test-org"),
+            Project(id=PROJECT, organization_id=ORG, name="state-test-project"),
+            Environment(
+                id=ENVIRONMENT,
+                organization_id=ORG,
+                project_id=PROJECT,
+                name="production",
+                environment_type="production",
+                state="READY",
+                desired_state={},
+                observed_state={},
+            ),
+            InfrastructurePlan(
+                id=plan_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                creator_subject="founder",
+                title="State test",
+            ),
+            InfrastructurePlanRevision(
+                id=revision_id,
+                infrastructure_plan_id=plan_id,
+                organization_id=ORG,
+                revision_number=1,
+                state="SUBMITTED",
+                content=plan_content,
+                content_digest="a" * 64,
+            ),
+            GeneratedPlanRun(
+                id=run_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                requester_subject="founder",
+                idempotency_key_sha256="b" * 64,
+                request_sha256="c" * 64,
+                request_document=request_document,
+                runner_run_id=attempt_id,
+                revision_sha256="d" * 64,
+                state="BUILD_STARTED",
+                codebuild_project="fixed-plan",
+                codebuild_build_id=build_id,
+                input_key="plan-input.json",
+                result_key="plan-result.json",
+                result_metadata={"codebuild_build_arn": build_arn},
+            ),
+            TerraformRemoteState(
+                id=other_state,
+                scope_sha256="e" * 64,
+                organization_id=other_org,
+                project_id=other_project,
+                environment_id=other_environment,
+                target_account_id=account_id,
+                region=region,
+            ),
+        ]
+    )
+    db.commit()
+
+    def override_session():
+        yield db
+
+    class FakeCodeBuild:
+        def __init__(self):
+            self.calls = []
+
+        def batch_get_builds(self, *, ids):
+            self.calls.append(ids)
+            return {
+                "builds": [
+                    {
+                        "id": build_id,
+                        "projectName": "fixed-plan",
+                        "buildStatus": "IN_PROGRESS",
+                        "arn": build_arn,
+                        "environment": {
+                            "environmentVariables": [
+                                {"name": "DAVDEPLOY_NOVA_PLAN_RUN_ID", "value": attempt_id}
+                            ]
+                        },
+                    }
+                ]
+            }
+
+    codebuild = FakeCodeBuild()
+    monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN", build_role)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "fixed-plan")
+    monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_API_URL", "https://api.davdeploy.tech")
+    monkeypatch.setattr(main, "ensure_aurora_ready", lambda: None)
+    monkeypatch.setattr(main.boto3, "client", lambda name, **_kwargs: codebuild if name == "codebuild" else None)
+    monkeypatch.setitem(main.app.dependency_overrides, main.session, override_session)
+    headers = {"x-davdeploy-bootstrap-principal": assumed_build_role}
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers=headers,
+            json={"run_id": run_id, "codebuild_build_id": build_id},
+        )
+        assert response.status_code == 200
+        credential_document = response.json()
+        assert credential_document["scope_sha256"] == terraform_state_scope_digest(
+            organization_id=ORG,
+            project_id=PROJECT,
+            environment_id=ENVIRONMENT,
+            target_account_id=account_id,
+            region=region,
+        )
+        assert credential_document["address"].endswith(
+            f"/api/v1/terraform-state/{credential_document['state_id']}"
+        )
+        credential = db.scalar(
+            select(TerraformStateCredential).where(
+                TerraformStateCredential.username == credential_document["username"]
+            )
+        )
+        assert credential is not None
+        assert credential.run_id == run_id
+        assert credential.codebuild_build_id == build_id
+        assert credential.password_sha256 != credential_document["password"]
+
+        cross_tenant = client.get(
+            f"/api/v1/terraform-state/{other_state}",
+            auth=(credential_document["username"], credential_document["password"]),
+        )
+        assert cross_tenant.status_code == 401
+
+    assert len(codebuild.calls) == 1
+    db.close()
+    engine.dispose()
 
 
 class _FakeS3:

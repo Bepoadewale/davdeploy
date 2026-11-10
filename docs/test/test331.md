@@ -47,14 +47,19 @@ runner remain disabled, and no customer or AWS execution occurred.
 - State writes reject a missing or mismatched lock ID from the HTTP backend.
 - The bootstrap endpoint defaults to disabled and rejects an untrusted role
   before attempting a CodeBuild lookup.
+- A successful TestClient bootstrap validates the exact active build, binds
+  the credential to the tenant state scope, stores only its password digest,
+  and denies a cross-tenant state read before another CodeBuild lookup.
 - Additive migration from schema version 32 and idempotent state-table setup.
 - Fake-S3 tests for KMS-encrypted, versioned state writes, exact-version reads,
   lock ownership, serial checks, and recovery after a lost upload response.
 - A review follow-up covers the S3 missing-key `HeadObject` 403 case without
   `s3:ListBucket`: the storage layer attempts an `IfNoneMatch="*"` write,
   accepts a 412 only after rereading and matching exact metadata, and retries a
-  409 at most once. Focused state-storage tests passed 16 cases.
-- Full `make verify` passed with 838 tests. Terraform validation, documentation
+  409 at most once. A TestClient route test verifies active-build bootstrap,
+  tenant scope/hash persistence, and cross-tenant state denial. The focused
+  state suite passed 17 tests.
+- Full `make verify` passed with 839 tests. Terraform validation, documentation
   conventions, and diff checks also passed.
 - Static infrastructure checks for an exact AWS-IAM bootstrap route, trusted
   API Gateway identity mapping, an exact CodeBuild role invoke grant, and
@@ -75,8 +80,7 @@ runner remain disabled, and no customer or AWS execution occurred.
 - The API feature flag is hard-disabled in Terraform and its state API URL is
   empty. The separately controlled state bucket defaults off; no bucket or KMS
   key was provisioned during this work.
-- Cross-tenant route behavior, successful active-build credential issuance,
-  concurrent database races, worker restart recovery, and Terraform CLI retry
+- Concurrent database races, worker restart recovery, and Terraform CLI retry
   behavior still need dedicated tests. Stale-lock release is unit-tested with
   exact terminal-build evidence, but its AWS CodeBuild lookup is not.
 - The clean-room lifecycle gate for this database/authentication/Terraform
