@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
-from davdeploy.db import run_migrations
+from davdeploy.db import make_engine, run_migrations
 from davdeploy.domain import GeneratedPlanGenerationReconciliationRequest
 from davdeploy.generated_deployment_contract import (
     GeneratedDeploymentProposal,
@@ -17,17 +17,20 @@ from davdeploy.generated_deployment_contract import (
     WorkloadRequirements,
 )
 from davdeploy.generated_plan_artifacts import canonical_json_digest
+from davdeploy.main import app, product_service
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import GeneratedPlanArtifact, GeneratedPlanRun, GeneratedPlanRunIdempotencyKey
 from davdeploy.nova_plan_dispatch import NovaPlanBuild, NovaPlanDispatchError
-from davdeploy.security import Principal
+from davdeploy.policy import PolicyClient
+from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
 from davdeploy.terraform_generation import generation_context_digest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from test_generated_plan_review import make_submitted_revision
-from test_product import founder, make_service
+from test_product import LocalExecutor, founder, make_service
 
 PROJECT = "davdeploy-nova-plan-only"
 
@@ -1599,3 +1602,211 @@ def test_plan_run_is_not_visible_across_organizations():
             Principal("other-user", "other-organization", "administrator"), run["id"]
         )
     db.close()
+
+
+def _history_run(
+    *, project_id, revision_id, organization_id, requester_subject, created_at, index
+):
+    return GeneratedPlanRun(
+        id=str(uuid.uuid4()),
+        organization_id=organization_id,
+        project_id=project_id,
+        revision_id=revision_id,
+        requester_subject=requester_subject,
+        idempotency_key_sha256=hashlib.sha256(f"history-key-{index}".encode()).hexdigest(),
+        request_sha256=hashlib.sha256(f"history-request-{index}".encode()).hexdigest(),
+        revision_sha256="a" * 64,
+        state="PLAN_READY_REVIEW_ONLY" if index % 2 else "BUILD_STARTED",
+        codebuild_project="internal-project-name",
+        input_key="private-input-object-key",
+        result_key="private-result-object-key",
+        result_metadata={"raw_secret": "must-not-leak", "artifact_id": f"artifact-{index}"},
+        created_at=created_at,
+    )
+
+
+def test_plan_history_is_stable_paginated_and_uses_safe_status_projection():
+    service, db, _, _ = service_with_dispatcher()
+    project, _, revision = make_submitted_revision(service)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    requests = [
+        _history_run(
+            project_id=project.id,
+            revision_id=revision.id,
+            organization_id=founder().organization_id,
+            requester_subject=founder().subject,
+            created_at=start + timedelta(minutes=index),
+            index=index,
+        )
+        for index in (1, 3, 4, 5)
+    ]
+    collaborator_request = _history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject="another-project-member",
+        created_at=start + timedelta(minutes=2),
+        index=2,
+    )
+    db.add_all([*requests, collaborator_request])
+    db.commit()
+
+    first = service.generated_plan_run_history(founder(), project.id, limit=2)
+    second = service.generated_plan_run_history(
+        founder(), project.id, limit=2, cursor=first["next_cursor"]
+    )
+    administrator = Principal("workspace-admin", founder().organization_id, "administrator")
+    all_runs = service.generated_plan_run_history(administrator, project.id, limit=10)
+
+    ordered_owner_runs = sorted(
+        requests, key=lambda run: (run.created_at, run.id), reverse=True
+    )
+    assert [item["id"] for item in first["items"]] == [
+        run.id for run in ordered_owner_runs[:2]
+    ]
+    assert first["next_cursor"] == ordered_owner_runs[1].id
+    assert [item["id"] for item in second["items"]] == [
+        run.id for run in ordered_owner_runs[2:]
+    ]
+    assert second["next_cursor"] is None
+    ordered_all_runs = sorted(
+        [*requests, collaborator_request],
+        key=lambda run: (run.created_at, run.id),
+        reverse=True,
+    )
+    assert [item["id"] for item in all_runs["items"]] == [
+        run.id for run in ordered_all_runs
+    ]
+    expected_fields = {
+        "id",
+        "project_id",
+        "revision_id",
+        "revision_sha256",
+        "proposal_sha256",
+        "state",
+        "artifact_id",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "error_code",
+        "error_summary",
+        "execution_boundary",
+    }
+    assert set(first["items"][0]) == expected_fields
+    assert "must-not-leak" not in repr(all_runs)
+    assert "private-input-object-key" not in repr(all_runs)
+    assert "internal-project-name" not in repr(all_runs)
+    db.close()
+
+
+def test_plan_history_expires_stale_preparation_before_reporting_status():
+    service, db, _, _ = service_with_dispatcher()
+    project, _, revision = make_submitted_revision(service)
+    stale = _history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime.now(UTC),
+        index=31,
+    )
+    stale.state = "PREPARING"
+    stale.preparation_phase = "STARTING_BUILD"
+    stale.preparation_lease_token = "expired-lease-token"
+    stale.preparation_lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.add(stale)
+    db.commit()
+
+    history = service.generated_plan_run_history(founder(), project.id)
+
+    assert history["items"][0]["id"] == stale.id
+    assert history["items"][0]["state"] == "RECONCILIATION_REQUIRED"
+    assert history["items"][0]["error_code"] == "BUILD_START_RECONCILIATION_REQUIRED"
+    db.close()
+
+
+def test_plan_history_hides_other_requesters_and_rejects_foreign_cursors():
+    service, db, _, _ = service_with_dispatcher()
+    project, _, revision = make_submitted_revision(service)
+    other_project = service.create_project(
+        founder(), "other-history-project", "https://github.com/example/other-history"
+    )
+    owner = _history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        index=20,
+    )
+    other_project_run = _history_run(
+        project_id=other_project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+        index=21,
+    )
+    db.add_all([owner, other_project_run])
+    db.commit()
+    collaborator = Principal("another-project-member", founder().organization_id, "member")
+
+    assert service.generated_plan_run_history(collaborator, project.id)["items"] == []
+    with pytest.raises(PermissionError, match="cursor is not visible"):
+        service.generated_plan_run_history(collaborator, project.id, cursor=owner.id)
+    with pytest.raises(PermissionError, match="cursor is not visible"):
+        service.generated_plan_run_history(founder(), project.id, cursor=other_project_run.id)
+    with pytest.raises(PermissionError):
+        service.generated_plan_run_history(
+            Principal("foreign-tenant", "org-foreign", "administrator"), project.id
+        )
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        service.generated_plan_run_history(founder(), project.id, cursor="not-a-run-id")
+    with pytest.raises(ValueError, match="page size"):
+        service.generated_plan_run_history(founder(), project.id, limit=101)
+    db.close()
+
+
+def test_plan_history_http_route_returns_safe_page_and_denies_other_tenants(tmp_path):
+    engine = make_engine(f"sqlite+pysqlite:///{tmp_path / 'plan-history-api.db'}")
+    run_migrations(engine)
+    db = Session(engine, expire_on_commit=False)
+    service = ProductService(
+        db,
+        policy=PolicyClient(fixture=True),
+        executor=LocalExecutor(),
+        terraform_generator=StaticGenerator(),
+    )
+    service.seed_local_identity()
+    project, _, revision = make_submitted_revision(service)
+    run = _history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        index=30,
+    )
+    db.add(run)
+    db.commit()
+
+    app.dependency_overrides[product_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                f"/api/v1/projects/{project.id}/generated-plan-runs?limit=1",
+                headers={"Authorization": f"Bearer {issue_local_token('founder')}"},
+            )
+            assert response.status_code == 200
+            assert response.json()["items"][0]["id"] == run.id
+            assert "private-input-object-key" not in response.text
+            assert "internal-project-name" not in response.text
+
+            foreign = client.get(
+                f"/api/v1/projects/{project.id}/generated-plan-runs",
+                headers={"Authorization": f"Bearer {issue_local_token('other-tenant')}"},
+            )
+            assert foreign.status_code == 403
+    finally:
+        app.dependency_overrides.pop(product_service, None)
+        db.close()

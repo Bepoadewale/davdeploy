@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -1660,6 +1660,24 @@ def get_generated_plan_run(
     REQUESTS.labels("generated_plan_runs.get").inc()
     try:
         return service.generated_plan_run_detail(principal, run_id)
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.get("/api/v1/projects/{project_id}/generated-plan-runs")
+def list_generated_plan_runs(
+    project_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None, min_length=1, max_length=36),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """List safe Nova plan-run status for one organization-owned project."""
+    REQUESTS.labels("generated_plan_runs.list").inc()
+    try:
+        return service.generated_plan_run_history(
+            principal, project_id, limit=limit, cursor=cursor
+        )
     except (PermissionError, ValueError, KeyError) as error:
         translate(error)
 
