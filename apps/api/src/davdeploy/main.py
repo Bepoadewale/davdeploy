@@ -1669,6 +1669,7 @@ def list_generated_plan_runs(
     project_id: str,
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None, min_length=1, max_length=36),
+    revision_id: str | None = Query(default=None, min_length=1, max_length=36),
     principal: Principal = Depends(verify_token),
     service: ProductService = Depends(product_service),
 ):
@@ -1676,7 +1677,11 @@ def list_generated_plan_runs(
     REQUESTS.labels("generated_plan_runs.list").inc()
     try:
         return service.generated_plan_run_history(
-            principal, project_id, limit=limit, cursor=cursor
+            principal,
+            project_id,
+            limit=limit,
+            cursor=cursor,
+            revision_id=revision_id,
         )
     except (PermissionError, ValueError, KeyError) as error:
         translate(error)

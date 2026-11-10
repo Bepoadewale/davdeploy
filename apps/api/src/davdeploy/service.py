@@ -1483,6 +1483,7 @@ class ProductService:
         return {
             "id": revision.id,
             "plan_id": plan.id,
+            "project_id": plan.project_id,
             "title": plan.title,
             "creator_subject": plan.creator_subject,
             "revision": revision.revision_number,
@@ -4179,6 +4180,7 @@ class ProductService:
         *,
         limit: int = 20,
         cursor: str | None = None,
+        revision_id: str | None = None,
     ) -> dict[str, Any]:
         """List bounded, customer-safe plan status for one authorized project."""
         project = self._project(principal, project_id)
@@ -4191,6 +4193,27 @@ class ProductService:
         ]
         if not self._is_workspace_administrator(principal):
             visibility.append(GeneratedPlanRun.requester_subject == principal.subject)
+        if revision_id is not None:
+            try:
+                canonical_revision_id = str(uuid.UUID(revision_id))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("plan history revision is invalid") from None
+            revision_exists = self.db.scalar(
+                select(InfrastructurePlanRevision.id)
+                .join(
+                    InfrastructurePlan,
+                    InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+                )
+                .where(
+                    InfrastructurePlanRevision.id == canonical_revision_id,
+                    InfrastructurePlanRevision.organization_id == principal.organization_id,
+                    InfrastructurePlan.organization_id == principal.organization_id,
+                    InfrastructurePlan.project_id == project.id,
+                )
+            )
+            if revision_exists is None:
+                raise PermissionError("plan revision not found for this project")
+            visibility.append(GeneratedPlanRun.revision_id == canonical_revision_id)
 
         query = (
             select(

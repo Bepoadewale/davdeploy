@@ -159,6 +159,7 @@ def test_customer_review_submits_then_administrator_approves_without_deploying()
     submitted = service.submit_infrastructure_plan(founder(), review.id)
     detail = service.infrastructure_plan_revision_detail(founder(), submitted.id)
     assert detail["state"] == InfrastructurePlanState.SUBMITTED
+    assert detail["project_id"] == project.id
     assert detail["execution"] == "UNEXECUTED_APPROVAL_ONLY"
 
     approved = service.decide_infrastructure_plan(
