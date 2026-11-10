@@ -31,6 +31,7 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - Add a state identity bound to organization, workspace, project, stable environment, target account/region, and approved execution context; never trust caller-selected object keys. Refuse state bootstrap when the revision has no environment ID.
 - Add short-lived, run/attempt-bound Basic Auth credentials and lock ownership with bounded TTL and explicit conflict handling.
 - Persist state as versioned S3 objects through a least-privilege API role; retain immutable version metadata and reconcile interrupted writes.
+- Add separately gated optional private S3/KMS state storage with versioning, TLS-only access, and a prefix-scoped API role; keep both storage provisioning and state API disabled by default.
 - Add strict HTTP backend GET/POST/lock/unlock semantics, request-size and content validation, and fail-closed authorization.
 - Add tests for tenant crossing, stale/forged tokens, lock conflicts/expiry, object versioning, interrupted writes, and HTTP status mapping.
 - Keep the plan runner disabled and do not provision AWS resources or apply customer infrastructure in this PR.
@@ -44,20 +45,20 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 - [ ] Oversized, malformed, cross-tenant, stale, and unauthenticated requests fail closed without leaking state contents.
 - [ ] Interrupted persistence is detectable and cannot be reported as a completed state write.
 - [ ] Database migrations, focused tests, `make verify`, and required clean-room lifecycle checks pass.
-- [ ] No runner enablement, AWS infrastructure deployment, pricing bypass, customer plan/apply, or destroy is included.
+- [x] No runner enablement, AWS infrastructure deployment, pricing bypass, customer plan/apply, or destroy is included.
 
 ## Acceptance status
 
-Implementation has not started. Acceptance criteria remain unmet until code, focused tests, full verification, clean-room evidence, and required GitHub CI are complete.
+Implementation is in progress. This draft now contains additive state/credential/lock/write models, a schema v33 migration, strict scope/state/lock/token validation, S3 version-pointer logic with pending-write reconciliation, Terraform HTTP routes, exact API Gateway IAM credential bootstrap, expired-lock reclamation tied to terminal CodeBuild status and the exact lock/run/build identity, and separately gated optional private S3/KMS storage. Storage provisioning defaults off; the state API feature flag remains hard-disabled, the state API URL remains empty, and the plan runner remains backend-free. Criteria remain unmet until missing lifecycle/race tests, runner integration, clean-room evidence, and required GitHub CI/review are complete.
 
 ## Tests / validation performed
 
-- Runtime test/evidence file: `docs/test/test331.md` (to be updated with exact commands/results before review-ready).
-- No AWS state bucket, role, or customer workload has been created as part of this PR.
+- Runtime test/evidence file: `docs/test/test331.md` records the local validation commands/results and unverified hosted behavior.
+- No AWS state bucket, role, or customer workload has been created as part of this PR; infrastructure was statically validated only.
 
 ## Evidence files produced
 
-- `docs/test/test331.md` will record focused and full validation plus the clean-room result.
+- `docs/test/test331.md` records local validation and explicitly lists unverified hosted behavior.
 
 ## Boundaries
 
@@ -65,4 +66,4 @@ This PR does not grant permission to deploy the state service or enable Nova exe
 
 ## Follow-up work
 
-Provision the state storage and endpoint only in a separate reviewed deployment. Then inject trusted HTTP-backend configuration into the isolated plan-only worker and prove state freshness, durable locking, exact-plan approval, and crash reconciliation before considering an apply path.
+Integrate the runner with the bootstrap and HTTP backend only after a dedicated review, then prove state freshness, durable locking, exact-plan approval, and crash reconciliation. Any deployment that enables the separately gated storage or state API requires its own reviewed deployment evidence before customer use.

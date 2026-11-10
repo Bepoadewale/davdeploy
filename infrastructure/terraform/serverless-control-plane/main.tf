@@ -313,6 +313,22 @@ resource "aws_iam_role_policy" "api" {
         Action   = ["s3:PutObject", "s3:GetObjectVersion"]
         Resource = "arn:aws:s3:::${var.nova_plan_artifact_bucket}/plans/nova-generated/*"
       }] : [],
+      var.enable_nova_terraform_state_storage ? [{
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
+        Resource = "${aws_s3_bucket.nova_terraform_state[0].arn}/terraform-state/*"
+      }] : [],
+      var.enable_nova_terraform_state_storage ? [{
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = aws_kms_key.nova_terraform_state[0].arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService"                   = "s3.${var.region}.amazonaws.com"
+            "kms:EncryptionContext:aws:s3:arn" = aws_s3_bucket.nova_terraform_state[0].arn
+          }
+        }
+      }] : [],
       var.enable_nova_plan_reviews ? [{
         # Recovery can inspect only the dedicated Nova plan project. It cannot start builds.
         Effect   = "Allow"
@@ -724,6 +740,106 @@ resource "aws_iam_role_policy" "nova_plan_only" {
   })
 }
 
+resource "aws_kms_key" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  description             = "DavDeploy tenant-isolated Nova Terraform state"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  tags                    = merge(local.common_tags, { Purpose = "nova-terraform-state" })
+
+  lifecycle { prevent_destroy = true }
+}
+
+resource "aws_kms_alias" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  name          = "alias/${local.name}-nova-terraform-state"
+  target_key_id = aws_kms_key.nova_terraform_state[0].key_id
+}
+
+resource "aws_s3_bucket" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  bucket        = "${local.name}-tfstate-${data.aws_caller_identity.current.account_id}-${var.region}"
+  force_destroy = false
+  tags          = merge(local.common_tags, { Purpose = "nova-terraform-state" })
+
+  lifecycle { prevent_destroy = true }
+}
+
+resource "aws_s3_bucket_versioning" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  bucket = aws_s3_bucket.nova_terraform_state[0].id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  bucket = aws_s3_bucket.nova_terraform_state[0].id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.nova_terraform_state[0].arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  bucket                  = aws_s3_bucket.nova_terraform_state[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  bucket = aws_s3_bucket.nova_terraform_state[0].id
+  rule { object_ownership = "BucketOwnerEnforced" }
+}
+
+resource "aws_s3_bucket_policy" "nova_terraform_state" {
+  count = var.enable_nova_terraform_state_storage ? 1 : 0
+
+  bucket = aws_s3_bucket.nova_terraform_state[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyInsecureTransport"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource = [
+        aws_s3_bucket.nova_terraform_state[0].arn,
+        "${aws_s3_bucket.nova_terraform_state[0].arn}/*",
+      ]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "nova_plan_only_state_bootstrap" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "nova-plan-only-state-bootstrap"
+  role = aws_iam_role.nova_plan_only[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["execute-api:Invoke"]
+      Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/terraform-state/credentials"
+    }]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "nova_plan_only" {
   count = var.enable_nova_plan_only_runner ? 1 : 0
 
@@ -768,6 +884,11 @@ resource "aws_codebuild_project" "nova_plan_only" {
     environment_variable {
       name  = "DAVDEPLOY_NOVA_PLAN_PROJECT_NAME"
       value = local.nova_plan_only_project_name
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"
+      value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/terraform-state/credentials"
       type  = "PLAINTEXT"
     }
     environment_variable {
@@ -1030,6 +1151,12 @@ locals {
     DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
     DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN                  = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
+    DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                    = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
+    DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = "false"
+    DAVDEPLOY_TERRAFORM_STATE_API_URL                    = ""
+    DAVDEPLOY_TERRAFORM_STATE_BUCKET                     = var.enable_nova_terraform_state_storage ? aws_s3_bucket.nova_terraform_state[0].bucket : ""
+    DAVDEPLOY_TERRAFORM_STATE_KMS_KEY_ARN                = var.enable_nova_terraform_state_storage ? aws_kms_key.nova_terraform_state[0].arn : ""
+    DAVDEPLOY_TERRAFORM_STATE_BUCKET_OWNER               = var.enable_nova_terraform_state_storage ? data.aws_caller_identity.current.account_id : ""
     DAVDEPLOY_NOVA_PLAN_RUNNER_READY                     = tostring(var.enable_nova_plan_only_runner)
     DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED              = tostring(var.enable_nova_plan_role_verification)
     DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
@@ -1144,12 +1271,54 @@ resource "aws_apigatewayv2_integration" "api" {
   timeout_milliseconds   = 29000
 }
 
+# The bootstrap request must be signed by the isolated CodeBuild role. API
+# Gateway overwrites this header from the authenticated IAM identity, so a
+# caller cannot select its own role by supplying a header value.
+resource "aws_apigatewayv2_integration" "terraform_state_bootstrap" {
+  api_id                 = aws_apigatewayv2_api.control_plane.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 29000
+  request_parameters = {
+    "overwrite:header.x-davdeploy-bootstrap-principal" = "$context.identity.userArn"
+  }
+}
+
 resource "aws_apigatewayv2_route" "authenticated" {
   api_id             = aws_apigatewayv2_api.control_plane.id
   route_key          = "$default"
   target             = "integrations/${aws_apigatewayv2_integration.api.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+resource "aws_apigatewayv2_route" "terraform_state_bootstrap" {
+  api_id             = aws_apigatewayv2_api.control_plane.id
+  route_key          = "POST /api/v1/terraform-state/credentials"
+  target             = "integrations/${aws_apigatewayv2_integration.terraform_state_bootstrap.id}"
+  authorization_type = "AWS_IAM"
+}
+
+locals {
+  # Terraform authenticates these calls with the short-lived Basic credential
+  # checked by the API. The edge-origin middleware remains required for state
+  # traffic; the direct API Gateway IAM exception exists only for bootstrap.
+  terraform_state_routes = toset([
+    "GET /api/v1/terraform-state/{state_id}",
+    "POST /api/v1/terraform-state/{state_id}",
+    "POST /api/v1/terraform-state/{state_id}/lock",
+    "DELETE /api/v1/terraform-state/{state_id}/unlock",
+  ])
+}
+
+resource "aws_apigatewayv2_route" "terraform_state" {
+  for_each = local.terraform_state_routes
+
+  api_id             = aws_apigatewayv2_api.control_plane.id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "NONE"
 }
 
 locals {
@@ -1246,7 +1415,11 @@ resource "aws_apigatewayv2_stage" "default" {
 
   # API Gateway rejects route-level settings until every referenced route exists.
   # Keep the stage update after creation when this map introduces a new route.
-  depends_on = [aws_apigatewayv2_route.sensitive]
+  depends_on = [
+    aws_apigatewayv2_route.sensitive,
+    aws_apigatewayv2_route.terraform_state_bootstrap,
+    aws_apigatewayv2_route.terraform_state,
+  ]
 
   default_route_settings {
     throttling_burst_limit = 50

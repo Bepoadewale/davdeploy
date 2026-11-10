@@ -208,7 +208,7 @@ def run_migrations(target: Engine | None = None) -> None:
             _install_generated_plan_immutability(connection)
             # create_all uses current model metadata, so new databases already include
             # every column through the latest schema version.
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (32)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (33)"))
             return
         if version < 2:
             connection.execute(
@@ -522,6 +522,12 @@ def run_migrations(target: Engine | None = None) -> None:
                 },
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (32)"))
+            version = 32
+        if version < 33:
+            # The state backend is additive; create_all installs its four new tables
+            # without altering existing tenant or plan records.
+            Base.metadata.create_all(bind=connection)
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (33)"))
         _install_generated_plan_immutability(connection)
 
 

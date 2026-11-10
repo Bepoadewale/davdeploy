@@ -154,7 +154,7 @@ def test_fresh_schema_records_current_migration_version():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 32
+    assert version == 33
     columns = {column["name"] for column in inspect(engine).get_columns("workspace_invitations")}
     assert {"delivery_state", "send_count", "last_sent_at", "cancelled_at"} <= columns
     execution_columns = {
@@ -198,4 +198,4 @@ def test_invitation_migration_upgrades_existing_version_19_schema():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 32
+    assert version == 33

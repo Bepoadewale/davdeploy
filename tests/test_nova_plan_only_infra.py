@@ -55,6 +55,48 @@ def test_nova_plan_only_resources_are_opt_in_and_fail_closed() -> None:
     assert 'aws_codebuild_project.nova_plan_only[0].name : ""' in MAIN
 
 
+def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
+    route = resource_block(MAIN, "aws_apigatewayv2_route", "terraform_state_bootstrap")
+    integration = resource_block(MAIN, "aws_apigatewayv2_integration", "terraform_state_bootstrap")
+    role_policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only_state_bootstrap")
+    assert 'route_key          = "POST /api/v1/terraform-state/credentials"' in route
+    assert 'authorization_type = "AWS_IAM"' in route
+    assert '"overwrite:header.x-davdeploy-bootstrap-principal"' in integration
+    assert '"$context.identity.userArn"' in integration
+    assert "execute-api:Invoke" in role_policy
+    assert "terraform-state/credentials" in role_policy
+    assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = "false"' in MAIN
+    assert 'DAVDEPLOY_TERRAFORM_STATE_API_URL                    = ""' in MAIN
+    state_routes = resource_block(MAIN, "aws_apigatewayv2_route", "terraform_state")
+    assert '"GET /api/v1/terraform-state/{state_id}"' in MAIN
+    assert '"POST /api/v1/terraform-state/{state_id}/lock"' in MAIN
+    assert '"DELETE /api/v1/terraform-state/{state_id}/unlock"' in MAIN
+    assert 'authorization_type = "NONE"' in state_routes
+    assert 'target             = "integrations/${aws_apigatewayv2_integration.api.id}"' in state_routes
+
+    storage_toggle = VARIABLES.split('variable "enable_nova_terraform_state_storage"', 1)[1].split(
+        "\nvariable ", 1
+    )[0]
+    assert "default     = false" in storage_toggle
+    api_policy = resource_block(MAIN, "aws_iam_role_policy", "api")
+    assert 'var.enable_nova_terraform_state_storage ? [{' in api_policy
+    assert '"s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"' in api_policy
+    assert 'terraform-state/*' in api_policy
+    state_bucket = resource_block(MAIN, "aws_s3_bucket", "nova_terraform_state")
+    assert "var.enable_nova_terraform_state_storage ? 1 : 0" in state_bucket
+    assert "prevent_destroy = true" in state_bucket
+    encryption = resource_block(
+        MAIN, "aws_s3_bucket_server_side_encryption_configuration", "nova_terraform_state"
+    )
+    versioning = resource_block(MAIN, "aws_s3_bucket_versioning", "nova_terraform_state")
+    public_access = resource_block(MAIN, "aws_s3_bucket_public_access_block", "nova_terraform_state")
+    assert 'sse_algorithm     = "aws:kms"' in encryption
+    assert "bucket_key_enabled = true" in encryption
+    assert 'versioning_configuration { status = "Enabled" }' in versioning
+    assert "block_public_acls       = true" in public_access
+    assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = "false"' in MAIN
+
+
 def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scoped() -> None:
     variable = VARIABLES.split('variable "enable_nova_plan_role_verification"', 1)[1].split(
         "\nvariable ", 1

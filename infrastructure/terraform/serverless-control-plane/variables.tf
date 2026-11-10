@@ -128,6 +128,12 @@ variable "enable_nova_plan_only_runner" {
   }
 }
 
+variable "enable_nova_terraform_state_storage" {
+  type        = bool
+  description = "Provision the private versioned KMS state bucket. This does not enable the HTTP API or change the backend-free Nova runner."
+  default     = false
+}
+
 variable "enable_customer_cloud_execution" {
   type        = bool
   description = "Explicitly enable bounded authenticated customer plan/apply submissions. Defaults to false."
