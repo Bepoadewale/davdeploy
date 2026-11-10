@@ -24,6 +24,7 @@ from davdeploy.models import (
     GeneratedPlanRun,
     GeneratedPlanRunIdempotencyKey,
     InfrastructurePlan,
+    InfrastructurePlanRevision,
 )
 from davdeploy.nova_plan_dispatch import NovaPlanBuild, NovaPlanDispatchError
 from davdeploy.policy import PolicyClient
@@ -1735,6 +1736,78 @@ def test_plan_history_expires_stale_preparation_before_reporting_status():
     db.close()
 
 
+def test_plan_history_revision_filter_is_exact_and_scopes_cursors():
+    service, db, _, _ = service_with_dispatcher()
+    project, _, revision = make_submitted_revision(service)
+    plan = db.get(InfrastructurePlan, revision.infrastructure_plan_id)
+    second_revision = InfrastructurePlanRevision(
+        id=str(uuid.uuid4()),
+        infrastructure_plan_id=plan.id,
+        organization_id=founder().organization_id,
+        revision_number=revision.revision_number + 1,
+        state="SUBMITTED",
+        content=revision.content,
+        content_digest="b" * 64,
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+    )
+    other_project = service.create_project(
+        founder(), "revision-filter-other-project", "https://github.com/example/other-project"
+    )
+    foreign_plan = InfrastructurePlan(
+        id=str(uuid.uuid4()),
+        organization_id=founder().organization_id,
+        project_id=other_project.id,
+        creator_subject=founder().subject,
+        title="Other project plan",
+    )
+    foreign_revision = InfrastructurePlanRevision(
+        id=str(uuid.uuid4()),
+        infrastructure_plan_id=foreign_plan.id,
+        organization_id=founder().organization_id,
+        revision_number=1,
+        state="SUBMITTED",
+        content=revision.content,
+        content_digest="c" * 64,
+    )
+    first_run = _history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        index=40,
+    )
+    second_run = _history_run(
+        project_id=project.id,
+        revision_id=second_revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
+        index=41,
+    )
+    db.add_all([second_revision, foreign_plan, foreign_revision, first_run, second_run])
+    db.commit()
+
+    exact_first = service.generated_plan_run_history(
+        founder(), project.id, revision_id=revision.id
+    )
+    exact_second = service.generated_plan_run_history(
+        founder(), project.id, revision_id=second_revision.id
+    )
+
+    assert [item["id"] for item in exact_first["items"]] == [first_run.id]
+    assert [item["id"] for item in exact_second["items"]] == [second_run.id]
+    with pytest.raises(PermissionError, match="cursor is not visible"):
+        service.generated_plan_run_history(
+            founder(), project.id, revision_id=revision.id, cursor=second_run.id
+        )
+    with pytest.raises(PermissionError, match="revision not found for this project"):
+        service.generated_plan_run_history(founder(), project.id, revision_id=foreign_revision.id)
+    with pytest.raises(ValueError, match="revision is invalid"):
+        service.generated_plan_run_history(founder(), project.id, revision_id="not-a-revision")
+    db.close()
+
+
 def test_plan_history_hides_other_requesters_and_rejects_foreign_cursors():
     service, db, _, _ = service_with_dispatcher()
     project, _, revision = make_submitted_revision(service)
@@ -1804,7 +1877,7 @@ def test_plan_history_http_route_returns_safe_page_and_denies_other_tenants(tmp_
     try:
         with TestClient(app) as client:
             response = client.get(
-                f"/api/v1/projects/{project.id}/generated-plan-runs?limit=1",
+                f"/api/v1/projects/{project.id}/generated-plan-runs?limit=1&revision_id={revision.id}",
                 headers={"Authorization": f"Bearer {issue_local_token('founder')}"},
             )
             assert response.status_code == 200

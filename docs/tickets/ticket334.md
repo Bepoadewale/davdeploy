@@ -39,27 +39,33 @@ page can incorrectly make an older revision appear to have no run.
 
 ## Acceptance criteria
 
-- [ ] An authorized customer can request history for one exact revision.
-- [ ] A revision from another project or tenant cannot be queried or used as
+- [x] An authorized customer can request history for one exact revision.
+- [x] A revision from another project or tenant cannot be queried or used as
       a cursor scope.
-- [ ] Pagination remains deterministic and bound to the selected revision.
-- [ ] Existing project-wide history behavior remains unchanged when the
+- [x] Pagination remains deterministic and bound to the selected revision.
+- [x] Existing project-wide history behavior remains unchanged when the
       filter is omitted.
-- [ ] No approval, apply, health, recovery, or teardown capability is added.
+- [x] No approval, apply, health, recovery, or teardown capability is added.
 
 ## Acceptance status
 
-Pending implementation and validation.
+Implementation is complete. Focused and full local verification and OpenAPI
+checks passed. Current-head CI and the isolated clean-room cycle are pending;
+no hosted state or workload execution is claimed.
 
 ## Tests / validation performed
 
-Pending implementation. Focused tests, `make verify`, OpenAPI checks,
-documentation conventions, diff checks, clean-room validation, and current-head
-GitHub checks will be recorded here.
+- `uv run pytest tests/test_nova_plan_runs.py -q`: 41 passed.
+- `make verify`: 866 passed; Ruff, Actions configuration, OpenAPI, and Docker
+  Compose configuration passed.
+- `make openapi-check`, documentation conventions, and `git diff --check`
+  passed.
+- Isolated clean-room validation and current-head GitHub CI are pending.
+- Runtime evidence: `docs/test/test334.md`.
 
 ## Evidence files produced
 
-- `docs/test/test334.md` will record the local-only implementation boundary.
+- `docs/test/test334.md` records the local-only implementation boundary.
 
 ## Boundaries
 
