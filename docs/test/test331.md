@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit/API validation, static infrastructure validation, and isolated clean-room demos; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: `b09d211` (recovery implementation)
+Commit: runtime source `b09d211` (recovery implementation); race-test additions follow.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -22,8 +22,8 @@ disabled.
 
 ## Validation performed
 
-- `tests/test_terraform_state.py tests/test_db_config.py` — 34 passed, including pending-write recovery, schema-field coverage, and a forced concurrent lock-acquisition race.
-- `make verify` — passed: 846 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration.
+- `tests/test_terraform_state.py tests/test_db_config.py` — 35 passed, including pending-write recovery, schema-field coverage, concurrent acquisition, and stale-reclaim/reacquisition races.
+- `make verify` — passed: 847 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration.
 - `make terraform-validate` — passed for all roots selected by `scripts/terraform-validate.sh`.
 - `python scripts/check_doc_conventions.py` — passed for the updated ticket and evidence.
 - `git diff --check` — passed.
@@ -71,12 +71,16 @@ runner remain disabled, and no customer or AWS execution occurred.
   accepts a 412 only after rereading and matching exact metadata, and retries a
   409 at most once. A TestClient route test verifies active-build bootstrap,
   tenant scope/hash persistence, and cross-tenant state denial. The focused
-  state suite passed 24 tests, including a forced concurrent acquisition race
-  using separate database sessions.
-- Full `make verify` passed with 845 tests. Terraform validation, documentation
-  conventions, and diff checks also passed.
+  state suite passed 25 tests, including forced concurrent acquisition and
+  stale-lock-reclaim/reacquisition interleavings using separate database
+  sessions.
+- The clean-room `make verify` passed with 845 tests at runtime code commit
+  `b09d211`; the later race-test additions passed full `make verify` with 847
+  tests. Terraform validation, documentation conventions, and diff checks also
+  passed.
 - The full local clean-room sequence passed in a fresh detached worktree at
-  code commit `b09d211` (before the additional race test): initial clean, bootstrap, smoke, all six demos, API contract,
+  code commit `b09d211` (before the additional race tests): initial clean,
+  bootstrap, smoke, all six demos, API contract,
   customer-plan E2E, seed, API restart/persistence, trace check, `make verify`,
   and MCP tools-list request.
 - GitHub Actions run `42873278635` passed all seven required checks for

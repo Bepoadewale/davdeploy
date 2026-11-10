@@ -1111,3 +1111,124 @@ def test_concurrent_state_lock_acquisition_keeps_one_owner(tmp_path):
             ("run-2", "project:build-2"),
         }
     engine.dispose()
+
+
+def test_expired_lock_reclaim_racing_new_acquisition_requires_retry(tmp_path):
+    engine = create_engine(
+        f"sqlite+pysqlite:///{tmp_path / 'terraform-state-reclaim-race.db'}",
+        connect_args={"timeout": 10},
+    )
+    Base.metadata.create_all(engine)
+    state = TerraformRemoteState(
+        scope_sha256=hashlib.sha256(str(uuid4()).encode()).hexdigest(),
+        organization_id=ORG,
+        project_id=PROJECT,
+        environment_id=ENVIRONMENT,
+        target_account_id="654654474502",
+        region="us-east-1",
+    )
+    with Session(engine) as setup:
+        setup.add(state)
+        setup.commit()
+        state_id = state.id
+        storage = TerraformStateStorage(
+            setup,
+            s3_client=_FakeS3(),
+            bucket="davdeploy-test-state",
+            kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/state-key",
+            expected_bucket_owner="654654474502",
+        )
+        storage.lock(
+            state_id=state_id,
+            run_id="old-run",
+            build_id="project:old-build",
+            raw=_lock_bytes("old-lock"),
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+        setup.get(TerraformStateLock, state_id).expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        setup.commit()
+
+    barrier = Barrier(2)
+
+    def race_read(db):
+        original_get = db.get
+        first_lock_read = True
+
+        def synchronized_get(entity, *args, **kwargs):
+            nonlocal first_lock_read
+            result = original_get(entity, *args, **kwargs)
+            if entity is TerraformStateLock and first_lock_read:
+                first_lock_read = False
+                barrier.wait(timeout=5)
+            return result
+
+        db.get = synchronized_get
+
+    def reclaim() -> bool:
+        with Session(engine) as db:
+            race_read(db)
+            storage = TerraformStateStorage(
+                db,
+                s3_client=_FakeS3(),
+                bucket="davdeploy-test-state",
+                kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/state-key",
+                expected_bucket_owner="654654474502",
+            )
+            return storage.reclaim_expired_lock(
+                state_id=state_id,
+                expected_lock_id="old-lock",
+                expected_run_id="old-run",
+                expected_build_id="project:old-build",
+                observed_build_status="FAILED",
+            )
+
+    def acquire_new() -> str:
+        with Session(engine) as db:
+            race_read(db)
+            storage = TerraformStateStorage(
+                db,
+                s3_client=_FakeS3(),
+                bucket="davdeploy-test-state",
+                kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/state-key",
+                expected_bucket_owner="654654474502",
+            )
+            try:
+                storage.lock(
+                    state_id=state_id,
+                    run_id="new-run",
+                    build_id="project:new-build",
+                    raw=_lock_bytes("new-lock"),
+                    expires_at=datetime.now(UTC) + timedelta(minutes=5),
+                )
+                return "ACQUIRED"
+            except TerraformStateLocked:
+                return "RETRY"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reclaim_future = executor.submit(reclaim)
+        acquire_future = executor.submit(acquire_new)
+        assert reclaim_future.result(timeout=10) is True
+        assert acquire_future.result(timeout=10) == "RETRY"
+
+    with Session(engine) as db:
+        storage = TerraformStateStorage(
+            db,
+            s3_client=_FakeS3(),
+            bucket="davdeploy-test-state",
+            kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/state-key",
+            expected_bucket_owner="654654474502",
+        )
+        storage.lock(
+            state_id=state_id,
+            run_id="new-run",
+            build_id="project:new-build",
+            raw=_lock_bytes("new-lock"),
+            expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+        active = db.get(TerraformStateLock, state_id)
+        assert (active.run_id, active.codebuild_build_id, active.lock_id) == (
+            "new-run",
+            "project:new-build",
+            "new-lock",
+        )
+    engine.dispose()

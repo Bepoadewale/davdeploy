@@ -54,15 +54,15 @@ ADR-013 selects a DavDeploy HTTP state API backed by versioned encrypted S3 obje
 
 ## Acceptance status
 
-The implementation and required local/CI verification pass at code commit `b09d211`; independent review found no remaining blocker in either failed-write recovery case. Prior pending S3 versions are checked by exact key, encryption, metadata, version, and state digest before adoption. Changed bytes at that serial are rejected after the valid prior version is committed; absent or invalid objects are recorded in bounded attempt history and rotated under the current lock. A forced two-session lock-acquisition race passes against a local SQLite database; a production PostgreSQL/Aurora race and hosted AWS behavior remain unverified. Schema v33 remains additive. The bucket toggle defaults off, the state API feature flag remains hard-disabled, and the runner is still backend-free. Worker restart recovery and Terraform CLI retry behavior also remain unverified, so keep the PR draft and state feature disabled.
+The implementation and required local/CI verification pass at runtime code commit `b09d211`; independent review found no remaining blocker in either failed-write recovery case. Prior pending S3 versions are checked by exact key, encryption, metadata, version, and state digest before adoption. Changed bytes at that serial are rejected after the valid prior version is committed; absent or invalid objects are recorded in bounded attempt history and rotated under the current lock. Forced two-session tests cover simultaneous acquisition and stale-lock reclaim racing a new acquisition against local SQLite. Production PostgreSQL/Aurora race behavior and hosted AWS behavior remain unverified. Schema v33 remains additive. The bucket toggle defaults off, the state API feature flag remains hard-disabled, and the runner is still backend-free. Worker restart recovery and Terraform CLI retry behavior also remain unverified, so keep the PR draft and state feature disabled.
 
 ## Tests / validation performed
 
-- Focused suites: `tests/test_terraform_state.py tests/test_db_config.py` — 34 passed, including pending-write recovery, schema-field coverage, and the concurrent SQLite lock-acquisition race.
-- `make verify` with Python 3.12 — 846 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
+- Focused suites: `tests/test_terraform_state.py tests/test_db_config.py` — 35 passed, including pending-write recovery, schema-field coverage, simultaneous acquisition, and stale-reclaim/reacquisition races.
+- `make verify` with Python 3.12 — 847 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
 - Full isolated clean-room sequence passed at code commit `b09d211`: bootstrap, readiness, all demos, API contract, customer-plan E2E, seed, API restart/persistence, trace check, `make verify`, and MCP tools-list request. The exact project containers, network, Postgres volume, `.venv`, and `.local` database were removed and absence verified.
 - GitHub Actions run `42873278635` — all seven required checks passed for `b09d211`, including fresh-runner local E2E.
-- The local race test uses separate SQLite sessions. It validates one-lock ownership under forced concurrent inserts but does not establish PostgreSQL/Aurora locking behavior.
+- The local race tests use separate SQLite sessions. They validate single-lock ownership under forced concurrent inserts and reclaim/acquisition interleaving but do not establish PostgreSQL/Aurora locking behavior.
 - `scripts/terraform-validate.sh` — all configured roots passed.
 - Documentation conventions and `git diff --check` passed.
 - Runtime test/evidence file: `docs/test/test331.md` records the local validation commands/results and unverified hosted behavior.
