@@ -4,7 +4,8 @@ Date: 2026-11-10
 Execution type: Local unit, API, infrastructure-contract, and Terraform validation; no customer workload
 Repository: `Bepoadewale/davdeploy`
 Customer repository: N/A; no customer repository or workload was used
-Branch: `feat/nova-plan-only-runner-328`
+PR source branch: `feat/nova-plan-only-runner-328`
+Local validation worktree branch: `feat/nova-plan-only-runner-328-review`
 PR: #328 (draft; based on `main` after prerequisite PR #326 merged)
 Commit: `593dbc9` plus OpenAPI snapshot update (review fixes under test)
 AWS account: N/A; no AWS calls
@@ -57,9 +58,31 @@ COMPOSE_PROJECT_NAME=davdeploy-pr328-cleanroom make clean-local
 
 Fresh dependency installation and Docker image builds passed. Smoke reported API, worker, executor, Prometheus, Grafana, Tempo, and OPA ready. The API contract and customer-plan end-to-end passed, including governed destroy in the local fixture. Trace checks passed. Full verification passed 796 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration; one existing Starlette/httpx deprecation warning was reported. Final cleanup removed only the uniquely named clean-room containers, network, and PostgreSQL volume plus the new worktree's `.venv` and `.local`. A follow-up check confirmed no matching containers or volume and no remaining `.venv` or `.local`. The clean-room worktree is retained. No AWS resources or unrelated project data were accessed or removed.
 
-## Updated clean-room evidence — 2026-11-10
+## Earlier clean-room evidence — 2026-11-10
 
-After the three review fixes and OpenAPI snapshot update, the isolated PR worktree `/private/tmp/davdeploy-pr328-review` completed the PR-required clean-room sequence with Compose project `davdeploy-pr328-review`. Smoke, API contract, all local demos, customer-plan fixture end-to-end, seed, trace checks, `make verify` (797 tests), and `make terraform-validate` across all roots passed. The only warning was the existing Starlette/httpx deprecation. `make clean-local` removed the uniquely named project containers, network, PostgreSQL volume, and the worktree's generated `.venv` and `.local`; no unrelated resources were removed. No AWS resources or customer workloads were used.
+The earlier review worktree run passed 797 tests. It is superseded by the integrated proof below, which includes main's merged customer plan-role changes and 814 tests.
+
+## Integrated clean-room evidence — 2026-11-10
+
+After merging current `main` (including PR #326), the isolated worktree `/private/tmp/davdeploy-pr328-review` completed the fresh local validation sequence on the PR implementation and generated OpenAPI snapshot:
+
+```text
+make clean-local
+make bootstrap-local
+make smoke
+make demo-simple
+make demo-complex
+make demo-day2
+make demo-degraded
+make demo-failure
+make demo-readiness-failure
+make trace-check
+make verify
+make terraform-validate
+make clean-local
+```
+
+The simple, complex, Day-2, degraded, policy-failure, and readiness-failure demos passed. Smoke reported API, worker, executor, Prometheus, Grafana, Tempo, and OPA ready. The API contract, local customer-plan end-to-end, seed, and trace checks passed. `make verify` passed 814 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration. All 15 configured Terraform roots passed formatting and validation. One pre-existing Starlette/httpx deprecation warning was emitted. The final cleanup removed only the uniquely named Compose project containers, network, PostgreSQL volume, and this PR worktree's generated `.venv` and `.local`. No AWS calls, customer workloads, or unrelated resources were used.
 
 ## Final boundary
 

@@ -2,7 +2,7 @@
 
 PR: [#328](https://github.com/Bepoadewale/davdeploy/pull/328) (draft)
 Branch: `feat/nova-plan-only-runner-328`
-Base: `main` (PR #326 merged as `49bd5dbed1fd578704f955c664ed19e8a4e159ef` on 2026-11-10)
+Base: `main` (PR #326 merged as `49bd5dbed1fd578704f955c664ed19e8a4e159ef` on 2026-11-10; PR #328 was reopened and retargeted after GitHub closed it when the stacked base branch was deleted)
 
 ## Problem / goal
 
@@ -75,16 +75,16 @@ The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact buc
 - [x] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
 - [x] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
 - [x] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
-- [x] Focused/full validation, clean-room validation, and current-head PR CI pass. Local verification passed 797 tests and all Terraform roots; current-head PR CI is pending after the review fixes are pushed.
+- [ ] Focused/full validation and clean-room validation pass; current-head PR CI and review are pending after these fixes are pushed.
 
 ## Acceptance status
 
-Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, and explicit input-handoff recovery. Review follow-ups now grant the API only exact build-input reads, allow manual reconciliation after transient result-read failure, and return the artifact ID only for a review-ready run; each has regression coverage. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
+Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, explicit input-handoff recovery, and three review fixes: exact API build-input reads, transient result-read reconciliation, and returning the artifact ID only for a review-ready run. Integrated clean-room verification passed 814 tests and all 15 configured Terraform roots after PR #326 merged. Current-head CI and review remain pending. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
 
 ## Tests / validation performed
 
-- Local focused feature tests, full `make verify` (797 tests), Terraform formatting, and Terraform validation are recorded in `docs/test/test328.md`; no customer workload or AWS account was used.
-- The isolated clean-room cycle passed on 2026-11-10 after the review fixes; details and scoped cleanup verification are in `docs/test/test328.md`.
+- The integrated clean-room cycle passed on 2026-11-10: all six local demos, customer-plan fixture flow, 814-test `make verify`, and `make terraform-validate` across 15 roots. Details and scoped cleanup verification are in `docs/test/test328.md`.
+- Focused tests for runner recovery and connection contracts passed (121 tests); no customer workload or AWS account was used.
 
 ## Evidence files produced
 
