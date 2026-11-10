@@ -350,6 +350,184 @@ def test_transient_result_read_can_be_reconciled_and_returns_review_artifact():
     db.close()
 
 
+def test_unconfirmed_codebuild_status_can_be_retried_for_exact_bound_build():
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-status-retry-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    build_id = run.codebuild_build_id
+
+    def temporary_failure(_build_id):
+        raise NovaPlanDispatchError("temporary CodeBuild API timeout", outcome_uncertain=True)
+
+    dispatcher.describe_build = temporary_failure
+    assert service.reconcile_generated_plan_build(build_id) is True
+    failed_lookup = service.generated_plan_run_detail(founder(), request["id"])
+    assert failed_lookup["state"] == "RECONCILIATION_REQUIRED"
+    assert failed_lookup["error_code"] == "BUILD_STATUS_UNCONFIRMED"
+
+    dispatcher.describe_build = lambda exact_id: NovaPlanBuild(
+        exact_id,
+        PROJECT,
+        "SUCCEEDED",
+        run.runner_run_id,
+        FakeDispatcher.build_arn_for_id(exact_id),
+    )
+    recovered = service.reconcile_generated_plan_build_attempt(founder(), request["id"])
+    assert recovered["state"] == "RECONCILIATION_REQUIRED"
+    assert recovered["error_code"] == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+    db.close()
+
+
+def test_disabled_runner_status_reconciliation_is_recoverable_after_reenable(monkeypatch):
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    db.autoflush = False
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-disabled-runner-retry-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    db.refresh(run)
+    assert run.preparation_phase is None
+    build_id = run.codebuild_build_id
+    run.preparation_phase = "STARTING_BUILD"
+    run.error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+    db.commit()
+    service.nova_plan_dispatcher = None
+    monkeypatch.setattr(
+        "davdeploy.service.NovaPlanOnlyDispatcher.from_environment",
+        classmethod(lambda _cls: None),
+    )
+
+    assert service.reconcile_generated_plan_build(build_id) is True
+    unavailable = service.generated_plan_run_detail(founder(), request["id"])
+    assert unavailable["state"] == "RECONCILIATION_REQUIRED"
+    assert unavailable["error_code"] == "BUILD_STATUS_UNCONFIRMED"
+
+    service.nova_plan_dispatcher = dispatcher
+    recovered = service.reconcile_generated_plan_build_attempt(founder(), request["id"])
+    assert recovered["state"] == "RECONCILIATION_REQUIRED"
+    assert recovered["error_code"] == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+    db.close()
+
+
+def test_late_start_response_cannot_bind_old_build_to_new_runner_attempt():
+    service, db, _, _dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-late-build-id-race-0001"
+    )
+    claimed = service._claim_next_generated_plan_run()
+    assert claimed is not None
+    run, lease_token = claimed
+    original_runner_id = run.runner_run_id
+    original_token = run.codebuild_idempotency_token
+    run.proposal_sha256 = "a" * 64
+    run.input_sha256 = "b" * 64
+    run.input_version_id = "fixture-input-version"
+    run.preparation_phase = "STARTING_BUILD"
+    run.preparation_lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert service._expire_generated_plan_run_lease(run, datetime.now(UTC)) is True
+
+    run = db.get(GeneratedPlanRun, request["id"])
+    run.runner_run_id = "nova-plan-new-runner-attempt-0001"
+    run.codebuild_idempotency_token = run.runner_run_id
+    run.input_key = f"plans/nova-generated/requests/{run.runner_run_id}/input.json"
+    run.result_key = f"plans/nova-generated/requests/{run.runner_run_id}/result.json"
+    run.input_sha256 = None
+    run.input_version_id = None
+    run.proposal_sha256 = None
+    run.state = "RECONCILIATION_REQUIRED"
+    run.error_code = "BUILD_START_RECONCILIATION_REQUIRED"
+    run.preparation_phase = "STARTING_BUILD"
+    db.commit()
+
+    bound = service._finish_generated_plan_run_claim(
+        run,
+        lease_token,
+        state="RECONCILIATION_REQUIRED",
+        error_code="BUILD_START_RECONCILIATION_REQUIRED",
+        error_summary="Late response from the old runner attempt.",
+        action="generated_plan_run.build_start_uncertain",
+        codebuild_build_id=f"{PROJECT}:{original_runner_id}",
+        expected_runner_run_id=original_runner_id,
+        expected_idempotency_token=original_token,
+    )
+
+    db.refresh(run)
+    assert bound is False
+    assert run.runner_run_id == "nova-plan-new-runner-attempt-0001"
+    assert run.codebuild_build_id is None
+    assert run.codebuild_idempotency_token == run.runner_run_id
+    db.close()
+
+
+def test_old_build_completion_cannot_overwrite_a_new_queued_attempt():
+    service, db, _, dispatcher = service_with_dispatcher(status="FAILED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-old-build-race-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    old_build_id = run.codebuild_build_id
+
+    def finish_after_retry(exact_build_id):
+        assert exact_build_id == old_build_id
+        run.state = "QUEUED"
+        run.codebuild_build_id = None
+        run.runner_run_id = "new-runner-attempt-after-retry"
+        run.error_code = None
+        run.error_summary = None
+        db.commit()
+        from davdeploy.nova_plan_dispatch import NovaPlanBuild
+
+        return NovaPlanBuild(exact_build_id, PROJECT, "FAILED")
+
+    dispatcher.describe_build = finish_after_retry
+    assert service.reconcile_generated_plan_build(old_build_id) is True
+    db.refresh(run)
+    assert run.state == "QUEUED"
+    assert run.codebuild_build_id is None
+    assert run.runner_run_id == "new-runner-attempt-after-retry"
+    db.close()
+
+
+def test_late_transient_status_error_cannot_overwrite_terminal_completion():
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-status-race-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    build_id = run.codebuild_build_id
+
+    def transient_error_after_completion(_build_id):
+        run.state = "BUILD_SUCCEEDED_UNVERIFIED"
+        run.error_code = "PLAN_RESULT_NOT_VERIFIED"
+        run.error_summary = "The build finished, but its result remains unverified."
+        db.commit()
+        raise NovaPlanDispatchError("late transient status lookup error", outcome_uncertain=True)
+
+    dispatcher.describe_build = transient_error_after_completion
+    assert service.reconcile_generated_plan_build(build_id) is True
+    db.refresh(run)
+    assert run.state == "BUILD_SUCCEEDED_UNVERIFIED"
+    assert run.error_code == "PLAN_RESULT_NOT_VERIFIED"
+    db.close()
+
+
 def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild():
     service, db, _, dispatcher = service_with_dispatcher()
     _, _, revision = make_submitted_revision(service)
@@ -626,6 +804,89 @@ def test_input_stage_reconciliation_can_abandon_mismatch_then_retry_fresh_key():
     assert db.get(GeneratedPlanRun, run["id"]).runner_run_id != old_runner_id
     assert service.run_next_generated_plan_run() is True
     assert db.get(GeneratedPlanRun, run["id"]).state == "BUILD_STARTED"
+    db.close()
+
+
+@pytest.mark.parametrize("inspected_version", ["fixture-input-version", None])
+def test_delayed_input_inspection_cannot_mutate_a_later_attempt(inspected_version):
+    service, db, _, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    original_stage = dispatcher.stage_input
+
+    def stage_then_lose_confirmation(run_id, document):
+        original_stage(run_id, document)
+        raise NovaPlanDispatchError(
+            "fixture lost input-stage confirmation",
+            outcome_uncertain=True,
+            phase="input_stage",
+        )
+
+    dispatcher.stage_input = stage_then_lose_confirmation
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-input-race-0001"
+    )
+    service._wake_worker = lambda *_args: None
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    original_runner_id = run.runner_run_id
+
+    def delayed_inspection(run_id, key, digest):
+        assert run_id == original_runner_id
+        assert key == dispatcher.input_key(original_runner_id)
+        assert digest == run.input_sha256
+        run.state = "RECONCILIATION_REQUIRED"
+        run.error_code = "INPUT_STAGE_RECONCILIATION_REQUIRED"
+        run.error_summary = "The later retry requires its own input reconciliation."
+        run.runner_run_id = "nova-plan-race-retry-attempt-0001"
+        run.input_key = dispatcher.input_key(run.runner_run_id)
+        run.result_key = dispatcher.result_key(run.runner_run_id)
+        run.input_sha256 = "c" * 64
+        run.proposal_sha256 = "d" * 64
+        run.input_version_id = None
+        db.commit()
+        return inspected_version
+
+    dispatcher.inspect_staged_input = delayed_inspection
+    recovered = service.reconcile_generated_plan_input(founder(), request["id"])
+    db.refresh(run)
+    assert recovered["state"] == "RECONCILIATION_REQUIRED"
+    assert run.runner_run_id == "nova-plan-race-retry-attempt-0001"
+    assert run.input_key == dispatcher.input_key(run.runner_run_id)
+    assert run.input_sha256 == "c" * 64
+    assert run.input_version_id is None
+    db.close()
+
+
+def test_preparation_lease_expired_before_generation_can_be_explicitly_abandoned_and_retried():
+    service, db, generator, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-expire-before-call-0001"
+    )
+    claimed = service._claim_next_generated_plan_run()
+    assert claimed is not None
+    run, _lease_token = claimed
+    assert run.preparation_phase is None
+    run.preparation_lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert service._expire_generated_plan_run_lease(run, datetime.now(UTC)) is True
+    expired = service.generated_plan_run_detail(founder(), request["id"])
+    assert expired["state"] == "RECONCILIATION_REQUIRED"
+    assert expired["error_code"] == "PREPARATION_LEASE_EXPIRED"
+    assert generator.calls == 0
+    assert dispatcher.started == []
+
+    abandoned = service.abandon_generated_plan_generation_attempt(founder(), request["id"])
+    assert abandoned["state"] == "FAILED"
+    assert abandoned["error_code"] == "PREPARATION_ATTEMPT_ABANDONED"
+    retried = service.retry_generated_plan_run(
+        founder(), request["id"], "nova-plan-expire-before-call-retry-0001"
+    )
+    assert retried["state"] == "QUEUED"
+    assert service.run_next_generated_plan_run() is True
+    assert generator.calls == 1
+    assert len(dispatcher.started) == 1
     db.close()
 
 
@@ -1072,6 +1333,8 @@ def test_known_codebuild_id_after_expired_start_is_bound_for_existing_reconciler
     claimed = service._claim_next_generated_plan_run()
     assert claimed is not None
     run, lease_token = claimed
+    runner_run_id = run.runner_run_id
+    idempotency_token = run.codebuild_idempotency_token
     run.proposal_sha256 = "a" * 64
     pending_document = {"run_id": run.runner_run_id, "proposal_sha256": run.proposal_sha256}
     run.input_key = _dispatcher.input_key(run.runner_run_id)
@@ -1102,6 +1365,8 @@ def test_known_codebuild_id_after_expired_start_is_bound_for_existing_reconciler
         action="generated_plan_run.build_start_uncertain",
         codebuild_build_id=build_id,
         codebuild_build_arn=_dispatcher.build_arn_for_id(build_id),
+        expected_runner_run_id=runner_run_id,
+        expected_idempotency_token=idempotency_token,
     ) is True
     recovered = db.get(GeneratedPlanRun, request["id"])
     db.refresh(recovered)

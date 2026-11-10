@@ -68,6 +68,12 @@ variable "enable_nova_plan_reviews" {
   default     = false
 }
 
+variable "enable_nova_plan_role_verification" {
+  type        = bool
+  description = "Allow the API to verify trust/account identity for customer roles named davdeployPlan-*. This does not attest the role's effective permissions or enable customer deployment. Defaults to false."
+  default     = false
+}
+
 variable "nova_plan_artifact_bucket" {
   type        = string
   description = "Existing versioned SSE-KMS Terraform plan bucket used for Nova artifacts when review storage is enabled."
@@ -114,6 +120,11 @@ variable "enable_nova_plan_only_runner" {
   validation {
     condition     = !var.enable_nova_plan_only_runner || var.enable_nova_plan_reviews
     error_message = "The Nova plan-only runner requires Nova plan reviews so the API has the permissions needed to stage and reconcile requests."
+  }
+
+  validation {
+    condition     = !var.enable_nova_plan_only_runner || var.enable_nova_plan_role_verification
+    error_message = "The Nova plan-only runner requires plan-role trust/account verification to be enabled."
   }
 }
 

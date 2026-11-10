@@ -621,12 +621,13 @@ def test_aws_verification_proves_an_optional_execution_role_belongs_to_the_custo
 def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separate_role_arn(
     monkeypatch,
 ):
-    plan_broker_arn = "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only"
     monkeypatch.setenv(
         "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
         "arn:aws:iam::111122223333:role/davdeploy-api",
     )
-    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN", plan_broker_arn)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
+    monkeypatch.delenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN", raising=False)
+    monkeypatch.delenv("DAVDEPLOY_NOVA_PLAN_PROJECT", raising=False)
     monkeypatch.setenv(
         "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
     )
@@ -659,7 +660,7 @@ def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separat
     )
     assert parameters["param_AccessMode"] == ["plan-only"]
     assert parameters["param_ExternalId"] == [external_id]
-    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == [plan_broker_arn]
+    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == ["unused"]
     assert saved.external_id_secret_ref == secret_ref
     assert saved.setup_state == "VERIFIED"
     assert saved.execution_role_arn is None
@@ -727,7 +728,9 @@ def test_plan_only_setup_rejects_connection_with_execution_role():
     assert saved.plan_role_setup_state == "NOT_CONFIGURED"
 
 
-def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_broker(monkeypatch):
+def test_plan_only_quick_create_is_available_without_runner_when_role_verification_is_enabled(
+    monkeypatch,
+):
     monkeypatch.setenv(
         "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
         "arn:aws:iam::111122223333:role/davdeploy-api",
@@ -741,6 +744,7 @@ def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_br
     )
 
     with pytest.raises(ValueError, match="verify the existing discovery connection"):
+        monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
         service.aws_quick_create_setup(
             workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
         )
@@ -754,10 +758,79 @@ def test_plan_only_quick_create_requires_verified_existing_discovery_and_plan_br
     )
     connection.setup_state = "VERIFIED"
     service.db.commit()
-    with pytest.raises(RuntimeError, match="isolated Nova plan broker role ARN"):
+    setup = service.aws_quick_create_setup(
+        workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
+    )
+    parameters = parse_qs(urlsplit(setup["quick_create_url"]).fragment.split("?", 1)[1])
+    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == ["unused"]
+
+
+def test_plan_only_quick_create_uses_runner_role_only_when_runner_is_enabled(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "davdeploy-nova-plan-only")
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN", "arn:aws:iam::111122223333:role/davdeploy-api"
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployDiscovery-{connection.id}"
+    )
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "existing-token"
+    )
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+
+    setup = service.aws_quick_create_setup(
+        workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
+    )
+    parameters = parse_qs(urlsplit(setup["quick_create_url"]).fragment.split("?", 1)[1])
+    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == [
+        "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only"
+    ]
+
+
+def test_plan_only_setup_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", raising=False)
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN", "arn:aws:iam::111122223333:role/davdeploy-api"
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployDiscovery-{connection.id}"
+    )
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "existing-token"
+    )
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+
+    with pytest.raises(RuntimeError, match="plan-role verification is disabled"):
         service.aws_quick_create_setup(
             workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
         )
+
+    saved = service.db.get(type(connection), connection.id)
+    assert saved.plan_role_arn is None
+    assert saved.plan_role_setup_state == "NOT_CONFIGURED"
 
 
 def test_plan_role_verification_checks_trust_and_account_without_claiming_policy_attestation(
@@ -783,6 +856,7 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
             pytest.fail("plan-only verification must not assume the execution role")
 
     monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
     service, _ = make_service()
     connection = service.create_cloud_connection(
         founder(), "Customer AWS", "aws", "byoc_role_contract"
@@ -814,10 +888,11 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
     assert detail["plan_role_arn"] == connection.plan_role_arn
     assert detail["plan_role_policy_status"] == "POLICY_UNATTESTED"
     assert "policy contents" in detail["plan_role_policy"]
-    assert any(
-        capability.startswith("initial Nova Terraform plan")
-        for capability in detail["capabilities"]
-    )
+    assert "effective AWS permissions and plan-runner readiness are not attested" in detail[
+        "capabilities"
+    ][-1]
+    assert "no customer service permissions" not in " ".join(detail["capabilities"])
+    assert "plan-runner readiness are not attested" in detail["capabilities"][-1]
 
 
 def test_general_verification_still_checks_execution_role_on_legacy_mixed_connection(monkeypatch):
@@ -840,6 +915,7 @@ def test_general_verification_still_checks_execution_role_on_legacy_mixed_connec
             return "123456789012"
 
     monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
     service, _ = make_service()
     connection = service.create_cloud_connection(
         founder(), "Legacy mixed AWS", "aws", "byoc_role_contract"
@@ -882,6 +958,7 @@ def test_plan_role_is_not_reported_usable_when_its_trust_check_fails(monkeypatch
             raise PermissionError("the plan role cannot be assumed by this broker yet")
 
     monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
     service, _ = make_service()
     connection = service.create_cloud_connection(
         founder(), "Customer AWS", "aws", "byoc_role_contract"
@@ -906,6 +983,33 @@ def test_plan_role_is_not_reported_usable_when_its_trust_check_fails(monkeypatch
     assert detail["plan_role_policy_status"] == "VERIFICATION_FAILED"
     assert "verification failed" in detail["plan_role_policy"]
     assert not any("Nova Terraform plan" in capability for capability in detail["capabilities"])
+
+
+def test_plan_role_verification_is_disabled_by_default_without_calling_aws(monkeypatch):
+    class NoAwsCalls:
+        def verify(self, *_args):
+            pytest.fail("discovery must not run while plan-role verification is disabled")
+
+    monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
+    monkeypatch.delenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", raising=False)
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-test"
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-test"
+    connection.plan_role_setup_state = "SETUP_LINK_GENERATED"
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "current-external-id"
+    )
+    service.db.commit()
+
+    with pytest.raises(RuntimeError, match="plan-role verification is disabled"):
+        service.verify_aws_connection(founder(), connection.id, "us-east-1", NoAwsCalls())
+
+    saved = service.db.get(type(connection), connection.id)
+    assert saved.plan_role_setup_state == "SETUP_LINK_GENERATED"
 
 
 def test_manual_role_setup_does_not_promote_or_retain_a_plan_role():

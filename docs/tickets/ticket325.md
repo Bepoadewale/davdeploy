@@ -65,7 +65,13 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 - [x] Duplicate/concurrent worker wake-ups and CodeBuild callbacks cannot create duplicate runs or bind another tenant's result.
 - [x] Failed, expired, or uncertain work remains visibly failed or requires reconciliation; no fake plan/artifact success is recorded.
 - [x] Lost input-stage responses cannot trigger an unsafe overwrite or duplicate write; durable reconciliation resumes a matching object, confirms absence, or requires explicit attempt abandonment before a fresh-key retry.
+- [x] Input reconciliation completion and confirmed-absence updates are fenced by the inspected runner ID, input key, proposal digest, and input digest, so a delayed inspection cannot affect a later attempt.
+- [x] A preparation lease that expires before an external call can be explicitly abandoned through the generation reconciliation route and retried with a fresh idempotency key.
 - [x] Lost CodeBuild start responses are protected by a durable per-attempt token and can be reconciled only by one exact runner-ID match in the dedicated CodeBuild project. Zero, multiple, incomplete, or unavailable results remain blocked without retry.
+- [x] Temporary runner disablement or invalid runner configuration does not strand a run with a bound build ID; status can be reconciled after the exact runner is restored.
+- [x] The worker phase written through a Core update is treated as committed in the ORM identity map, so later commits cannot restore a stale phase over a terminal or uncertain run.
+- [x] A late `StartBuild` response can bind only to the original runner ID and idempotency token, and status uncertainty clears the start phase required for explicit recovery.
+- [x] Transient status-lookup failures for an already-bound build remain manually reconcilable, and a stale completion cannot overwrite a newer retry attempt.
 - [x] An uncertain generation lease can be explicitly abandoned and retried with a fresh key; no generation attempt is automatically replayed.
 - [x] Bedrock response loss/transport timeout is not treated as a confirmed generation failure; definite pre-call or known 4xx rejection other than HTTP 408 remains retryable.
 - [x] Bedrock HTTP 408 and ambiguous CodeBuild `StartBuild` failures cannot be retried until explicit reconciliation or abandonment; known rejected requests remain retryable.
@@ -76,16 +82,18 @@ Add a tenant-scoped, idempotent request boundary for a real Nova-generated Terra
 
 ## Acceptance status
 
-Focused validation (114 tests), `make verify` (750 tests), Terraform formatting, and `terraform validate` pass on migration 31 and both reconciliation paths. Bedrock HTTP 408 and transport timeouts, plus ambiguous CodeBuild `StartBuild` errors, require explicit reconciliation or abandonment; known pre-call failures and confirmed provider/CodeBuild rejections without timeout semantics remain retryable. The required clean-room cycle is pending because `make clean-local` would remove existing local files and a PostgreSQL volume; those targets are preserved pending explicit approval. The PR remains open for review and has not been merged.
+The original focused validation (114 tests), full verification (750 tests), Terraform formatting, `terraform validate`, and isolated clean-room cycle at `c8141ae` passed. Latest focused Nova-run/worker validation passed 34 tests; `make verify` passed with 759 tests plus Ruff, Actions configuration, OpenAPI, and Compose checks. The final isolated clean-room cycle passed at `0e802d0` with 690 tests under Python 3.12. Completion updates and status failures are fenced by exact project/build/state; input reconciliation is fenced by the inspected attempt identity; pre-call lease expiry can be explicitly abandoned and retried safely; missing runner configuration remains reconcilable after restoration; ORM commits cannot restore a stale preparation phase; late start responses cannot bind across retry attempts; status uncertainty clears the start phase. Prior fresh clean-room evidence at `ae49f43`, `5cce504`, `c3e5721`, and `80827d4` also passed 690 tests under Python 3.12. Test containers were removed; new volumes and networks remain because the current deletion rule does not authorize deleting them. Bedrock HTTP 408 and transport timeouts, plus ambiguous CodeBuild `StartBuild` errors, require explicit reconciliation or abandonment; known pre-call failures and confirmed provider/CodeBuild rejections without timeout semantics remain retryable. Current-head CI and review must pass before merge.
 
 ## Tests / validation performed
 
 - `.venv/bin/python -m pytest tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py tests/test_db_config.py tests/test_invitation_email.py tests/test_nova_plan_artifact_infra.py tests/test_nova_plan_only_infra.py tests/test_queue_and_model_gateway.py tests/test_terraform_generation.py -q` — 114 passed, covering phase migration, explicit generation-abandon confirmation, exact build recovery, CodeBuild StartBuild 408/5xx/malformed-status classification, timeout-coded 4xx classification, uncertain Bedrock transport/408 outcomes, and composed IAM/dispatcher contracts.
 - `make verify PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` — passed with 750 tests, Ruff, Actions configuration, OpenAPI snapshot, and `docker compose config --quiet`.
+- Review follow-up `.venv/bin/pytest -q tests/test_nova_plan_runs.py tests/test_lambda_worker.py` — 34 passed; `make verify` — 759 passed plus Ruff, Actions configuration, OpenAPI, and Compose checks.
+- `make openapi-update` refreshed the generation-reconciliation description to include explicit pre-call lease recovery; `make verify` confirmed the snapshot matches.
 - `make openapi-update PY=/Users/adewale/Projects/davdeploy-pr325/.venv/bin/python PYTHON=/opt/homebrew/opt/python@3.14/bin/python3.14` updated both reconciliation routes; `make verify` confirmed the snapshot matches.
 - `terraform fmt -check -diff infrastructure/terraform/serverless-control-plane/main.tf infrastructure/terraform/serverless-control-plane/variables.tf`, `terraform validate`, `uv run --locked --extra dev python scripts/check_doc_conventions.py`, and `git diff --check` passed. Terraform initialization used `-backend=false -lockfile=readonly`.
 - The earlier initial verification reported 692 passed and 4 failures due to stale schema-version expectations; those assertions are now updated and the final full suite passes with 750 tests.
-- No AWS calls or customer resources were used. The clean-room cycle was not run because the repository cleanup target removes existing user data; see the exact paths below.
+- No AWS calls or customer resources were used. The isolated clean-room cycle passed on 2026-11-09 at `c8141ae`; exact commands and cleanup evidence are recorded in `docs/test/test325.md`.
 
 ## Evidence files produced
 
@@ -95,7 +103,7 @@ Focused validation (114 tests), `make verify` (750 tests), Terraform formatting,
 
 No Terraform apply, destroy, customer resource mutation, or AWS deployment. A successful plan job is not proof of apply, health, update, recovery, or cleanup. The separate customer plan-only role and tenant-isolated remote state remain follow-up gates. PR #326 must use schema migration 32 after this PR's migration 31.
 
-The local clean-room cycle remains pending. `make clean-local` would delete `/Users/adewale/Projects/davdeploy-pr325/.venv`, `/Users/adewale/Projects/davdeploy-pr325/.local/davdeploy.db`, and the Docker volume `davdeploy_davdeploy-postgres` at `/var/lib/docker/volumes/davdeploy_davdeploy-postgres/_data`. These local artifacts were preserved.
+The original worktree's `/Users/adewale/Projects/davdeploy-pr325/.venv`, `.local/davdeploy.db`, and Docker volume `davdeploy_davdeploy-postgres` remain preserved. Clean-room validation used a separate new worktree and a uniquely named Compose project, then cleaned only those test-created resources.
 
 ## Follow-up work
 

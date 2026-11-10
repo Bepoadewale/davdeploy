@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: davdeploy AWS connection. Discovery is read-only; Nova plan access is deny-all; administrator pilot is separate.
+Description: davdeploy AWS connection. Nova plan policy is expected to deny customer actions, but effective permissions are not verified; administrator pilot is separate.
 Parameters:
   davdeployDiscoveryBrokerRoleArn:
     Type: String
@@ -7,6 +7,7 @@ Parameters:
     Type: String
   davdeployNovaPlanBrokerRoleArn:
     Type: String
+    Default: unused
     AllowedPattern: "^(unused|arn:aws:iam::[0-9]{12}:role/.+)$"
   AccessMode:
     Type: String
@@ -21,6 +22,7 @@ Parameters:
 Conditions:
   CreateDiscoveryRole: !Not [!Equals [!Ref AccessMode, plan-only]]
   CreateNovaPlanOnlyRole: !Equals [!Ref AccessMode, plan-only]
+  CreateNovaPlanBrokerTrust: !Not [!Equals [!Ref davdeployNovaPlanBrokerRoleArn, unused]]
   CreateAdministratorPilotRole: !Equals [!Ref AccessMode, administrator-pilot]
 Resources:
   DiscoveryRole:
@@ -89,7 +91,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "davdeployPlan-${ConnectionId}"
-      Description: davdeploy Nova Terraform plan-only role. It has no customer service permissions.
+      Description: Template attaches a deny policy for customer service actions. DavDeploy does not attest effective permissions.
       MaxSessionDuration: 3600
       Tags:
         - Key: ManagedBy
@@ -103,9 +105,10 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS:
+              AWS: !If
+                - CreateNovaPlanBrokerTrust
+                - [!Ref davdeployDiscoveryBrokerRoleArn, !Ref davdeployNovaPlanBrokerRoleArn]
                 - !Ref davdeployDiscoveryBrokerRoleArn
-                - !Ref davdeployNovaPlanBrokerRoleArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:

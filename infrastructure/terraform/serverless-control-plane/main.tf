@@ -275,6 +275,19 @@ resource "aws_iam_role_policy" "api" {
         ]
       }
       ],
+      var.enable_nova_plan_role_verification ? [{
+        # The API may verify only customer roles with the plan-only name prefix.
+        # The customer role trust also requires this connection's ExternalId.
+        Effect   = "Allow"
+        Action   = ["sts:AssumeRole"]
+        Resource = "arn:aws:iam::*:role/davdeployPlan-*"
+        Condition = {
+          StringLike = {
+            "sts:ExternalId"      = "?*"
+            "sts:RoleSessionName" = "davdeploy-plan-verify-*"
+          }
+        }
+      }] : [],
       var.github_app_credential_secret_arn == "" ? [] : [{
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
@@ -1021,10 +1034,11 @@ locals {
     DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN                  = aws_iam_role.api.arn
     DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
     DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN                  = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
-    DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
-    DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
     DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
     DAVDEPLOY_NOVA_PLAN_RUNNER_READY                     = tostring(var.enable_nova_plan_only_runner)
+    DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED              = tostring(var.enable_nova_plan_role_verification)
+    DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
+    DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
     DAVDEPLOY_CLOUD_EXECUTION_BACKEND                    = "codebuild"
     DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED            = tostring(var.enable_customer_cloud_execution)
     DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION                = tostring(var.enable_customer_cloud_execution)

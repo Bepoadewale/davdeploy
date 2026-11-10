@@ -704,6 +704,7 @@ def list_cloud_connections(
             "setup_state": item.setup_state,
             "plan_role_arn": item.plan_role_arn,
             "plan_role_setup_state": item.plan_role_setup_state,
+            "plan_role_policy_status": service.plan_role_policy_status(item),
         }
         for item in service.cloud_connections(principal)
     ]
@@ -1273,7 +1274,7 @@ def abandon_generated_plan_generation_attempt(
     principal: Principal = Depends(verify_token),
     service: ProductService = Depends(product_service),
 ):
-    """Explicitly abandon an uncertain proposal call so a fresh retry can begin."""
+    """Explicitly abandon an uncertain or pre-call expired attempt for a fresh retry."""
     REQUESTS.labels("generated_plan_runs.reconcile_generation").inc()
     try:
         return service.abandon_generated_plan_generation_attempt(principal, run_id)
@@ -1287,7 +1288,7 @@ def reconcile_generated_plan_build_attempt(
     principal: Principal = Depends(verify_token),
     service: ProductService = Depends(product_service),
 ):
-    """Reconcile one exact build start, input handoff, or result read."""
+    """Find one exact CodeBuild attempt after its start response was lost."""
     REQUESTS.labels("generated_plan_runs.reconcile_build").inc()
     try:
         return service.reconcile_generated_plan_build_attempt(principal, run_id)

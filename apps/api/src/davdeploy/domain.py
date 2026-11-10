@@ -394,7 +394,7 @@ class GeneratedPlanInputReconciliationRequest(BaseModel):
 
 
 class GeneratedPlanGenerationReconciliationRequest(BaseModel):
-    """Require explicit confirmation before abandoning an uncertain proposal call."""
+    """Require explicit confirmation before abandoning an uncertain or pre-call attempt."""
 
     abandon_attempt: Literal[True]
 

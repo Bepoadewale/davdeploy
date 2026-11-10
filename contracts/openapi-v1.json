@@ -520,7 +520,7 @@
         "type": "object"
       },
       "GeneratedPlanGenerationReconciliationRequest": {
-        "description": "Require explicit confirmation before abandoning an uncertain proposal call.",
+        "description": "Require explicit confirmation before abandoning an uncertain or pre-call attempt.",
         "properties": {
           "abandon_attempt": {
             "const": true,
@@ -4302,7 +4302,7 @@
     },
     "/api/v1/generated-plan-runs/{run_id}/reconcile-generation": {
       "post": {
-        "description": "Explicitly abandon an uncertain proposal call so a fresh retry can begin.",
+        "description": "Explicitly abandon an uncertain or pre-call expired attempt for a fresh retry.",
         "operationId": "abandon_generated_plan_generation_attempt_api_v1_generated_plan_runs__run_id__reconcile_generation_post",
         "parameters": [
           {

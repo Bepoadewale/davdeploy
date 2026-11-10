@@ -64,7 +64,7 @@ resource "aws_s3_bucket_policy" "templates" {
   depends_on = [aws_s3_bucket_public_access_block.templates]
 }
 
-resource "aws_s3_object" "active_customer_discovery_role" {
+resource "aws_s3_object" "current_customer_discovery_role" {
   bucket       = aws_s3_bucket.templates.id
   key          = local.template_key
   source       = local.template_source
