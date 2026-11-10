@@ -3,15 +3,15 @@
 Date: 2026-11-10
 Execution type: Local API/service tests and static contract verification; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: implementation commit pending
+Commit: `e046917`
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
 ## Resources created
 
 No AWS or customer resources were created. Tests use local SQLite databases and
-temporary directories. The required isolated clean-room lifecycle run is still
-pending and will be recorded here before the PR is considered for merge.
+temporary directories. The isolated clean-room run used the PR-specific Compose
+project `davdeploy-pr333-cleanroom-20261110`.
 
 ## Commands executed
 
@@ -23,6 +23,8 @@ make openapi-check
 python scripts/check_doc_conventions.py
 git diff --check
 make verify
+COMPOSE_PROJECT_NAME=davdeploy-pr333-cleanroom-20261110 make local-proof
+COMPOSE_PROJECT_NAME=davdeploy-pr333-cleanroom-20261110 make clean-local
 ```
 
 ## Observed result
@@ -34,14 +36,21 @@ make verify
 - Full `make verify` passed: 865 tests; Ruff, Actions configuration, OpenAPI,
   and Docker Compose configuration passed.
 - Documentation convention validation and `git diff --check` passed.
+- Fresh isolated `make local-proof` passed on commit `e046917`: bootstrap,
+  smoke, API contract, customer-plan E2E, demo data seed, trace check, and all
+  865 tests. The customer-plan E2E used local fixtures; no AWS infrastructure
+  was deployed.
+- `make clean-local` removed the exact PR #333 Compose containers, network,
+  PostgreSQL volume, `.venv`, and `.local`. Docker inspection and filesystem
+  checks confirmed these targets were absent afterward. The unrelated existing
+  `davdeploy-nova-cleanroom-20261105a` container was left untouched.
 - No AWS, Bedrock, CodeBuild, state API, or customer workload calls occurred.
-- Clean-room validation remains pending.
 
 ## Teardown
 
 No cloud resources were created. Local temporary test data is managed by the
-test framework. The PR-specific clean-room stack will be cleaned by the
-repository's `make local-proof` workflow and its cleanup will be verified.
+test framework. The PR-specific clean-room stack was cleaned with
+`make clean-local`, and its cleanup was verified.
 
 ## Final boundary
 

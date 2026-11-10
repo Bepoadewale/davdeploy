@@ -58,16 +58,19 @@ does not add apply, pricing, health, recovery, or destroy behavior.
 
 ## Acceptance status
 
-The API and service behavior are implemented and locally tested. Full
-verification and clean-room checks remain in progress; current-head GitHub CI
-and review are pending. No hosted state or workload execution is claimed.
+The API and service behavior are implemented and locally tested. Focused and
+full verification, OpenAPI checks, and the isolated clean-room cycle passed.
+Current-head GitHub CI and review are pending. No hosted state or workload
+execution is claimed.
 
 ## Tests / validation performed
 
 - `uv run pytest tests/test_nova_plan_runs.py -q`: 40 passed.
 - `uv run ruff check apps/api/src/davdeploy/main.py apps/api/src/davdeploy/service.py tests/test_nova_plan_runs.py`: passed after import formatting.
 - `make openapi-update` regenerated `contracts/openapi-v1.json`; `make openapi-check` passed.
-- Full `make verify` reached 865 passing tests, then stopped because this ticket initially lacked required documentation markers. The ticket has been corrected; rerun the full gate.
+- Full `make verify`: 865 passed; Ruff, Actions configuration, OpenAPI, and Docker Compose configuration passed.
+- Fresh isolated `make local-proof` passed on `e046917`; all 865 tests, API contract, customer-plan E2E, trace check, and cleanup passed. Exact resources and cleanup evidence are in `docs/test/test333.md`.
+- Documentation convention validation and `git diff --check` passed.
 - Runtime and API evidence: `docs/test/test333.md`.
 
 ## Evidence files produced
