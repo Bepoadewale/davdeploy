@@ -1483,6 +1483,7 @@ class ProductService:
         return {
             "id": revision.id,
             "plan_id": plan.id,
+            "project_id": plan.project_id,
             "title": plan.title,
             "creator_subject": plan.creator_subject,
             "revision": revision.revision_number,

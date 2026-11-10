@@ -17,6 +17,9 @@ page can incorrectly make an older revision appear to have no run.
 - The route returns safe plan status and customer-facing title/revision labels,
   but only filters by project. The frontend post-approval page needs exact
   revision filtering to report the correct Terraform plan state.
+- The customer plan revision detail response also needs its project ID so the
+  customer page can call the project history route without an extra dashboard
+  lookup.
 - Planning remains review-only; pricing, approval, apply, health, recovery,
   and teardown remain unavailable.
 
@@ -31,6 +34,7 @@ page can incorrectly make an older revision appear to have no run.
 ## Work planned for the PR
 
 - Add an optional `revision_id` query parameter to the project history API.
+- Include the owning project ID in customer revision detail.
 - Verify that the exact revision belongs to the authenticated organization
   and requested project before querying runs.
 - Bind both returned items and cursor anchors to the same revision filter.
@@ -49,18 +53,21 @@ page can incorrectly make an older revision appear to have no run.
 
 ## Acceptance status
 
-Implementation is complete. Focused and full local verification and OpenAPI
-checks passed. Current-head CI and the isolated clean-room cycle are pending;
+Implementation is complete. Focused and full local verification, OpenAPI
+checks, and the isolated clean-room cycle passed. Current-head CI is pending;
 no hosted state or workload execution is claimed.
 
 ## Tests / validation performed
 
 - `uv run pytest tests/test_nova_plan_runs.py -q`: 41 passed.
+- `uv run pytest tests/test_customer_plan_review.py -q`: 32 passed, including
+  the project ID response field.
 - `make verify`: 866 passed; Ruff, Actions configuration, OpenAPI, and Docker
   Compose configuration passed.
 - `make openapi-check`, documentation conventions, and `git diff --check`
   passed.
-- Isolated clean-room validation and current-head GitHub CI are pending.
+- Clean-room `make local-proof` passed at `338a403`; current-head `make verify`
+  passed with 866 tests. GitHub CI is pending.
 - Runtime evidence: `docs/test/test334.md`.
 
 ## Evidence files produced
