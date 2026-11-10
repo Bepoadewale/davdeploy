@@ -25,6 +25,7 @@ from davdeploy.models import TerraformRemoteState, TerraformStateLock, Terraform
 
 MAX_TERRAFORM_STATE_BYTES = 128 * 1024 * 1024
 MAX_TERRAFORM_LOCK_BYTES = 16 * 1024
+MAX_TERRAFORM_STATE_WRITE_ATTEMPTS = 16
 _ACCOUNT_ID = re.compile(r"^[0-9]{12}$")
 _REGION = re.compile(r"^[a-z]{2}(?:-[a-z0-9]+)+-\d$")
 _UUID = re.compile(
@@ -266,6 +267,176 @@ class TerraformStateStorage:
             raise TerraformStateError("the stored Terraform state failed version or digest checks")
         return raw
 
+    def _active_lock(
+        self, *, state_id: str, run_id: str, build_id: str, lock_id: str
+    ) -> TerraformStateLock:
+        lock = self.db.scalar(
+            select(TerraformStateLock)
+            .where(
+                TerraformStateLock.state_id == state_id,
+                TerraformStateLock.lock_id == lock_id,
+                TerraformStateLock.run_id == run_id,
+                TerraformStateLock.codebuild_build_id == build_id,
+            )
+            .with_for_update()
+        )
+        expiry = lock.expires_at if lock else None
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        if lock is None or expiry <= datetime.now(UTC):
+            raise TerraformStateError("state write requires this active build's Terraform lock")
+        return lock
+
+    def _recover_pending_version(self, write: TerraformStateWrite, raw: bytes) -> str | None:
+        """Return the exact valid S3 version for a prior pending write, if present."""
+        if (
+            not isinstance(write.build_id_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", write.build_id_sha256)
+        ):
+            return None
+        expected_metadata = {
+            "davdeploy-state-id": write.state_id,
+            "davdeploy-state-sha256": write.state_sha256,
+            "davdeploy-state-lineage": write.lineage,
+            "davdeploy-state-serial": str(write.serial),
+            "davdeploy-run-id": write.run_id,
+            "davdeploy-build-id-sha256": write.build_id_sha256,
+        }
+        try:
+            head = self.s3.head_object(
+                Bucket=self.bucket,
+                Key=write.object_key,
+                ExpectedBucketOwner=self.expected_bucket_owner,
+            )
+        except ClientError as error:
+            error_code = error.response.get("Error", {}).get("Code")
+            status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            if status == 404 or error_code in {"404", "NoSuchKey", "NotFound"}:
+                return None
+            if status != 403 and error_code not in {"403", "AccessDenied"}:
+                raise TerraformStateError("pending Terraform state upload could not be reconciled") from None
+
+            # With no s3:ListBucket grant, HeadObject can return 403 for a missing
+            # key. A conditional write distinguishes absence without risking an
+            # overwrite; if the key exists, reconcile the exact version below.
+            try:
+                created = self.s3.put_object(
+                    Bucket=self.bucket,
+                    Key=write.object_key,
+                    Body=raw,
+                    ContentLength=len(raw),
+                    ContentType="application/json",
+                    ServerSideEncryption="aws:kms",
+                    SSEKMSKeyId=self.kms_key_arn,
+                    BucketKeyEnabled=True,
+                    ExpectedBucketOwner=self.expected_bucket_owner,
+                    Metadata=expected_metadata,
+                    IfNoneMatch="*",
+                )
+                version_id = created.get("VersionId") if isinstance(created, dict) else None
+                if not isinstance(version_id, str) or not version_id:
+                    raise TerraformStateError("state bucket versioning is required")
+                head = self.s3.head_object(
+                    Bucket=self.bucket,
+                    Key=write.object_key,
+                    ExpectedBucketOwner=self.expected_bucket_owner,
+                )
+                if head.get("VersionId") != version_id:
+                    return None
+            except ClientError as put_error:
+                put_code = put_error.response.get("Error", {}).get("Code")
+                put_status = put_error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+                if put_status != 412 and put_code not in {"412", "PreconditionFailed"}:
+                    raise TerraformStateError("pending Terraform state upload could not be reconciled") from None
+                try:
+                    head = self.s3.head_object(
+                        Bucket=self.bucket,
+                        Key=write.object_key,
+                        ExpectedBucketOwner=self.expected_bucket_owner,
+                    )
+                except (BotoCoreError, ClientError, OSError, TypeError, ValueError):
+                    raise TerraformStateError(
+                        "conditional Terraform state upload could not be reconciled"
+                    ) from None
+        except (BotoCoreError, OSError, TypeError, ValueError):
+            raise TerraformStateError("pending Terraform state upload could not be reconciled") from None
+
+        version_id = head.get("VersionId") if isinstance(head, dict) else None
+        if (
+            not isinstance(version_id, str)
+            or not version_id
+            or head.get("ServerSideEncryption") != "aws:kms"
+            or head.get("SSEKMSKeyId") != self.kms_key_arn
+            or head.get("Metadata") != expected_metadata
+        ):
+            return None
+        try:
+            response = self.s3.get_object(
+                Bucket=self.bucket,
+                Key=write.object_key,
+                VersionId=version_id,
+                ExpectedBucketOwner=self.expected_bucket_owner,
+            )
+            body = response.get("Body")
+            if body is None:
+                return None
+            try:
+                stored = body.read(MAX_TERRAFORM_STATE_BYTES + 1)
+            finally:
+                body.close()
+            parsed = parse_terraform_state(stored)
+        except (BotoCoreError, ClientError, OSError, TypeError, ValueError, AttributeError):
+            return None
+        if (
+            response.get("VersionId") != version_id
+            or response.get("ServerSideEncryption") != "aws:kms"
+            or response.get("SSEKMSKeyId") != self.kms_key_arn
+            or response.get("Metadata") != expected_metadata
+            or parsed.sha256 != write.state_sha256
+            or parsed.lineage != write.lineage
+            or parsed.serial != write.serial
+            or hashlib.sha256(raw).hexdigest() != parsed.sha256
+        ):
+            return None
+        return version_id
+
+    def _abandon_pending_attempt(
+        self,
+        write: TerraformStateWrite,
+        *,
+        run_id: str,
+        build_id: str,
+        lock_id: str,
+    ) -> None:
+        """Record an invalid prior attempt and rotate to a fresh, unguessable key."""
+        self._active_lock(
+            state_id=write.state_id, run_id=run_id, build_id=build_id, lock_id=lock_id
+        )
+        prior_history = write.attempt_history
+        if (
+            not isinstance(prior_history, list)
+            or len(prior_history) >= MAX_TERRAFORM_STATE_WRITE_ATTEMPTS
+        ):
+            raise TerraformStateError("Terraform state write recovery exceeded its attempt limit")
+        history = [*prior_history]
+        history.append(
+            {
+                "run_id": write.run_id,
+                "build_id_sha256": write.build_id_sha256,
+                "object_key": write.object_key,
+                "outcome": "ABANDONED_UNVERIFIED_OBJECT",
+                "recorded_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        write.attempt_history = history
+        write.run_id = run_id
+        write.build_id_sha256 = hashlib.sha256(build_id.encode()).hexdigest()
+        write.object_key = f"terraform-state/{write.state_id}/{secrets.token_hex(24)}.tfstate"
+        write.status = "PENDING"
+        write.object_version_id = None
+        write.committed_at = None
+        self.db.commit()
+
     def write(
         self,
         *,
@@ -277,22 +448,10 @@ class TerraformStateStorage:
     ) -> TerraformStateMetadata:
         state = self._state(state_id)
         metadata = parse_terraform_state(raw)
-        lock = self.db.get(TerraformStateLock, state_id)
-        lock_expiry = (
-            lock.expires_at.replace(tzinfo=UTC)
-            if lock and lock.expires_at.tzinfo is None
-            else lock.expires_at
-            if lock
-            else None
+        self._active_lock(
+            state_id=state_id, run_id=run_id, build_id=build_id, lock_id=lock_id
         )
-        if (
-            lock is None
-            or lock.lock_id != lock_id
-            or lock.run_id != run_id
-            or lock.codebuild_build_id != build_id
-            or lock_expiry <= datetime.now(UTC)
-        ):
-            raise TerraformStateError("state write requires this active build's Terraform lock")
+        build_id_sha256 = hashlib.sha256(build_id.encode()).hexdigest()
         if state.lineage is not None and state.lineage != metadata.lineage:
             raise TerraformStateError("Terraform state lineage changed unexpectedly")
         if state.serial is not None:
@@ -314,14 +473,35 @@ class TerraformStateStorage:
                 TerraformStateWrite.state_id == state_id,
                 TerraformStateWrite.lineage == metadata.lineage,
                 TerraformStateWrite.serial == metadata.serial,
-            )
+            ).with_for_update()
         )
-        if write is not None and (
-            write.state_sha256 != metadata.sha256
-            or write.run_id != run_id
-            or write.status not in {"PENDING", "COMMITTED"}
-        ):
+        if write is not None and write.state_sha256 != metadata.sha256:
             raise TerraformStateError("a conflicting Terraform state write already exists")
+        if write is not None and write.status == "COMMITTED":
+            return metadata
+        if write is not None and write.status != "PENDING":
+            raise TerraformStateError("a conflicting Terraform state write already exists")
+        if write is not None and (
+            write.run_id != run_id or write.build_id_sha256 != build_id_sha256
+        ):
+            recovered_version_id = self._recover_pending_version(write, raw)
+            if recovered_version_id is not None:
+                self._active_lock(
+                    state_id=state_id, run_id=run_id, build_id=build_id, lock_id=lock_id
+                )
+                write.object_version_id = recovered_version_id
+                write.status = "COMMITTED"
+                write.committed_at = datetime.now(UTC)
+                state.latest_object_key = write.object_key
+                state.latest_version_id = recovered_version_id
+                state.lineage = metadata.lineage
+                state.serial = metadata.serial
+                state.state_sha256 = metadata.sha256
+                self.db.commit()
+                return metadata
+            self._abandon_pending_attempt(
+                write, run_id=run_id, build_id=build_id, lock_id=lock_id
+            )
         if write is None:
             write = TerraformStateWrite(
                 state_id=state_id,
@@ -331,6 +511,8 @@ class TerraformStateStorage:
                 lineage=metadata.lineage,
                 serial=metadata.serial,
                 state_sha256=metadata.sha256,
+                build_id_sha256=build_id_sha256,
+                attempt_history=[],
             )
             self.db.add(write)
             try:
@@ -348,6 +530,7 @@ class TerraformStateStorage:
                     write is None
                     or write.state_sha256 != metadata.sha256
                     or write.run_id != run_id
+                    or write.build_id_sha256 != build_id_sha256
                     or write.status not in {"PENDING", "COMMITTED"}
                 ):
                     raise TerraformStateError(
@@ -449,23 +632,9 @@ class TerraformStateStorage:
                     "pending Terraform state upload failed reconciliation checks"
                 )
 
-        current_lock = self.db.scalar(
-            select(TerraformStateLock)
-            .where(
-                TerraformStateLock.state_id == state_id,
-                TerraformStateLock.lock_id == lock_id,
-                TerraformStateLock.run_id == run_id,
-                TerraformStateLock.codebuild_build_id == build_id,
-            )
-            .with_for_update()
+        self._active_lock(
+            state_id=state_id, run_id=run_id, build_id=build_id, lock_id=lock_id
         )
-        if current_lock is None:
-            raise TerraformStateError("Terraform lock changed before state metadata was committed")
-        current_expiry = current_lock.expires_at
-        if current_expiry.tzinfo is None:
-            current_expiry = current_expiry.replace(tzinfo=UTC)
-        if current_expiry <= datetime.now(UTC):
-            raise TerraformStateError("Terraform state lock expired before commit")
 
         write.object_version_id = version_id
         write.status = "COMMITTED"

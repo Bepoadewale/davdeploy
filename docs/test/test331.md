@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit, API, migration, infrastructure-contract, and Terraform validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: Draft work in progress; source commit will be recorded before review-ready
+Commit: Recovery implementation in progress; source commit will be recorded after final validation
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -50,6 +50,13 @@ runner remain disabled, and no customer or AWS execution occurred.
 - A successful TestClient bootstrap validates the exact active build, binds
   the credential to the tenant state scope, stores only its password digest,
   and denies a cross-tenant state read before another CodeBuild lookup.
+- A pending write from a failed CodeBuild attempt is recovered under a new
+  exact state lock: valid exact-version S3 content is adopted; absent or
+  unverifiable content is recorded in attempt history and moved to a fresh
+  object key. The old unverified object is retained and never used as state.
+- Recovery tests cover an upload whose response was lost, an absent object
+  under both 403 and 404 `HeadObject` responses, an invalid object, and
+  terminal-build lock reclamation before the next build writes.
 - Additive migration from schema version 32 and idempotent state-table setup.
 - Fake-S3 tests for KMS-encrypted, versioned state writes, exact-version reads,
   lock ownership, serial checks, and recovery after a lost upload response.
@@ -58,8 +65,8 @@ runner remain disabled, and no customer or AWS execution occurred.
   accepts a 412 only after rereading and matching exact metadata, and retries a
   409 at most once. A TestClient route test verifies active-build bootstrap,
   tenant scope/hash persistence, and cross-tenant state denial. The focused
-  state suite passed 17 tests.
-- Full `make verify` passed with 839 tests. Terraform validation, documentation
+  state suite passed 21 tests.
+- Full `make verify` passed with 843 tests. Terraform validation, documentation
   conventions, and diff checks also passed.
 - Static infrastructure checks for an exact AWS-IAM bootstrap route, trusted
   API Gateway identity mapping, an exact CodeBuild role invoke grant, and
@@ -83,8 +90,8 @@ runner remain disabled, and no customer or AWS execution occurred.
 - Concurrent database races, worker restart recovery, and Terraform CLI retry
   behavior still need dedicated tests. Stale-lock release is unit-tested with
   exact terminal-build evidence, but its AWS CodeBuild lookup is not.
-- The clean-room lifecycle gate for this database/authentication/Terraform
-  change has not been run. PR #331 remains draft and must not be treated as
+- The full clean-room lifecycle gate has not yet been rerun against the pending
+  recovery fix. PR #331 remains draft and must not be treated as
   deployment-ready.
 
 ## Commands executed
@@ -99,7 +106,8 @@ python scripts/check_doc_conventions.py
 
 ## Teardown
 
-No cloud teardown was needed. No persistent local test services were started.
+No cloud teardown was needed. The recovery tests use in-memory SQLite and fake
+S3; no persistent local services were started for the current source checks.
 
 ## Final boundary
 

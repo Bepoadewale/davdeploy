@@ -18,6 +18,7 @@ from davdeploy.models import (
     TerraformRemoteState,
     TerraformStateCredential,
     TerraformStateLock,
+    TerraformStateWrite,
 )
 from davdeploy.terraform_state import (
     TerraformStateError,
@@ -396,6 +397,7 @@ class _FakeS3:
         self.missing_head_code = "404"
         self.conditional_precondition_once = False
         self.conditional_conflict_once = False
+        self.fail_before_put_once = False
 
     def head_object(self, *, Key, **_kwargs):
         if Key not in self.objects:
@@ -414,6 +416,11 @@ class _FakeS3:
     def put_object(self, *, Key, Body, Metadata, IfNoneMatch=None, **_kwargs):
         self.put_count += 1
         self.put_conditions.append(IfNoneMatch)
+        if self.fail_before_put_once:
+            self.fail_before_put_once = False
+            from botocore.exceptions import ClientError
+
+            raise ClientError({"Error": {"Code": "InternalError", "Message": "failed"}}, "PutObject")
         self.objects[Key] = {
             "VersionId": f"version-{self.put_count}",
             "ServerSideEncryption": "aws:kms",
@@ -504,6 +511,18 @@ def _lock_bytes(lock_id: str = "lock-1") -> bytes:
             "Path": "state",
         }
     ).encode()
+
+
+def _reclaim_failed_state_lock(db, storage, state, *, run_id: str, build_id: str, lock_id: str):
+    db.get(TerraformStateLock, state.id).expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    db.commit()
+    assert storage.reclaim_expired_lock(
+        state_id=state.id,
+        expected_lock_id=lock_id,
+        expected_run_id=run_id,
+        expected_build_id=build_id,
+        observed_build_status="FAILED",
+    )
 
 
 def test_state_storage_commits_exact_encrypted_object_version_and_lock_owner():
@@ -667,6 +686,194 @@ def test_state_storage_reconciles_lost_upload_response_from_exact_object_metadat
     )
     assert result.serial == 0
     assert s3.put_count == 1
+    assert storage.read(state.id) == state_bytes
+    db.close()
+    engine.dispose()
+
+
+def test_state_storage_adopts_valid_pending_object_after_build_recovery():
+    s3 = _FakeS3()
+    s3.lose_first_response = True
+    engine, db, state, storage = _state_storage(s3)
+    state_bytes = _state_bytes(serial=0)
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with pytest.raises(TerraformStateError, match="uncertain"):
+        storage.write(
+            state_id=state.id,
+            run_id="run-1",
+            build_id="project:build-1",
+            lock_id="lock-1",
+            raw=state_bytes,
+        )
+    _reclaim_failed_state_lock(
+        db,
+        storage,
+        state,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+    )
+    storage.lock(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        raw=_lock_bytes("lock-2"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        lock_id="lock-2",
+        raw=state_bytes,
+    )
+
+    write = db.scalar(select(TerraformStateWrite).where(TerraformStateWrite.state_id == state.id))
+    assert result.serial == 0
+    assert s3.put_count == 1
+    assert write.status == "COMMITTED"
+    assert write.run_id == "run-1"
+    assert write.object_version_id == "version-1"
+    assert storage.read(state.id) == state_bytes
+    db.close()
+    engine.dispose()
+
+
+@pytest.mark.parametrize("missing_head_code", ["403", "404"])
+def test_state_storage_recovers_absent_pending_object_under_current_lock(missing_head_code):
+    s3 = _FakeS3()
+    s3.fail_before_put_once = True
+    s3.missing_head_code = missing_head_code
+    engine, db, state, storage = _state_storage(s3)
+    state_bytes = _state_bytes(serial=0)
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with pytest.raises(TerraformStateError, match="uncertain"):
+        storage.write(
+            state_id=state.id,
+            run_id="run-1",
+            build_id="project:build-1",
+            lock_id="lock-1",
+            raw=state_bytes,
+        )
+    old_write = db.scalar(
+        select(TerraformStateWrite).where(TerraformStateWrite.state_id == state.id)
+    )
+    old_key = old_write.object_key
+    _reclaim_failed_state_lock(
+        db,
+        storage,
+        state,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+    )
+    storage.lock(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        raw=_lock_bytes("lock-2"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        lock_id="lock-2",
+        raw=state_bytes,
+    )
+
+    assert result.serial == 0
+    assert old_write.status == "COMMITTED"
+    if missing_head_code == "403":
+        assert old_write.object_key == old_key
+        assert old_write.run_id == "run-1"
+        assert old_write.attempt_history == []
+        assert s3.put_count == 2
+    else:
+        assert old_write.object_key != old_key
+        assert old_write.run_id == "run-2"
+        assert old_write.attempt_history[0]["object_key"] == old_key
+        assert old_write.attempt_history[0]["run_id"] == "run-1"
+        assert old_write.attempt_history[0]["outcome"] == "ABANDONED_UNVERIFIED_OBJECT"
+    assert storage.read(state.id) == state_bytes
+    db.close()
+    engine.dispose()
+
+
+def test_state_storage_abandons_unverifiable_pending_object_and_rotates_key():
+    s3 = _FakeS3()
+    s3.lose_first_response = True
+    engine, db, state, storage = _state_storage(s3)
+    state_bytes = _state_bytes(serial=0)
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with pytest.raises(TerraformStateError, match="uncertain"):
+        storage.write(
+            state_id=state.id,
+            run_id="run-1",
+            build_id="project:build-1",
+            lock_id="lock-1",
+            raw=state_bytes,
+        )
+    write = db.scalar(select(TerraformStateWrite).where(TerraformStateWrite.state_id == state.id))
+    old_key = write.object_key
+    s3.objects[old_key]["Metadata"]["davdeploy-state-sha256"] = "f" * 64
+    _reclaim_failed_state_lock(
+        db,
+        storage,
+        state,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+    )
+    storage.lock(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        raw=_lock_bytes("lock-2"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        lock_id="lock-2",
+        raw=state_bytes,
+    )
+
+    assert result.serial == 0
+    assert write.status == "COMMITTED"
+    assert write.run_id == "run-2"
+    assert write.object_key != old_key
+    assert write.attempt_history == [
+        {
+            "run_id": "run-1",
+            "build_id_sha256": hashlib.sha256(b"project:build-1").hexdigest(),
+            "object_key": old_key,
+            "outcome": "ABANDONED_UNVERIFIED_OBJECT",
+            "recorded_at": write.attempt_history[0]["recorded_at"],
+        }
+    ]
     assert storage.read(state.id) == state_bytes
     db.close()
     engine.dispose()

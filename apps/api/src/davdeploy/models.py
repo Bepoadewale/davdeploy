@@ -637,7 +637,7 @@ class TerraformStateCredential(Base):
 
 
 class TerraformStateWrite(Base):
-    """Two-phase record tying one state upload to an exact immutable S3 version."""
+    """Two-phase record tying one state upload attempt to an exact S3 version."""
 
     __tablename__ = "terraform_state_writes"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -648,6 +648,8 @@ class TerraformStateWrite(Base):
     lineage: Mapped[str] = mapped_column(String(64))
     serial: Mapped[int] = mapped_column(Integer)
     state_sha256: Mapped[str] = mapped_column(String(64))
+    build_id_sha256: Mapped[str] = mapped_column(String(64))
+    attempt_history: Mapped[list] = mapped_column(JSON, default=list)
     object_version_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
