@@ -5,7 +5,7 @@ Execution type: Local database migration, API contract and Terraform policy vali
 Repository: `Bepoadewale/davdeploy`
 Customer repository: N/A; no customer repository or workload was used
 Branch: `feat/customer-nova-plan-role-326` (refreshed after PR #325 merged)
-Commit: proof checkout at `3be87a1` (migration source `28ca129`, merged main `47d932e`); final evidence commit recorded in the pull request
+Commit: proof checkout at `3be87a1` (migration source `28ca129`, merged main `47d932e`); evidence updated at the final PR commit
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -35,15 +35,26 @@ The focused plan-role, list response, migration and Terraform policy suite passe
 
 For the follow-up workflow wiring, the focused Nova/workflow tests passed (14 tests), the Actions configuration boundary classified 26 public metadata names and 3 secret names, the PR documentation convention check passed, and `git diff --check` passed. The workflow maps `NOVA_PLAN_ROLE_VERIFICATION_ENABLED` with a false fallback; the hosted variable was not enabled or changed.
 
-After PR #325 merged, PR #326 was retargeted to `main` and its current mainline was merged into the feature branch. A fresh, isolated checkout then ran `make local-proof` successfully: Python 3.12 bootstrap, Docker Compose startup and smoke checks, API contract, customer-plan E2E, fixture seed, trace check, and full `make verify` all passed. The full suite reported 781 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. The pre-existing Starlette/httpx deprecation warning remains. The fresh project containers were stopped and retained; its new Compose volume/network and local `.venv`/`.local` were retained because the current deletion rule does not authorize deleting them. This was not the repository's complete clean-to-clean cycle. No AWS calls were made.
+After PR #325 merged, PR #326 was retargeted to `main` and current mainline was merged into the feature branch. The full isolated cycle passed at `3be87a1`: clean, Python 3.12 bootstrap, Compose smoke, API contract, simple/complex/degraded/Day-2 and canonical demos, policy and readiness failure demos, customer-plan E2E, fixture seed, trace check, `make verify` (781 tests), and final clean. Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. The pre-existing Starlette/httpx deprecation warning remains. Final checks confirmed no project containers, volume, network, `.venv`, or `.local` remained. This is local fixture evidence; no AWS calls or customer resources were used.
 
 ## Resources created
 
-No AWS resources or customer workloads. The isolated local proof created the project-specific Compose containers, network and PostgreSQL volume, plus `.venv` and `.local` in `/private/tmp/davdeploy-pr326-resume`. The containers were stopped. The network, volume and local files remain; do not treat them as AWS resources.
+No AWS resources or customer workloads. The isolated local proof created project-specific Compose containers, a network and PostgreSQL volume, plus `.venv` and `.local` in `/private/tmp/davdeploy-pr326-resume`; final `make clean-local` removed those exact artifacts and absence was verified.
 
 ## Teardown
 
-No cloud teardown was needed. The stopped local Compose stack and its persistent local artifacts remain because deletion was not authorized.
+No cloud teardown was needed. Final project-scoped `make clean-local` removed the local test stack and artifacts; absence was verified.
+
+```text
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make clean-local
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make bootstrap-local
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make smoke
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make api-contract
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make demo-simple demo-complex demo-degraded demo-day2 demo demo-failure demo-readiness-failure
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make customer-plan-e2e seed-demo-data
+sleep 10 && COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make trace-check verify
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make clean-local
+```
 
 ## Limits
 
