@@ -44,6 +44,9 @@ git diff --check
   trace, verification, and cleanup sequence.
 - GitHub Actions run `42861740002` passed all seven required checks for the
   final evidence commit `4277831`.
+- GitHub Actions run `42883208366` passed all seven required checks for the
+  merged-main source and current evidence, including fresh-runner `local-e2e`
+  and `cloud-contracts`.
 - No clean-room cycle was run on the developer's Mac. The fresh GitHub runner
   completed the repository's clean-room lifecycle sequence, which provides
   the required isolated proof without deleting local project artifacts.
@@ -76,8 +79,9 @@ recovery, or teardown. PR #332 remains draft.
 PR #331 merged into `main` at `c3067ea`; PR #332 now incorporates it through
 merge commit `eb10860`. On that combined source, `make verify` passed 861
 tests, `make terraform-validate` passed all configured roots, documentation
-convention checks passed, and `git diff --check` passed. These are local
-checks. Fresh GitHub checks for the current PR head are still required. No AWS
+convention checks passed, and `git diff --check` passed. GitHub run
+`42883208366` subsequently passed all seven required checks for the
+merged-main source and evidence head. No AWS
 calls, CodeBuild bootstrap, remote-state request, or infrastructure mutation
 occurred.
 

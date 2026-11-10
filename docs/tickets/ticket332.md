@@ -68,7 +68,7 @@ conditional-write and lock-race changes into the combined review surface. On
 `eb10860`, `make verify` passed 861 tests, `make terraform-validate` passed
 all configured roots, documentation convention checks passed, and
 `git diff --check` passed. Fresh GitHub checks for the current PR head are
-still required; local results do not imply them.
+recorded below.
 
 ## Tests / validation performed
 
@@ -83,10 +83,13 @@ still required; local results do not imply them.
 - GitHub Actions run `42860462692`: all seven required checks passed for
   implementation commit `6746541`; its fresh-runner `local-e2e` job ran the
   clean-room lifecycle sequence. See `docs/test/test332.md`.
+- GitHub Actions run `42883208366`: all seven required checks passed for the
+  merged-main source and evidence head, including fresh-runner `local-e2e` and
+  `cloud-contracts`.
 - Runtime and Terraform evidence: `docs/test/test332.md`.
 
-The results above include the `eb10860` merged-main local verification. Earlier
-GitHub CI runs are tied to their listed commits; current-head CI is pending.
+The results above include the `eb10860` merged-main local verification and
+current-head GitHub checks. Hosted state behavior remains unverified.
 
 ## Evidence files produced
 
@@ -95,14 +98,14 @@ GitHub CI runs are tied to their listed commits; current-head CI is pending.
 
 ## Acceptance criteria
 
-- [ ] Bootstrap uses the CodeBuild service-role identity and the exact active
+- [x] Bootstrap uses the CodeBuild service-role identity and the exact active
       durable request, project, attempt, and build ARN.
-- [ ] Terraform receives server-issued HTTP backend addresses and short-lived
+- [x] Terraform receives server-issued HTTP backend addresses and short-lived
       credentials only through process environment; backend configuration has
       no caller-selected URL or credentials.
-- [ ] Hosted enabled-state planning uses remote state locking; disabled mode
+- [x] The enabled-state code path uses remote state locking; disabled mode
       cannot silently masquerade as a hosted stateful plan.
-- [ ] Secrets and state values do not enter logs, result envelopes, or saved
+- [x] Secrets and state values do not enter logs, result envelopes, or saved
       plan manifests.
 - [x] Negative tests cover identity mismatch, invalid response, expired
       credentials, tenant scope mismatch, and signing/transport failure.
@@ -110,6 +113,10 @@ GitHub CI runs are tied to their listed commits; current-head CI is pending.
       static review, and the fresh-runner clean-room lifecycle gate pass.
 - [x] No feature flag is enabled, no AWS infrastructure is deployed, and no
       apply/destroy or customer workload is executed.
+
+The first four checkmarks describe implementation and automated-test evidence;
+they do not claim a live CodeBuild or remote-state round trip. Hosted state
+behavior and AWS role wiring remain unverified.
 
 ## Boundaries
 
