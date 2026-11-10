@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit/API validation, static infrastructure validation, and isolated clean-room demos; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: runtime source `b09d211` (recovery implementation); race-test additions follow.
+Commit: runtime source `b09d211`; race tests and final evidence at `240079a`.
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -85,6 +85,9 @@ runner remain disabled, and no customer or AWS execution occurred.
   and MCP tools-list request.
 - GitHub Actions run `42873278635` passed all seven required checks for
   `b09d211`, including the fresh-runner `local-e2e` workflow.
+- GitHub Actions run `42876621371` passed all seven required checks for
+  `240079a`; the fresh-runner `local-e2e` job ran the complete lifecycle and
+  847-test verification sequence.
 - Static infrastructure checks for an exact AWS-IAM bootstrap route, trusted
   API Gateway identity mapping, an exact CodeBuild role invoke grant, and
   Basic-auth state routes behind the edge-origin guard.
@@ -104,9 +107,11 @@ runner remain disabled, and no customer or AWS execution occurred.
 - The API feature flag is hard-disabled in Terraform and its state API URL is
   empty. The separately controlled state bucket defaults off; no bucket or KMS
   key was provisioned during this work.
-- Concurrent database races, worker restart recovery, and Terraform CLI retry
-  behavior still need dedicated tests. Stale-lock release is unit-tested with
-  exact terminal-build evidence, but its AWS CodeBuild lookup is not.
+- The simultaneous lock-acquisition and stale-reclaim/reacquisition races have
+  forced two-session SQLite tests. PostgreSQL/Aurora concurrency, state-write
+  versus unlock/reclaim races, worker restart recovery, and Terraform CLI retry
+  behavior remain untested. Stale-lock release has local terminal-build
+  evidence, but its live AWS CodeBuild lookup is not.
 
 ## Commands executed
 

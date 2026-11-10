@@ -60,8 +60,8 @@ The implementation and required local/CI verification pass at runtime code commi
 
 - Focused suites: `tests/test_terraform_state.py tests/test_db_config.py` — 35 passed, including pending-write recovery, schema-field coverage, simultaneous acquisition, and stale-reclaim/reacquisition races.
 - `make verify` with Python 3.12 — 847 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
-- Full isolated clean-room sequence passed at code commit `b09d211`: bootstrap, readiness, all demos, API contract, customer-plan E2E, seed, API restart/persistence, trace check, `make verify`, and MCP tools-list request. The exact project containers, network, Postgres volume, `.venv`, and `.local` database were removed and absence verified.
-- GitHub Actions run `42873278635` — all seven required checks passed for `b09d211`, including fresh-runner local E2E.
+- Full isolated clean-room sequence passed at runtime code commit `b09d211`: bootstrap, readiness, all demos, API contract, customer-plan E2E, seed, API restart/persistence, trace check, `make verify`, and MCP tools-list request. The exact project containers, network, Postgres volume, `.venv`, and `.local` database were removed and absence verified.
+- GitHub Actions run `42876621371` — all seven required checks passed for final test/evidence head `240079a`, including fresh-runner local E2E with 847 tests.
 - The local race tests use separate SQLite sessions. They validate single-lock ownership under forced concurrent inserts and reclaim/acquisition interleaving but do not establish PostgreSQL/Aurora locking behavior.
 - `scripts/terraform-validate.sh` — all configured roots passed.
 - Documentation conventions and `git diff --check` passed.
