@@ -4255,7 +4255,7 @@
     },
     "/api/v1/generated-plan-runs/{run_id}/reconcile-build": {
       "post": {
-        "description": "Find one exact CodeBuild attempt after its start response was lost.",
+        "description": "Reconcile one exact build start, input handoff, or result read.",
         "operationId": "reconcile_generated_plan_build_attempt_api_v1_generated_plan_runs__run_id__reconcile_build_post",
         "parameters": [
           {

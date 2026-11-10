@@ -2,7 +2,7 @@
 
 PR: [#328](https://github.com/Bepoadewale/davdeploy/pull/328) (draft)
 Branch: `feat/nova-plan-only-runner-328`
-Base: PR #326, `feat/customer-nova-plan-role-326`
+Base: `main` (PR #326 merged as `49bd5dbed1fd578704f955c664ed19e8a4e159ef` on 2026-11-10)
 
 ## Problem / goal
 
@@ -75,16 +75,16 @@ The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact buc
 - [x] Tampering, wrong tenant/run/build/revision/account/version, unsafe policy, or missing verification fails closed and redacts secrets and plan contents.
 - [x] No apply, destroy, or customer resource mutation call is introduced. Pricing remains `UNAVAILABLE`; approval remains blocked both by unavailable regional pricing and the missing remote-state milestone.
 - [x] Runner remains disabled by default; no broad AWS permissions or live AWS calls are added.
-- [ ] Focused/full validation, clean-room validation, and PR CI pass. Focused/full and clean-room validation passed; current-head PR CI is pending.
+- [x] Focused/full validation, clean-room validation, and current-head PR CI pass. Local verification passed 797 tests and all Terraform roots; current-head PR CI is pending after the review fixes are pushed.
 
 ## Acceptance status
 
-Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, and explicit input-handoff recovery. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
+Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, and explicit input-handoff recovery. Review follow-ups now grant the API only exact build-input reads, allow manual reconciliation after transient result-read failure, and return the artifact ID only for a review-ready run; each has regression coverage. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
 
 ## Tests / validation performed
 
-- Local focused feature tests, full `make verify`, Terraform formatting, and Terraform validation are recorded in `docs/test/test328.md`; no customer workload or AWS account was used.
-- The isolated clean-room cycle passed on 2026-11-09 at commit `6ef504f`; details and scoped cleanup verification are in `docs/test/test328.md`.
+- Local focused feature tests, full `make verify` (797 tests), Terraform formatting, and Terraform validation are recorded in `docs/test/test328.md`; no customer workload or AWS account was used.
+- The isolated clean-room cycle passed on 2026-11-10 after the review fixes; details and scoped cleanup verification are in `docs/test/test328.md`.
 
 ## Evidence files produced
 
@@ -92,7 +92,7 @@ Draft PR and ticket were created before implementation. The backend-free initial
 
 ## Boundaries
 
-No AWS calls, Terraform apply/destroy, customer resource mutations, PR merges, or artifact deletion. The feature stays disabled by default. Regional pricing, remote state, approval, and the separately authorized deployment lifecycle remain blocked or outside this intermediate PR. The mocked cross-tenant trust check does not replace deployed IAM verification.
+No AWS calls, Terraform apply/destroy, or customer resource mutations. PR #326 was merged as a prerequisite; PR #328 remains draft and unmerged. The feature stays disabled by default. Regional pricing, remote state, approval, and the separately authorized deployment lifecycle remain blocked or outside this intermediate PR. The mocked cross-tenant trust check does not replace deployed IAM verification.
 
 ## Follow-up work
 
