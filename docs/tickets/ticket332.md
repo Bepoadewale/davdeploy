@@ -1,8 +1,8 @@
 # ticket332 — bind the Nova plan worker to isolated remote Terraform state
 
-PR: [#332](https://github.com/Bepoadewale/davdeploy/pull/332), draft stacked on [#331](https://github.com/Bepoadewale/davdeploy/pull/331)
+PR: [#332](https://github.com/Bepoadewale/davdeploy/pull/332), draft
 Branch: `feat/nova-remote-state-runner-332`
-Base: `feat/tenant-isolated-terraform-state-331`
+Base: `main` (includes merged PR #331)
 
 ## Problem / goal
 
@@ -15,8 +15,8 @@ the state-credential bootstrap request.
 
 ## Current repo state
 
-- PR #331 implements the state service and optional storage, but the runner
-  still runs `terraform init -backend=false` and `terraform plan -lock=false`.
+- PR #331's state service and optional storage are now merged into `main`;
+  this PR binds the plan worker to that state service when explicitly enabled.
 - The API bootstrap route is disabled by default and checks both the durable
   row ID and active attempt/build binding.
 - Pricing is unavailable. Plans must remain unapprovable, and there is no
@@ -60,6 +60,16 @@ unverified. The final run included the full fresh-runner local-e2e/clean-room
 sequence. Independent static security review found no blocking findings. The
 default-off and no-deployment boundary is met.
 
+### Revalidation after PR #331 merged
+
+PR #331 merged into `main` as `c3067ea`. This branch now includes current
+`main` through merge commit `eb10860`, bringing the state API recovery,
+conditional-write and lock-race changes into the combined review surface. On
+`eb10860`, `make verify` passed 861 tests, `make terraform-validate` passed
+all configured roots, documentation convention checks passed, and
+`git diff --check` passed. Fresh GitHub checks for the current PR head are
+still required; local results do not imply them.
+
 ## Tests / validation performed
 
 - Focused suites: 27 state-client and state-worker tests passed; 19 worker
@@ -74,6 +84,9 @@ default-off and no-deployment boundary is met.
   implementation commit `6746541`; its fresh-runner `local-e2e` job ran the
   clean-room lifecycle sequence. See `docs/test/test332.md`.
 - Runtime and Terraform evidence: `docs/test/test332.md`.
+
+The results above include the `eb10860` merged-main local verification. Earlier
+GitHub CI runs are tied to their listed commits; current-head CI is pending.
 
 ## Evidence files produced
 

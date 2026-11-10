@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit tests and static Terraform validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: runtime implementation `674654173b7e6b90ec72542afd4f52be9a781134`; evidence update `4277831`
+Commit: runtime implementation `674654173b7e6b90ec72542afd4f52be9a781134`; merged-main revalidation `eb10860`; evidence update pending
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -69,4 +69,18 @@ Temporary local test directories are handled by the test framework.
 This evidence does not establish a live SigV4 call, API Gateway identity
 mapping, CodeBuild IAM role permission, remote-state HTTP round trip, persisted
 state recovery, hosted customer plan, pricing, approval, apply, health,
-recovery, or teardown. PR #332 remains draft and depends on PR #331.
+recovery, or teardown. PR #332 remains draft.
+
+## Revalidation on merged `main`
+
+PR #331 merged into `main` at `c3067ea`; PR #332 now incorporates it through
+merge commit `eb10860`. On that combined source, `make verify` passed 861
+tests, `make terraform-validate` passed all configured roots, documentation
+convention checks passed, and `git diff --check` passed. These are local
+checks. Fresh GitHub checks for the current PR head are still required. No AWS
+calls, CodeBuild bootstrap, remote-state request, or infrastructure mutation
+occurred.
+
+PR #332 now targets `main` and no longer depends on an open PR #331. Hosted
+remote-state behavior, customer planning, pricing, approval, apply, health,
+recovery, and teardown remain unverified or unimplemented.
