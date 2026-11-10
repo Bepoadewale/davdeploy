@@ -121,7 +121,9 @@ def make_approved_revision(service):
     return project, connection, approved
 
 
-def generated_runner_result(tmp_path, revision, project):
+def generated_runner_result(
+    tmp_path, revision, project, *, rationale="Private application storage."
+):
     plan_file = tmp_path / "saved.tfplan"
     plan_file.write_bytes(PLAN_BYTES)
     os.chmod(plan_file, 0o600)
@@ -135,14 +137,12 @@ def generated_runner_result(tmp_path, revision, project):
                 resource_type="aws_s3_bucket",
                 name="app_data",
                 arguments={"bucket": "private-test-data"},
-                rationale="Private application storage.",
+                rationale=rationale,
             ),
         ),
         requirements=WorkloadRequirements(region="us-east-1"),
     )
-    proposal_digest = hashlib.sha256(
-        json.dumps(proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    proposal_digest = canonical_json_digest(proposal.model_dump(mode="json"))
     policy = GeneratedPlanPolicyResult(
         PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW, "generated-plan-policy-test", ()
     )
@@ -210,7 +210,9 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
     store = ArtifactStoreFixture()
     service, db = service_with_artifact_store(store)
     project, _, revision = make_submitted_revision(service)
-    proposal, generated = generated_runner_result(tmp_path, revision, project)
+    proposal, generated = generated_runner_result(
+        tmp_path, revision, project, rationale="Stockage privé sécurisé."
+    )
 
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, RUN_ID, proposal, generated

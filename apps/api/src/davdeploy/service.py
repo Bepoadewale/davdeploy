@@ -4884,10 +4884,7 @@ class ProductService:
         ):
             raise ValueError("generated plan target does not match the verified customer account")
 
-        proposal_bytes = json.dumps(
-            proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
-        proposal_sha256 = hashlib.sha256(proposal_bytes).hexdigest()
+        proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
         expected_context_sha256 = generation_context_digest(revision.content, revision.id)
         try:
             with open(generated_plan.saved_plan_path, "rb") as saved_plan_file:

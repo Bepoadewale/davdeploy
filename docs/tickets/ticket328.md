@@ -80,7 +80,7 @@ The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact buc
 
 ## Acceptance status
 
-Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, distinct durable request and per-attempt IDs, canonical Unicode proposal digests, recovery from saved-plan verification errors, conditional build-input recovery, and returning the artifact ID only for a review-ready run. The fresh Python 3.12 local-proof cycle and current-head `make verify` passed 818 tests after the latest changes. CI and review for the latest follow-up remain pending. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
+Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, distinct durable request and per-attempt IDs, canonical Unicode proposal digests through planner and artifact persistence, recovery from saved-plan verification errors, conditional build-input recovery, and returning the artifact ID only for a review-ready run. The fresh Python 3.12 local-proof cycle and current-head `make verify` passed 818 tests after the latest changes. CI and review for the latest follow-up remain pending. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
 
 ## Tests / validation performed
 
@@ -88,6 +88,7 @@ Draft PR and ticket were created before implementation. The backend-free initial
 - Focused tests for runner recovery and connection contracts passed (61 tests); no customer workload or AWS account was used.
 - Current-head review regressions passed: 47 focused plan/reconciliation tests and `make verify` with 818 tests; Ruff passed. No AWS calls or resource mutations occurred.
 - The conditional build-input recovery regression passed; refreshed 818-test `make verify` and a fresh Python 3.12 `make local-proof` passed after the change. No AWS calls or resource mutations occurred.
+- Canonical Unicode proposal persistence regression passed with accented text; refreshed `make verify` and fresh Python 3.12 `make local-proof` both passed with 818 tests. No AWS calls or resource mutations occurred.
 
 ## Evidence files produced
 
