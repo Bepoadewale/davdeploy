@@ -19,7 +19,12 @@ from davdeploy.generated_deployment_contract import (
 from davdeploy.generated_plan_artifacts import canonical_json_digest
 from davdeploy.main import app, product_service
 from davdeploy.model_gateway import ModelGatewayUnavailable
-from davdeploy.models import GeneratedPlanArtifact, GeneratedPlanRun, GeneratedPlanRunIdempotencyKey
+from davdeploy.models import (
+    GeneratedPlanArtifact,
+    GeneratedPlanRun,
+    GeneratedPlanRunIdempotencyKey,
+    InfrastructurePlan,
+)
 from davdeploy.nova_plan_dispatch import NovaPlanBuild, NovaPlanDispatchError
 from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
@@ -1680,6 +1685,8 @@ def test_plan_history_is_stable_paginated_and_uses_safe_status_projection():
     expected_fields = {
         "id",
         "project_id",
+        "plan_title",
+        "revision_number",
         "revision_id",
         "revision_sha256",
         "proposal_sha256",
@@ -1693,6 +1700,9 @@ def test_plan_history_is_stable_paginated_and_uses_safe_status_projection():
         "execution_boundary",
     }
     assert set(first["items"][0]) == expected_fields
+    plan = db.get(InfrastructurePlan, revision.infrastructure_plan_id)
+    assert first["items"][0]["plan_title"] == plan.title
+    assert first["items"][0]["revision_number"] == revision.revision_number
     assert "must-not-leak" not in repr(all_runs)
     assert "private-input-object-key" not in repr(all_runs)
     assert "internal-project-name" not in repr(all_runs)

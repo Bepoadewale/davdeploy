@@ -34,6 +34,8 @@ does not add apply, pricing, health, recovery, or destroy behavior.
 ## Work planned for the PR
 
 - Add a project-scoped history endpoint using the authenticated organization.
+- Include the customer-facing plan title and revision number in each history
+  entry so customers can distinguish plans without decoding identifiers.
 - Reuse existing requester/admin visibility rules and safe status projection.
 - Add a hard-bounded page size and stable cursor pagination using an
   organization/project/requester-authorized prior run as the cursor anchor.
@@ -53,7 +55,8 @@ does not add apply, pricing, health, recovery, or destroy behavior.
 - [x] Foreign-tenant, foreign-project, and foreign-requester records cannot
       be disclosed through results or cursor behavior.
 - [x] Ordering and pagination are deterministic, bounded, and tested.
-- [x] Responses contain only the established customer-safe status projection.
+- [x] Responses contain only the established customer-safe status projection,
+      with the plan title and revision number needed to identify each entry.
 - [x] No mutation, apply, approval, or teardown capability is introduced.
 
 ## Acceptance status

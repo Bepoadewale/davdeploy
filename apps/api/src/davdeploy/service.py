@@ -4192,7 +4192,27 @@ class ProductService:
         if not self._is_workspace_administrator(principal):
             visibility.append(GeneratedPlanRun.requester_subject == principal.subject)
 
-        query = select(GeneratedPlanRun).where(*visibility)
+        query = (
+            select(
+                GeneratedPlanRun,
+                InfrastructurePlan.title,
+                InfrastructurePlanRevision.revision_number,
+            )
+            .join(
+                InfrastructurePlanRevision,
+                GeneratedPlanRun.revision_id == InfrastructurePlanRevision.id,
+            )
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+            )
+            .where(
+                *visibility,
+                InfrastructurePlan.organization_id == principal.organization_id,
+                InfrastructurePlan.project_id == project.id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+        )
         if cursor is not None:
             try:
                 canonical_cursor = str(uuid.UUID(cursor))
@@ -4217,7 +4237,7 @@ class ProductService:
             )
 
         selected = list(
-            self.db.scalars(
+            self.db.execute(
                 query.order_by(
                     GeneratedPlanRun.created_at.desc(), GeneratedPlanRun.id.desc()
                 ).limit(limit + 1)
@@ -4226,7 +4246,7 @@ class ProductService:
         has_more = len(selected) > limit
         page = selected[:limit]
         now = datetime.now(UTC)
-        for run in page:
+        for run, _, _ in page:
             expiry = run.preparation_lease_expires_at
             if run.state == "PREPARING" and expiry is not None:
                 if expiry.tzinfo is None:
@@ -4237,8 +4257,20 @@ class ProductService:
 
         return {
             "project_id": project.id,
-            "items": [self._generated_plan_run_payload(run) for run in page],
-            "next_cursor": page[-1].id if has_more and page else None,
+            "items": [
+                self._generated_plan_run_history_payload(run, title, revision_number)
+                for run, title, revision_number in page
+            ],
+            "next_cursor": page[-1][0].id if has_more and page else None,
+        }
+
+    def _generated_plan_run_history_payload(
+        self, run: GeneratedPlanRun, plan_title: str, revision_number: int
+    ) -> dict[str, Any]:
+        """Add customer labels to the established safe run-status projection."""
+        return self._generated_plan_run_payload(run) | {
+            "plan_title": plan_title,
+            "revision_number": revision_number,
         }
 
     @staticmethod
