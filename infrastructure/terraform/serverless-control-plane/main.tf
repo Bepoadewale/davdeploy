@@ -826,7 +826,7 @@ resource "aws_s3_bucket_policy" "nova_terraform_state" {
 }
 
 resource "aws_iam_role_policy" "nova_plan_only_state_bootstrap" {
-  count = var.enable_nova_plan_only_runner ? 1 : 0
+  count = var.enable_nova_terraform_state_api ? 1 : 0
 
   name = "nova-plan-only-state-bootstrap"
   role = aws_iam_role.nova_plan_only[0].id
@@ -852,7 +852,7 @@ resource "aws_codebuild_project" "nova_plan_only" {
   count = var.enable_nova_plan_only_runner ? 1 : 0
 
   name                   = local.nova_plan_only_project_name
-  description            = "Fixed initial-state Nova Terraform plan-only runner; no remote state, approval, apply, or destroy."
+  description            = "Fixed Nova Terraform plan-only runner; remote state is opt-in, with no approval, apply, or destroy."
   service_role           = aws_iam_role.nova_plan_only[0].arn
   build_timeout          = 15
   queued_timeout         = 5
@@ -889,6 +889,16 @@ resource "aws_codebuild_project" "nova_plan_only" {
     environment_variable {
       name  = "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"
       value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/terraform-state/credentials"
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_ENABLED"
+      value = tostring(var.enable_nova_terraform_state_api)
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_API_URL"
+      value = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
       type  = "PLAINTEXT"
     }
     environment_variable {
@@ -1152,8 +1162,8 @@ locals {
     DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN                  = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
     DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                    = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
-    DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = "false"
-    DAVDEPLOY_TERRAFORM_STATE_API_URL                    = ""
+    DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)
+    DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
     DAVDEPLOY_TERRAFORM_STATE_BUCKET                     = var.enable_nova_terraform_state_storage ? aws_s3_bucket.nova_terraform_state[0].bucket : ""
     DAVDEPLOY_TERRAFORM_STATE_KMS_KEY_ARN                = var.enable_nova_terraform_state_storage ? aws_kms_key.nova_terraform_state[0].arn : ""
     DAVDEPLOY_TERRAFORM_STATE_BUCKET_OWNER               = var.enable_nova_terraform_state_storage ? data.aws_caller_identity.current.account_id : ""

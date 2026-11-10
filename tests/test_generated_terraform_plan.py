@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import textwrap
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
@@ -14,6 +15,7 @@ from davdeploy.generated_terraform_plan import (
     TerraformPlanExecutionError,
     verify_saved_plan_artifact,
 )
+from davdeploy.nova_terraform_state_client import TerraformHTTPBackend
 
 LOCKFILE = '''provider "registry.terraform.io/hashicorp/aws" {
   version = "5.100.0"
@@ -125,6 +127,10 @@ args = sys.argv[1:]
 with open(".terraform-command-log", "a") as command_log:
     command_log.write(" ".join(args) + "\\n")
 pathlib.Path(".terraform-cli-args-plan").write_text(os.environ.get("TF_CLI_ARGS_plan", ""))
+pathlib.Path(".terraform-http-env-present").write_text(json.dumps({{
+    "username": bool(os.environ.get("TF_HTTP_USERNAME")),
+    "password": bool(os.environ.get("TF_HTTP_PASSWORD")),
+}}))
 if args == ["version", "-json"]:
     print(json.dumps({{"terraform_version": "1.14.7"}}))
 elif args and args[0] == "providers":
@@ -214,6 +220,42 @@ def test_proposal_digest_uses_canonical_unicode_json(tmp_path):
     assert result.proposal_sha256 == canonical_json_digest(
         unicode_proposal.model_dump(mode="json")
     )
+
+
+def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path):
+    state_id = "12345678-1234-4234-8234-123456789012"
+    address = f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}"
+    backend = TerraformHTTPBackend(
+        state_id=state_id,
+        scope_sha256="c" * 64,
+        address=address,
+        lock_address=f"{address}/lock",
+        unlock_address=f"{address}/unlock",
+        username="temporary-user-token-1234567890",
+        password="temporary-password-token-123456789012345678901234567890",
+        expires_at=datetime.now(UTC) + timedelta(minutes=15),
+    )
+    workspace = tmp_path / "remote-run"
+    runner(tmp_path).plan(
+        proposal(),
+        expected_account_id="654654474502",
+        region="us-east-1",
+        ownership_scope=ownership_scope(),
+        workspace=workspace,
+        remote_state=backend,
+    )
+
+    generated = json.loads((workspace / "main.tf.json").read_text())
+    assert generated["terraform"]["backend"]["http"] == backend.backend_configuration()
+    assert backend.username not in json.dumps(generated)
+    assert backend.password not in json.dumps(generated)
+    assert json.loads((workspace / ".terraform-http-env-present").read_text()) == {
+        "username": True,
+        "password": True,
+    }
+    commands = (workspace / ".terraform-command-log").read_text().splitlines()
+    assert commands[1] == "init -input=false -lockfile=readonly -no-color"
+    assert commands[4] == f"plan -input=false -no-color -out={workspace / 'saved.tfplan'}"
 
 
 def test_target_account_mismatch_blocks_before_creating_workspace(tmp_path):

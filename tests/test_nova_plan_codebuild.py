@@ -4,6 +4,7 @@ import ast
 import hashlib
 import io
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,7 +28,12 @@ from davdeploy.generated_terraform_plan import (
     PINNED_TERRAFORM_VERSION,
     GeneratedTerraformPlan,
 )
+from davdeploy.nova_terraform_state_client import (
+    TerraformHTTPBackend,
+    TerraformStateBootstrapError,
+)
 from davdeploy.terraform_generation import generation_context_digest
+from davdeploy.terraform_state import terraform_state_scope_digest
 from test_nova_plan_only_infra import ROOT
 
 RUN_ID = "12345678-1234-1234-1234-123456789012"
@@ -54,6 +60,7 @@ def make_input_document(
     plan_id="plan-a",
     revision_id="revision-a",
     control_plane_run_id=None,
+    environment_id="production",
 ):
     build_arn = build_arn or build_arn_for(run_id)
     region = "us-east-1"
@@ -63,7 +70,7 @@ def make_input_document(
             "account_id": account_id,
             "region": region,
             "connection_id": connection_id,
-            "environment_id": "production",
+            "environment_id": environment_id,
         },
         "source_deployment_plan_id": source_plan_id,
     }
@@ -74,7 +81,7 @@ def make_input_document(
         project_id=project_id,
         plan_id=plan_id,
         revision_id=revision_id,
-        environment_id="production",
+        environment_id=environment_id,
     )
     proposal = GeneratedDeploymentProposal(
         contract_version="1.0",
@@ -269,6 +276,7 @@ class FakePlanRunner:
         ownership_scope,
         workspace,
         aws_credentials,
+        remote_state=None,
     ):
         self.calls.append(
             {
@@ -278,6 +286,7 @@ class FakePlanRunner:
                 "ownership_scope": ownership_scope,
                 "workspace": workspace,
                 "aws_credentials": aws_credentials,
+                "remote_state": remote_state,
             }
         )
         saved_plan = Path(workspace) / "saved.tfplan"
@@ -321,7 +330,17 @@ class FakePlanRunner:
         )
 
 
-def run_build(monkeypatch, tmp_path, *, document=None, runner=None, sts=None, s3=None, env=None):
+def run_build(
+    monkeypatch,
+    tmp_path,
+    *,
+    document=None,
+    runner=None,
+    sts=None,
+    s3=None,
+    env=None,
+    state_bootstrapper=None,
+):
     build_arn = build_arn_for()
     document = document or make_input_document(build_arn=build_arn)
     s3 = s3 or FakeS3()
@@ -340,6 +359,7 @@ def run_build(monkeypatch, tmp_path, *, document=None, runner=None, sts=None, s3
         workspace_root=tmp_path,
         input_poll_attempts=1,
         input_poll_interval_seconds=0,
+        state_bootstrapper=state_bootstrapper,
     )
     return result, document, key, version_id, s3, sts, runner
 
@@ -404,6 +424,193 @@ def test_retry_attempt_can_bind_a_distinct_control_plane_request_id(monkeypatch,
     assert result_document["run_id"] == RUN_ID
     assert result_document["run_id"] != control_plane_run_id
     assert len(runner.calls) == 1
+
+
+def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_of_result(
+    monkeypatch, tmp_path
+):
+    control_plane_run_id = "87654321-4321-4321-4321-210987654321"
+    document = make_input_document(
+        control_plane_run_id=control_plane_run_id,
+        organization_id="12345678-1234-4234-8234-123456789012",
+        project_id="22345678-1234-4234-8234-123456789012",
+        environment_id="32345678-1234-4234-8234-123456789012",
+    )
+    target = document["customer_revision"]["target"]
+    expected_scope_sha256 = terraform_state_scope_digest(
+        organization_id=document["request_document"]["organization_id"],
+        project_id=document["request_document"]["project_id"],
+        environment_id=target["environment_id"],
+        target_account_id=document["request_document"]["target_account_id"],
+        region=document["request_document"]["region"],
+    )
+    state_id = "12345678-1234-4234-8234-123456789012"
+    state_backend = TerraformHTTPBackend(
+        state_id=state_id,
+        scope_sha256=expected_scope_sha256,
+        address=f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}",
+        lock_address=f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}/lock",
+        unlock_address=f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}/unlock",
+        username="u" * 32,
+        password="p" * 64,
+        expires_at=datetime.now(UTC) + timedelta(minutes=20),
+    )
+    calls = []
+
+    def bootstrap(**kwargs):
+        calls.append(kwargs)
+        return state_backend
+
+    env = {
+        **build_env(),
+        "DAVDEPLOY_TERRAFORM_STATE_ENABLED": "true",
+        "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL": "https://api-id.execute-api.us-east-1.amazonaws.com/api/v1/terraform-state/credentials",
+        "DAVDEPLOY_TERRAFORM_STATE_API_URL": "https://api.davdeploy.tech",
+    }
+    result, _, _, _, s3, _, runner = run_build(
+        monkeypatch,
+        tmp_path,
+        document=document,
+        env=env,
+        state_bootstrapper=bootstrap,
+    )
+    assert calls == [
+        {
+            "bootstrap_url": env["DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"],
+            "state_api_url": env["DAVDEPLOY_TERRAFORM_STATE_API_URL"],
+            "durable_run_id": control_plane_run_id,
+            "codebuild_build_id": env["CODEBUILD_BUILD_ID"],
+            "region": "us-east-1",
+        }
+    ]
+    assert runner.calls[0]["remote_state"] is state_backend
+    stored_result = next(
+        payload for call, payload in s3.put_calls if call["Key"].endswith("result.json")
+    )
+    result_document = json.loads(stored_result)
+    assert result_document["planning_boundary"] == "TENANT_ISOLATED_HTTP_STATE"
+    assert result_document["remote_state"] == {
+        "state_id": state_backend.state_id,
+        "scope_sha256": state_backend.scope_sha256,
+    }
+    assert result_document["manifest"]["manifest_version"] == 4
+    assert state_backend.password not in stored_result.decode()
+    assert state_backend.username not in stored_result.decode()
+    assert result["result_version_id"] == "output-version-2"
+
+
+def test_remote_state_scope_mismatch_fails_before_terraform_plan(monkeypatch, tmp_path):
+    document = make_input_document(
+        control_plane_run_id="87654321-4321-4321-4321-210987654321",
+        organization_id="12345678-1234-4234-8234-123456789012",
+        project_id="22345678-1234-4234-8234-123456789012",
+        environment_id="32345678-1234-4234-8234-123456789012",
+    )
+    state_id = "12345678-1234-4234-8234-123456789012"
+    backend = TerraformHTTPBackend(
+        state_id=state_id,
+        scope_sha256="c" * 64,
+        address=f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}",
+        lock_address=f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}/lock",
+        unlock_address=f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}/unlock",
+        username="u" * 32,
+        password="p" * 64,
+        expires_at=datetime.now(UTC) + timedelta(minutes=20),
+    )
+    env = {
+        **build_env(),
+        "DAVDEPLOY_TERRAFORM_STATE_ENABLED": "true",
+        "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL": "https://api-id.execute-api.us-east-1.amazonaws.com/api/v1/terraform-state/credentials",
+        "DAVDEPLOY_TERRAFORM_STATE_API_URL": "https://api.davdeploy.tech",
+    }
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+
+    with pytest.raises(
+        codebuild_runner.NovaPlanBuildError, match="wrong tenant scope"
+    ):
+        run_build(
+            monkeypatch,
+            tmp_path,
+            document=document,
+            env=env,
+            s3=s3,
+            sts=sts,
+            runner=runner,
+            state_bootstrapper=lambda **_kwargs: backend,
+        )
+
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+def test_enabled_remote_state_fails_closed_without_trusted_bootstrap_configuration(
+    monkeypatch, tmp_path
+):
+    env = {**build_env(), "DAVDEPLOY_TERRAFORM_STATE_ENABLED": "true"}
+    document = make_input_document(
+        control_plane_run_id="87654321-4321-4321-4321-210987654321"
+    )
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="not configured"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=env,
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert len(sts.calls) == 1
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+def test_enabled_remote_state_does_not_fall_back_when_bootstrap_fails(monkeypatch, tmp_path):
+    env = {
+        **build_env(),
+        "DAVDEPLOY_TERRAFORM_STATE_ENABLED": "true",
+        "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL": "https://api-id.execute-api.us-east-1.amazonaws.com/api/v1/terraform-state/credentials",
+        "DAVDEPLOY_TERRAFORM_STATE_API_URL": "https://api.davdeploy.tech",
+    }
+    document = make_input_document(
+        control_plane_run_id="87654321-4321-4321-4321-210987654321"
+    )
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    def reject_bootstrap(**_kwargs):
+        raise TerraformStateBootstrapError("fixture transport failure")
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="bootstrap failed"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=env,
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+            state_bootstrapper=reject_bootstrap,
+        )
+
+    assert len(sts.calls) == 1
+    assert runner.calls == []
+    assert s3.put_calls == []
 
 
 def test_invalid_control_plane_request_id_is_rejected_before_assume_role(monkeypatch, tmp_path):

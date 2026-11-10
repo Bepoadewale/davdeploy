@@ -109,7 +109,7 @@ variable "nova_plan_runner_release_kms_key_arn" {
 
 variable "enable_nova_plan_only_runner" {
   type        = bool
-  description = "Provision the isolated fixed Nova initial-plan CodeBuild runner and expose it to the API. Keep disabled until the separate durable-state milestone is ready."
+  description = "Provision the isolated fixed Nova plan-only CodeBuild runner and expose it to the API. Keep disabled until its required state and policy gates are ready."
   default     = false
 
   validation {
@@ -132,6 +132,27 @@ variable "enable_nova_terraform_state_storage" {
   type        = bool
   description = "Provision the private versioned KMS state bucket. This does not enable the HTTP API or change the backend-free Nova runner."
   default     = false
+}
+
+variable "enable_nova_terraform_state_api" {
+  type        = bool
+  description = "Enable the tenant-scoped HTTP state API and remote-state worker path. Defaults off."
+  default     = false
+
+  validation {
+    condition = !var.enable_nova_terraform_state_api || (
+      var.enable_nova_plan_only_runner &&
+      var.enable_nova_terraform_state_storage &&
+      can(regex("^https://[A-Za-z0-9.-]+(:[0-9]+)?$", var.nova_terraform_state_api_url))
+    )
+    error_message = "Nova remote state requires the isolated plan runner, encrypted state storage, and an HTTPS state API origin."
+  }
+}
+
+variable "nova_terraform_state_api_url" {
+  type        = string
+  description = "HTTPS origin of the public DavDeploy state API; required only when remote state is enabled."
+  default     = ""
 }
 
 variable "enable_customer_cloud_execution" {

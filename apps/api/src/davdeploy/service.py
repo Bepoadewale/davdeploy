@@ -126,6 +126,7 @@ from davdeploy.models import (
     SupportTicket,
     TerraformPlanRender,
     TerraformPlanReview,
+    TerraformRemoteState,
     UsageRecord,
     WorkerDispatchState,
     WorkloadIntent,
@@ -147,6 +148,7 @@ from davdeploy.terraform_generation import (
     NovaTerraformGenerator,
     generation_context_digest,
 )
+from davdeploy.terraform_state import terraform_state_scope_digest
 from davdeploy.universal_execution import (
     compile_universal_execution_plan,
     lifecycle_work,
@@ -4459,9 +4461,16 @@ class ProductService:
             "manifest_sha256",
             "planning_boundary",
         }
-        if set(result) != required_result_fields or result.get("planning_boundary") != (
-            "INITIAL_PLAN_NO_REMOTE_STATE"
-        ):
+        boundary_mode = result.get("planning_boundary")
+        if boundary_mode not in {
+            "INITIAL_PLAN_NO_REMOTE_STATE",
+            "TENANT_ISOLATED_HTTP_STATE",
+        }:
+            raise ValueError("Nova plan result envelope shape is invalid")
+        expected_result_fields = required_result_fields | (
+            {"remote_state"} if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else set()
+        )
+        if set(result) != expected_result_fields:
             raise ValueError("Nova plan result envelope shape is invalid")
         try:
             run_id = str(uuid.UUID(run.runner_run_id or run.id))
@@ -4708,6 +4717,55 @@ class ProductService:
         artifact_doc = manifest.get("artifact")
         if not isinstance(digests, dict) or not isinstance(artifact_doc, dict):
             raise TypeError("Nova result artifact binding is invalid")
+        expected_boundary = {
+            "mode": boundary_mode,
+            "approval_allowed": False,
+            "execution_allowed": False,
+        }
+        expected_manifest_version = 4 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 3
+        if manifest.get("manifest_version") != expected_manifest_version:
+            raise ValueError("Nova result manifest version does not match its state boundary")
+        if boundary_mode == "TENANT_ISOLATED_HTTP_STATE":
+            remote_state = result.get("remote_state")
+            try:
+                state_id = remote_state.get("state_id") if isinstance(remote_state, dict) else None
+                canonical_state_id = str(uuid.UUID(state_id))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("Nova result remote-state evidence is malformed") from None
+            if (
+                not isinstance(remote_state, dict)
+                or set(remote_state) != {"state_id", "scope_sha256"}
+                or state_id != canonical_state_id
+                or not isinstance(remote_state.get("scope_sha256"), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", remote_state.get("scope_sha256", ""))
+                or manifest.get("remote_state") != remote_state
+            ):
+                raise ValueError("Nova result remote-state evidence is malformed")
+            environment_id = target.get("environment_id")
+            try:
+                expected_scope_sha256 = terraform_state_scope_digest(
+                    organization_id=run.organization_id,
+                    project_id=run.project_id,
+                    environment_id=environment_id,
+                    target_account_id=account_id,
+                    region=region,
+                )
+            except ValueError as error:
+                raise ValueError("Nova revision has no stable remote-state scope") from error
+            state = self.db.get(TerraformRemoteState, remote_state["state_id"])
+            if (
+                state is None
+                or state.organization_id != run.organization_id
+                or state.project_id != run.project_id
+                or state.environment_id != environment_id
+                or state.target_account_id != account_id
+                or state.region != region
+                or state.scope_sha256 != expected_scope_sha256
+                or remote_state["scope_sha256"] != expected_scope_sha256
+            ):
+                raise ValueError("Nova result remote state does not match the trusted tenant scope")
+        elif "remote_state" in manifest:
+            raise ValueError("backend-free Nova result contains remote-state evidence")
         saved_plan_sha256 = digests.get("saved_plan_sha256")
         if not isinstance(saved_plan_sha256, str) or not re.fullmatch(
             r"[a-f0-9]{64}", saved_plan_sha256
@@ -4727,12 +4785,7 @@ class ProductService:
             or digests.get("ownership_scope_sha256") != ownership_scope.scope_sha256()
             or digests.get("ownership_plan_id_sha256") != ownership_scope.plan_id_sha256()
             or digests.get("policy_sha256") != result.get("policy_sha256")
-            or manifest.get("planning_boundary")
-            != {
-                "mode": "INITIAL_PLAN_NO_REMOTE_STATE",
-                "approval_allowed": False,
-                "execution_allowed": False,
-            }
+            or manifest.get("planning_boundary") != expected_boundary
         ):
             raise ValueError("Nova result manifest digest binding is invalid")
         generated_plan = GeneratedTerraformPlan(
@@ -5152,6 +5205,13 @@ class ProductService:
             raise ValueError(
                 "durable remote Terraform state is unavailable; initial-state plans cannot be approved"
             )
+        planning_boundary = manifest.get("planning_boundary")
+        if (
+            not isinstance(planning_boundary, dict)
+            or planning_boundary.get("approval_allowed") is not True
+            or planning_boundary.get("execution_allowed") is not True
+        ):
+            raise ValueError("the generated plan's execution boundary does not allow approval")
         tenant = manifest.get("tenant") or {}
         target = manifest.get("target") or {}
         digests = manifest.get("digests") or {}
