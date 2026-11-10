@@ -1,0 +1,75 @@
+# ticket332 — bind the Nova plan worker to isolated remote Terraform state
+
+PR: draft stacked on [#331](https://github.com/Bepoadewale/davdeploy/pull/331)
+Branch: `feat/nova-remote-state-runner-332`
+Base: `feat/tenant-isolated-terraform-state-331`
+
+## Goal
+
+Teach the fixed Nova plan-only CodeBuild worker to obtain a short-lived
+credential for its exact durable request and attempt, initialize Terraform's
+HTTP backend from the trusted response, and preserve the existing saved-plan,
+policy, and artifact path. The customer plan-only role remains the only role
+used by Terraform for AWS provider reads. CodeBuild's service role signs only
+the state-credential bootstrap request.
+
+## Current state
+
+- PR #331 implements the state service and optional storage, but the runner
+  still runs `terraform init -backend=false` and `terraform plan -lock=false`.
+- The API bootstrap route is disabled by default and checks both the durable
+  row ID and active attempt/build binding.
+- Pricing is unavailable. Plans must remain unapprovable, and there is no
+  apply or destroy path in this change.
+
+## Research and references
+
+- [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/backend/http)
+- [Terraform state locking](https://developer.hashicorp.com/terraform/language/state/locking)
+- [API Gateway HTTP API IAM authorization](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-access-control-iam.html)
+- [Botocore SigV4 signing](https://botocore.amazonaws.com/v1/documentation/api/latest/reference/auth.html)
+
+## Work
+
+- Carry the validated durable control-plane request ID through the immutable
+  staged input; do not confuse it with the per-attempt CodeBuild run ID.
+- Add bounded SigV4 bootstrap using CodeBuild service-role credentials and
+  validate the response contract, HTTPS endpoints, and credential lifetime.
+- Inject only trusted HTTP-backend addresses and lock methods into generated
+  Terraform configuration. Pass short-lived Basic credentials through the
+  Terraform process environment, never configuration, logs, or artifacts.
+- Retain backend-free behavior only for explicitly disabled test/local use;
+  if hosted state is enabled but bootstrap/configuration fails, fail closed.
+- Test signing, durable/attempt identity binding, malformed and mismatched
+  bootstrap responses, Terraform backend configuration, secret redaction, and
+  preservation of policy/saved-plan result binding.
+- Keep Terraform state, plan runner, and apply gates disabled by default.
+
+## Acceptance criteria
+
+- [ ] Bootstrap uses the CodeBuild service-role identity and the exact active
+      durable request, project, attempt, and build ARN.
+- [ ] Terraform receives server-issued HTTP backend addresses and short-lived
+      credentials only through process environment; backend configuration has
+      no caller-selected URL or credentials.
+- [ ] Hosted enabled-state planning uses remote state locking; disabled mode
+      cannot silently masquerade as a hosted stateful plan.
+- [ ] Secrets and state values do not enter logs, result envelopes, or saved
+      plan manifests.
+- [ ] Negative tests cover identity mismatch, invalid response, expired
+      credentials, and signing/transport failure.
+- [ ] `make verify`, Terraform validation, docs checks, required CI, independent
+      review, and the clean-room lifecycle gate pass.
+- [x] No feature flag is enabled, no AWS infrastructure is deployed, and no
+      apply/destroy or customer workload is executed.
+
+## Validation and evidence
+
+- To be recorded in `docs/test/test332.md` before review-ready.
+
+## Boundaries and follow-up
+
+This PR cannot make a plan approvable. It does not add pricing, approval,
+apply, health, recovery, or teardown. The state feature remains disabled until
+the service, runner, pricing, exact-plan approval, and hosted security gates
+are reviewed and verified together.
