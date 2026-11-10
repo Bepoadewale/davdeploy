@@ -65,8 +65,19 @@ def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
     assert '"$context.identity.userArn"' in integration
     assert "execute-api:Invoke" in role_policy
     assert "terraform-state/credentials" in role_policy
-    assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = "false"' in MAIN
-    assert 'DAVDEPLOY_TERRAFORM_STATE_API_URL                    = ""' in MAIN
+    assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)' in MAIN
+    assert 'DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""' in MAIN
+    state_policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only_state_bootstrap")
+    assert "count = var.enable_nova_terraform_state_api ? 1 : 0" in state_policy
+    state_api_toggle = VARIABLES.split('variable "enable_nova_terraform_state_api"', 1)[1].split(
+        "\nvariable ", 1
+    )[0]
+    assert "default     = false" in state_api_toggle
+    assert "var.enable_nova_plan_only_runner" in state_api_toggle
+    assert "var.enable_nova_terraform_state_storage" in state_api_toggle
+    project = resource_block(MAIN, "aws_codebuild_project", "nova_plan_only")
+    assert 'name  = "DAVDEPLOY_TERRAFORM_STATE_ENABLED"' in project
+    assert 'name  = "DAVDEPLOY_TERRAFORM_STATE_API_URL"' in project
     state_routes = resource_block(MAIN, "aws_apigatewayv2_route", "terraform_state")
     assert '"GET /api/v1/terraform-state/{state_id}"' in MAIN
     assert '"POST /api/v1/terraform-state/{state_id}/lock"' in MAIN
@@ -94,7 +105,6 @@ def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
     assert "bucket_key_enabled = true" in encryption
     assert 'versioning_configuration { status = "Enabled" }' in versioning
     assert "block_public_acls       = true" in public_access
-    assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = "false"' in MAIN
 
 
 def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scoped() -> None:

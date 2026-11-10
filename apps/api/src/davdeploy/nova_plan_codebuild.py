@@ -1,8 +1,9 @@
-"""Fixed CodeBuild entrypoint for initial, backend-free Nova plans.
+"""Fixed CodeBuild entrypoint for initial Nova plan-only builds.
 
-The only request input is the API-generated durable run ID. The project buildspec
-and release artifact are fixed in Terraform; this module never reads customer
-source, a caller-selected backend, or a Terraform command from the request.
+The project buildspec and release artifact are fixed in Terraform. The worker
+never reads customer source, a caller-selected backend, or Terraform commands
+from a request. Remote state can be used only through an opt-in, server-issued
+HTTP backend contract.
 """
 
 from __future__ import annotations
@@ -38,6 +39,11 @@ from davdeploy.generated_terraform_plan import (
     GeneratedTerraformPlanRunner,
     TerraformPlanExecutionError,
 )
+from davdeploy.nova_terraform_state_client import (
+    TerraformHTTPBackend,
+    TerraformStateBootstrapError,
+    request_terraform_http_backend,
+)
 from davdeploy.terraform_generation import generation_context_digest
 
 RUN_ID_ENV = "DAVDEPLOY_NOVA_PLAN_RUN_ID"
@@ -63,6 +69,7 @@ def run_nova_plan_build(
     input_poll_attempts: int = 30,
     input_poll_interval_seconds: float = 2.0,
     sleeper=time.sleep,
+    state_bootstrapper=None,
 ) -> dict[str, Any]:
     """Verify one staged request, plan it, and write exact encrypted artifacts."""
     env = dict(os.environ if environment is None else environment)
@@ -123,6 +130,38 @@ def run_nova_plan_build(
     if not isinstance(identity, dict) or identity.get("Account") != binding["account_id"]:
         raise NovaPlanBuildError("customer plan role account does not match the durable request")
 
+    state_enabled = env.get("DAVDEPLOY_TERRAFORM_STATE_ENABLED", "false").lower()
+    if state_enabled not in {"true", "false"}:
+        raise NovaPlanBuildError("Terraform state feature configuration is invalid")
+    remote_state = None
+    if state_enabled == "true":
+        bootstrap_url = env.get("DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL")
+        state_api_url = env.get("DAVDEPLOY_TERRAFORM_STATE_API_URL")
+        if not bootstrap_url or not state_api_url:
+            raise NovaPlanBuildError("trusted Terraform state service is not configured")
+        try:
+            if state_bootstrapper is not None:
+                remote_state = state_bootstrapper(
+                    bootstrap_url=bootstrap_url,
+                    state_api_url=state_api_url,
+                    durable_run_id=binding["control_plane_run_id"],
+                    codebuild_build_id=build_id,
+                    region=region,
+                )
+            else:
+                remote_state = request_terraform_http_backend(
+                    bootstrap_url=bootstrap_url,
+                    state_api_url=state_api_url,
+                    durable_run_id=binding["control_plane_run_id"],
+                    codebuild_build_id=build_id,
+                    region=region,
+                    credentials=boto3.Session().get_credentials(),
+                )
+        except (TerraformStateBootstrapError, BotoCoreError, ClientError, OSError, TypeError, ValueError):
+            raise NovaPlanBuildError("trusted Terraform state bootstrap failed") from None
+        if not isinstance(remote_state, TerraformHTTPBackend):
+            raise NovaPlanBuildError("trusted Terraform state bootstrap returned an invalid contract")
+
     provider_lockfile = Path(__file__).with_name("terraform-provider.lock.hcl")
     plan_runner = runner or GeneratedTerraformPlanRunner(
         provider_lockfile=provider_lockfile,
@@ -142,6 +181,7 @@ def run_nova_plan_build(
             ownership_scope=binding["ownership_scope"],
             workspace=workspace,
             aws_credentials=credentials,
+            remote_state=remote_state,
         )
     except (TerraformPlanExecutionError, OSError, TypeError, ValueError):
         raise NovaPlanBuildError("the fixed Terraform plan pipeline rejected this request") from None
@@ -183,6 +223,11 @@ def run_nova_plan_build(
         plan=generated_plan,
         policy_digest=policy_sha256,
         created_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        remote_state=(
+            {"state_id": remote_state.state_id, "scope_sha256": remote_state.scope_sha256}
+            if remote_state is not None
+            else None
+        ),
     )
     result = {
         "contract": RESULT_CONTRACT,
@@ -213,8 +258,15 @@ def run_nova_plan_build(
         "policy_sha256": policy_sha256,
         "manifest": manifest,
         "manifest_sha256": canonical_json_digest(manifest),
-        "planning_boundary": "INITIAL_PLAN_NO_REMOTE_STATE",
+        "planning_boundary": (
+            "TENANT_ISOLATED_HTTP_STATE" if remote_state is not None else "INITIAL_PLAN_NO_REMOTE_STATE"
+        ),
     }
+    if remote_state is not None:
+        result["remote_state"] = {
+            "state_id": remote_state.state_id,
+            "scope_sha256": remote_state.scope_sha256,
+        }
     result_bytes = _canonical_json(result)
     if len(result_bytes) > MAX_RESULT_BYTES:
         raise NovaPlanBuildError("the verified plan result exceeds its size limit")
@@ -454,6 +506,7 @@ def _validate_input_document(
         "organization_id": organization_id,
         "project_id": project_id,
         "plan_id": plan_id,
+        "control_plane_run_id": control_plane_run_id,
         "revision_id": revision_id,
         "revision_sha256": revision_sha256,
         "account_id": account_id,

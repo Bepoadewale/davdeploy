@@ -312,6 +312,50 @@ def test_complete_pricing_does_not_unblock_backend_free_plan_approval(tmp_path, 
         )
 
 
+def test_remote_state_plan_with_closed_boundary_cannot_be_approved(tmp_path, monkeypatch):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    project, _, revision = make_submitted_revision(service)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+    original_manifest_builder = service_module.generated_plan_manifest
+
+    def manifest_with_closed_remote_boundary(**kwargs):
+        manifest = original_manifest_builder(**kwargs)
+        manifest["planning_boundary"] = {
+            "mode": "TENANT_ISOLATED_HTTP_STATE",
+            "approval_allowed": False,
+            "execution_allowed": False,
+        }
+        manifest["remote_state"] = {
+            "state_id": "12345678-1234-4234-8234-123456789012",
+            "scope_sha256": "c" * 64,
+        }
+        manifest["pricing"] = {
+            "status": "COMPLETE",
+            "region": "us-east-1",
+            "currency": "USD",
+            "monthly_cost": 12.5,
+            "evidence_sha256": "d" * 64,
+            "reason_code": None,
+        }
+        return manifest
+
+    monkeypatch.setattr(
+        service_module, "generated_plan_manifest", manifest_with_closed_remote_boundary
+    )
+    artifact = service.persist_generated_plan_artifact(
+        founder(), revision.id, RUN_ID, proposal, generated
+    )
+
+    detail = service.generated_plan_artifact_detail(founder(), artifact.id)
+    assert detail["approval_allowed"] is False
+    assert detail["approval_blockers"] == ["PLANNING_BOUNDARY_BLOCKED"]
+    with pytest.raises(ValueError, match="execution boundary does not allow approval"):
+        service.approve_generated_plan_artifact(
+            administrator(), artifact.id, artifact.manifest_sha256
+        )
+
+
 def test_generated_plan_approval_rejects_manifest_digest_tampering(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_artifact_store(store)

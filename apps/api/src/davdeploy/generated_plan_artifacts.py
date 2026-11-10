@@ -314,10 +314,23 @@ def generated_plan_manifest(
     plan: GeneratedTerraformPlan,
     policy_digest: str,
     created_at: str,
+    remote_state: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build canonical, secret-free review material for exact plan bytes."""
-    return {
-        "manifest_version": 3,
+    if remote_state is not None:
+        try:
+            state_id = remote_state.get("state_id")
+            canonical_state_id = str(uuid.UUID(state_id))
+        except (AttributeError, TypeError, ValueError):
+            raise GeneratedPlanArtifactError("remote Terraform state evidence is malformed") from None
+        if (
+            set(remote_state) != {"state_id", "scope_sha256"}
+            or state_id != canonical_state_id
+            or not re.fullmatch(r"[a-f0-9]{64}", remote_state.get("scope_sha256", ""))
+        ):
+            raise GeneratedPlanArtifactError("remote Terraform state evidence is malformed")
+    manifest = {
+        "manifest_version": 4 if remote_state is not None else 3,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -355,7 +368,11 @@ def generated_plan_manifest(
             "contains_sensitive_changes": plan.summary.contains_sensitive_changes,
         },
         "planning_boundary": {
-            "mode": "INITIAL_PLAN_NO_REMOTE_STATE",
+            "mode": (
+                "TENANT_ISOLATED_HTTP_STATE"
+                if remote_state is not None
+                else "INITIAL_PLAN_NO_REMOTE_STATE"
+            ),
             "approval_allowed": False,
             "execution_allowed": False,
         },
@@ -375,6 +392,9 @@ def generated_plan_manifest(
         },
         "created_at": created_at,
     }
+    if remote_state is not None:
+        manifest["remote_state"] = remote_state
+    return manifest
 
 
 def has_complete_pricing_evidence(manifest: dict[str, Any]) -> bool:

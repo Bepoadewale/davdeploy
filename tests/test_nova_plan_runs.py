@@ -784,6 +784,18 @@ def test_retry_after_input_staging_uses_a_new_durable_runner_key(monkeypatch):
         raise ReachedDurableRevisionValidation
 
     monkeypatch.setattr(service, "_infrastructure_revision", stop_after_attempt_binding)
+    remote_retry_result = {
+        **retry_result,
+        "planning_boundary": "TENANT_ISOLATED_HTTP_STATE",
+        "remote_state": {
+            "state_id": "12345678-1234-4234-8234-123456789012",
+            "scope_sha256": "c" * 64,
+        },
+    }
+    with pytest.raises(ReachedDurableRevisionValidation):
+        service._persist_verified_nova_plan_result(
+            queued, dispatcher, remote_retry_result, "result-version", "e" * 64
+        )
     with pytest.raises(ReachedDurableRevisionValidation):
         service._persist_verified_nova_plan_result(
             queued, dispatcher, retry_result, "result-version", "e" * 64

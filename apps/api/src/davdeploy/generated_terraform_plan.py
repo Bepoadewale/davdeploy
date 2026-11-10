@@ -1,4 +1,4 @@
-"""Create isolated, backend-free Terraform plans for typed Nova proposals."""
+"""Create isolated Terraform plans for typed Nova proposals using trusted state."""
 
 from __future__ import annotations
 
@@ -39,6 +39,7 @@ from davdeploy.generated_provider_validation import (
     GeneratedProviderSchemaError,
     validate_generated_proposal,
 )
+from davdeploy.nova_terraform_state_client import TerraformHTTPBackend
 
 PINNED_TERRAFORM_VERSION = "1.14.7"
 PINNED_AWS_PROVIDER_VERSION = "5.100.0"
@@ -71,7 +72,8 @@ class GeneratedTerraformPlanRunner:
 
     The runner has no apply or destroy method. It requires an exact pinned CLI
     and provider lockfile, verifies the active AWS account, and writes all
-    files into a caller-owned private workspace.
+    files into a private workspace. Remote-state configuration can be supplied
+    only through a validated, server-issued HTTP backend.
     """
 
     def __init__(
@@ -106,6 +108,7 @@ class GeneratedTerraformPlanRunner:
         ownership_scope: PlanOwnershipScope,
         workspace: str | Path,
         aws_credentials: dict[str, str] | None = None,
+        remote_state: TerraformHTTPBackend | None = None,
     ) -> GeneratedTerraformPlan:
         """Validate and plan; never apply, destroy, or return resource values."""
         if not isinstance(ownership_scope, PlanOwnershipScope):
@@ -143,7 +146,12 @@ class GeneratedTerraformPlanRunner:
         config = self._trusted_configuration(
             proposal, region, expected_account_id, self.expected_terraform_version
         )
-        terraform_environment = self._terraform_environment(aws_credentials)
+        if remote_state is not None:
+            config["terraform"]["backend"] = {"http": remote_state.backend_configuration()}
+        terraform_environment = self._terraform_environment(
+            aws_credentials,
+            remote_state.environment() if remote_state is not None else None,
+        )
         config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self._write_private(working_root / "main.tf.json", config_bytes)
         self._write_private(working_root / ".terraform.lock.hcl", lockfile_bytes)
@@ -158,11 +166,10 @@ class GeneratedTerraformPlanRunner:
         if installed_version != self.expected_terraform_version:
             raise TerraformPlanExecutionError("Terraform CLI version does not match trusted pin")
 
-        self._run(
-            ["init", "-backend=false", "-input=false", "-lockfile=readonly", "-no-color"],
-            working_root,
-            env=terraform_environment,
-        )
+        init_arguments = ["init", "-input=false", "-lockfile=readonly", "-no-color"]
+        if remote_state is None:
+            init_arguments.insert(1, "-backend=false")
+        self._run(init_arguments, working_root, env=terraform_environment)
         schema_output = self._run(
             ["providers", "schema", "-json"], working_root, env=terraform_environment
         )
@@ -180,14 +187,11 @@ class GeneratedTerraformPlanRunner:
         config_digest = hashlib.sha256(config_bytes).hexdigest()
 
         self._run(["validate", "-no-color"], working_root, env=terraform_environment)
+        plan_arguments = ["plan", "-input=false", "-no-color", f"-out={plan_path}"]
+        if remote_state is None:
+            plan_arguments.insert(2, "-lock=false")
         self._run(
-            [
-                "plan",
-                "-input=false",
-                "-lock=false",
-                "-no-color",
-                f"-out={plan_path}",
-            ],
+            plan_arguments,
             working_root,
             allowed_exit_codes=frozenset({0, 2}),
             env=terraform_environment,
@@ -365,6 +369,7 @@ class GeneratedTerraformPlanRunner:
     @staticmethod
     def _terraform_environment(
         aws_credentials: dict[str, str] | None = None,
+        http_credentials: dict[str, str] | None = None,
     ) -> dict[str, str]:
         allowed = {
             "PATH",
@@ -409,6 +414,14 @@ class GeneratedTerraformPlanRunner:
                     "AWS_SECRET_ACCESS_KEY": secret_key,
                     "AWS_SESSION_TOKEN": session_token,
                 }
+            )
+        if http_credentials is not None:
+            username = http_credentials.get("TF_HTTP_USERNAME")
+            password = http_credentials.get("TF_HTTP_PASSWORD")
+            if not all(isinstance(value, str) and value for value in (username, password)):
+                raise TerraformPlanExecutionError("short-lived Terraform state credentials are invalid")
+            environment.update(
+                {"TF_HTTP_USERNAME": username, "TF_HTTP_PASSWORD": password}
             )
         return environment
 

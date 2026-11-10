@@ -388,6 +388,7 @@ def issue_terraform_state_credentials(
     address = f"{state_base_url}/api/v1/terraform-state/{state.id}"
     return {
         "state_id": state.id,
+        "scope_sha256": scope_sha256,
         "address": address,
         "lock_address": f"{address}/lock",
         "unlock_address": f"{address}/unlock",

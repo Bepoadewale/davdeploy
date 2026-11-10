@@ -1,10 +1,10 @@
 # ticket332 — bind the Nova plan worker to isolated remote Terraform state
 
-PR: draft stacked on [#331](https://github.com/Bepoadewale/davdeploy/pull/331)
+PR: [#332](https://github.com/Bepoadewale/davdeploy/pull/332), draft stacked on [#331](https://github.com/Bepoadewale/davdeploy/pull/331)
 Branch: `feat/nova-remote-state-runner-332`
 Base: `feat/tenant-isolated-terraform-state-331`
 
-## Goal
+## Problem / goal
 
 Teach the fixed Nova plan-only CodeBuild worker to obtain a short-lived
 credential for its exact durable request and attempt, initialize Terraform's
@@ -13,7 +13,7 @@ policy, and artifact path. The customer plan-only role remains the only role
 used by Terraform for AWS provider reads. CodeBuild's service role signs only
 the state-credential bootstrap request.
 
-## Current state
+## Current repo state
 
 - PR #331 implements the state service and optional storage, but the runner
   still runs `terraform init -backend=false` and `terraform plan -lock=false`.
@@ -22,14 +22,14 @@ the state-credential bootstrap request.
 - Pricing is unavailable. Plans must remain unapprovable, and there is no
   apply or destroy path in this change.
 
-## Research and references
+## Research / references used
 
 - [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/backend/http)
 - [Terraform state locking](https://developer.hashicorp.com/terraform/language/state/locking)
 - [API Gateway HTTP API IAM authorization](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-access-control-iam.html)
 - [Botocore SigV4 signing](https://botocore.amazonaws.com/v1/documentation/api/latest/reference/auth.html)
 
-## Work
+## Work planned for the PR
 
 - Carry the validated durable control-plane request ID through the immutable
   staged input; do not confuse it with the per-attempt CodeBuild run ID.
@@ -44,6 +44,31 @@ the state-credential bootstrap request.
   bootstrap responses, Terraform backend configuration, secret redaction, and
   preservation of policy/saved-plan result binding.
 - Keep Terraform state, plan runner, and apply gates disabled by default.
+
+## Acceptance status
+
+The client, runner wiring, result contract, manifest binding, and feature-flag
+plumbing are implemented in this draft. Full local verification and Terraform
+validation pass. The state feature remains disabled, and no AWS deployment or
+hosted state request occurred. Hosted behavior, clean-room proof, current-head
+CI, and review remain unverified. The default-off and no-deployment boundary
+is met.
+
+## Tests / validation performed
+
+- Focused suite: 133 passed.
+- `make verify`: 848 passed; Ruff, OpenAPI, Actions configuration, and Compose
+  configuration passed.
+- `make terraform-validate`: all configured roots passed.
+- Documentation convention and diff checks passed.
+- The required clean-room lifecycle cycle remains unrun because it would
+  delete exact local artifacts without current approval; see `docs/test/test332.md`.
+- Runtime and Terraform evidence: `docs/test/test332.md`.
+
+## Evidence files produced
+
+- `docs/test/test332.md` records local validation and the unverified hosted
+  boundary.
 
 ## Acceptance criteria
 
@@ -63,13 +88,16 @@ the state-credential bootstrap request.
 - [x] No feature flag is enabled, no AWS infrastructure is deployed, and no
       apply/destroy or customer workload is executed.
 
-## Validation and evidence
-
-- To be recorded in `docs/test/test332.md` before review-ready.
-
-## Boundaries and follow-up
+## Boundaries
 
 This PR cannot make a plan approvable. It does not add pricing, approval,
 apply, health, recovery, or teardown. The state feature remains disabled until
 the service, runner, pricing, exact-plan approval, and hosted security gates
 are reviewed and verified together.
+
+## Follow-up work
+
+After the state service and runner pass review, integrate complete regional
+pricing and exact costed-plan approval before considering apply or lifecycle
+operations. The current remote-state boundary deliberately remains
+unapprovable.
