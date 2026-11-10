@@ -95,7 +95,12 @@ def test_public_template_host_allows_only_versioned_template_reads_and_is_confir
     assert 'actions   = ["s3:GetObject"]' in configuration
     assert 'resources = ["${aws_s3_bucket.templates.arn}/cloudformation/*"]' in configuration
     assert "s3:ListBucket" not in configuration
+    assert 'resource "aws_s3_object" "current_customer_discovery_role"' in configuration
     assert 'resource "aws_s3_object" "retained_customer_templates"' in configuration
+    assert "from = aws_s3_object.active_customer_discovery_role" in configuration
+    assert "aws_s3_object.active_customer_discovery_role" not in (
+        Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
+    )
     assert "prevent_destroy = true" in configuration
     assert "retained_template_keys" in variables
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
