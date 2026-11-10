@@ -64,7 +64,7 @@ def test_bootstrap_sigv4_binds_durable_request_and_build_identity():
         state_api_url="https://api.davdeploy.tech",
         durable_run_id="87654321-4321-4321-4321-210987654321",
         codebuild_build_id="davdeploy-nova-plan:build-attempt-1",
-        region="us-east-1",
+        region="eu-west-1",
         credentials=_Credentials(),
         opener=opener,
     )
@@ -73,7 +73,7 @@ def test_bootstrap_sigv4_binds_durable_request_and_build_identity():
     assert request.get_method() == "POST"
     assert captured["timeout"] == 15
     assert "AWS4-HMAC-SHA256 Credential=ASIAEXAMPLE/" in request.get_header("Authorization")
-    assert "/execute-api/aws4_request" in request.get_header("Authorization")
+    assert "/us-east-1/execute-api/aws4_request" in request.get_header("Authorization")
     assert json.loads(request.data) == {
         "run_id": "87654321-4321-4321-4321-210987654321",
         "codebuild_build_id": "davdeploy-nova-plan:build-attempt-1",
@@ -127,6 +127,12 @@ def test_bootstrap_fails_closed_on_bad_identity_transport_or_server_status():
     with pytest.raises(TerraformStateBootstrapError):
         request_terraform_http_backend(
             bootstrap_url="http://api-id.execute-api.us-east-1.amazonaws.com/bootstrap",
+            opener=lambda *_args, **_kwargs: _Response(_response_document()),
+            **request_args,
+        )
+    with pytest.raises(TerraformStateBootstrapError):
+        request_terraform_http_backend(
+            bootstrap_url="https://api-id.attacker.example/api/v1/terraform-state/credentials",
             opener=lambda *_args, **_kwargs: _Response(_response_document()),
             **request_args,
         )

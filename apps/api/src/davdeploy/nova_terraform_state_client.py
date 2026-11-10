@@ -102,6 +102,9 @@ def request_terraform_http_backend(
             raise ValueError
     except (AttributeError, TypeError, ValueError):
         raise TerraformStateBootstrapError("CodeBuild service-role credentials are unavailable") from None
+    bootstrap_region = _bootstrap_signing_region(bootstrap_url)
+    if bootstrap_region is None:
+        raise TerraformStateBootstrapError("trusted API Gateway region is invalid")
 
     payload = json.dumps(
         {"run_id": durable_run_id, "codebuild_build_id": codebuild_build_id},
@@ -114,7 +117,7 @@ def request_terraform_http_backend(
         data=payload,
         headers={"content-type": "application/json"},
     )
-    SigV4Auth(frozen_credentials, "execute-api", region).add_auth(aws_request)
+    SigV4Auth(frozen_credentials, "execute-api", bootstrap_region).add_auth(aws_request)
     prepared = aws_request.prepare()
     request = Request(
         prepared.url,
@@ -228,7 +231,7 @@ def _valid_bootstrap_url(value: Any) -> bool:
         parsed = urlsplit(value)
         return bool(
             parsed.scheme == "https"
-            and parsed.hostname
+            and _bootstrap_signing_region(value) is not None
             and parsed.username is None
             and parsed.password is None
             and parsed.path == "/api/v1/terraform-state/credentials"
@@ -238,3 +241,19 @@ def _valid_bootstrap_url(value: Any) -> bool:
         )
     except ValueError:
         return False
+
+
+def _bootstrap_signing_region(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urlsplit(value)
+        if parsed.hostname is None:
+            return None
+        match = re.fullmatch(
+            r"[a-z0-9-]+\.execute-api\.([a-z]{2}(?:-[a-z0-9]+)+-\d)\.amazonaws\.com(?:\.cn)?",
+            parsed.hostname.lower(),
+        )
+    except ValueError:
+        return None
+    return match.group(1) if match else None
