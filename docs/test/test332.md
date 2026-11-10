@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit tests and static Terraform validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: implementation `0e0f24ef6642143ea6619560e51f6aa59f1bf5c1`
+Commit: implementation `674654173b7e6b90ec72542afd4f52be9a781134`
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -28,17 +28,30 @@ git diff --check
 
 ## Observed result
 
-- Focused tests passed: 133 tests.
-- Full `make verify` passed: 848 tests, Ruff, OpenAPI snapshot, Actions
+- Focused tests passed: 134 tests.
+- Full `make verify` passed: 849 tests, Ruff, OpenAPI snapshot, Actions
   configuration, and Compose configuration checks.
 - Terraform validation passed across all configured roots.
 - Documentation convention validation and `git diff --check` passed.
-- GitHub Actions run `42856971505` passed all seven required checks for the
-  implementation commit.
-- The full local clean-room lifecycle cycle was not run. Its cleanup target
-  would delete the PR worktree's `.venv`, `.local` database, and newly created
-  Docker volume/network; current deletion approval for those exact artifacts
-  is not recorded.
+- GitHub Actions runs `42856971505` (implementation baseline `0e0f24e`) and
+  `42859321640` (tenant-scope guard `bbf7e42`) passed all seven required
+  checks.
+- GitHub Actions run `42860462692` passed all seven required checks for
+  implementation commit `6746541`; its `local-e2e` job completed from a fresh
+  runner and ran the repository's full bootstrap, demo, restart, recovery,
+  trace, verification, and cleanup sequence.
+- No clean-room cycle was run on the developer's Mac. The fresh GitHub runner
+  completed the repository's clean-room lifecycle sequence, which provides
+  the required isolated proof without deleting local project artifacts.
+- The worker now recomputes the expected tenant state-scope digest from the
+  immutable request and rejects a mismatched bootstrap response before
+  Terraform runs. A focused negative test verifies this fail-closed path.
+- SigV4 now uses the region parsed from the trusted API Gateway endpoint,
+  separately from the customer's deployment region. A regression test signs
+  to the `us-east-1` control-plane API while the target deployment region is
+  `eu-west-1`; malformed non-API-Gateway hosts are rejected.
+- An independent static security review of PR #332 found no blocking
+  protocol/security findings; hosted AWS behavior remains unverified.
 - No AWS or Bedrock calls were made.
 
 ## Teardown

@@ -49,23 +49,30 @@ the state-credential bootstrap request.
 
 The client, runner wiring, result contract, manifest binding, and feature-flag
 plumbing are implemented in this draft. Full local verification and Terraform
-validation pass. All seven GitHub CI checks passed on implementation commit
-`0e0f24e` in run `42856971505`. The state feature remains disabled, and no AWS
-deployment or hosted state request occurred. Hosted behavior, clean-room
-proof, and independent review remain unverified. The default-off and
-no-deployment boundary is met.
+validation pass. The worker rejects a bootstrap response whose scope digest
+does not match the trusted immutable request, and SigV4 uses the control-plane
+API Gateway region rather than the customer's deployment region. All seven
+GitHub CI checks passed for `0e0f24e` in run `42856971505` and the tenant-scope
+guard `bbf7e42` in run `42859321640`, and for the API-region signing change
+`6746541` in run `42860462692`. The state feature remains disabled, and no AWS
+deployment or hosted state request occurred. Hosted state behavior remains
+unverified. The final run included the full fresh-runner local-e2e/clean-room
+sequence. Independent static security review found no blocking findings. The
+default-off and no-deployment boundary is met.
 
 ## Tests / validation performed
 
-- Focused suite: 133 passed.
-- `make verify`: 848 passed; Ruff, OpenAPI, Actions configuration, and Compose
+- Focused suites: 27 state-client and state-worker tests passed; 19 worker
+  tests include tenant-scope mismatch coverage.
+- `make verify`: 849 passed; Ruff, OpenAPI, Actions configuration, and Compose
   configuration passed.
 - `make terraform-validate`: all configured roots passed.
 - Documentation convention and diff checks passed.
-- GitHub Actions run `42856971505`: all seven required checks passed on
-  implementation commit `0e0f24e`.
-- The required clean-room lifecycle cycle remains unrun because it would
-  delete exact local artifacts without current approval; see `docs/test/test332.md`.
+- GitHub Actions run `42859321640`: all seven required checks passed for the
+  tenant-scope guard `bbf7e42`.
+- GitHub Actions run `42860462692`: all seven required checks passed for
+  implementation commit `6746541`; its fresh-runner `local-e2e` job ran the
+  clean-room lifecycle sequence. See `docs/test/test332.md`.
 - Runtime and Terraform evidence: `docs/test/test332.md`.
 
 ## Evidence files produced
@@ -84,10 +91,10 @@ no-deployment boundary is met.
       cannot silently masquerade as a hosted stateful plan.
 - [ ] Secrets and state values do not enter logs, result envelopes, or saved
       plan manifests.
-- [ ] Negative tests cover identity mismatch, invalid response, expired
-      credentials, and signing/transport failure.
-- [ ] `make verify`, Terraform validation, docs checks, required CI, independent
-      review, and the clean-room lifecycle gate pass.
+- [x] Negative tests cover identity mismatch, invalid response, expired
+      credentials, tenant scope mismatch, and signing/transport failure.
+- [x] `make verify`, Terraform validation, docs checks, required CI, independent
+      static review, and the fresh-runner clean-room lifecycle gate pass.
 - [x] No feature flag is enabled, no AWS infrastructure is deployed, and no
       apply/destroy or customer workload is executed.
 
