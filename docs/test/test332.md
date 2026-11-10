@@ -3,7 +3,7 @@
 Date: 2026-11-10
 Execution type: Local unit tests and static Terraform validation; no customer workload
 Customer repository: N/A; no customer repository or workload was used
-Commit: implementation `674654173b7e6b90ec72542afd4f52be9a781134`
+Commit: runtime implementation `674654173b7e6b90ec72542afd4f52be9a781134`; evidence update `4277831`
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -13,8 +13,10 @@ Terraform state request, customer plan, or AWS mutation occurred.
 
 ## Resources created
 
-No cloud, customer, container, or persistent local resources were created.
-Tests use mocked AWS responses and temporary test directories.
+No AWS or customer resources were created. GitHub Actions run `42860462692`
+created the repository's Docker Compose test stack and volume on its fresh
+runner; the job ran `make clean-local` before completing. Local unit tests use
+mocked AWS responses and temporary test directories.
 
 ## Commands executed
 
@@ -40,6 +42,8 @@ git diff --check
   implementation commit `6746541`; its `local-e2e` job completed from a fresh
   runner and ran the repository's full bootstrap, demo, restart, recovery,
   trace, verification, and cleanup sequence.
+- GitHub Actions run `42861740002` passed all seven required checks for the
+  final evidence commit `4277831`.
 - No clean-room cycle was run on the developer's Mac. The fresh GitHub runner
   completed the repository's clean-room lifecycle sequence, which provides
   the required isolated proof without deleting local project artifacts.
@@ -56,8 +60,9 @@ git diff --check
 
 ## Teardown
 
-No cloud teardown was needed. Temporary test directories are handled by the
-test framework. No PR clean-room cleanup was run.
+The GitHub Actions runner executed `make clean-local`, removing its isolated
+Compose containers, network, and volume. No cloud teardown was needed.
+Temporary local test directories are handled by the test framework.
 
 ## Final boundary
 
