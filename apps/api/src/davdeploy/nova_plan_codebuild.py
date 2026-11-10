@@ -45,6 +45,7 @@ from davdeploy.nova_terraform_state_client import (
     request_terraform_http_backend,
 )
 from davdeploy.terraform_generation import generation_context_digest
+from davdeploy.terraform_state import terraform_state_scope_digest
 
 RUN_ID_ENV = "DAVDEPLOY_NOVA_PLAN_RUN_ID"
 INPUT_CONTRACT = "davdeploy.nova-plan-request.v1"
@@ -161,6 +162,18 @@ def run_nova_plan_build(
             raise NovaPlanBuildError("trusted Terraform state bootstrap failed") from None
         if not isinstance(remote_state, TerraformHTTPBackend):
             raise NovaPlanBuildError("trusted Terraform state bootstrap returned an invalid contract")
+        try:
+            expected_state_scope = terraform_state_scope_digest(
+                organization_id=binding["organization_id"],
+                project_id=binding["project_id"],
+                environment_id=binding["ownership_scope"].environment_id,
+                target_account_id=binding["account_id"],
+                region=binding["region"],
+            )
+        except (KeyError, ValueError):
+            raise NovaPlanBuildError("trusted plan request has no stable state scope") from None
+        if remote_state.scope_sha256 != expected_state_scope:
+            raise NovaPlanBuildError("trusted state bootstrap returned the wrong tenant scope")
 
     provider_lockfile = Path(__file__).with_name("terraform-provider.lock.hcl")
     plan_runner = runner or GeneratedTerraformPlanRunner(
