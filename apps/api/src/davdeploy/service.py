@@ -19,7 +19,7 @@ import httpx
 from botocore.exceptions import BotoCoreError, ClientError
 from httpx import HTTPError
 from opentelemetry import trace
-from sqlalchemy import or_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import set_committed_value
@@ -4171,6 +4171,107 @@ class ProductService:
                 if refreshed is not None:
                     run = refreshed
         return self._generated_plan_run_payload(run)
+
+    def generated_plan_run_history(
+        self,
+        principal: Principal,
+        project_id: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """List bounded, customer-safe plan status for one authorized project."""
+        project = self._project(principal, project_id)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("plan history page size must be between 1 and 100")
+
+        visibility = [
+            GeneratedPlanRun.organization_id == principal.organization_id,
+            GeneratedPlanRun.project_id == project.id,
+        ]
+        if not self._is_workspace_administrator(principal):
+            visibility.append(GeneratedPlanRun.requester_subject == principal.subject)
+
+        query = (
+            select(
+                GeneratedPlanRun,
+                InfrastructurePlan.title,
+                InfrastructurePlanRevision.revision_number,
+            )
+            .join(
+                InfrastructurePlanRevision,
+                GeneratedPlanRun.revision_id == InfrastructurePlanRevision.id,
+            )
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+            )
+            .where(
+                *visibility,
+                InfrastructurePlan.organization_id == principal.organization_id,
+                InfrastructurePlan.project_id == project.id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+        )
+        if cursor is not None:
+            try:
+                canonical_cursor = str(uuid.UUID(cursor))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("plan history cursor is invalid") from None
+            anchor = self.db.scalar(
+                select(GeneratedPlanRun).where(
+                    *visibility,
+                    GeneratedPlanRun.id == canonical_cursor,
+                )
+            )
+            if anchor is None:
+                raise PermissionError("plan history cursor is not visible")
+            query = query.where(
+                or_(
+                    GeneratedPlanRun.created_at < anchor.created_at,
+                    and_(
+                        GeneratedPlanRun.created_at == anchor.created_at,
+                        GeneratedPlanRun.id < anchor.id,
+                    ),
+                )
+            )
+
+        selected = list(
+            self.db.execute(
+                query.order_by(
+                    GeneratedPlanRun.created_at.desc(), GeneratedPlanRun.id.desc()
+                ).limit(limit + 1)
+            )
+        )
+        has_more = len(selected) > limit
+        page = selected[:limit]
+        now = datetime.now(UTC)
+        for run, _, _ in page:
+            expiry = run.preparation_lease_expires_at
+            if run.state == "PREPARING" and expiry is not None:
+                if expiry.tzinfo is None:
+                    expiry = expiry.replace(tzinfo=UTC)
+                if expiry <= now:
+                    self._expire_generated_plan_run_lease(run, now)
+                    self.db.refresh(run)
+
+        return {
+            "project_id": project.id,
+            "items": [
+                self._generated_plan_run_history_payload(run, title, revision_number)
+                for run, title, revision_number in page
+            ],
+            "next_cursor": page[-1][0].id if has_more and page else None,
+        }
+
+    def _generated_plan_run_history_payload(
+        self, run: GeneratedPlanRun, plan_title: str, revision_number: int
+    ) -> dict[str, Any]:
+        """Add customer labels to the established safe run-status projection."""
+        return self._generated_plan_run_payload(run) | {
+            "plan_title": plan_title,
+            "revision_number": revision_number,
+        }
 
     @staticmethod
     def _generated_plan_run_payload(run: GeneratedPlanRun) -> dict[str, Any]:
