@@ -1,7 +1,8 @@
 # ticket328 — fixed Nova plan-only Terraform runner
 
-PR: [#328](https://github.com/Bepoadewale/davdeploy/pull/328) (draft)
-Branch: `feat/nova-plan-only-runner-328`
+PR: [#328](https://github.com/Bepoadewale/davdeploy/pull/328) (merged 2026-11-10)
+Merge commit: `64bfd2c55cf22b61c20305106dcbcec65ef48352`
+Branch: `feat/nova-plan-only-runner-328` (deleted after merge)
 Base: `main` (PR #326 merged as `49bd5dbed1fd578704f955c664ed19e8a4e159ef` on 2026-11-10; PR #328 was reopened and retargeted after GitHub closed it when the stacked base branch was deleted)
 
 ## Problem / goal
@@ -80,7 +81,7 @@ The shared plans bucket enables S3 Bucket Keys. AWS therefore uses the exact buc
 
 ## Acceptance status
 
-Draft PR and ticket were created before implementation. The backend-free initial-plan slice is implemented, including buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, distinct durable request and per-attempt IDs, canonical Unicode proposal digests through planner and artifact persistence, recovery from saved-plan verification and secret-read errors, conditional build-input recovery, and returning the artifact ID only for a review-ready run. Full local and isolated verification passed with 820 tests; code commit `6afd383` passed all seven PR checks and current-head code review found no unresolved findings. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
+The PR was created as a draft and merged as `64bfd2c55cf22b61c20305106dcbcec65ef48352` after current-head CI and review passed. The backend-free initial-plan slice includes buildArn-scoped input/result/plan paths, exact role/ExternalId request binding, distinct durable request and per-attempt IDs, canonical Unicode proposal digests through planner and artifact persistence, recovery from saved-plan verification and secret-read errors, conditional build-input recovery, and returning the artifact ID only for a review-ready run. Full local and isolated verification passed with 820 tests; code commit `6afd383` passed all seven PR checks (run `42801456619`), and latest-head review found no unresolved findings. The durable remote-state boundary remains a product milestone blocker and is not weakened by this PR. The runner remains disabled by default; artifacts from this slice are explicitly unapprovable and non-deployable. The shared AssumeRole policy is a role-name pattern; per-connection trust and build-scoped input bind the identity pair, and the plan role grants no customer service permissions.
 
 ## Tests / validation performed
 
@@ -97,7 +98,7 @@ Draft PR and ticket were created before implementation. The backend-free initial
 
 ## Boundaries
 
-No AWS calls, Terraform apply/destroy, or customer resource mutations. PR #326 was merged as a prerequisite; PR #328 remains draft and unmerged. The feature stays disabled by default. Regional pricing, remote state, approval, and the separately authorized deployment lifecycle remain blocked or outside this intermediate PR. The mocked cross-tenant trust check does not replace deployed IAM verification.
+No AWS calls, Terraform apply/destroy, or customer resource mutations occurred. PR #328 merged as `64bfd2c`; its source is not deployed and the feature stays disabled by default. Regional pricing, durable remote state, exact-plan approval, apply, health, recovery, and teardown remain incomplete. The mocked cross-tenant trust check does not replace deployed IAM verification.
 
 ## Follow-up work
 

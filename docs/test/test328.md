@@ -6,8 +6,8 @@ Repository: `Bepoadewale/davdeploy`
 Customer repository: N/A; no customer repository or workload was used
 PR source branch: `feat/nova-plan-only-runner-328`
 Local validation worktree branch: `feat/nova-plan-only-runner-328-review`
-PR: #328 (draft; based on `main` after prerequisite PR #326 merged)
-Commit: `41a9b6a1bac32f701e0e9c8229d868e285ffd00d` (Nova retry identity and exact IAM policy follow-ups; documentation evidence is committed separately)
+PR: #328 (merged 2026-11-10 as `64bfd2c55cf22b61c20305106dcbcec65ef48352`)
+Commit: `6afd3835a6d66fff790356358f951600d0b1333b` (validated code head; post-merge evidence update tracked in PR #329)
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -110,7 +110,7 @@ All six local demos passed. Smoke, API contract, fixture end-to-end, seed, and t
 
 ## Final boundary
 
-The runner remains disabled by default. Its Terraform configuration uses `-backend=false`; results explicitly declare `INITIAL_PLAN_NO_REMOTE_STATE` and cannot be approved. Regional pricing remains unavailable, and the durable remote-state design is a separate blocker. No AWS call, customer resource mutation, Terraform apply/destroy, or merge of PR #328 is evidenced here. The CodeBuild role's STS permission uses a `davdeployPlan-*` name pattern; exact account/connection ARN binding in the runner, buildArn-only input visibility, and per-connection ExternalId trust keep the plan path identity-only. PR #326's customer plan role explicitly denies all customer service actions.
+The runner remains disabled by default. Its Terraform configuration uses `-backend=false`; results explicitly declare `INITIAL_PLAN_NO_REMOTE_STATE` and cannot be approved. Regional pricing remains unavailable, and durable remote state is a separate blocker. PR #328 later merged as `64bfd2c`; that merge did not deploy the feature or create customer resources. The CodeBuild role's STS permission uses a `davdeployPlan-*` name pattern; exact account/connection ARN binding in the runner, buildArn-only input visibility, and per-connection ExternalId trust keep the plan path identity-only. PR #326's customer plan role explicitly denies all customer service actions.
 
 ## Current-head review follow-up — 2026-11-10
 
@@ -118,16 +118,16 @@ The latest review identified two edge cases. The Terraform planner now hashes pr
 
 Focused tests passed: `tests/test_generated_terraform_plan.py` and `tests/test_nova_plan_runs.py` (47 tests); Ruff passed. Full `make verify` passed 818 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration. A clean Python 3.12 `make local-proof` also passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 818 tests. Cleanup removed only this PR's named Compose containers, network, PostgreSQL volume, `.venv`, and `.local`. The existing Starlette/httpx deprecation warning remains. CI run `42778557344` passed all seven jobs for commit `e8311a3`.
 
-That review also found a missing-input recovery case: without `s3:ListBucket`, HeadObject can return 403 for an absent key. Recovery now proceeds to its exact-key conditional write instead of treating that response as proof of presence; if an object already exists and cannot be verified, the attempt still fails closed. The recovery regression test simulates an inaccessible HEAD and confirms the exact build input is staged without restarting CodeBuild. Focused tests passed (2), full `make verify` passed 818 tests, and a fresh Python 3.12 `make local-proof` passed smoke, API contract, fixture end-to-end, seed, trace checks, and all 818 tests. Scoped cleanup removed only this PR's named local artifacts. No AWS calls or resource mutations occurred. Current-head CI and review for this follow-up are pending.
+That review also found a missing-input recovery case: without `s3:ListBucket`, HeadObject can return 403 for an absent key. Recovery now proceeds to its exact-key conditional write instead of treating that response as proof of presence; if an object already exists and cannot be verified, the attempt still fails closed. The recovery regression test simulates an inaccessible HEAD and confirms the exact build input is staged without restarting CodeBuild. Focused tests passed (2), full `make verify` passed 818 tests, and a fresh Python 3.12 `make local-proof` passed smoke, API contract, fixture end-to-end, seed, trace checks, and all 818 tests. Scoped cleanup removed only this PR's named local artifacts. No AWS calls or resource mutations occurred. CI and review were pending at this intermediate commit; final PR-head checks passed in run `42802196788`.
 
 ## Canonical digest persistence follow-up — 2026-11-10
 
 The independent review found one remaining legacy persistence path that hashed proposal JSON with Python's default ASCII escaping. `persist_generated_plan_artifact()` now uses `canonical_json_digest`, matching the planner and hosted result validation. The persistence success regression now uses an accented French rationale, so it proves the complete artifact-persistence path accepts the same proposal digest.
 
-The Unicode planner and artifact-persistence regressions plus the conditional input-recovery case passed. Full `make verify` passed 818 tests; a fresh Python 3.12 `make local-proof` passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 818 tests. `make clean-local` removed only this PR's uniquely named containers, network, PostgreSQL volume, `.venv`, and `.local`. No AWS calls or mutations occurred. CI and review for this newest commit are pending.
+The Unicode planner and artifact-persistence regressions plus the conditional input-recovery case passed. Full `make verify` passed 818 tests; a fresh Python 3.12 `make local-proof` passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 818 tests. `make clean-local` removed only this PR's uniquely named containers, network, PostgreSQL volume, `.venv`, and `.local`. No AWS calls or mutations occurred. CI and review were pending at this intermediate commit; final PR-head checks passed in run `42802196788`.
 
 ## Secrets Manager retry follow-up — 2026-11-10
 
 Current-head review identified that `BotoCoreError` and `ClientError` from the production Secrets Manager lookup could bypass the result-reconciliation handler. These AWS failures are now classified as retryable result-verification failures, so the request enters `RECONCILIATION_REQUIRED` and can be checked again after Secrets Manager recovers. Regression coverage exercises both a transport failure and a service error.
 
-The focused secret-read reconciliation tests passed (2). Full `make verify` passed 820 tests; a fresh Python 3.12 `make local-proof` passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 820 tests. Final cleanup removed only this PR's named containers, network, PostgreSQL volume, `.venv`, and `.local`. No AWS calls or resource mutations occurred. Code commit `6afd383` passed all seven PR checks in run `42801456619`; current-head review completed with no findings.
+The focused secret-read reconciliation tests passed (2). Full `make verify` passed 820 tests; a fresh Python 3.12 `make local-proof` passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 820 tests. Final cleanup removed only this PR's named containers, network, PostgreSQL volume, `.venv`, and `.local`. No AWS calls or resource mutations occurred. Code commit `6afd383` passed all seven PR checks in run `42801456619`; final PR head `8929956` passed all seven checks in run `42802196788` and its review completed with no findings. PR #328 merged as `64bfd2c`; nothing from this plan-only feature was deployed or applied to AWS.
