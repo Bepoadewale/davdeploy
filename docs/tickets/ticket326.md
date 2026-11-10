@@ -55,7 +55,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Acceptance status
 
-The plan-only authorization, opt-in identity verification and status-reporting safeguards are implemented. The PR now targets `main`; its branch includes the merged plan-request path, and the v32 migration follows v31. The complete local clean-room cycle passed at proof commit `3be87a1` and is recorded in `docs/test/test326.md`. The PR is ready for review; current-head CI has not yet reported, and the latest review requested this clean-room result, now supplied. Verification proves role trust and account identity only; effective policy contents remain unattested and are reported as `POLICY_UNATTESTED`.
+The plan-only authorization, opt-in identity verification and status-reporting safeguards are implemented. The PR targets `main`; its branch includes the merged plan-request path, and the v32 migration follows v31. Review feedback on Terraform's moved object address was fixed at `6bc9668` and the full local clean-room cycle plus all-root Terraform validation passed again; evidence is recorded in `docs/test/test326.md`. Current-head CI and review are pending. Verification proves role trust and account identity only; effective policy contents remain unattested and are reported as `POLICY_UNATTESTED`.
 
 ## Tests / validation performed
 
@@ -73,6 +73,7 @@ The plan-only authorization, opt-in identity verification and status-reporting s
 - `make verify` — passed: 772 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration; one existing Starlette/httpx deprecation warning.
 - Fresh isolated full clean-room cycle after merging current `main` — passed: clean, bootstrap, smoke, API contract, simple/complex/degraded/Day-2/canonical demos, policy/readiness failure demos, customer-plan E2E, fixture seed, trace check, `make verify` (781 tests), and final clean. Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed.
 - Final absence checks confirmed no `davdeploy-pr326-resume` containers, network, volume, `.venv`, or `.local` remained.
+- After the reviewed Terraform object-address fix, the full isolated cycle was rerun at `6bc9668`; `make verify` again passed 781 tests, and `make terraform-validate` passed all configured roots.
 - `GITHUB_PR_NUMBER=326 uv run --locked python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — rerun after final documentation updates.
 - The required full `clean -> bootstrap -> demos -> verify -> clean` cycle passed on a fresh isolated worktree at `3be87a1`. The user authorized cleanup of PR-specific artifacts; cleanup removed only this run's named project resources and generated `.venv`/`.local`. No AWS calls, stacks, or customer resources were created.

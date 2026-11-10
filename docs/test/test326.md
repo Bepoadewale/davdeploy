@@ -5,7 +5,7 @@ Execution type: Local database migration, API contract and Terraform policy vali
 Repository: `Bepoadewale/davdeploy`
 Customer repository: N/A; no customer repository or workload was used
 Branch: `feat/customer-nova-plan-role-326` (refreshed after PR #325 merged)
-Commit: proof checkout at `3be87a1` (migration source `28ca129`, merged main `47d932e`); evidence updated at the final PR commit
+Commit: full-cycle proof after template-address fix at `6bc9668` (merged main `47d932e`); evidence updated at the final PR commit
 AWS account: N/A; no AWS calls
 AWS region: N/A; no AWS calls
 
@@ -37,9 +37,11 @@ For the follow-up workflow wiring, the focused Nova/workflow tests passed (14 te
 
 After PR #325 merged, PR #326 was retargeted to `main` and current mainline was merged into the feature branch. The full isolated cycle passed at `3be87a1`: clean, Python 3.12 bootstrap, Compose smoke, API contract, simple/complex/degraded/Day-2 and canonical demos, policy and readiness failure demos, customer-plan E2E, fixture seed, trace check, `make verify` (781 tests), and final clean. Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. The pre-existing Starlette/httpx deprecation warning remains. Final checks confirmed no project containers, volume, network, `.venv`, or `.local` remained. This is local fixture evidence; no AWS calls or customer resources were used.
 
+The final review then found that the new public customer template object reused a Terraform address still present in a `moved` block. The active object was renamed to `current_customer_discovery_role`, preserving the prior address only as the migration source. The isolated full cycle was rerun on code commit `6bc9668`; all demos passed, `make verify` again passed 781 tests, and `make terraform-validate` passed every configured root including `connection-template-host`. Final cleanup and absence checks confirmed that only the uniquely named test stack and local files were removed. No AWS calls or template publication occurred.
+
 ## Resources created
 
-No AWS resources or customer workloads. The isolated local proof created project-specific Compose containers, a network and PostgreSQL volume, plus `.venv` and `.local` in `/private/tmp/davdeploy-pr326-resume`; final `make clean-local` removed those exact artifacts and absence was verified.
+No AWS resources or customer workloads. Both isolated full cycles created project-specific Compose containers, networks and PostgreSQL volumes, plus `.venv` and `.local` in `/private/tmp/davdeploy-pr326-resume`; each final cleanup removed those exact artifacts and absence was verified.
 
 ## Teardown
 
@@ -53,6 +55,7 @@ COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make api-contract
 COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make demo-simple demo-complex demo-degraded demo-day2 demo demo-failure demo-readiness-failure
 COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make customer-plan-e2e seed-demo-data
 sleep 10 && COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make trace-check verify
+COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make terraform-validate
 COMPOSE_PROJECT_NAME=davdeploy-pr326-resume make clean-local
 ```
 
