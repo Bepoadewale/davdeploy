@@ -62,9 +62,9 @@ does not add apply, pricing, health, recovery, or destroy behavior.
 ## Acceptance status
 
 The API and service behavior are implemented and locally tested. Focused and
-full verification, OpenAPI checks, and the isolated clean-room cycle passed.
-Current-head GitHub CI and review are pending. No hosted state or workload
-execution is claimed.
+full verification, OpenAPI checks, the isolated clean-room cycle, and all
+seven current-head GitHub CI jobs passed in run `42890326037`. Source review
+found no blocking issue. No hosted state or workload execution is claimed.
 
 ## Tests / validation performed
 
@@ -73,6 +73,7 @@ execution is claimed.
 - `make openapi-update` regenerated `contracts/openapi-v1.json`; `make openapi-check` passed.
 - Full `make verify`: 865 passed; Ruff, Actions configuration, OpenAPI, and Docker Compose configuration passed.
 - Fresh isolated `make local-proof` passed on the final runtime commit `43ba947`; all 865 tests, API contract, customer-plan E2E, trace check, and cleanup passed. Exact resources and cleanup evidence are in `docs/test/test333.md`.
+- GitHub Actions run `42890326037` passed all seven required checks for final PR head `4244757`, including `local-e2e` and `cloud-contracts`.
 - Documentation convention validation and `git diff --check` passed.
 - Runtime and API evidence: `docs/test/test333.md`.
 
