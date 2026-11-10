@@ -4287,6 +4287,8 @@ class ProductService:
                 }
                 artifact_id = artifact.id
             except (
+                BotoCoreError,
+                ClientError,
                 GeneratedPlanArtifactError,
                 NovaPlanDispatchError,
                 ValueError,

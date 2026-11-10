@@ -8,6 +8,7 @@ from threading import Barrier
 from types import SimpleNamespace
 
 import pytest
+from botocore.exceptions import BotoCoreError, ClientError
 from davdeploy.db import run_migrations
 from davdeploy.domain import GeneratedPlanGenerationReconciliationRequest
 from davdeploy.generated_deployment_contract import (
@@ -382,6 +383,41 @@ def test_saved_plan_verification_error_enters_reconciliation_state():
         raise GeneratedPlanArtifactError("fixture saved-plan verification failed")
 
     service._persist_verified_nova_plan_result = fail_artifact_verification
+
+    assert service.reconcile_generated_plan_build(run.codebuild_build_id) is True
+    updated = service.generated_plan_run_detail(founder(), request["id"])
+    assert updated["state"] == "RECONCILIATION_REQUIRED"
+    assert updated["error_code"] == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+    assert "No plan is approvable" in updated["error_summary"]
+    db.close()
+
+
+@pytest.mark.parametrize(
+    "aws_error",
+    [
+        BotoCoreError(error_message="fixture Secrets Manager transport failure"),
+        ClientError(
+            {"Error": {"Code": "ServiceUnavailable", "Message": "fixture unavailable"}},
+            "GetSecretValue",
+        ),
+    ],
+)
+def test_secrets_manager_read_errors_leave_build_recoverable(aws_error):
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-secret-read-reconcile-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    assert run and run.codebuild_build_id
+    dispatcher.read_result = lambda *_args: ({}, "result-version", "f" * 64)
+
+    def secret_store_failure(*_args):
+        raise aws_error
+
+    service._persist_verified_nova_plan_result = secret_store_failure
 
     assert service.reconcile_generated_plan_build(run.codebuild_build_id) is True
     updated = service.generated_plan_run_detail(founder(), request["id"])

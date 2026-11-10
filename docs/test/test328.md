@@ -125,3 +125,9 @@ That review also found a missing-input recovery case: without `s3:ListBucket`, H
 The independent review found one remaining legacy persistence path that hashed proposal JSON with Python's default ASCII escaping. `persist_generated_plan_artifact()` now uses `canonical_json_digest`, matching the planner and hosted result validation. The persistence success regression now uses an accented French rationale, so it proves the complete artifact-persistence path accepts the same proposal digest.
 
 The Unicode planner and artifact-persistence regressions plus the conditional input-recovery case passed. Full `make verify` passed 818 tests; a fresh Python 3.12 `make local-proof` passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 818 tests. `make clean-local` removed only this PR's uniquely named containers, network, PostgreSQL volume, `.venv`, and `.local`. No AWS calls or mutations occurred. CI and review for this newest commit are pending.
+
+## Secrets Manager retry follow-up — 2026-11-10
+
+Current-head review identified that `BotoCoreError` and `ClientError` from the production Secrets Manager lookup could bypass the result-reconciliation handler. These AWS failures are now classified as retryable result-verification failures, so the request enters `RECONCILIATION_REQUIRED` and can be checked again after Secrets Manager recovers. Regression coverage exercises both a transport failure and a service error.
+
+The focused secret-read reconciliation tests passed (2). Full `make verify` passed 820 tests; a fresh Python 3.12 `make local-proof` passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 820 tests. Final cleanup removed only this PR's named containers, network, PostgreSQL volume, `.venv`, and `.local`. No AWS calls or resource mutations occurred. CI and review for the latest changes are pending.
