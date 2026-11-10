@@ -4285,7 +4285,14 @@ class ProductService:
                     "planning_boundary": "INITIAL_PLAN_NO_REMOTE_STATE",
                 }
                 artifact_id = artifact.id
-            except (NovaPlanDispatchError, ValueError, TypeError, KeyError, OSError):
+            except (
+                GeneratedPlanArtifactError,
+                NovaPlanDispatchError,
+                ValueError,
+                TypeError,
+                KeyError,
+                OSError,
+            ):
                 self.db.rollback()
                 failed_read = self.db.execute(
                     update(GeneratedPlanRun)

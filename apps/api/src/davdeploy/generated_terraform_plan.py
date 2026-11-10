@@ -129,7 +129,10 @@ class GeneratedTerraformPlanRunner:
             raise TerraformPlanExecutionError("AWS provider lockfile version does not match pin")
         lockfile_digest = hashlib.sha256(lockfile_bytes).hexdigest()
         proposal_bytes = json.dumps(
-            proposal.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+            proposal.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
         ).encode("utf-8")
 
         working_root = self._secure_workspace(Path(workspace))

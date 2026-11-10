@@ -350,6 +350,47 @@ def test_transient_result_read_can_be_reconciled_and_returns_review_artifact():
     db.close()
 
 
+def test_saved_plan_verification_error_enters_reconciliation_state():
+    from davdeploy.generated_plan_artifacts import GeneratedPlanArtifactError
+
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-artifact-error-reconcile-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    assert run and run.codebuild_build_id and run.result_key
+    dispatcher.read_result = lambda *_args: (
+        {
+            "manifest": {
+                "artifact": {
+                    "bucket": "plan-artifacts",
+                    "key": "plans/review/saved.tfplan",
+                    "version_id": "saved-plan-version",
+                },
+                "digests": {"saved_plan_sha256": "d" * 64},
+            },
+            "manifest_sha256": "e" * 64,
+        },
+        "result-version",
+        "f" * 64,
+    )
+
+    def fail_artifact_verification(*_args):
+        raise GeneratedPlanArtifactError("fixture saved-plan verification failed")
+
+    service._persist_verified_nova_plan_result = fail_artifact_verification
+
+    assert service.reconcile_generated_plan_build(run.codebuild_build_id) is True
+    updated = service.generated_plan_run_detail(founder(), request["id"])
+    assert updated["state"] == "RECONCILIATION_REQUIRED"
+    assert updated["error_code"] == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+    assert "No plan is approvable" in updated["error_summary"]
+    db.close()
+
+
 def test_unconfirmed_codebuild_status_can_be_retried_for_exact_bound_build():
     service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
     _, _, revision = make_submitted_revision(service)

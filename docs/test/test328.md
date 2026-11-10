@@ -111,3 +111,9 @@ All six local demos passed. Smoke, API contract, fixture end-to-end, seed, and t
 ## Final boundary
 
 The runner remains disabled by default. Its Terraform configuration uses `-backend=false`; results explicitly declare `INITIAL_PLAN_NO_REMOTE_STATE` and cannot be approved. Regional pricing remains unavailable, and the durable remote-state design is a separate blocker. No AWS call, customer resource mutation, Terraform apply/destroy, or merge of PR #328 is evidenced here. The CodeBuild role's STS permission uses a `davdeployPlan-*` name pattern; exact account/connection ARN binding in the runner, buildArn-only input visibility, and per-connection ExternalId trust keep the plan path identity-only. PR #326's customer plan role explicitly denies all customer service actions.
+
+## Current-head review follow-up — 2026-11-10
+
+The latest review identified two edge cases. The Terraform planner now hashes proposal JSON with the same canonical UTF-8 encoding used by the control plane, including non-ASCII text. If saved-plan object verification raises its typed storage error during successful-build reconciliation, the durable run now enters `RECONCILIATION_REQUIRED` instead of remaining `BUILD_STARTED`.
+
+Focused tests passed: `tests/test_generated_terraform_plan.py` and `tests/test_nova_plan_runs.py` (47 tests); Ruff passed. Full `make verify` passed 818 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration. A clean Python 3.12 `make local-proof` also passed smoke, API contract, customer-plan fixture E2E, seed, trace checks, and all 818 tests. Cleanup removed only this PR's named Compose containers, network, PostgreSQL volume, `.venv`, and `.local`. The existing Starlette/httpx deprecation warning remains. Current-head CI and review are pending; no AWS calls or resource mutations occurred.

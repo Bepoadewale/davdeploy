@@ -7,6 +7,7 @@ import textwrap
 
 import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_plan_artifacts import canonical_json_digest
 from davdeploy.generated_plan_ownership import PlanOwnershipScope
 from davdeploy.generated_terraform_plan import (
     GeneratedTerraformPlanRunner,
@@ -195,6 +196,24 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
     ]
     assert not hasattr(GeneratedTerraformPlanRunner, "apply")
     assert (workspace / ".terraform-cli-args-plan").read_text() == ""
+
+
+def test_proposal_digest_uses_canonical_unicode_json(tmp_path):
+    current = proposal().model_dump(mode="json")
+    current["resources"][0]["rationale"] = "Stockage privé sécurisé."
+    unicode_proposal = GeneratedDeploymentProposal.model_validate(current)
+
+    result = runner(tmp_path).plan(
+        unicode_proposal,
+        expected_account_id="654654474502",
+        region="us-east-1",
+        ownership_scope=ownership_scope(),
+        workspace=tmp_path / "unicode-run",
+    )
+
+    assert result.proposal_sha256 == canonical_json_digest(
+        unicode_proposal.model_dump(mode="json")
+    )
 
 
 def test_target_account_mismatch_blocks_before_creating_workspace(tmp_path):
