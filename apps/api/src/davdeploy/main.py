@@ -1287,7 +1287,7 @@ def reconcile_generated_plan_build_attempt(
     principal: Principal = Depends(verify_token),
     service: ProductService = Depends(product_service),
 ):
-    """Find one exact CodeBuild attempt after its start response was lost."""
+    """Reconcile one exact build start, input handoff, or result read."""
     REQUESTS.labels("generated_plan_runs.reconcile_build").inc()
     try:
         return service.reconcile_generated_plan_build_attempt(principal, run_id)

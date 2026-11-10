@@ -295,7 +295,58 @@ def test_successful_codebuild_is_not_promoted_to_a_verified_plan():
 
     assert updated["state"] == "RECONCILIATION_REQUIRED"
     assert updated["error_code"] == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+    assert updated["artifact_id"] is None
     assert "No plan is approvable" in updated["error_summary"]
+    db.close()
+
+
+def test_transient_result_read_can_be_reconciled_and_returns_review_artifact():
+    service, db, _, dispatcher = service_with_dispatcher(status="SUCCEEDED")
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    request = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-result-retry-fixture-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, request["id"])
+    assert run and run.codebuild_build_id and run.result_key
+
+    result = {
+        "manifest": {
+            "artifact": {
+                "bucket": "plan-artifacts",
+                "key": "plans/review/saved.tfplan",
+                "version_id": "saved-plan-version",
+            },
+            "digests": {"saved_plan_sha256": "d" * 64},
+        },
+        "manifest_sha256": "e" * 64,
+    }
+    read_attempts = []
+
+    def transient_then_successful_read(_run_id, _key, _build_id, _build_arn):
+        read_attempts.append(True)
+        if len(read_attempts) == 1:
+            raise NovaPlanDispatchError(
+                "fixture result read temporarily unavailable", outcome_uncertain=True
+            )
+        return result, "result-version", "f" * 64
+
+    dispatcher.read_result = transient_then_successful_read
+    service._persist_verified_nova_plan_result = lambda *_args: SimpleNamespace(
+        id="artifact-review-123"
+    )
+
+    assert service.reconcile_generated_plan_build(run.codebuild_build_id) is True
+    uncertain = service.generated_plan_run_detail(founder(), request["id"])
+    assert uncertain["state"] == "RECONCILIATION_REQUIRED"
+    assert uncertain["error_code"] == "PLAN_RESULT_RECONCILIATION_REQUIRED"
+    assert uncertain["artifact_id"] is None
+
+    recovered = service.reconcile_generated_plan_build_attempt(founder(), request["id"])
+    assert recovered["state"] == "PLAN_READY_REVIEW_ONLY"
+    assert recovered["artifact_id"] == "artifact-review-123"
+    assert len(read_attempts) == 2
     db.close()
 
 

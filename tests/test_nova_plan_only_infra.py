@@ -170,6 +170,12 @@ def test_api_artifact_permissions_and_completion_events_are_exactly_scoped() -> 
     assert "nova_plan_only_input_key" in api_artifacts
     assert "nova_plan_only_build_result_key" in api_artifacts
     assert '"kms:EncryptionContext:aws:s3:arn"' in api_artifacts
+    assert re.search(
+        r'Action\s*=\s*\["s3:GetObject"\]\s*Resource\s*=\s*'
+        r'"arn:\$\{data\.aws_partition\.current\.partition\}:s3:::'
+        r'\$\{var\.nova_plan_artifact_bucket\}/\$\{local\.nova_plan_only_build_input_key\}"',
+        api_artifacts,
+    )
 
     event_rule = resource_block(MAIN, "aws_cloudwatch_event_rule", "nova_plan_only_completion")
     assert '"project-name" = [aws_codebuild_project.nova_plan_only[0].name]' in event_rule
@@ -204,6 +210,12 @@ def test_plan_only_object_keys_require_object_level_sse_kms_context() -> None:
         '"arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"'
     )
     assert api_artifacts.count(bucket_context) == 3
+    assert re.search(
+        r'Action\s*=\s*\["s3:GetObject"\]\s*Resource\s*=\s*'
+        r'"arn:\$\{data\.aws_partition\.current\.partition\}:s3:::'
+        r'\$\{var\.nova_plan_artifact_bucket\}/\$\{local\.nova_plan_only_build_input_key\}"',
+        api_artifacts,
+    )
     dispatcher = (ROOT / "apps/api/src/davdeploy/nova_plan_dispatch.py").read_text()
     codebuild_runner = (ROOT / "apps/api/src/davdeploy/nova_plan_codebuild.py").read_text()
     assert dispatcher.count("BucketKeyEnabled=True") == 1

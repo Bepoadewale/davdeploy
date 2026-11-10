@@ -441,6 +441,13 @@ resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
         Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_input_key}"
       },
       {
+        # Recovery inspects the current immutable build-input object before
+        # resolving its version ID. Keep the read limited to that exact key.
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_input_key}"
+      },
+      {
         Effect   = "Allow"
         Action   = ["s3:GetObjectVersion"]
         Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_saved_plan_key}"

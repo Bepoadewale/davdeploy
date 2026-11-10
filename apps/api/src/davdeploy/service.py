@@ -2642,11 +2642,14 @@ class ProductService:
             not in {
                 "BUILD_START_RECONCILIATION_REQUIRED",
                 "BUILD_INPUT_STAGE_RECONCILIATION_REQUIRED",
+                "PLAN_RESULT_RECONCILIATION_REQUIRED",
             }
             or not run.runner_run_id
             or run.codebuild_idempotency_token != run.runner_run_id
         ):
-            raise ValueError("only an ambiguous CodeBuild start or input handoff can be reconciled")
+            raise ValueError(
+                "only an ambiguous CodeBuild start, input handoff, or result read can be reconciled"
+            )
 
         dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
         if dispatcher is None or dispatcher.project_name != run.codebuild_project:
@@ -4101,6 +4104,13 @@ class ProductService:
             "revision_sha256": run.revision_sha256,
             "proposal_sha256": run.proposal_sha256,
             "state": run.state,
+            "artifact_id": (
+                run.result_metadata.get("artifact_id")
+                if run.state == "PLAN_READY_REVIEW_ONLY"
+                and isinstance(run.result_metadata, dict)
+                and isinstance(run.result_metadata.get("artifact_id"), str)
+                else None
+            ),
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "started_at": run.started_at.isoformat() if run.started_at else None,
             "finished_at": run.finished_at.isoformat() if run.finished_at else None,
