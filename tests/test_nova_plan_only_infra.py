@@ -43,6 +43,41 @@ def test_nova_plan_only_resources_are_opt_in_and_fail_closed() -> None:
     assert 'aws_codebuild_project.nova_plan_only[0].name : ""' in MAIN
 
 
+def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scoped() -> None:
+    variable = VARIABLES.split('variable "enable_nova_plan_role_verification"', 1)[1].split(
+        "\nvariable ", 1
+    )[0]
+    assert 'default     = false' in variable
+    assert (
+        "TF_VAR_enable_nova_plan_role_verification: "
+        "${{ vars.NOVA_PLAN_ROLE_VERIFICATION_ENABLED || 'false' }}"
+    ) in PLAN_WORKFLOW
+    assert "effective permissions" in variable
+    assert "DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED" in MAIN
+    assert "tostring(var.enable_nova_plan_role_verification)" in MAIN
+    assert 'var.enable_nova_plan_role_verification ? [{' in MAIN
+    verification = MAIN.split('var.enable_nova_plan_role_verification ? [{', 1)[1].split(
+        "}] : []", 1
+    )[0]
+    assert 'Action   = ["sts:AssumeRole"]' in verification
+    assert 'Resource = "arn:aws:iam::*:role/davdeployPlan-*"' in verification
+    assert '"sts:ExternalId"' in verification
+    assert '"sts:RoleSessionName" = "davdeploy-plan-verify-*"' in verification
+    assert 'Resource = "*"' not in verification
+
+    runner_validation = VARIABLES.split('variable "enable_nova_plan_only_runner"', 1)[1].split(
+        "\nvariable ", 1
+    )[0]
+    assert "var.enable_nova_plan_role_verification" in runner_validation
+
+
+def test_plan_broker_env_is_derived_from_runner_and_not_required_for_setup_only() -> None:
+    assert "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN" in MAIN
+    assert (
+        'var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""' in MAIN
+    )
+
+
 def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_logs() -> None:
     policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only")
     assert 'logs:CreateLogStream' in policy

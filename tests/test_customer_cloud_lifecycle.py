@@ -4,10 +4,60 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from davdeploy import integrations
 from davdeploy.domain import CloudInventorySnapshot
 from davdeploy.integrations import StsAwsDiscovery
 from davdeploy.models import Environment
 from test_product import founder, make_service
+
+
+def test_plan_role_verification_uses_exact_customer_arn_external_id_and_verify_session(monkeypatch):
+    calls = []
+
+    class StsClient:
+        def assume_role(self, **kwargs):
+            calls.append(kwargs)
+            return {
+                "Credentials": {
+                    "AccessKeyId": "temporary-access-key",
+                    "SecretAccessKey": "temporary-secret",
+                    "SessionToken": "temporary-session",
+                }
+            }
+
+        def get_caller_identity(self):
+            return {"Account": "123456789012"}
+
+    class ApiSession:
+        def client(self, service_name, region_name=None):
+            assert service_name == "sts"
+            assert region_name == "eu-west-1"
+            return StsClient()
+
+    class CustomerSession:
+        def client(self, service_name):
+            assert service_name == "sts"
+            return StsClient()
+
+    monkeypatch.setattr(integrations.boto3, "Session", lambda **_kwargs: CustomerSession())
+    discovery = StsAwsDiscovery(session=ApiSession())
+
+    account_id = discovery.verify_plan_role(
+        "conn1234-5678",
+        "arn:aws:iam::123456789012:role/davdeployPlan-conn1234-5678",
+        "connection-specific-external-id",
+        "eu-west-1",
+    )
+
+    assert account_id == "123456789012"
+    assert calls == [
+        {
+            "RoleArn": "arn:aws:iam::123456789012:role/davdeployPlan-conn1234-5678",
+            "RoleSessionName": "davdeploy-plan-verify-conn1234",
+            "ExternalId": "connection-specific-external-id",
+            "DurationSeconds": 900,
+        }
+    ]
 
 
 def test_verified_customer_snapshot_is_the_only_non_fixture_planning_input():

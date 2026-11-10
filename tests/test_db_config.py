@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 31
+            == 32
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -89,7 +89,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 31
+            == 32
         )
     engine.dispose()
 
@@ -126,7 +126,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 31
+            == 32
         )
         connection.execute(
             text(
@@ -149,6 +149,13 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     with engine.begin() as connection:
         connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
         connection.execute(text("INSERT INTO schema_migrations(version) VALUES (27)"))
+        connection.execute(
+            text(
+                "CREATE TABLE cloud_connections ("
+                "id VARCHAR(36) PRIMARY KEY, account_id VARCHAR(12), "
+                "discovery_role_arn TEXT, execution_role_arn TEXT)"
+            )
+        )
         connection.execute(text("CREATE TABLE organizations (id VARCHAR(36) PRIMARY KEY)"))
         connection.execute(text("INSERT INTO organizations(id) VALUES ('org-demo')"))
         connection.execute(
@@ -251,6 +258,74 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 31
+            == 32
         )
+    engine.dispose()
+
+
+def test_plan_role_migration_upgrades_version_31_with_only_plan_role_columns():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
+        connection.execute(
+            text(
+                "CREATE TABLE cloud_connections ("
+                "id VARCHAR(36) PRIMARY KEY, account_id VARCHAR(12), "
+                "discovery_role_arn TEXT, execution_role_arn TEXT)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO cloud_connections "
+                "(id, account_id, discovery_role_arn, execution_role_arn) "
+                "VALUES ('connection-1', '123456789012', 'arn:discovery', 'arn:execution')"
+            )
+        )
+        connection.execute(text("CREATE TABLE generated_plan_artifacts (id TEXT PRIMARY KEY)"))
+        connection.execute(text("CREATE TABLE generated_plan_approvals (id TEXT PRIMARY KEY)"))
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("cloud_connections")}
+    assert columns == {
+        "id",
+        "account_id",
+        "discovery_role_arn",
+        "execution_role_arn",
+        "plan_role_arn",
+        "plan_role_setup_state",
+    }
+    with engine.connect() as connection:
+        version = connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+        existing = connection.execute(
+            text(
+                "SELECT account_id, discovery_role_arn, execution_role_arn, "
+                "plan_role_arn, plan_role_setup_state FROM cloud_connections WHERE id = 'connection-1'"
+            )
+        ).one()
+    assert version == 32
+    assert existing == (
+        "123456789012",
+        "arn:discovery",
+        "arn:execution",
+        None,
+        "NOT_CONFIGURED",
+    )
+    engine.dispose()
+
+
+def test_plan_role_migration_fails_closed_if_cloud_connections_is_missing():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
+
+    with pytest.raises(RuntimeError, match="cloud_connections table is missing"):
+        db.run_migrations(engine)
+
+    with engine.connect() as connection:
+        version = connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
+    assert version == 31
     engine.dispose()

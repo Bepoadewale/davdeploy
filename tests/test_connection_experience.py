@@ -4,7 +4,7 @@ import json
 
 from davdeploy.db import make_engine, run_migrations
 from davdeploy.integrations import RepositoryAnalysis, RepositoryMetadata
-from davdeploy.main import app, product_service, verify_token
+from davdeploy.main import app, list_cloud_connections, product_service, verify_token
 from davdeploy.models import GitHubWebhookDelivery
 from davdeploy.policy import PolicyClient
 from davdeploy.security import LOCAL_USERS, Principal
@@ -38,6 +38,25 @@ def test_administrator_pilot_quick_create_requires_explicit_acknowledgement():
     assert response.json() == {
         "detail": "acknowledge administrator access before enabling the deployment pilot"
     }
+
+
+def test_plan_only_quick_create_is_not_mistaken_for_administrator_access():
+    class QuickCreateService:
+        def aws_quick_create_setup(self, *_args):
+            return {"access_mode": _args[-1], "boundary": "deny-all"}
+
+    app.dependency_overrides[product_service] = lambda: QuickCreateService()
+    app.dependency_overrides[verify_token] = founder
+    try:
+        response = TestClient(app).post(
+            "/api/v1/cloud-connections/connection-1/aws-quick-create",
+            json={"account_id": "123456789012", "access_mode": "plan-only"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["access_mode"] == "plan-only"
 
 
 def test_fixture_github_connection_lists_only_authorized_repositories_and_branches():
@@ -173,6 +192,21 @@ def test_aws_connection_detail_and_disconnect_are_tenant_scoped_and_credential_f
         raise AssertionError("other tenant read an AWS connection")
     service.disconnect_cloud_connection(founder(), connection.id)
     assert service.cloud_connections(founder()) == []
+
+
+def test_cloud_connection_list_reports_plan_role_policy_as_unattested_when_identity_verified():
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer account", "aws", "byoc_role_contract"
+    )
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-connection"
+    connection.plan_role_setup_state = "VERIFIED"
+    service.db.commit()
+
+    response = list_cloud_connections(founder(), service)
+    item = next(item for item in response if item["id"] == connection.id)
+    assert item["plan_role_setup_state"] == "VERIFIED"
+    assert item["plan_role_policy_status"] == "POLICY_UNATTESTED"
 
 
 def signed_fixture_webhook(service, event: str, delivery_id: str, payload: dict):

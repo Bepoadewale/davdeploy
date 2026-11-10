@@ -1,14 +1,18 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: davdeploy AWS connection. Discovery is read-only; pilot execution is explicit and separate.
+Description: davdeploy AWS connection. Nova plan policy is expected to deny customer actions, but effective permissions are not verified; administrator pilot is separate.
 Parameters:
   davdeployDiscoveryBrokerRoleArn:
     Type: String
   davdeployExecutionBrokerRoleArn:
     Type: String
+  davdeployNovaPlanBrokerRoleArn:
+    Type: String
+    Default: unused
+    AllowedPattern: "^(unused|arn:aws:iam::[0-9]{12}:role/.+)$"
   AccessMode:
     Type: String
     Default: discovery
-    AllowedValues: [discovery, administrator-pilot]
+    AllowedValues: [discovery, plan-only, administrator-pilot]
   ExternalId:
     Type: String
     NoEcho: true
@@ -16,9 +20,13 @@ Parameters:
     Type: String
     AllowedPattern: "[A-Za-z0-9-]{8,40}"
 Conditions:
+  CreateDiscoveryRole: !Not [!Equals [!Ref AccessMode, plan-only]]
+  CreateNovaPlanOnlyRole: !Equals [!Ref AccessMode, plan-only]
+  CreateNovaPlanBrokerTrust: !Not [!Equals [!Ref davdeployNovaPlanBrokerRoleArn, unused]]
   CreateAdministratorPilotRole: !Equals [!Ref AccessMode, administrator-pilot]
 Resources:
   DiscoveryRole:
+    Condition: CreateDiscoveryRole
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "davdeployDiscovery-${ConnectionId}"
@@ -77,6 +85,41 @@ Resources:
                   - secretsmanager:DescribeSecret
                   - secretsmanager:ListSecrets
                   - tag:GetResources
+                Resource: "*"
+  NovaPlanOnlyRole:
+    Condition: CreateNovaPlanOnlyRole
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "davdeployPlan-${ConnectionId}"
+      Description: Template attaches a deny policy for customer service actions. DavDeploy does not attest effective permissions.
+      MaxSessionDuration: 3600
+      Tags:
+        - Key: ManagedBy
+          Value: davdeploy
+        - Key: ConnectionId
+          Value: !Ref ConnectionId
+        - Key: Access
+          Value: nova-plan-only-deny-all
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !If
+                - CreateNovaPlanBrokerTrust
+                - [!Ref davdeployDiscoveryBrokerRoleArn, !Ref davdeployNovaPlanBrokerRoleArn]
+                - !Ref davdeployDiscoveryBrokerRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Policies:
+        - PolicyName: davdeployNovaPlanDenyAllCustomerActions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Deny
+                Action: "*"
                 Resource: "*"
   ExecutionRole:
     Condition: CreateAdministratorPilotRole
@@ -137,6 +180,7 @@ Resources:
             Action: sts:AssumeRole
 Outputs:
   DiscoveryRoleArn:
+    Condition: CreateDiscoveryRole
     Description: Read-only role used by davdeploy after connection verification.
     Value: !GetAtt DiscoveryRole.Arn
   ConnectionId:
@@ -145,3 +189,7 @@ Outputs:
     Condition: CreateAdministratorPilotRole
     Description: Administrator pilot role. It can modify AWS resources when assumed by DavDeploy's execution broker.
     Value: !GetAtt ExecutionRole.Arn
+  NovaPlanOnlyRoleArn:
+    Condition: CreateNovaPlanOnlyRole
+    Description: Deny-all customer role used only to produce initial Nova Terraform plans.
+    Value: !GetAtt NovaPlanOnlyRole.Arn

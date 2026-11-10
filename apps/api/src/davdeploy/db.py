@@ -206,7 +206,9 @@ def run_migrations(target: Engine | None = None) -> None:
                 )
             )
             _install_generated_plan_immutability(connection)
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
+            # create_all uses current model metadata, so new databases already include
+            # every column through the latest schema version.
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (32)"))
             return
         if version < 2:
             connection.execute(
@@ -505,6 +507,21 @@ def run_migrations(target: Engine | None = None) -> None:
                 )
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (31)"))
+            version = 31
+        if version < 32:
+            if not inspect(connection).has_table("cloud_connections"):
+                raise RuntimeError(
+                    "Cannot apply schema migration 32: cloud_connections table is missing"
+                )
+            _add_columns_if_missing(
+                connection,
+                "cloud_connections",
+                {
+                    "plan_role_arn": "TEXT",
+                    "plan_role_setup_state": "VARCHAR(32) NOT NULL DEFAULT 'NOT_CONFIGURED'",
+                },
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (32)"))
         _install_generated_plan_immutability(connection)
 
 
