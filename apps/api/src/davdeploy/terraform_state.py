@@ -302,6 +302,7 @@ class TerraformStateStorage:
             "davdeploy-run-id": write.run_id,
             "davdeploy-build-id-sha256": write.build_id_sha256,
         }
+        incoming_matches_pending = hashlib.sha256(raw).hexdigest() == write.state_sha256
         try:
             head = self.s3.head_object(
                 Bucket=self.bucket,
@@ -315,6 +316,8 @@ class TerraformStateStorage:
                 return None
             if status != 403 and error_code not in {"403", "AccessDenied"}:
                 raise TerraformStateError("pending Terraform state upload could not be reconciled") from None
+            if not incoming_matches_pending:
+                return None
 
             # With no s3:ListBucket grant, HeadObject can return 403 for a missing
             # key. A conditional write distinguishes absence without risking an
@@ -395,7 +398,6 @@ class TerraformStateStorage:
             or parsed.sha256 != write.state_sha256
             or parsed.lineage != write.lineage
             or parsed.serial != write.serial
-            or hashlib.sha256(raw).hexdigest() != parsed.sha256
         ):
             return None
         return version_id
@@ -407,6 +409,7 @@ class TerraformStateStorage:
         run_id: str,
         build_id: str,
         lock_id: str,
+        metadata: TerraformStateMetadata,
     ) -> None:
         """Record an invalid prior attempt and rotate to a fresh, unguessable key."""
         self._active_lock(
@@ -432,6 +435,9 @@ class TerraformStateStorage:
         write.run_id = run_id
         write.build_id_sha256 = hashlib.sha256(build_id.encode()).hexdigest()
         write.object_key = f"terraform-state/{write.state_id}/{secrets.token_hex(24)}.tfstate"
+        write.lineage = metadata.lineage
+        write.serial = metadata.serial
+        write.state_sha256 = metadata.sha256
         write.status = "PENDING"
         write.object_version_id = None
         write.committed_at = None
@@ -475,14 +481,16 @@ class TerraformStateStorage:
                 TerraformStateWrite.serial == metadata.serial,
             ).with_for_update()
         )
-        if write is not None and write.state_sha256 != metadata.sha256:
-            raise TerraformStateError("a conflicting Terraform state write already exists")
         if write is not None and write.status == "COMMITTED":
+            if write.state_sha256 != metadata.sha256:
+                raise TerraformStateError("a conflicting Terraform state write already exists")
             return metadata
         if write is not None and write.status != "PENDING":
             raise TerraformStateError("a conflicting Terraform state write already exists")
         if write is not None and (
-            write.run_id != run_id or write.build_id_sha256 != build_id_sha256
+            write.state_sha256 != metadata.sha256
+            or write.run_id != run_id
+            or write.build_id_sha256 != build_id_sha256
         ):
             recovered_version_id = self._recover_pending_version(write, raw)
             if recovered_version_id is not None:
@@ -494,13 +502,21 @@ class TerraformStateStorage:
                 write.committed_at = datetime.now(UTC)
                 state.latest_object_key = write.object_key
                 state.latest_version_id = recovered_version_id
-                state.lineage = metadata.lineage
-                state.serial = metadata.serial
-                state.state_sha256 = metadata.sha256
+                state.lineage = write.lineage
+                state.serial = write.serial
+                state.state_sha256 = write.state_sha256
                 self.db.commit()
+                if write.state_sha256 != metadata.sha256:
+                    raise TerraformStateError(
+                        "a prior Terraform state version was recovered; refresh state before retrying"
+                    )
                 return metadata
             self._abandon_pending_attempt(
-                write, run_id=run_id, build_id=build_id, lock_id=lock_id
+                write,
+                run_id=run_id,
+                build_id=build_id,
+                lock_id=lock_id,
+                metadata=metadata,
             )
         if write is None:
             write = TerraformStateWrite(

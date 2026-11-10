@@ -879,6 +879,124 @@ def test_state_storage_abandons_unverifiable_pending_object_and_rotates_key():
     engine.dispose()
 
 
+def test_state_storage_commits_prior_pending_version_before_rejecting_changed_same_serial():
+    s3 = _FakeS3()
+    s3.lose_first_response = True
+    engine, db, state, storage = _state_storage(s3)
+    prior_bytes = _state_bytes(serial=0)
+    changed_document = json.loads(prior_bytes)
+    changed_document["resources"] = [{"mode": "managed", "type": "aws_s3_bucket"}]
+    changed_bytes = json.dumps(changed_document).encode()
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with pytest.raises(TerraformStateError, match="uncertain"):
+        storage.write(
+            state_id=state.id,
+            run_id="run-1",
+            build_id="project:build-1",
+            lock_id="lock-1",
+            raw=prior_bytes,
+        )
+    _reclaim_failed_state_lock(
+        db,
+        storage,
+        state,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+    )
+    storage.lock(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        raw=_lock_bytes("lock-2"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    with pytest.raises(TerraformStateError, match="prior Terraform state version was recovered"):
+        storage.write(
+            state_id=state.id,
+            run_id="run-2",
+            build_id="project:build-2",
+            lock_id="lock-2",
+            raw=changed_bytes,
+        )
+
+    assert storage.read(state.id) == prior_bytes
+    assert db.get(TerraformRemoteState, state.id).serial == 0
+    write = db.scalar(select(TerraformStateWrite).where(TerraformStateWrite.state_id == state.id))
+    assert write.status == "COMMITTED"
+    assert write.state_sha256 == hashlib.sha256(prior_bytes).hexdigest()
+    assert s3.put_count == 1
+    db.close()
+    engine.dispose()
+
+
+def test_state_storage_rotates_missing_pending_attempt_to_changed_same_serial_payload():
+    s3 = _FakeS3()
+    s3.fail_before_put_once = True
+    engine, db, state, storage = _state_storage(s3)
+    prior_bytes = _state_bytes(serial=0)
+    changed_document = json.loads(prior_bytes)
+    changed_document["resources"] = [{"mode": "managed", "type": "aws_s3_bucket"}]
+    changed_bytes = json.dumps(changed_document).encode()
+    storage.lock(
+        state_id=state.id,
+        run_id="run-1",
+        build_id="project:build-1",
+        raw=_lock_bytes(),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    with pytest.raises(TerraformStateError, match="uncertain"):
+        storage.write(
+            state_id=state.id,
+            run_id="run-1",
+            build_id="project:build-1",
+            lock_id="lock-1",
+            raw=prior_bytes,
+        )
+    write = db.scalar(select(TerraformStateWrite).where(TerraformStateWrite.state_id == state.id))
+    old_key = write.object_key
+    _reclaim_failed_state_lock(
+        db,
+        storage,
+        state,
+        run_id="run-1",
+        build_id="project:build-1",
+        lock_id="lock-1",
+    )
+    storage.lock(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        raw=_lock_bytes("lock-2"),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+    result = storage.write(
+        state_id=state.id,
+        run_id="run-2",
+        build_id="project:build-2",
+        lock_id="lock-2",
+        raw=changed_bytes,
+    )
+
+    assert result.sha256 == hashlib.sha256(changed_bytes).hexdigest()
+    assert storage.read(state.id) == changed_bytes
+    assert write.status == "COMMITTED"
+    assert write.run_id == "run-2"
+    assert write.object_key != old_key
+    assert write.state_sha256 == hashlib.sha256(changed_bytes).hexdigest()
+    assert write.attempt_history[0]["run_id"] == "run-1"
+    db.close()
+    engine.dispose()
+
+
 def test_expired_lock_requires_exact_terminal_build_before_reclaim():
     engine, db, state, storage = _state_storage(_FakeS3())
     storage.lock(
