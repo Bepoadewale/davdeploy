@@ -177,7 +177,9 @@ def validate_terraform_state_lock_id(supplied_lock_id: str | None, active_lock_i
         not isinstance(supplied_lock_id, str)
         or not supplied_lock_id
         or not isinstance(active_lock_id, str)
-        or not hmac.compare_digest(supplied_lock_id, active_lock_id)
+        or not hmac.compare_digest(
+            supplied_lock_id.encode("utf-8"), active_lock_id.encode("utf-8")
+        )
     ):
         raise TerraformStateError("state update lock ID does not match the active Terraform lock")
 

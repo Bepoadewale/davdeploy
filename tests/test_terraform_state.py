@@ -89,7 +89,7 @@ def test_lock_parser_requires_terraform_lock_shape():
 
 def test_state_write_requires_exact_lock_id_from_http_backend():
     validate_terraform_state_lock_id("lock-1", "lock-1")
-    for supplied in (None, "", "another-lock"):
+    for supplied in (None, "", "another-lock", "🔒"):
         with pytest.raises(TerraformStateError, match="lock ID"):
             validate_terraform_state_lock_id(supplied, "lock-1")
 
