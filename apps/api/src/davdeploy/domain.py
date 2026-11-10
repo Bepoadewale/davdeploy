@@ -387,6 +387,13 @@ class GeneratedPlanRunRequest(BaseModel):
     content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class TerraformStateCredentialRequest(BaseModel):
+    """Build identity presented during SigV4 state credential bootstrap."""
+
+    run_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+    codebuild_build_id: str = Field(min_length=1, max_length=255)
+
+
 class GeneratedPlanInputReconciliationRequest(BaseModel):
     """Resolve only an ambiguous S3 input-stage attempt before any build starts."""
 

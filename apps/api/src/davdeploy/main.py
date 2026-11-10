@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import Counter, generate_latest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -54,10 +61,19 @@ from davdeploy.domain import (
     SupportTicketStateRequest,
     TerraformPlanRenderRequest,
     TerraformPlanReviewRequest,
+    TerraformStateCredentialRequest,
 )
 from davdeploy.edge_origin import edge_origin_is_authorized
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
+from davdeploy.models import (
+    Environment,
+    GeneratedPlanRun,
+    InfrastructurePlanRevision,
+    TerraformRemoteState,
+    TerraformStateCredential,
+    TerraformStateLock,
+)
 from davdeploy.nova_plan_dispatch import NovaPlanDispatchError
 from davdeploy.product_readiness import security_headers
 from davdeploy.rate_limit import SlidingWindowRateLimiter
@@ -70,6 +86,17 @@ from davdeploy.security import (
 )
 from davdeploy.service import ProductService
 from davdeploy.telemetry import configure_tracing
+from davdeploy.terraform_state import (
+    MAX_TERRAFORM_STATE_BYTES,
+    TerraformStateError,
+    TerraformStateLocked,
+    TerraformStateStorage,
+    credential_matches,
+    issue_terraform_state_credential,
+    terraform_state_scope_digest,
+    trusted_codebuild_role_matches,
+    validate_terraform_state_lock_id,
+)
 
 REQUESTS = Counter("davdeploy_api_requests_total", "API requests by route", ["route"])
 PLAN_RESULTS = Counter("davdeploy_plan_results_total", "Plans by policy outcome", ["outcome"])
@@ -99,6 +126,8 @@ FastAPIInstrumentor.instrument_app(app)
 API_CONTRACT_VERSION = "v1"
 RATE_LIMIT = SlidingWindowRateLimiter(int(os.getenv("DAVDEPLOY_RATE_LIMIT_PER_MINUTE", "0")))
 GITHUB_WEBHOOK_MAX_BODY_BYTES = 1_000_000
+TERRAFORM_HTTP_MAX_BODY_BYTES = 8 * 1024 * 1024
+TERRAFORM_BASIC = HTTPBasic(auto_error=False)
 
 
 def parse_frontend_origins(value: str | None) -> list[str]:
@@ -154,7 +183,17 @@ configure_frontend_cors(
 @app.middleware("http")
 async def apply_api_guardrails(request: Request, call_next):
     """Apply bounded abuse protection, contract metadata and security headers."""
-    if not edge_origin_is_authorized(request.headers.get("x-davdeploy-edge")):
+    is_terraform_state_bootstrap = (
+        request.method == "POST"
+        and request.url.path == "/api/v1/terraform-state/credentials"
+        and trusted_codebuild_role_matches(
+            request.headers.get("x-davdeploy-bootstrap-principal"),
+            os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN"),
+        )
+    )
+    if not is_terraform_state_bootstrap and not edge_origin_is_authorized(
+        request.headers.get("x-davdeploy-edge")
+    ):
         return JSONResponse(
             status_code=403,
             content={"detail": "This API is available through the DavDeploy edge endpoint."},
@@ -193,6 +232,390 @@ async def apply_api_guardrails(request: Request, call_next):
 
 def product_service(db: Session = Depends(session)) -> ProductService:
     return ProductService(db)
+
+
+def _require_state_environment(
+    db: Session, environment_id: str, organization_id: str, project_id: str
+) -> None:
+    environment = db.get(Environment, environment_id)
+    if (
+        environment is None
+        or environment.organization_id != organization_id
+        or environment.project_id != project_id
+    ):
+        raise HTTPException(403, "Terraform state environment is outside the durable plan tenant")
+
+
+def _build_matches_generated_plan_run(build: dict, run: GeneratedPlanRun, project: str) -> bool:
+    environment = build.get("environment")
+    environment_values = (
+        environment.get("environmentVariables", []) if isinstance(environment, dict) else []
+    )
+    run_id = next(
+        (
+            item.get("value")
+            for item in environment_values
+            if isinstance(item, dict) and item.get("name") == "DAVDEPLOY_NOVA_PLAN_RUN_ID"
+        ),
+        None,
+    )
+    result_metadata = run.result_metadata if isinstance(run.result_metadata, dict) else {}
+    return bool(
+        run.state == "BUILD_STARTED"
+        and run.codebuild_project == project
+        and run.codebuild_build_id == build.get("id")
+        and run.runner_run_id
+        and build.get("projectName") == project
+        and build.get("buildStatus") == "IN_PROGRESS"
+        and run_id == run.runner_run_id
+        and isinstance(build.get("arn"), str)
+        and build.get("arn") == result_metadata.get("codebuild_build_arn")
+    )
+
+
+@app.post("/api/v1/terraform-state/credentials", include_in_schema=False)
+def issue_terraform_state_credentials(
+    body: TerraformStateCredentialRequest,
+    request: Request,
+    db: Session = Depends(session),
+):
+    """Issue an ephemeral state credential to the exact active fixed CodeBuild run."""
+    if os.getenv("DAVDEPLOY_TERRAFORM_STATE_ENABLED", "false").lower() != "true":
+        raise HTTPException(404, "Terraform remote state is not enabled")
+    principal_arn = request.headers.get("x-davdeploy-bootstrap-principal")
+    expected_role = os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN")
+    if not trusted_codebuild_role_matches(principal_arn, expected_role):
+        raise HTTPException(403, "Terraform state bootstrap requires the trusted plan-only role")
+    expected_project = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "")
+    if not expected_project or ":" not in body.codebuild_build_id:
+        raise HTTPException(403, "CodeBuild identity is invalid")
+    build_project, _ = body.codebuild_build_id.split(":", 1)
+    if build_project != expected_project:
+        raise HTTPException(403, "CodeBuild project is not the fixed plan-only project")
+
+    run = db.get(GeneratedPlanRun, body.run_id)
+    if (
+        run is None
+        or run.codebuild_build_id != body.codebuild_build_id
+        or run.codebuild_project != expected_project
+        or run.state != "BUILD_STARTED"
+        or not run.runner_run_id
+    ):
+        raise HTTPException(403, "CodeBuild run is not bound to a durable DavDeploy plan request")
+    try:
+        response = boto3.client("codebuild").batch_get_builds(ids=[body.codebuild_build_id])
+    except (BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(503, "Could not verify the active plan build") from None
+    builds = response.get("builds", []) if isinstance(response, dict) else []
+    if len(builds) != 1 or not isinstance(builds[0], dict):
+        raise HTTPException(403, "CodeBuild build identity could not be verified")
+    if not _build_matches_generated_plan_run(builds[0], run, expected_project):
+        raise HTTPException(403, "CodeBuild build is not the active trusted DavDeploy attempt")
+
+    revision = db.get(InfrastructurePlanRevision, run.revision_id)
+    content = revision.content if revision and isinstance(revision.content, dict) else {}
+    target = content.get("target") if isinstance(content, dict) else None
+    request_document = run.request_document if isinstance(run.request_document, dict) else {}
+    if not isinstance(target, dict):
+        raise HTTPException(409, "Customer revision has no trusted target environment")
+    environment_id = target.get("environment_id")
+    account_id = target.get("account_id")
+    region = target.get("region")
+    if (
+        account_id != request_document.get("target_account_id")
+        or region != request_document.get("region")
+        or not isinstance(environment_id, str)
+    ):
+        raise HTTPException(409, "Customer revision has no stable state environment binding")
+    _require_state_environment(db, environment_id, run.organization_id, run.project_id)
+    try:
+        scope_sha256 = terraform_state_scope_digest(
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            environment_id=environment_id,
+            target_account_id=account_id,
+            region=region,
+        )
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+    state_base_url = os.getenv("DAVDEPLOY_TERRAFORM_STATE_API_URL", "").rstrip("/")
+    if not state_base_url.startswith("https://"):
+        raise HTTPException(503, "Terraform state API URL is not configured")
+    state = db.scalar(
+        select(TerraformRemoteState).where(TerraformRemoteState.scope_sha256 == scope_sha256)
+    )
+    if state is None:
+        state = TerraformRemoteState(
+            scope_sha256=scope_sha256,
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            environment_id=environment_id,
+            target_account_id=account_id,
+            region=region,
+        )
+        db.add(state)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            state = db.scalar(
+                select(TerraformRemoteState).where(
+                    TerraformRemoteState.scope_sha256 == scope_sha256
+                )
+            )
+            if state is None:
+                raise HTTPException(503, "Terraform state identity could not be reserved") from None
+
+    issued, password_digest = issue_terraform_state_credential()
+    expires_at = datetime.now(UTC) + timedelta(minutes=25)
+    db.add(
+        TerraformStateCredential(
+            username=issued.username,
+            password_sha256=password_digest,
+            state_id=state.id,
+            run_id=run.id,
+            codebuild_build_id=body.codebuild_build_id,
+            expires_at=expires_at,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(503, "Terraform state credential could not be issued") from None
+
+    address = f"{state_base_url}/api/v1/terraform-state/{state.id}"
+    return {
+        "state_id": state.id,
+        "scope_sha256": scope_sha256,
+        "address": address,
+        "lock_address": f"{address}/lock",
+        "unlock_address": f"{address}/unlock",
+        "username": issued.username,
+        "password": issued.password,
+        "expires_at": expires_at.isoformat(),
+    }
+
+
+def _terraform_state_authorization(
+    state_id: str,
+    credentials: HTTPBasicCredentials | None,
+    db: Session,
+) -> tuple[TerraformStateCredential, GeneratedPlanRun]:
+    if os.getenv("DAVDEPLOY_TERRAFORM_STATE_ENABLED", "false").lower() != "true":
+        raise HTTPException(404, "Terraform remote state is not enabled")
+    credential = (
+        db.scalar(
+            select(TerraformStateCredential).where(
+                TerraformStateCredential.username == credentials.username
+            )
+        )
+        if credentials
+        else None
+    )
+    if (
+        credential is None
+        or credential.state_id != state_id
+        or not credential_matches(
+            credentials.password,
+            credential.password_sha256,
+            expires_at=credential.expires_at,
+            revoked_at=credential.revoked_at,
+        )
+    ):
+        raise HTTPException(
+            401,
+            "Valid short-lived Terraform state credentials are required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    run = db.get(GeneratedPlanRun, credential.run_id)
+    if (
+        run is None
+        or run.state != "BUILD_STARTED"
+        or run.codebuild_build_id != credential.codebuild_build_id
+        or run.codebuild_project != os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT")
+    ):
+        raise HTTPException(401, "Terraform state credentials are no longer active")
+    try:
+        response = boto3.client("codebuild").batch_get_builds(ids=[credential.codebuild_build_id])
+    except (BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(503, "Could not verify the active plan build") from None
+    builds = response.get("builds", []) if isinstance(response, dict) else []
+    if (
+        len(builds) != 1
+        or not isinstance(builds[0], dict)
+        or builds[0].get("id") != credential.codebuild_build_id
+        or builds[0].get("projectName") != run.codebuild_project
+        or builds[0].get("buildStatus") != "IN_PROGRESS"
+    ):
+        raise HTTPException(401, "Terraform state credentials are no longer active")
+    return credential, run
+
+
+def _terraform_state_storage(db: Session) -> TerraformStateStorage:
+    try:
+        return TerraformStateStorage(
+            db,
+            s3_client=boto3.client("s3"),
+            bucket=os.getenv("DAVDEPLOY_TERRAFORM_STATE_BUCKET", ""),
+            kms_key_arn=os.getenv("DAVDEPLOY_TERRAFORM_STATE_KMS_KEY_ARN", ""),
+            expected_bucket_owner=os.getenv("DAVDEPLOY_TERRAFORM_STATE_BUCKET_OWNER", ""),
+        )
+    except TerraformStateError as error:
+        raise HTTPException(503, str(error)) from error
+
+
+def _reclaim_expired_terraform_lock(
+    state_id: str, db: Session, storage: TerraformStateStorage
+) -> None:
+    lock = db.get(TerraformStateLock, state_id)
+    if lock is None:
+        return
+    expiry = lock.expires_at
+    if expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=UTC)
+    if expiry > datetime.now(UTC):
+        return
+    run = db.get(GeneratedPlanRun, lock.run_id)
+    if (
+        run is None
+        or run.codebuild_project != os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT")
+        or run.codebuild_build_id != lock.codebuild_build_id
+    ):
+        raise HTTPException(409, "Expired Terraform lock has no matching durable build record")
+    try:
+        response = boto3.client("codebuild").batch_get_builds(ids=[lock.codebuild_build_id])
+    except (BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(503, "Could not verify the expired lock owner") from None
+    builds = response.get("builds", []) if isinstance(response, dict) else []
+    if len(builds) != 1 or not isinstance(builds[0], dict):
+        raise HTTPException(409, "Expired Terraform lock owner could not be verified")
+    build = builds[0]
+    if (
+        build.get("id") != lock.codebuild_build_id
+        or build.get("projectName") != run.codebuild_project
+    ):
+        raise HTTPException(409, "Expired Terraform lock owner did not match the exact build")
+    try:
+        recovered = storage.reclaim_expired_lock(
+            state_id=state_id,
+            expected_lock_id=lock.lock_id,
+            expected_run_id=lock.run_id,
+            expected_build_id=lock.codebuild_build_id,
+            observed_build_status=build.get("buildStatus", ""),
+        )
+    except TerraformStateError as error:
+        raise HTTPException(409, str(error)) from error
+    if not recovered:
+        raise HTTPException(409, "Terraform lock expired while recovery was being checked")
+
+
+async def _bounded_terraform_body(request: Request, maximum: int) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length and (not content_length.isdecimal() or int(content_length) > maximum):
+        raise HTTPException(413, "Terraform state request exceeds the size limit")
+    body = await request.body()
+    if not body or len(body) > maximum:
+        raise HTTPException(413, "Terraform state request is empty or exceeds the size limit")
+    return body
+
+
+@app.get("/api/v1/terraform-state/{state_id}", include_in_schema=False)
+def read_terraform_state(
+    state_id: str,
+    credentials: HTTPBasicCredentials | None = Depends(TERRAFORM_BASIC),
+    db: Session = Depends(session),
+):
+    _terraform_state_authorization(state_id, credentials, db)
+    try:
+        raw = _terraform_state_storage(db).read(state_id)
+    except TerraformStateError as error:
+        raise HTTPException(503, str(error)) from error
+    if raw is None:
+        return Response(status_code=404)
+    return Response(content=raw, media_type="application/json")
+
+
+@app.post("/api/v1/terraform-state/{state_id}", include_in_schema=False)
+async def write_terraform_state(
+    state_id: str,
+    request: Request,
+    credentials: HTTPBasicCredentials | None = Depends(TERRAFORM_BASIC),
+    db: Session = Depends(session),
+):
+    _, run = _terraform_state_authorization(state_id, credentials, db)
+    try:
+        raw = await _bounded_terraform_body(
+            request, min(MAX_TERRAFORM_STATE_BYTES, TERRAFORM_HTTP_MAX_BODY_BYTES)
+        )
+        lock = db.get(TerraformStateLock, state_id)
+        if lock is None:
+            raise TerraformStateError("state write requires an active Terraform lock")
+        validate_terraform_state_lock_id(request.query_params.get("ID"), lock.lock_id)
+        metadata = _terraform_state_storage(db).write(
+            state_id=state_id,
+            run_id=run.id,
+            build_id=run.codebuild_build_id or "",
+            lock_id=lock.lock_id,
+            raw=raw,
+        )
+    except TerraformStateLocked as error:
+        raise HTTPException(423, error.lock_document) from error
+    except TerraformStateError as error:
+        raise HTTPException(409, str(error)) from error
+    return {"serial": metadata.serial, "lineage": metadata.lineage}
+
+
+@app.post("/api/v1/terraform-state/{state_id}/lock", include_in_schema=False)
+async def lock_terraform_state(
+    state_id: str,
+    request: Request,
+    credentials: HTTPBasicCredentials | None = Depends(TERRAFORM_BASIC),
+    db: Session = Depends(session),
+):
+    _, run = _terraform_state_authorization(state_id, credentials, db)
+    try:
+        raw = await _bounded_terraform_body(request, 16 * 1024)
+        storage = _terraform_state_storage(db)
+        _reclaim_expired_terraform_lock(state_id, db, storage)
+        document = storage.lock(
+            state_id=state_id,
+            run_id=run.id,
+            build_id=run.codebuild_build_id or "",
+            raw=raw,
+            expires_at=datetime.now(UTC) + timedelta(minutes=20),
+        )
+    except TerraformStateLocked as error:
+        return Response(
+            content=json.dumps(error.lock_document),
+            status_code=423,
+            media_type="application/json",
+        )
+    except TerraformStateError as error:
+        raise HTTPException(409, str(error)) from error
+    return Response(content=json.dumps(document), media_type="application/json")
+
+
+@app.delete("/api/v1/terraform-state/{state_id}/unlock", include_in_schema=False)
+async def unlock_terraform_state(
+    state_id: str,
+    request: Request,
+    credentials: HTTPBasicCredentials | None = Depends(TERRAFORM_BASIC),
+    db: Session = Depends(session),
+):
+    _, run = _terraform_state_authorization(state_id, credentials, db)
+    try:
+        raw = await _bounded_terraform_body(request, 16 * 1024)
+        _terraform_state_storage(db).unlock(
+            state_id=state_id,
+            run_id=run.id,
+            build_id=run.codebuild_build_id or "",
+            raw=raw,
+        )
+    except TerraformStateError as error:
+        raise HTTPException(409, str(error)) from error
+    return Response(content="OK", media_type="text/plain")
 
 
 def translate(error: Exception) -> None:
@@ -1217,7 +1640,13 @@ def request_generated_plan_run(
             request.content_digest,
             idempotency_key,
         )
-    except (PermissionError, ValueError, KeyError, ModelGatewayUnavailable, NovaPlanDispatchError) as error:
+    except (
+        PermissionError,
+        ValueError,
+        KeyError,
+        ModelGatewayUnavailable,
+        NovaPlanDispatchError,
+    ) as error:
         translate(error)
 
 

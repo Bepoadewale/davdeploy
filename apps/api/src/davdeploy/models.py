@@ -581,9 +581,7 @@ class GeneratedPlanRunIdempotencyKey(Base):
     """Organization-scoped idempotency key aliases for deduplicated plan runs."""
 
     __tablename__ = "generated_plan_run_idempotency_keys"
-    organization_id: Mapped[str] = mapped_column(
-        ForeignKey("organizations.id"), primary_key=True
-    )
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
     idempotency_key_sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
     request_sha256: Mapped[str] = mapped_column(String(64), index=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("generated_plan_runs.id"), index=True)
@@ -599,6 +597,80 @@ class WorkerDispatchState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class TerraformRemoteState(Base):
+    """Trusted logical state identity and pointer to its last committed S3 version."""
+
+    __tablename__ = "terraform_remote_states"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    scope_sha256: Mapped[str] = mapped_column(String(64), unique=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
+    environment_id: Mapped[str] = mapped_column(ForeignKey("environments.id"), index=True)
+    target_account_id: Mapped[str] = mapped_column(String(12))
+    region: Mapped[str] = mapped_column(String(64))
+    latest_object_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latest_version_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    lineage: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    serial: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    state_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class TerraformStateCredential(Base):
+    """Short-lived Terraform HTTP Basic credential; only the password digest is stored."""
+
+    __tablename__ = "terraform_state_credentials"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    password_sha256: Mapped[str] = mapped_column(String(64))
+    state_id: Mapped[str] = mapped_column(ForeignKey("terraform_remote_states.id"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("generated_plan_runs.id"), index=True)
+    codebuild_build_id: Mapped[str] = mapped_column(String(255))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TerraformStateWrite(Base):
+    """Two-phase record tying one state upload attempt to an exact S3 version."""
+
+    __tablename__ = "terraform_state_writes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    state_id: Mapped[str] = mapped_column(ForeignKey("terraform_remote_states.id"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("generated_plan_runs.id"), index=True)
+    object_key: Mapped[str] = mapped_column(Text, unique=True)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    lineage: Mapped[str] = mapped_column(String(64))
+    serial: Mapped[int] = mapped_column(Integer)
+    state_sha256: Mapped[str] = mapped_column(String(64))
+    build_id_sha256: Mapped[str] = mapped_column(String(64))
+    attempt_history: Mapped[list] = mapped_column(JSON, default=list)
+    object_version_id: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    __table_args__ = (
+        UniqueConstraint("state_id", "lineage", "serial", name="uq_terraform_state_version"),
+    )
+
+
+class TerraformStateLock(Base):
+    """Database-serialized Terraform lock, bound to one current plan build."""
+
+    __tablename__ = "terraform_state_locks"
+    state_id: Mapped[str] = mapped_column(
+        ForeignKey("terraform_remote_states.id"), primary_key=True
+    )
+    lock_id: Mapped[str] = mapped_column(String(128), unique=True)
+    lock_document: Mapped[dict] = mapped_column(JSON)
+    run_id: Mapped[str] = mapped_column(ForeignKey("generated_plan_runs.id"), index=True)
+    codebuild_build_id: Mapped[str] = mapped_column(String(255))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class GeneratedPlanArtifact(Base):
