@@ -88,6 +88,14 @@ def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
     assert "default     = false" in state_api_toggle
     assert "var.enable_nova_plan_only_runner" in state_api_toggle
     assert "var.enable_nova_terraform_state_storage" in state_api_toggle
+    assert (
+        'can(regex("^https://[A-Za-z0-9.-]+(:[0-9]+)?$", '
+        "var.nova_terraform_state_api_url))"
+    ) in state_api_toggle
+    state_api_url = VARIABLES.split('variable "nova_terraform_state_api_url"', 1)[1].split(
+        "\nvariable ", 1
+    )[0]
+    assert 'default     = ""' in state_api_url
     project = resource_block(MAIN, "aws_codebuild_project", "nova_plan_only")
     assert 'name  = "DAVDEPLOY_TERRAFORM_STATE_ENABLED"' in project
     assert 'name  = "DAVDEPLOY_TERRAFORM_STATE_API_URL"' in project
