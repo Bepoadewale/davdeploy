@@ -339,6 +339,29 @@ resource "aws_iam_role_policy" "apply_backend" {
 }
 
 data "aws_iam_policy_document" "apply_backend" {
+  # The Nova state bucket is protected from deletion and is created only by the
+  # reviewed state-storage rollout. Keep its one-time provisioning permissions
+  # on the exact bucket name and exclude object access and bucket deletion.
+  statement {
+    sid    = "ProvisionNovaTerraformStateBucket"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:PutBucketTagging",
+      "s3:TagResource",
+      "s3:PutBucketVersioning",
+      "s3:PutBucketOwnershipControls",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:PutEncryptionConfiguration",
+      "s3:PutBucketPolicy",
+    ]
+    resources = ["arn:${data.aws_partition.current.partition}:s3:::davdeploy-tfstate-${data.aws_caller_identity.current.account_id}-${var.region}"]
+    condition {
+      test     = "StringEqualsIfExists"
+      variable = "s3:LocationConstraint"
+      values   = [var.region]
+    }
+  }
   statement {
     sid       = "CloudTrailAuditBucketLifecycle"
     effect    = "Allow"
@@ -402,6 +425,30 @@ resource "aws_iam_role_policy" "apply_control_plane" {
 }
 
 data "aws_iam_policy_document" "apply_control_plane" {
+  # KMS requires CreateAlias permission on both the alias and its target key.
+  # The alias is exact, and the key must carry both DavDeploy ownership tags.
+  statement {
+    sid       = "CreateNovaTerraformStateAlias"
+    effect    = "Allow"
+    actions   = ["kms:CreateAlias"]
+    resources = ["arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:alias/davdeploy-nova-terraform-state"]
+  }
+  statement {
+    sid       = "AttachNovaTerraformStateAliasToOwnedKey"
+    effect    = "Allow"
+    actions   = ["kms:CreateAlias"]
+    resources = ["arn:${data.aws_partition.current.partition}:kms:${var.region}:${data.aws_caller_identity.current.account_id}:key/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Product"
+      values   = ["davdeploy"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Purpose"
+      values   = ["nova-terraform-state"]
+    }
+  }
   statement {
     sid       = "CreateDavDeployCognitoEmailKey"
     effect    = "Allow"

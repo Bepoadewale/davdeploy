@@ -96,6 +96,36 @@ def test_apply_role_can_manage_the_nova_plan_project_and_its_exact_log_group() -
     assert 'role/davdeploy-*' in runtime_roles
 
 
+def test_apply_role_can_provision_only_the_nova_state_bucket_and_owned_key_alias() -> None:
+    source = bootstrap_source()
+    bucket = source.split('sid    = "ProvisionNovaTerraformStateBucket"', 1)[1].split(
+        "statement {", 1
+    )[0]
+    alias = source.split('sid       = "CreateNovaTerraformStateAlias"', 1)[1].split(
+        "statement {", 1
+    )[0]
+    key = source.split('sid       = "AttachNovaTerraformStateAliasToOwnedKey"', 1)[1].split(
+        "statement {", 1
+    )[0]
+
+    assert '"s3:CreateBucket"' in bucket
+    assert '"s3:PutBucketVersioning"' in bucket
+    assert '"s3:PutEncryptionConfiguration"' in bucket
+    assert '"s3:PutBucketPolicy"' in bucket
+    assert 'arn:${data.aws_partition.current.partition}:s3:::davdeploy-tfstate-${data.aws_caller_identity.current.account_id}-${var.region}' in bucket
+    assert 'variable = "s3:LocationConstraint"' in bucket
+    assert '"s3:DeleteBucket"' not in bucket
+    assert '"s3:GetObject"' not in bucket
+    assert 'alias/davdeploy-nova-terraform-state' in alias
+    assert '"kms:CreateAlias"' in alias
+    assert '"kms:DeleteAlias"' not in alias
+    assert 'key/*' in key
+    assert 'variable = "aws:ResourceTag/Product"' in key
+    assert 'values   = ["davdeploy"]' in key
+    assert 'variable = "aws:ResourceTag/Purpose"' in key
+    assert 'values   = ["nova-terraform-state"]' in key
+
+
 def test_plan_workflow_uses_one_production_cognito_domain() -> None:
     workflow = (ROOT / ".github" / "workflows" / "terraform-plan.yml").read_text(
         encoding="utf-8"
