@@ -92,7 +92,7 @@ def make_input_document(
                 resource_id="bucket",
                 resource_type="aws_s3_bucket",
                 name="app_data",
-                arguments={"bucket_prefix": "fixture"},
+                arguments={"bucket": "fixture-app-storage"},
                 rationale="Private application storage.",
             ),
         ),
@@ -277,6 +277,8 @@ class FakePlanRunner:
         workspace,
         aws_credentials,
         remote_state=None,
+        plan_access_policy_version="NOT_APPLICABLE",
+        plan_access_policy_sha256="0" * 64,
     ):
         self.calls.append(
             {
@@ -287,6 +289,8 @@ class FakePlanRunner:
                 "workspace": workspace,
                 "aws_credentials": aws_credentials,
                 "remote_state": remote_state,
+                "plan_access_policy_version": plan_access_policy_version,
+                "plan_access_policy_sha256": plan_access_policy_sha256,
             }
         )
         saved_plan = Path(workspace) / "saved.tfplan"
@@ -327,6 +331,8 @@ class FakePlanRunner:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=plan_digest,
             saved_plan_path=str(saved_plan),
+            plan_access_policy_version=plan_access_policy_version,
+            plan_access_policy_sha256=plan_access_policy_sha256,
         )
 
 
@@ -376,6 +382,22 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
     assert sts.calls[0]["RoleArn"] == f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}"
     assert sts.calls[0]["ExternalId"] == EXTERNAL_A
     assert sts.calls[0]["RoleSessionName"] == f"davdeploy-nova-plan-{RUN_ID[:8]}"
+    session_policy = json.loads(sts.calls[0]["Policy"])
+    assert {statement["Effect"] for statement in session_policy["Statement"]} == {
+        "Allow",
+        "Deny",
+    }
+    deny = next(
+        statement for statement in session_policy["Statement"] if statement["Effect"] == "Deny"
+    )
+    assert "s3:GetObject" not in deny["NotAction"]
+    assert "lambda:InvokeFunction" not in deny["NotAction"]
+    allow = next(
+        statement for statement in session_policy["Statement"] if statement["Effect"] == "Allow"
+    )
+    assert "s3:GetObject" not in allow["Action"]
+    assert allow["Resource"] == ["arn:aws:s3:::fixture-app-storage"]
+    assert len(sts.calls[0]["Policy"]) <= 2048
     assert runner.calls[0]["aws_credentials"]["SecretAccessKey"] == "fixture-secret-credential"
     assert len(s3.put_calls) == 2
 
@@ -493,7 +515,7 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
         "state_id": state_backend.state_id,
         "scope_sha256": state_backend.scope_sha256,
     }
-    assert result_document["manifest"]["manifest_version"] == 4
+    assert result_document["manifest"]["manifest_version"] == 5
     assert state_backend.password not in stored_result.decode()
     assert state_backend.username not in stored_result.decode()
     assert result["result_version_id"] == "output-version-2"
@@ -763,6 +785,36 @@ def test_input_body_digest_tampering_is_rejected_before_assume_role(monkeypatch,
     assert s3.put_calls == []
 
 
+def test_unsupported_proposal_fails_before_customer_role_assumption(monkeypatch, tmp_path):
+    s3 = FakeS3()
+    document = make_input_document(build_arn=build_arn_for())
+    document["proposal"]["resources"][0]["resource_type"] = "aws_ec2_instance"
+    document["proposal_sha256"] = canonical_json_digest(document["proposal"])
+    s3.seed_input(build_arn_for(), document)
+    sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(
+        codebuild_runner.NovaPlanBuildError,
+        match="exceeds the fixed customer plan permission profile",
+    ):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            sts_client=sts,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert sts.calls == []
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
 def test_denied_plan_policy_stores_no_plan_or_result(monkeypatch, tmp_path):
     s3 = FakeS3()
     sts = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
@@ -835,14 +887,17 @@ def test_cross_tenant_plan_role_fails_exact_external_id_trust(monkeypatch, tmp_p
     assert s3.put_calls == []
 
 
-def test_customer_plan_role_trust_requires_exact_external_id_and_deny_all():
+def test_customer_plan_role_trust_requires_external_id_and_read_only_permission_guard():
     template = (ROOT / "infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
     plan_role = template.split("  NovaPlanOnlyRole:", 1)[1].split("  ExecutionRole:", 1)[0]
     assert "!Ref davdeployNovaPlanBrokerRoleArn" in plan_role
     assert "StringEquals:" in plan_role
     assert "sts:ExternalId: !Ref ExternalId" in plan_role
     assert "Effect: Deny" in plan_role
-    assert 'Action: "*"' in plan_role
+    assert "NotAction:" in plan_role
+    assert "lambda:InvokeFunction" not in plan_role
+    assert "iam:PassRole" not in plan_role
+    assert "s3:GetObject" not in plan_role
     assert 'Resource: "*"' in plan_role
 
 

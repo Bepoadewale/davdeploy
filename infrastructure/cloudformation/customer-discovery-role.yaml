@@ -91,7 +91,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "davdeployPlan-${ConnectionId}"
-      Description: Template attaches a deny policy for customer service actions. DavDeploy does not attest effective permissions.
+      Description: DavDeploy does not attest effective permissions or later customer policy changes. Template grants bounded planning metadata reads; the fixed worker applies an explicit-deny proposal-scoped session policy.
       MaxSessionDuration: 3600
       Tags:
         - Key: ManagedBy
@@ -99,7 +99,7 @@ Resources:
         - Key: ConnectionId
           Value: !Ref ConnectionId
         - Key: Access
-          Value: nova-plan-only-deny-all
+          Value: nova-plan-only-read-v1
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -114,12 +114,49 @@ Resources:
               StringEquals:
                 sts:ExternalId: !Ref ExternalId
       Policies:
-        - PolicyName: davdeployNovaPlanDenyAllCustomerActions
+        - PolicyName: davdeployNovaPlanReadOnlyProfile
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              - Effect: Allow
+                Action:
+                  - apigateway:GET
+                  - dynamodb:Describe*
+                  - dynamodb:ListTagsOfResource
+                  - iam:Get*
+                  - iam:List*
+                  - lambda:Get*
+                  - lambda:List*
+                  - s3:GetAccelerateConfiguration
+                  - s3:GetBucket*
+                  - s3:Get*Configuration
+                  - s3:ListBucket
+                  - sqs:Get*
+                  - sqs:ListQueueTags
+                  - sts:GetCallerIdentity
+                Resource: "*"
               - Effect: Deny
-                Action: "*"
+                Action: s3:*
+                Resource: "*"
+                Condition:
+                  StringNotEquals:
+                    aws:ResourceAccount: !Ref AWS::AccountId
+              - Effect: Deny
+                NotAction:
+                  - apigateway:GET
+                  - dynamodb:Describe*
+                  - dynamodb:ListTagsOfResource
+                  - iam:Get*
+                  - iam:List*
+                  - lambda:Get*
+                  - lambda:List*
+                  - s3:GetAccelerateConfiguration
+                  - s3:GetBucket*
+                  - s3:Get*Configuration
+                  - s3:ListBucket
+                  - sqs:Get*
+                  - sqs:ListQueueTags
+                  - sts:GetCallerIdentity
                 Resource: "*"
   ExecutionRole:
     Condition: CreateAdministratorPilotRole

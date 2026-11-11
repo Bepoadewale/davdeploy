@@ -329,8 +329,15 @@ def generated_plan_manifest(
             or not re.fullmatch(r"[a-f0-9]{64}", remote_state.get("scope_sha256", ""))
         ):
             raise GeneratedPlanArtifactError("remote Terraform state evidence is malformed")
+    if (
+        not isinstance(plan.plan_access_policy_version, str)
+        or not plan.plan_access_policy_version
+        or not isinstance(plan.plan_access_policy_sha256, str)
+        or not re.fullmatch(r"[a-f0-9]{64}", plan.plan_access_policy_sha256)
+    ):
+        raise GeneratedPlanArtifactError("customer plan permission evidence is malformed")
     manifest = {
-        "manifest_version": 4 if remote_state is not None else 3,
+        "manifest_version": 5 if remote_state is not None else 4,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -356,6 +363,10 @@ def generated_plan_manifest(
             "version": plan.policy.policy_version,
             "verdict": plan.policy.verdict.value,
             "human_approval_required": plan.policy.human_approval_required,
+        },
+        "customer_plan_access": {
+            "version": plan.plan_access_policy_version,
+            "session_policy_sha256": plan.plan_access_policy_sha256,
         },
         "summary": {
             "create_count": plan.summary.create_count,

@@ -138,6 +138,10 @@ from davdeploy.module_ports import (
     validate_module_inputs,
     validate_module_outputs,
 )
+from davdeploy.nova_plan_access import (
+    NovaPlanAccessError,
+    build_nova_plan_access_policy,
+)
 from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
 from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
@@ -4743,6 +4747,14 @@ class ProductService:
         }
         if result.get("binding") != binding:
             raise ValueError("Nova result tenant, revision, or target binding failed")
+        try:
+            access_policy = build_nova_plan_access_policy(
+                proposal,
+                account_id=account_id,
+                region=region,
+            )
+        except NovaPlanAccessError:
+            raise ValueError("Nova proposal exceeds the trusted plan permission profile") from None
         rendered_result = json.dumps(
             result, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
         )
@@ -4846,7 +4858,7 @@ class ProductService:
             "approval_allowed": False,
             "execution_allowed": False,
         }
-        expected_manifest_version = 4 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 3
+        expected_manifest_version = 5 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 4
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
         if boundary_mode == "TENANT_ISOLATED_HTTP_STATE":
@@ -4927,6 +4939,8 @@ class ProductService:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=saved_plan_sha256,
             saved_plan_path="",
+            plan_access_policy_version=access_policy.version,
+            plan_access_policy_sha256=access_policy.sha256,
         )
         expected_manifest = generated_plan_manifest(
             organization_id=run.organization_id,
@@ -5605,9 +5619,9 @@ class ProductService:
                     "role trust verification failed; the expected template policy is not verified"
                     if connection.plan_role_setup_state == "VERIFICATION_FAILED"
                     else (
-                        "role trust and account are verified; installed policy contents and later policy changes are not attested"
+                        "role trust and account are verified; installed policy contents and later changes are not attested; the fixed planner applies its own proposal-scoped explicit-deny session policy"
                         if connection.plan_role_setup_state == "VERIFIED"
-                        else "template is expected to install an explicit deny for all customer service actions; setup is not yet verified"
+                        else "template is expected to install bounded Terraform metadata reads with an explicit deny outside the profile; setup is not yet verified"
                     )
                 )
             ),
