@@ -14,7 +14,8 @@ verified.
 
 ## Current repo state
 
-- Backend `main` is `11e66e878933a69638128a8bab80115c051d230a` (PR #356).
+- Backend `main` is `5c60b7f85a03a9c92b256952e68bf8f4a3efc7e7` (PR #357),
+  which records the deployed PR #356 policy state.
 - Actual-plan policy covers selected IAM, S3, SQS, Lambda, network, database,
   and EBS risks but not API Gateway route authorization.
 - Nova customer planning/apply remain disabled; this change does not enable
@@ -37,8 +38,8 @@ verified.
 - [x] Missing, unknown, malformed, and unsupported authorization values deny.
 - [x] Explicit `NONE` yields an open-route review finding; `JWT`, `AWS_IAM`,
   and `CUSTOM` do not yield that finding.
-- [x] Focused tests, full verification, and clean-room local proof pass;
-  documentation conventions and required hosted CI remain pending.
+- [x] Focused tests, full verification, clean-room local proof, and
+  documentation conventions pass; required hosted CI is pending.
 - [x] No customer AWS plan or infrastructure mutation was performed.
 
 ## Acceptance status
