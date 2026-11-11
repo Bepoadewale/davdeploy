@@ -48,7 +48,8 @@ from the Nova runner flag and does not attest customer role permissions or enabl
 `false`; `NOVA_TERRAFORM_STATE_API_URL` defaults to an empty value. The API flag is rejected by
 Terraform unless the isolated Nova runner and dedicated state bucket are also enabled and the URL
 is a valid HTTPS origin. These workflow mappings only pass configuration to the reviewed saved
-plan. They do not change the hosted values or enable remote state by themselves.
+plan. Leaving these Actions variables unset preserves the default-off behavior;
+no hosted variable values are changed by this code update.
 
 The serverless API certification inputs are off by default. Set
 `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED` to `true` only for a controlled certification and
