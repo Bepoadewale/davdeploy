@@ -28,7 +28,7 @@ def ownership_scope():
     )
 
 
-def proposal(resources=None):
+def proposal(resources=None, *, backup_required=False):
     resources = resources or [
         {
             "resource_id": "bucket",
@@ -64,6 +64,7 @@ def proposal(resources=None):
             "source_revision": "test-revision",
             "context_digest": "a" * 64,
             "requirements": {"region": REGION},
+            "recovery": {"backup_required": backup_required},
             "resources": resources,
         }
     )
@@ -157,6 +158,46 @@ def evaluate(document=None, proposal_value=None):
             },
         },
     )
+
+
+def dynamodb_case(point_in_time_recovery=_OMIT, *, backup_required=False, after_unknown=None):
+    table_values = {
+        "name": "app-records",
+        "server_side_encryption": {"enabled": True},
+        "deletion_protection_enabled": True,
+    }
+    if point_in_time_recovery is not _OMIT:
+        table_values["point_in_time_recovery"] = point_in_time_recovery
+    table_address = "aws_dynamodb_table.records"
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "terraform_data"
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["type"] == "terraform_data"
+    ]
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(table_address, "aws_dynamodb_table", table_values)
+    )
+    metadata = {"after_unknown": after_unknown or {}}
+    document["resource_changes"].append(
+        change(table_address, "aws_dynamodb_table", **metadata)
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "records",
+                "resource_type": "aws_dynamodb_table",
+                "name": "records",
+                "arguments": {"name": "app-records"},
+                "rationale": "Store application records.",
+            }
+        ],
+        backup_required=backup_required,
+    )
+    return document, proposal_value
 
 
 def add_sqs_queue_policy(document, policy, **change_metadata):
@@ -1699,3 +1740,78 @@ def test_delete_of_resource_outside_proposal_is_denied():
     result = evaluate(document)
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "unproposed_resource_change" in codes(result)
+
+
+def test_dynamodb_pitr_enabled_with_valid_recovery_period_passes_recovery_policy():
+    document, proposal_value = dynamodb_case(
+        [{"enabled": True, "recovery_period_in_days": 35}], backup_required=True
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not {"dynamodb_pitr_required", "dynamodb_pitr_disabled", "dynamodb_pitr_recovery_period_invalid"} & codes(result)
+
+
+def test_dynamodb_pitr_disabled_is_reviewed_when_backups_are_not_required():
+    document, proposal_value = dynamodb_case(
+        [{"enabled": False, "recovery_period_in_days": 35}]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "dynamodb_pitr_disabled" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "pitr",
+    [None, [{"enabled": False, "recovery_period_in_days": 35}]],
+)
+def test_dynamodb_backup_requirement_denies_missing_or_disabled_pitr(pitr):
+    document, proposal_value = dynamodb_case(pitr, backup_required=True)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "dynamodb_pitr_required" in codes(result)
+
+
+@pytest.mark.parametrize("unknown_path", ["enabled", "recovery_period_in_days"])
+def test_unknown_dynamodb_pitr_values_are_denied(unknown_path):
+    document, proposal_value = dynamodb_case(
+        [{"enabled": True, "recovery_period_in_days": 30}],
+        after_unknown={"point_in_time_recovery": {unknown_path: True}},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+@pytest.mark.parametrize("recovery_period", [None, 0, 36, True, "30"])
+def test_dynamodb_pitr_enabled_requires_bounded_integer_recovery_period(recovery_period):
+    document, proposal_value = dynamodb_case(
+        [{"enabled": True, "recovery_period_in_days": recovery_period}],
+        backup_required=True,
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "dynamodb_pitr_recovery_period_invalid" in codes(result)
+
+
+def test_dynamodb_pitr_policy_findings_do_not_include_plan_values():
+    document, proposal_value = dynamodb_case(
+        [{"enabled": False, "recovery_period_in_days": 35}]
+    )
+    document["planned_values"]["root_module"]["resources"][-1]["values"][
+        "sensitive_customer_value"
+    ] = "private-data-marker"
+
+    result = evaluate(document, proposal_value)
+
+    assert "dynamodb_pitr_disabled" in codes(result)
+    assert "private-data-marker" not in repr(result)
