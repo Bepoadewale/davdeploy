@@ -32,12 +32,12 @@ Backend `main` is `334865159a0a6f7dcf155dc7595f4cc455aea679` (PR #352). `generat
 - [x] A tightly scoped pass-role grant is surfaced for human review; broad or unconditioned pass-role grants are denied.
 - [x] Regression tests cover positive and negative policy documents and preserve safe policies.
 - [x] Focused tests, Ruff, full verification, clean-room proof, documentation conventions, and diff checks pass on the final code head.
-- [ ] Required latest-head CI passes and the latest code review has no unresolved blocking findings.
+- [x] Required CI passes on code/test head `94bc338`, and the latest code review has no unresolved blocking findings.
 - [x] Runner, state API, role verification, plan review, and customer apply remain disabled; no AWS customer resources are changed.
 
 ## Acceptance status
 
-The implementation is complete on draft PR #353. The policy denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, rejects wildcard/unverified and external-account trust principals, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition, same-account role trust, and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The focused tests pass (83 tests), and `make verify` passes (922 tests). Final-code clean-room `make local-proof` passed in isolated worktree `/private/tmp/davdeploy-pr353-final-cleanroom` at code commit `549c0ab` (921 tests); its code is unchanged by the later safe-policy test-only addition. Documentation conventions and diff checks pass. The isolated Docker stack is stopped; its worktree and local test artifacts are retained. CI run `43063902324` passed all seven jobs on code commit `549c0ab`; Codex review of that exact code commit found no major issues. Latest-head CI and review are pending after the evidence/test update.
+The implementation is complete on draft PR #353. The policy denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, rejects wildcard/unverified and external-account trust principals, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition, same-account role trust, and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The focused tests pass (83 tests), and `make verify` passes (922 tests). Final-code clean-room `make local-proof` passed in isolated worktree `/private/tmp/davdeploy-pr353-final-cleanroom` at code commit `549c0ab` (921 tests); its code is unchanged by the later safe-policy test-only addition. Documentation conventions and diff checks pass. The isolated Docker stack is stopped; its worktree and local test artifacts are retained. All seven required CI jobs passed on code/test head `94bc338` in run [43065453896](https://github.com/Bepoadewale/davdeploy/actions/runs/43065453896), and Codex review of that head found no major issues. This ticket evidence update requires its own final PR checks before merge.
 
 ## Tests / validation performed
 
@@ -48,6 +48,7 @@ The implementation is complete on draft PR #353. The policy denies IAM allow sta
 - `COMPOSE_PROJECT_NAME=davdeploy-pr353-final-cleanroom make local-proof` in a fresh worktree at `549c0ab` — local services ready, API contract and customer-plan E2E passed, demo data seeded locally, trace check passed, and all 921 tests passed. No AWS calls or customer infrastructure changes occurred. The isolated Docker stack is stopped; its worktree and generated test artifacts remain available for review.
 - `GITHUB_PR_NUMBER=353 python3.12 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- All seven required PR CI jobs passed on code/test head `94bc338` in run [43065453896](https://github.com/Bepoadewale/davdeploy/actions/runs/43065453896). Codex review of commit `94bc338` found no major issues.
 
 ## Evidence files produced
 
