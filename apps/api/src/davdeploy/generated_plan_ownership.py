@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 
 class PlanOwnershipError(ValueError):
@@ -30,6 +32,7 @@ RESOURCE_TYPES_WITH_UNPROVEN_CHILD_OWNERSHIP = frozenset(
         "aws_spot_fleet_request",
     }
 )
+UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP = frozenset({"aws_apigatewayv2_route"})
 
 
 @dataclass(frozen=True)
@@ -98,17 +101,29 @@ class PlanOwnershipScope:
         return hashlib.sha256(encoded).hexdigest()
 
 
+@dataclass(frozen=True)
+class UntaggedResourceOwnershipRecord:
+    """Exact Terraform address recorded as owned by one trusted remote state."""
+
+    address: str
+    resource_type: str
+
+
 def inject_trusted_ownership_tags(
     configuration: dict[str, Any],
     provider_schema_document: dict[str, Any],
     ownership_scope: PlanOwnershipScope,
-) -> None:
-    """Inject server-owned tags into every AWS resource with a writable tag map.
+    *,
+    remote_state_id: str | None = None,
+    remote_state_scope_sha256: str | None = None,
+    expected_remote_state_scope_sha256: str | None = None,
+) -> tuple[UntaggedResourceOwnershipRecord, ...]:
+    """Tag supported AWS resources and record exact state-owned exceptions.
 
-    A resource that cannot accept a normal ``map(string)`` tags argument is
-    rejected before Terraform planning. This avoids treating untaggable
-    resources as safely owned when the runner has no state-backed ownership
-    mechanism yet.
+    A resource without a safely writable ``map(string)`` tags argument is
+    accepted only when a trusted, tenant-scoped state identity has already
+    been verified. Its exact Terraform address is then bound to that state in
+    the saved-plan manifest. Child-expanding types remain rejected below.
     """
     provider_schemas = provider_schema_document.get("provider_schemas")
     provider = (
@@ -123,6 +138,7 @@ def inject_trusted_ownership_tags(
 
     reserved_tags = ownership_scope.tags()
     aws_resources = 0
+    untaggable: list[UntaggedResourceOwnershipRecord] = []
     for resource_type, instances in resources.items():
         if not isinstance(resource_type, str) or not resource_type.startswith("aws_"):
             continue
@@ -145,9 +161,38 @@ def inject_trusted_ownership_tags(
             or not writable
             or tags_schema.get("sensitive") is True
         ):
-            raise PlanOwnershipError(
-                f"AWS resource type {resource_type} has no safely writable ownership tags"
-            )
+            if resource_type not in UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP:
+                raise PlanOwnershipError(
+                    f"AWS resource type {resource_type} has no supported ownership mechanism"
+                )
+            if (
+                remote_state_id is None
+                or remote_state_scope_sha256 is None
+                or remote_state_scope_sha256 != expected_remote_state_scope_sha256
+            ):
+                raise PlanOwnershipError(
+                    f"AWS resource type {resource_type} has no safely writable ownership tags or verified remote state"
+                )
+            try:
+                if str(UUID(remote_state_id)) != remote_state_id.lower():
+                    raise ValueError
+            except (AttributeError, TypeError, ValueError):
+                raise PlanOwnershipError("trusted remote-state identity is invalid") from None
+            if not re.fullmatch(r"[a-f0-9]{64}", remote_state_scope_sha256):
+                raise PlanOwnershipError("trusted remote-state scope is invalid")
+            for instance_name, arguments in instances.items():
+                if not isinstance(instance_name, str) or not isinstance(arguments, dict):
+                    raise PlanOwnershipError("generated AWS resource configuration is malformed")
+                if "tags" in arguments:
+                    raise PlanOwnershipError("proposal supplied tags for an untaggable AWS resource")
+                untaggable.append(
+                    UntaggedResourceOwnershipRecord(
+                        address=f"{resource_type}.{instance_name}",
+                        resource_type=resource_type,
+                    )
+                )
+                aws_resources += 1
+            continue
         for instance_name, arguments in instances.items():
             if not isinstance(instance_name, str) or not isinstance(arguments, dict):
                 raise PlanOwnershipError("generated AWS resource configuration is malformed")
@@ -161,3 +206,4 @@ def inject_trusted_ownership_tags(
 
     if aws_resources == 0:
         raise PlanOwnershipError("generated plan contains no verifiable AWS resources")
+    return tuple(sorted(untaggable, key=lambda item: item.address))

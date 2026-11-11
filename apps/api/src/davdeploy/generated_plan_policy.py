@@ -14,7 +14,11 @@ from davdeploy.generated_plan_inspection import (
     TerraformPlanInspectionError,
     inspect_terraform_plan,
 )
-from davdeploy.generated_plan_ownership import PlanOwnershipScope
+from davdeploy.generated_plan_ownership import (
+    UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP,
+    PlanOwnershipScope,
+    UntaggedResourceOwnershipRecord,
+)
 
 
 class PlanPolicyVerdict(StrEnum):
@@ -43,7 +47,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-11.9"
+POLICY_VERSION = "nova-generated-plan-2026-11-11.10"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -111,6 +115,7 @@ def evaluate_generated_plan_policy(
     expected_region: str,
     ownership_scope: PlanOwnershipScope,
     trusted_configuration: dict[str, Any] | None = None,
+    untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...] = (),
 ) -> GeneratedPlanPolicyResult:
     """Evaluate trusted context and common AWS security risks, without output values."""
     try:
@@ -121,6 +126,7 @@ def evaluate_generated_plan_policy(
             expected_region,
             ownership_scope,
             trusted_configuration,
+            untagged_resource_ownership,
         )
     except (
         GeneratedPlanPolicyError,
@@ -150,6 +156,7 @@ def _evaluate(
     expected_region: str,
     ownership_scope: PlanOwnershipScope,
     trusted_configuration: dict[str, Any] | None,
+    untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...],
 ) -> GeneratedPlanPolicyResult:
     if not isinstance(ownership_scope, PlanOwnershipScope):
         raise GeneratedPlanPolicyError("trusted ownership scope is missing")
@@ -174,12 +181,17 @@ def _evaluate(
     _check_region(document, expected_region)
     resources = _planned_resources(document)
     _check_proposal_inventory(resources, document, proposal, findings)
-    _check_resource_ownership(document, resources, ownership_scope, findings)
+    _validate_untagged_resource_ownership(
+        untagged_resource_ownership, resources, proposal, findings
+    )
+    _check_resource_ownership(
+        document, resources, ownership_scope, findings, untagged_resource_ownership
+    )
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings)
     _check_sqs_queue_policies(resources, findings)
     _check_lambda_permissions(resources, findings)
-    _check_api_gateway_routes(resources, findings)
+    _check_api_gateway_routes(document, resources, proposal, findings)
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
@@ -220,9 +232,11 @@ def _check_resource_ownership(
     resources: tuple[dict[str, Any], ...],
     ownership_scope: PlanOwnershipScope,
     findings: list[PlanPolicyFinding],
+    untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...],
 ) -> None:
-    """Require exact known scope tags on existing and proposed AWS resources."""
+    """Require exact scope tags or exact state ownership for untaggable resources."""
     expected_tags = ownership_scope.tags()
+    state_owned = {item.address: item for item in untagged_resource_ownership}
     changes = document.get("resource_changes")
     if not isinstance(changes, list):
         raise GeneratedPlanPolicyError("resource changes are malformed")
@@ -256,6 +270,27 @@ def _check_resource_ownership(
             ("create", "delete"),
         }:
             raise GeneratedPlanPolicyError("AWS resource change action is unsupported")
+
+        ownership_record = state_owned.get(address)
+        if ownership_record is not None:
+            if ownership_record.resource_type != kind:
+                _deny(
+                    findings,
+                    "resource_ownership_record_mismatch",
+                    address,
+                    "DavDeploy could not match this untaggable resource to its trusted ownership record.",
+                )
+            elif any(
+                isinstance(change.get(key), dict) and "tags" in change[key]
+                for key in ("before", "after")
+            ):
+                _deny(
+                    findings,
+                    "resource_ownership_record_conflict",
+                    address,
+                    "DavDeploy found conflicting ownership data for this infrastructure resource.",
+                )
+            continue
 
         if "delete" in actions or "update" in actions or actions == ["no-op"]:
             _check_resource_tag_values(
@@ -301,7 +336,68 @@ def _check_resource_ownership(
                 address,
                 "DavDeploy could not connect this planned AWS resource to ownership evidence.",
             )
+        ownership_record = state_owned.get(address)
+        if ownership_record is not None:
+            if ownership_record.resource_type != kind:
+                _deny(
+                    findings,
+                    "resource_ownership_record_mismatch",
+                    address,
+                    "DavDeploy could not match this untaggable resource to its trusted ownership record.",
+                )
+            elif isinstance(values, dict) and "tags" in values:
+                _deny(
+                    findings,
+                    "resource_ownership_record_conflict",
+                    address,
+                    "DavDeploy found conflicting ownership data for this infrastructure resource.",
+                )
+            continue
         _check_resource_tag_values(address, values, expected_tags, findings)
+
+
+def _validate_untagged_resource_ownership(
+    records: tuple[UntaggedResourceOwnershipRecord, ...],
+    resources: tuple[dict[str, Any], ...],
+    proposal: GeneratedDeploymentProposal,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    if not isinstance(records, tuple) or len(records) > 2_000:
+        raise GeneratedPlanPolicyError("untaggable resource ownership records are invalid")
+    proposal_addresses = {
+        f"{item.resource_type}.{item.name}": item.resource_type for item in proposal.resources
+    }
+    planned_addresses = {
+        item.get("address"): item.get("type")
+        for item in resources
+        if isinstance(item.get("address"), str)
+    }
+    seen: set[str] = set()
+    for record in records:
+        resource_name = (
+            record.address.removeprefix(record.resource_type + ".")
+            if isinstance(record, UntaggedResourceOwnershipRecord)
+            and isinstance(record.address, str)
+            and isinstance(record.resource_type, str)
+            else ""
+        )
+        if (
+            not isinstance(record, UntaggedResourceOwnershipRecord)
+            or record.resource_type not in UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP
+            or not resource_name
+            or record.address != record.resource_type + "." + resource_name
+            or proposal_addresses.get(record.address) != record.resource_type
+            or planned_addresses.get(record.address) != record.resource_type
+            or record.address in seen
+        ):
+            _deny(
+                findings,
+                "resource_ownership_record_invalid",
+                record.address if isinstance(record, UntaggedResourceOwnershipRecord) else None,
+                "DavDeploy could not verify the exact address of an untaggable AWS resource.",
+            )
+            continue
+        seen.add(record.address)
 
 
 def _check_resource_tag_values(
@@ -885,14 +981,64 @@ def _check_lambda_permissions(
 
 
 def _check_api_gateway_routes(
-    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    proposal: GeneratedDeploymentProposal,
+    findings: list[PlanPolicyFinding],
 ) -> None:
     authenticated_types = {"JWT", "AWS_IAM", "CUSTOM"}
+    planned_by_address = {item.get("address"): item for item in resources}
+    proposal_by_id = {item.resource_id: item for item in proposal.resources}
+    configured_references = _configured_resource_references(document)
     for item in resources:
         if item.get("type") != "aws_apigatewayv2_route":
             continue
         values = item.get("values")
         address = item.get("address")
+        route_references = configured_references.get(address, ())
+        route_proposal = next(
+            (
+                candidate
+                for candidate in proposal.resources
+                if candidate.resource_type == "aws_apigatewayv2_route"
+                and f"{candidate.resource_type}.{candidate.name}" == address
+            ),
+            None,
+        )
+        api_reference = route_proposal.arguments.get("api_id") if route_proposal else None
+        api_proposal = (
+            proposal_by_id.get(api_reference.get("resource_id"))
+            if isinstance(api_reference, dict)
+            and api_reference.get("kind") == "resource_reference"
+            and api_reference.get("output_name") == "id"
+            else None
+        )
+        expected_api_address = (
+            f"{api_proposal.resource_type}.{api_proposal.name}" if api_proposal else None
+        )
+        api_references = tuple(
+            reference
+            for reference in route_references
+            if reference.startswith("aws_apigatewayv2_api.")
+        )
+        planned_api = planned_by_address.get(expected_api_address)
+        if (
+            api_proposal is None
+            or api_proposal.resource_type != "aws_apigatewayv2_api"
+            or not any(output.name == "id" for output in api_proposal.outputs)
+            or api_references != (f"{expected_api_address}.id",)
+            or not isinstance(planned_api, dict)
+            or planned_api.get("type") != "aws_apigatewayv2_api"
+            or not isinstance(values, dict)
+            or not isinstance(values.get("api_id"), str)
+            or not values.get("api_id")
+        ):
+            _deny(
+                findings,
+                "api_gateway_route_target_not_owned",
+                address,
+                "The API route must reference exactly one API included in this deployment.",
+            )
         authorization_type = values.get("authorization_type") if isinstance(values, dict) else None
         if not isinstance(authorization_type, str) or authorization_type not in authenticated_types | {"NONE"}:
             _deny(

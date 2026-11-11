@@ -8,19 +8,21 @@ Base: `main`
 
 Trusted ownership currently requires every generated AWS resource to accept a
 reserved `tags` map. Some resources, including `aws_apigatewayv2_route`, do not
-support that argument. Continue to deny them without state, and support them
-only when their exact Terraform addresses and types are tied to the trusted,
-tenant-scoped remote-state identity and saved-plan manifest.
+support that argument. Continue to deny unsupported resources and support the
+explicitly allowlisted API Gateway route only when its exact Terraform address
+and type are tied to the trusted, tenant-scoped remote-state identity and
+saved-plan manifest.
 
 ## Current repo state
 
 - Backend `main` is `4de1022592fdf65cdd38f32386cbccbce5a40071` (PR #358).
 - The plan runner verifies the tenant state-scope digest before supplying the
   server-issued HTTP backend. Remote state remains disabled in production.
-- `inject_trusted_ownership_tags()` currently rejects AWS resources without a
-  safely writable `map(string)` tag schema.
-- Plan artifacts bind the remote-state ID/scope and saved-plan digest, but do
-  not list exact non-taggable resource ownership records.
+- `inject_trusted_ownership_tags()` adds reserved tags where supported and now
+  derives an exact state-backed ownership record for the allowlisted
+  `aws_apigatewayv2_route` type.
+- Plan artifacts bind the remote-state ID/scope and saved-plan digest; manifest
+  version 6 now also binds exact non-taggable addresses and resource types.
 
 ## Research / references used
 
@@ -29,35 +31,57 @@ tenant-scoped remote-state identity and saved-plan manifest.
 
 ## Work planned for the PR
 
-- Derive exact non-taggable resource addresses/types only from the validated
-  proposal and pinned provider schema.
+- Derive exact non-taggable API Gateway route addresses/types only from the
+  validated proposal and pinned provider schema; keep other untaggable types
+  denied.
 - Fail closed without a server-issued remote state whose tenant scope matches
   the trusted organization, project, environment, account, and region.
 - Pass the derived ownership records into actual-plan policy and bind them,
   along with the state ID/scope, into the immutable saved-plan manifest.
+- Require each API Gateway route to use a typed `api_id` reference to exactly
+  one API declared in the same proposal and present in the actual plan. Routes
+  targeting external or unproven APIs are denied.
 - Keep child-expanding resource types denied unless their individual AWS
   resources have independently verifiable ownership.
+- Carry the bounded ownership inventory through the CodeBuild result envelope
+  and independently reconstruct it when the service verifies the manifest.
 
 ## Acceptance criteria
 
-- [ ] Taggable resources retain exact reserved tag checks.
-- [ ] Untaggable resources are denied without remote state or with a mismatched
+- [x] Taggable resources retain exact reserved tag checks.
+- [x] Untaggable resources are denied without remote state or with a mismatched
   state scope; proposal-invented ownership metadata is rejected.
-- [ ] Allowed untaggable addresses are exact, bounded, included in the manifest,
+- [x] Allowed untaggable addresses are exact, bounded, included in the manifest,
   and covered by the approved manifest digest.
-- [ ] Unproposed and unsupported actions remain denied; replacement/deletion
+- [x] Unproposed and unsupported actions remain denied; replacement/deletion
   still requires human review.
 - [ ] Focused tests, full clean-room proof, documentation conventions, and all
   required hosted CI pass.
-- [ ] No AWS customer plan/apply or infrastructure mutation is performed.
+- [x] No AWS customer plan/apply or infrastructure mutation is performed.
 
 ## Acceptance status
 
-In progress; bootstrap ticket only. No implementation changes have started.
+Implementation is locally verified and the clean-room proof passed. Hosted CI
+and independent review are pending. The feature still does not enable remote
+state or customer execution.
 
 ## Tests / validation performed
 
-- None yet.
+- `tests/test_generated_plan_ownership.py`,
+  `tests/test_generated_plan_artifacts.py`,
+  `tests/test_generated_plan_policy.py`,
+  `tests/test_generated_terraform_plan.py`,
+  `tests/test_nova_plan_dispatch.py`, and `tests/test_nova_plan_runs.py`:
+  273 focused tests passed before the final API-target regression was added;
+  the policy suite then passed all 113 tests.
+- `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify`:
+  968 tests passed; Ruff, OpenAPI, Actions configuration, and Compose checks
+  passed. This run includes the API-target regression.
+- Clean-room `make local-proof` after the API-target change passed: 968 tests,
+  API contract, customer-plan E2E, demo seed, trace check, OpenAPI, Actions,
+  Ruff, and Compose validation. One existing Starlette/httpx deprecation
+  warning remains. Project `davdeploy-pr359` containers were stopped; the
+  worktree and generated test volume/database were retained.
 
 ## Evidence files produced
 

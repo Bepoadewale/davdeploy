@@ -709,7 +709,7 @@ class NovaPlanOnlyDispatcher:
                 "Nova plan result is not canonical JSON", outcome_uncertain=True
             ) from None
         if (
-            result.get("contract") != "davdeploy.nova-plan-result.v1"
+            result.get("contract") != "davdeploy.nova-plan-result.v2"
             or result.get("run_id") != run_id
             or result.get("codebuild_project") != self.project_name
             or result.get("codebuild_build_id") != expected_build_id

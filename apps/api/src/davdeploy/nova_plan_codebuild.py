@@ -57,7 +57,7 @@ from davdeploy.terraform_state import terraform_state_scope_digest
 
 RUN_ID_ENV = "DAVDEPLOY_NOVA_PLAN_RUN_ID"
 INPUT_CONTRACT = "davdeploy.nova-plan-request.v1"
-RESULT_CONTRACT = "davdeploy.nova-plan-result.v1"
+RESULT_CONTRACT = "davdeploy.nova-plan-result.v2"
 MAX_INPUT_BYTES = 1_000_000
 MAX_RESULT_BYTES = 1_000_000
 MAX_PLAN_BYTES = 128 * 1024 * 1024
@@ -307,6 +307,10 @@ def run_nova_plan_build(
         },
         "policy_evidence": policy_doc,
         "policy_sha256": policy_sha256,
+        "untagged_resource_ownership": [
+            {"address": item.address, "resource_type": item.resource_type}
+            for item in generated_plan.untagged_resource_ownership
+        ],
         "manifest": manifest,
         "manifest_sha256": canonical_json_digest(manifest),
         "planning_boundary": (

@@ -29,6 +29,7 @@ from davdeploy.generated_plan_inspection import (
 from davdeploy.generated_plan_ownership import (
     PlanOwnershipError,
     PlanOwnershipScope,
+    UntaggedResourceOwnershipRecord,
     inject_trusted_ownership_tags,
 )
 from davdeploy.generated_plan_policy import (
@@ -40,6 +41,7 @@ from davdeploy.generated_provider_validation import (
     validate_generated_proposal,
 )
 from davdeploy.nova_terraform_state_client import TerraformHTTPBackend
+from davdeploy.terraform_state import TerraformStateError, terraform_state_scope_digest
 
 PINNED_TERRAFORM_VERSION = "1.14.7"
 PINNED_AWS_PROVIDER_VERSION = "5.100.0"
@@ -65,6 +67,7 @@ class GeneratedTerraformPlan:
     ownership_plan_id_sha256: str
     saved_plan_sha256: str
     saved_plan_path: str
+    untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...] = ()
     plan_access_policy_version: str = "NOT_APPLICABLE"
     plan_access_policy_sha256: str = "0" * 64
 
@@ -130,6 +133,25 @@ class GeneratedTerraformPlanRunner:
         if actual_account_id != expected_account_id:
             raise TerraformPlanExecutionError("active AWS identity does not match trusted account")
 
+        expected_remote_state_scope_sha256 = None
+        if remote_state is not None:
+            try:
+                expected_remote_state_scope_sha256 = terraform_state_scope_digest(
+                    organization_id=ownership_scope.organization_id,
+                    project_id=ownership_scope.project_id,
+                    environment_id=ownership_scope.environment_id,
+                    target_account_id=expected_account_id,
+                    region=region,
+                )
+            except TerraformStateError as error:
+                raise TerraformPlanExecutionError(
+                    "trusted remote-state tenant identity is incomplete"
+                ) from error
+            if remote_state.scope_sha256 != expected_remote_state_scope_sha256:
+                raise TerraformPlanExecutionError(
+                    "remote-state scope does not match trusted tenant identity"
+                )
+
         lockfile_bytes = self._read_lockfile()
         lockfile_version = self._provider_version(lockfile_bytes.decode("utf-8"))
         if lockfile_version != self.expected_aws_provider_version:
@@ -180,7 +202,16 @@ class GeneratedTerraformPlanRunner:
         try:
             schema = json.loads(schema_output.stdout)
             validate_generated_proposal(proposal, schema)
-            inject_trusted_ownership_tags(config, schema, ownership_scope)
+            untagged_resource_ownership = inject_trusted_ownership_tags(
+                config,
+                schema,
+                ownership_scope,
+                remote_state_id=remote_state.state_id if remote_state is not None else None,
+                remote_state_scope_sha256=(
+                    remote_state.scope_sha256 if remote_state is not None else None
+                ),
+                expected_remote_state_scope_sha256=expected_remote_state_scope_sha256,
+            )
         except (json.JSONDecodeError, GeneratedProviderSchemaError, PlanOwnershipError) as error:
             raise TerraformPlanExecutionError(
                 "proposal failed pinned AWS provider schema validation or ownership validation"
@@ -233,6 +264,7 @@ class GeneratedTerraformPlanRunner:
             expected_region=region,
             ownership_scope=ownership_scope,
             trusted_configuration=config,
+            untagged_resource_ownership=untagged_resource_ownership,
         )
 
         return GeneratedTerraformPlan(
@@ -250,6 +282,7 @@ class GeneratedTerraformPlanRunner:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=hashlib.sha256(plan_bytes).hexdigest(),
             saved_plan_path=str(plan_path),
+            untagged_resource_ownership=untagged_resource_ownership,
             plan_access_policy_version=plan_access_policy_version,
             plan_access_policy_sha256=plan_access_policy_sha256,
         )

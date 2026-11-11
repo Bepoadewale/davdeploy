@@ -16,6 +16,7 @@ from davdeploy.generated_terraform_plan import (
     verify_saved_plan_artifact,
 )
 from davdeploy.nova_terraform_state_client import TerraformHTTPBackend
+from davdeploy.terraform_state import terraform_state_scope_digest
 
 LOCKFILE = '''provider "registry.terraform.io/hashicorp/aws" {
   version = "5.100.0"
@@ -27,10 +28,10 @@ LOCKFILE = '''provider "registry.terraform.io/hashicorp/aws" {
 
 def ownership_scope():
     return PlanOwnershipScope(
-        organization_id="org-test",
-        workspace_id="workspace-test",
-        project_id="project-test",
-        environment_id="production",
+        organization_id="12345678-1234-4234-8234-123456789012",
+        workspace_id="22345678-1234-4234-8234-123456789012",
+        project_id="32345678-1234-4234-8234-123456789012",
+        environment_id="42345678-1234-4234-8234-123456789012",
         plan_id="plan-internal-id",
         revision_id="revision-internal-id",
     )
@@ -225,9 +226,17 @@ def test_proposal_digest_uses_canonical_unicode_json(tmp_path):
 def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path):
     state_id = "12345678-1234-4234-8234-123456789012"
     address = f"https://api.davdeploy.tech/api/v1/terraform-state/{state_id}"
+    trusted_scope = ownership_scope()
+    state_scope_sha256 = terraform_state_scope_digest(
+        organization_id=trusted_scope.organization_id,
+        project_id=trusted_scope.project_id,
+        environment_id=trusted_scope.environment_id,
+        target_account_id="654654474502",
+        region="us-east-1",
+    )
     backend = TerraformHTTPBackend(
         state_id=state_id,
-        scope_sha256="c" * 64,
+        scope_sha256=state_scope_sha256,
         address=address,
         lock_address=f"{address}/lock",
         unlock_address=f"{address}/unlock",
@@ -240,7 +249,7 @@ def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path)
         proposal(),
         expected_account_id="654654474502",
         region="us-east-1",
-        ownership_scope=ownership_scope(),
+        ownership_scope=trusted_scope,
         workspace=workspace,
         remote_state=backend,
     )
@@ -256,6 +265,32 @@ def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path)
     commands = (workspace / ".terraform-command-log").read_text().splitlines()
     assert commands[1] == "init -input=false -lockfile=readonly -no-color"
     assert commands[4] == f"plan -input=false -no-color -out={workspace / 'saved.tfplan'}"
+
+
+def test_remote_state_scope_mismatch_blocks_before_workspace_creation(tmp_path):
+    backend = TerraformHTTPBackend(
+        state_id="12345678-1234-4234-8234-123456789012",
+        scope_sha256="c" * 64,
+        address="https://api.davdeploy.tech/api/v1/terraform-state/12345678-1234-4234-8234-123456789012",
+        lock_address="https://api.davdeploy.tech/api/v1/terraform-state/12345678-1234-4234-8234-123456789012/lock",
+        unlock_address="https://api.davdeploy.tech/api/v1/terraform-state/12345678-1234-4234-8234-123456789012/unlock",
+        username="temporary-user-token-1234567890",
+        password="temporary-password-token-123456789012345678901234567890",
+        expires_at=datetime.now(UTC) + timedelta(minutes=15),
+    )
+    workspace = tmp_path / "wrong-state-scope"
+
+    with pytest.raises(TerraformPlanExecutionError, match="remote-state scope does not match"):
+        runner(tmp_path).plan(
+            proposal(),
+            expected_account_id="654654474502",
+            region="us-east-1",
+            ownership_scope=ownership_scope(),
+            workspace=workspace,
+            remote_state=backend,
+        )
+
+    assert not workspace.exists()
 
 
 def test_target_account_mismatch_blocks_before_creating_workspace(tmp_path):
