@@ -58,20 +58,19 @@ address.
   matching retained entry; the absent 0e key is not created.
 - [x] The new published object has an address distinct from the moved source.
 - [x] The output URL uses the new published object address.
-- [ ] Focused tests, Terraform validation, docs checks, and required CI pass.
+- [x] Focused tests, Terraform validation, docs checks, and required CI pass.
 - [x] A new hosted plan succeeds and preserves the prior public object; any
   hosted apply is recorded separately and occurs only for an exact safe plan.
 - [x] The failed initial plan is recorded accurately; no AWS mutation occurred.
 
 ## Acceptance status
 
-The fix began in bootstrap commit `8ce49d3`; source, regression test, and
-updated evidence are pending final commit. Focused tests passed (9), Terraform
-format and all-root validation passed, and docs conventions/diff checks are
-being rechecked. The corrected read-only hosted plan proposes one object
+The final implementation/evidence head is `dda5068`. Focused tests passed (9),
+Terraform format and all-root validation passed, and documentation conventions
+and diff checks passed. The corrected read-only hosted plan proposes one object
 creation (the new f3d9e1 template), moves the old active state to the retained
-7e key, and has zero changes or destroys. Final-head CI remains pending. No AWS
-write occurred.
+7e key, and has zero changes or destroys. All seven required checks passed in
+run `42982526696`. No AWS write occurred.
 
 ## Tests / validation performed
 

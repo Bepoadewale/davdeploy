@@ -11,7 +11,7 @@ Repository: `Bepoadewale/davdeploy`
 Customer repository: Not applicable; no customer repository or workload was
 used.
 
-Commit: `8ce49d3` (follow-up test and evidence pending).
+Commit: `dda5068c5c0d2d961efdb6e84fb52b760aa7333e` (evidence update pending).
 
 AWS account: `654654474502` for the read-only initial plan.
 
@@ -36,8 +36,10 @@ No plan was produced and no AWS writes occurred.
 `.venv/bin/python -m pytest -q tests/test_customer_aws_connection_contract.py`
 passed (9 tests). `terraform -chdir=infrastructure/terraform/connection-template-host
 fmt -check -diff` passed. `make terraform-validate` passed for all roots.
-Documentation conventions and `git diff --check` are being rerun after this
-update. Required CI is pending.
+`GITHUB_PR_NUMBER=344 .venv/bin/python scripts/check_doc_conventions.py` and
+`git diff --check` passed. Required PR CI run `42982526696` passed all seven
+checks: cloud contracts, documentation conventions, local integration,
+policy, Python, secrets, and supply chain.
 
 Read-only state inspection used
 `AWS_PROFILE=ai-platform-pilot-key terraform -chdir=infrastructure/terraform/connection-template-host state list`.
