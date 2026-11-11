@@ -82,6 +82,7 @@ project and live CodeBuild build before issuing them.
   customer plan-role credentials, and only for the proposal-scoped policy.
 - [x] Customer plan-role and Terraform state credential issuances persist a
   non-secret actor/run/build/scope audit event before returning credentials.
+- [x] Both credential responses prohibit caching of ephemeral secret material.
 - [x] Credential brokerage fails closed on tenant, project, revision, build,
   account, region, connection, digest, role, policy, secret-store or STS errors.
 - [x] CodeBuild has no `sts:AssumeRole` permission to customer plan roles.
@@ -90,8 +91,9 @@ project and live CodeBuild build before issuing them.
   ID and derives build identity from SigV4, with its IAM permission restricted
   to the fixed project. All Nova planning gates remain off by default.
 - [x] Focused tests, `make verify`, Terraform validation and documentation
-  checks pass; all seven required GitHub checks pass on implementation commit
-  `1da2f97`.
+  checks pass; all seven required GitHub checks pass on proof/evidence commit
+  `78895ed`. A subsequent focused state test covers the no-store response
+  headers.
 - [x] Fresh isolated `make local-proof`, full local demo/failure sequence, and
   exact test-resource cleanup pass.
 - [ ] Independent current-head review passes.
@@ -103,7 +105,7 @@ Implementation, focused/full local verification and the isolated clean-room
 proof are complete. Only the exact PR-specific test worktree, Compose
 containers, network and PostgreSQL volume were removed; existing DavDeploy
 containers and data remain untouched. All seven required GitHub checks passed
-for implementation commit `1da2f97`; independent review remains the merge gate.
+for proof/evidence commit `78895ed`; independent review remains the merge gate.
 
 ## Tests / validation performed
 

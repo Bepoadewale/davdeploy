@@ -424,16 +424,19 @@ def issue_terraform_state_credentials(
         raise HTTPException(503, "Terraform state credential could not be issued") from None
 
     address = f"{state_base_url}/api/v1/terraform-state/{state.id}"
-    return {
-        "state_id": state.id,
-        "scope_sha256": scope_sha256,
-        "address": address,
-        "lock_address": f"{address}/lock",
-        "unlock_address": f"{address}/unlock",
-        "username": issued.username,
-        "password": issued.password,
-        "expires_at": expires_at.isoformat(),
-    }
+    return JSONResponse(
+        {
+            "state_id": state.id,
+            "scope_sha256": scope_sha256,
+            "address": address,
+            "lock_address": f"{address}/lock",
+            "unlock_address": f"{address}/unlock",
+            "username": issued.username,
+            "password": issued.password,
+            "expires_at": expires_at.isoformat(),
+        },
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
 
 
 @app.post("/api/v1/nova-plan/credentials", include_in_schema=False)

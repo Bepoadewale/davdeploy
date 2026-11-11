@@ -382,6 +382,8 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
             json={"run_id": run_id},
         )
         assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["pragma"] == "no-cache"
         assert codebuild.calls == [[build_id]]
         credential_document = response.json()
         assert credential_document["scope_sha256"] == terraform_state_scope_digest(

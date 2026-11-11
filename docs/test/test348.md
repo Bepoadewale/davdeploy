@@ -26,8 +26,11 @@ default off.
 
 - Focused broker, worker, infrastructure-contract, customer-connection and
   product tests: **124 passed** before the final state-bootstrap audit addition;
-  focused Terraform-state tests then passed (**26 passed**).
-- `make verify`: **899 passed**; Ruff, configuration checks, OpenAPI snapshot
+  focused Terraform-state tests then passed (**26 passed**), including the
+  latest assertion that state-credential responses set `Cache-Control:
+  no-store` and `Pragma: no-cache`.
+- `make verify` before the response-cache-header follow-up: **899 passed**;
+  Ruff, configuration checks, OpenAPI snapshot
   and Docker Compose configuration passed. One existing Starlette/httpx
   deprecation warning remains.
 - `terraform fmt -check -recursive infrastructure/terraform/serverless-control-plane`:
@@ -72,8 +75,9 @@ customer workload. The credential broker and Nova runner remain disabled in
 hosted AWS. The PR does not grant a general CodeBuild caller access: the AWS
 IAM policy requires the fixed project's `codebuild:BuildArn`, and the API
 derives the build ID from the authenticated `AWSCodeBuild-<build-UUID>` session
-instead of accepting it from the request. GitHub CI run `43025299664` passed
-all seven required checks for implementation commit `1da2f97`. The isolated
+instead of accepting it from the request. GitHub CI run `43026767357` passed
+all seven required checks for proof/evidence commit `78895ed`; run `43025299664`
+passed all seven for implementation commit `1da2f97`. The isolated
 local clean-room proof also passed and its temporary resources were removed.
 Current-head independent review remains pending. This local fixture workflow
 does not exercise the hosted Nova runner or a customer AWS role.
