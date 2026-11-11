@@ -61,16 +61,20 @@ flows and keep all Nova execution gates disabled.
 
 ## Acceptance status
 
-Not started. This ticket was added before policy implementation. Draft PR CI
-will be required before merge.
+Implemented and locally verified; final-head pull request checks remain a merge
+gate. The change adds critical unknown-value checks, bounded retention
+validation, explicit review for disabled instance backups and RDS replacement
+without a final snapshot, plus fail-closed snapshot metadata checks.
 
 ## Tests / validation performed
 
-- Planned focused command: `.venv/bin/python -m pytest tests/test_generated_plan_policy.py`.
-- Planned full verification: `make verify`.
-- Planned clean-room proof: `make local-proof`.
-- Runtime evidence file will record the exact test commands and result; this PR
-  will not perform an AWS workload test or infrastructure mutation.
+- Focused generated-plan policy suite: 131 passed.
+- `make verify`: 986 passed; Ruff, Actions configuration, OpenAPI snapshot,
+  and Compose configuration passed.
+- `make local-proof`: local stack readiness, API/CORS contract, customer-plan
+  E2E, fixture seeding, trace check, and `make verify` passed (986 tests).
+- Documentation convention and diff checks are recorded in `docs/test/test361.md`.
+- No AWS workload test or infrastructure mutation was performed.
 
 ## Evidence files produced
 
