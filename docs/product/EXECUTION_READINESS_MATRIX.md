@@ -2,7 +2,30 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current hosted release — 2026-11-11, PR #359
+## Current hosted release — 2026-11-11, PR #361
+
+Backend `main` commit `5775d766584f31f8a31b6b22e8e523b4e8a3f257` (PR #361) was
+applied by protected Terraform plan
+[43111051028](https://github.com/Bepoadewale/davdeploy/actions/runs/43111051028)
+and exact saved-plan apply
+[43112125588](https://github.com/Bepoadewale/davdeploy/actions/runs/43112125588),
+deployment `7722764924`. The reviewed plan reported 0 additions, 6 in-place
+Lambda package updates, 0 destroys, 0 replacements or other changes, 0 drift,
+and 8 output changes. Migrations passed after one retry while Aurora resumed.
+All six Lambdas are Active/Successful and share
+`CodeSha256=29j5jv6Gefv883KmJnN2DyKTo8VH9Ma8pck8uE63AHQ=`. Read-only identity was
+account `654654474502` in `us-east-1`; `/healthz` returned
+`{"status":"ok","product":"davdeploy"}`. PR #361 adds fail-closed RDS
+backup-retention validation, review when an RDS DB instance disables automated
+backups, and review or denial for RDS deletes/replacements according to final
+snapshot settings. Nova runner, role verification, credential broker,
+Terraform state API, plan reviews, and hosted certification remain `false`.
+Legacy cloud-execution, `ALLOW_CLOUD_PLAN`, and `ALLOW_CLOUD_APPLY` remain
+`true`; they are not Nova plan/apply gates. No Nova customer plan or workload
+was applied, operated, health-checked, or certified. Release evidence:
+[`test361.md`](../test/test361.md).
+
+## Historical hosted release — 2026-11-11, PR #359
 
 Backend `main` commit `d734547a0551e85c5eafcc7349561e3ea7790589` (PR #359) was
 applied by protected Terraform plan
@@ -11,17 +34,14 @@ and exact saved-plan apply
 [43101777948](https://github.com/Bepoadewale/davdeploy/actions/runs/43101777948),
 deployment `7721332861`. The reviewed plan reported 0 additions, 6 in-place
 Lambda package updates, 0 destroys, 0 replacements or other changes, 0 drift,
-and 8 output changes. Migrations passed. All six Lambdas are Active with
-successful updates and share
+and 8 output changes. Migrations passed. All six Lambdas were Active with
+successful updates and shared
 `CodeSha256=vg52ZDcTSAhZ3hK7dra2Ou7oExSdzGDPjMBjoNQe4ZM=`. Read-only identity was
 account `654654474502` in `us-east-1`; `/healthz` returned
-`{"status":"ok","product":"davdeploy"}`. Nova runner, role verification,
-credential broker, Terraform state API, plan reviews, and hosted certification
-are `false`. Legacy cloud-execution, `ALLOW_CLOUD_PLAN`, and `ALLOW_CLOUD_APPLY`
-remain `true`; they are not Nova plan/apply gates. The deployment includes
-PR #359's exact state-backed ownership for untaggable API Gateway routes. No
-Nova customer plan or workload was applied, operated, health-checked, or
-certified. Release evidence: [`test359.md`](../test/test359.md).
+`{"status":"ok","product":"davdeploy"}`. The deployment included PR #359's
+exact state-backed ownership for untaggable API Gateway routes. No Nova
+customer plan or workload was applied, operated, health-checked, or certified.
+Release evidence: [`test359.md`](../test/test359.md).
 
 ## Historical hosted release — 2026-11-11, PR #358
 
@@ -91,7 +111,7 @@ certification gate disabled and its workspace allowlist empty.
 | Layer | Current evidence | State |
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
-| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access plus actual-plan policy hardening for IAM, SQS, Lambda invocation and API Gateway route authorization (#314, #324–#334, #340, #353, #355–#356, #358–#359) | #358 and #359 control-plane changes are deployed. Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
+| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access plus actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization and RDS backup retention/final snapshots (#314, #324–#334, #340, #353, #355–#356, #358–#359, #361) | #361's control-plane policy is deployed. Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api`, `aws-file-storage` and `aws-nosql-data` disabled | One customer renderer enabled; S3 and DynamoDB renderer routes remain gated; PR #303's allowlist correction is included in the November 10 backend release |
 | CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling; #299 adds the gated S3 dispatch mapping; #300 adds a validated S3 bucket input for Lambda; #301 adds the gated DynamoDB dispatch route; #302 adds its `table_name` input; #303 corrects the source allowlist for that input. | #303 is deployed with renderer gates still disabled; live composed lifecycle remains unproven |
