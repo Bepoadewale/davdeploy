@@ -43,7 +43,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-04.5"
+POLICY_VERSION = "nova-generated-plan-2026-11-11.6"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -166,7 +166,7 @@ def _evaluate(
     _check_resource_ownership(document, resources, ownership_scope, findings)
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings)
-    _check_iam(resources, findings)
+    _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
     _check_ebs_volumes(resources, findings)
@@ -580,7 +580,11 @@ def _check_s3(
                 )
 
 
-def _check_iam(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]) -> None:
+def _check_iam(
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+) -> None:
     for item in resources:
         kind = item.get("type")
         values = item.get("values", {})
@@ -589,22 +593,12 @@ def _check_iam(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyF
         address = item.get("address")
         if kind in {"aws_iam_policy", "aws_iam_role_policy"}:
             policy = _json_document(values.get("policy"), findings, address)
-            if policy is not None and _has_privileged_wildcard(policy):
-                _deny(
-                    findings,
-                    "iam_privileged_wildcard",
-                    address,
-                    "The plan grants broad IAM administration or pass-role access. Narrow the permissions to required actions and resources.",
-                )
+            if policy is not None:
+                _check_iam_permissions(policy, address, expected_account_id, findings)
         if kind == "aws_iam_role":
             trust = _json_document(values.get("assume_role_policy"), findings, address)
-            if trust is not None and _has_wildcard_trust(trust):
-                _deny(
-                    findings,
-                    "iam_wildcard_trust",
-                    address,
-                    "The role trust policy accepts an unrestricted principal.",
-                )
+            if trust is not None:
+                _check_role_trust(trust, address, expected_account_id, findings)
         if kind in {"aws_iam_role_policy_attachment", "aws_iam_policy_attachment"}:
             policy_arn = values.get("policy_arn")
             if not isinstance(policy_arn, str) or not policy_arn:
@@ -620,6 +614,13 @@ def _check_iam(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyF
                     "iam_administrator_access_attached",
                     address,
                     "The plan attaches the AWS AdministratorAccess policy to an application role.",
+                )
+            else:
+                _review(
+                    findings,
+                    "iam_managed_policy_contents_unverified",
+                    address,
+                    "The attached managed policy contents are not present in this plan and require explicit review.",
                 )
 
 
@@ -797,35 +798,222 @@ def _has_public_allow(policy: dict[str, Any]) -> bool:
     return False
 
 
-def _has_privileged_wildcard(policy: dict[str, Any]) -> bool:
+def _check_iam_permissions(
+    policy: dict[str, Any],
+    address: Any,
+    expected_account_id: str,
+    findings: list[PlanPolicyFinding],
+) -> None:
     for statement in _statements(policy, require_resource=True):
         if str(statement.get("Effect", "")).lower() != "allow":
+            continue
+        if "NotAction" in statement:
+            _deny(
+                findings,
+                "iam_not_action_policy_denied",
+                address,
+                "An IAM allow policy uses NotAction, so its effective permissions cannot be safely bounded.",
+            )
             continue
         actions = _string_list(statement.get("Action"))
         resources = _string_list(statement.get("Resource"))
         normalized_actions = {item.lower() for item in actions}
         wildcard_resource = any("*" in item or "?" in item for item in resources)
+        pass_role = "iam:passrole" in normalized_actions
         if "*" in actions or "iam:*" in normalized_actions:
-            return True
-        if any(item.startswith("iam:") and not item.startswith(("iam:get", "iam:list")) for item in normalized_actions) and wildcard_resource:
-            return True
-        if any(item in {"iam:passrole", "sts:assumerole"} for item in normalized_actions) and wildcard_resource:
-            return True
-        if statement.get("NotAction") is not None and wildcard_resource:
-            return True
-    return False
+            _deny(
+                findings,
+                "iam_privileged_wildcard",
+                address,
+                "The plan grants broad IAM administration. Narrow the permissions to required actions and resources.",
+            )
+            continue
+        iam_mutations = {
+            action
+            for action in normalized_actions
+            if action.startswith("iam:")
+            and not action.startswith(("iam:get", "iam:list"))
+            and action != "iam:passrole"
+        }
+        if iam_mutations:
+            _deny(
+                findings,
+                "iam_permission_management_denied",
+                address,
+                "The plan grants IAM permission-management actions that could change or delegate account access.",
+            )
+        if pass_role:
+            if not _pass_role_is_bounded(
+                resources, statement.get("Condition"), expected_account_id
+            ):
+                _deny(
+                    findings,
+                    "iam_passrole_unbounded_denied",
+                    address,
+                    "The plan can pass a role without an exact same-account role ARN and a literal iam:PassedToService condition.",
+                )
+            else:
+                _review(
+                    findings,
+                    "iam_passrole_requires_review",
+                    address,
+                    "The plan passes a specific role to a named AWS service; confirm the role permissions and service use before approval.",
+                )
+        assume_role = "sts:assumerole" in normalized_actions
+        broad_assume_role = any(
+            action == "sts:*" or action.startswith("sts:assume") and action != "sts:assumerole"
+            for action in normalized_actions
+        )
+        if broad_assume_role:
+            _deny(
+                findings,
+                "sts_assume_role_unbounded_denied",
+                address,
+                "The plan uses a wildcard role-assumption action that cannot be safely bounded.",
+            )
+        elif assume_role:
+            if wildcard_resource or not _same_account_role_resources(
+                resources, expected_account_id
+            ):
+                _deny(
+                    findings,
+                    "sts_assume_role_unbounded_denied",
+                    address,
+                    "The plan grants role assumption outside a fixed same-account role scope.",
+                )
+            else:
+                _review(
+                    findings,
+                    "sts_assume_role_requires_review",
+                    address,
+                    "The plan grants role assumption for a specific same-account role; review the target trust and application need.",
+                )
 
 
-def _has_wildcard_trust(policy: dict[str, Any]) -> bool:
+def _same_account_role_resources(resources: tuple[str, ...], account_id: str) -> bool:
+    if not resources:
+        return False
+    return all(
+        bool(
+            re.fullmatch(
+                rf"arn:[a-z0-9-]+:iam::{account_id}:role/"
+                r"(?:[A-Za-z0-9+=,.@_-]+/)*[A-Za-z0-9+=,.@_-]+",
+                resource,
+            )
+        )
+        for resource in resources
+    )
+
+
+def _pass_role_is_bounded(resources: tuple[str, ...], condition: Any, account_id: str) -> bool:
+    if not _same_account_role_resources(resources, account_id) or not isinstance(condition, dict):
+        return False
+    if set(condition) != {"StringEquals"}:
+        return False
+    equals = condition.get("StringEquals")
+    if not isinstance(equals, dict) or set(equals) != {"iam:PassedToService"}:
+        return False
+    service = equals.get("iam:PassedToService") if isinstance(equals, dict) else None
+    service_names = (
+        (service,)
+        if isinstance(service, str)
+        else tuple(service)
+        if isinstance(service, list)
+        else ()
+    )
+    return bool(service_names) and all(
+        isinstance(value, str) and bool(re.fullmatch(r"[a-z0-9-]+\.amazonaws\.com(?:\.cn)?", value))
+        for value in service_names
+    )
+
+
+def _check_role_trust(
+    policy: dict[str, Any],
+    address: Any,
+    expected_account_id: str,
+    findings: list[PlanPolicyFinding],
+) -> None:
     for statement in _statements(policy, require_principal=True):
+        if str(statement.get("Effect", "")).lower() != "allow":
+            continue
+        if "NotPrincipal" in statement:
+            _deny(
+                findings,
+                "iam_not_principal_trust_denied",
+                address,
+                "An IAM role trust allow uses NotPrincipal and cannot be safely bounded.",
+            )
+            continue
         principal = statement.get("Principal")
         if principal == "*":
-            return True
-        if isinstance(principal, dict):
-            for value in principal.values():
-                if value == "*" or isinstance(value, list) and "*" in value:
-                    return True
-    return False
+            _deny(
+                findings,
+                "iam_wildcard_trust",
+                address,
+                "The role trust policy accepts an unrestricted principal.",
+            )
+            continue
+        principals = principal if isinstance(principal, dict) else {"AWS": principal}
+        same_account_aws_principal = False
+        for principal_type, raw_values in principals.items():
+            values = _string_list(raw_values)
+            if not values or any("*" in value or "?" in value for value in values):
+                _deny(
+                    findings,
+                    "iam_wildcard_trust",
+                    address,
+                    "The role trust policy contains a wildcard or malformed principal.",
+                )
+                continue
+            if principal_type == "Service":
+                if any(
+                    not re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?", value)
+                    for value in values
+                ):
+                    _deny(
+                        findings,
+                        "iam_unverified_trust_principal_denied",
+                        address,
+                        "The role trust policy contains a service principal outside the verified AWS service-name format.",
+                    )
+            elif principal_type == "AWS":
+                if all(_is_same_account_principal(value, expected_account_id) for value in values):
+                    same_account_aws_principal = True
+                else:
+                    _deny(
+                        findings,
+                        "iam_external_trust_denied",
+                        address,
+                        "The role trust policy grants access to an external or unverified AWS principal.",
+                    )
+            else:
+                _deny(
+                    findings,
+                    "iam_unverified_trust_principal_denied",
+                    address,
+                    "The role trust policy uses an unverified principal type.",
+                )
+        if same_account_aws_principal:
+            _review(
+                findings,
+                "iam_same_account_trust_requires_review",
+                address,
+                "The role trust policy accepts an AWS principal in this account; confirm that principal should assume the role.",
+            )
+
+
+def _is_same_account_principal(value: str, account_id: str) -> bool:
+    if value == account_id or re.fullmatch(
+        rf"arn:[a-z0-9-]+:iam::{account_id}:root", value
+    ):
+        return True
+    return bool(
+        re.fullmatch(
+            rf"arn:[a-z0-9-]+:iam::{account_id}:(?:role|user)/"
+            r"(?:[A-Za-z0-9+=,.@_-]+/)*[A-Za-z0-9+=,.@_-]+",
+            value,
+        )
+    )
 
 
 def _statements(
