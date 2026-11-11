@@ -47,16 +47,20 @@ configuration incomplete.
 - [x] The Actions variable allowlist accepts only the new named variables.
 - [x] Contract tests assert the mappings and fail-closed Terraform validations.
 - [x] No hosted state API, runner, or customer workload is enabled by this PR.
-- [ ] Focused and full verification pass; required CI checks pass.
+- [x] Focused and full local verification pass.
+- [ ] Required GitHub CI checks pass.
 
 ## Acceptance status
 
 Workflow mappings, explicit allowlist entries, static contract checks, and
-configuration documentation are implemented. Verification remains.
+configuration documentation are implemented. Focused, full, and isolated
+clean-room verification passed. Required GitHub CI remains.
 
 ## Tests / validation performed
 
-Pending focused/full verification and required CI.
+`docs/test/test336.md` records 16 focused tests, `make verify` (866 tests),
+and isolated `make local-proof` (866 tests), plus local cleanup evidence.
+Required GitHub CI is pending.
 
 ## Evidence files produced
 
