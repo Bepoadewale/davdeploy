@@ -28,13 +28,13 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 
 ## Acceptance criteria
 
-- [ ] Unknown or malformed PITR enablement/recovery-period metadata is denied before approval.
-- [ ] A proposal with `recovery.backup_required=true` is denied unless PITR is known enabled with a valid 1–35 day recovery period.
-- [ ] A proposal without required backups receives a human-review finding when PITR is disabled or omitted.
-- [ ] A known enabled PITR setting with a valid period passes this specific policy check.
-- [ ] Policy findings do not contain sensitive plan values.
-- [ ] Focused tests, full `make verify`, docs conventions, diff check and required GitHub CI pass.
-- [ ] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
+- [x] Unknown or malformed PITR enablement/recovery-period metadata is denied before approval.
+- [x] A proposal with `recovery.backup_required=true` is denied unless PITR is known enabled with a valid 1–35 day recovery period.
+- [x] A proposal without required backups receives a human-review finding when PITR is disabled or omitted.
+- [x] A known enabled PITR setting with a valid period passes this specific policy check.
+- [x] Policy findings do not contain sensitive plan values.
+- [ ] Required GitHub CI and review pass.
+- [x] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
 
 ## Acceptance status
 
@@ -43,18 +43,18 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 - [x] A proposal without required backups receives a human-review finding when PITR is disabled or omitted.
 - [x] A known enabled PITR setting with a valid period passes this specific policy check.
 - [x] Policy findings do not contain sensitive plan values.
-- [ ] Focused tests, full `make verify`, docs conventions, diff check and required GitHub CI pass.
+- [x] Focused tests, full `make verify`, clean-room local proof, docs conventions and diff check pass. Required GitHub CI is pending.
 - [x] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
 
 ## Tests / validation performed
 
 - Focused suite: `.venv/bin/python -m pytest -q tests/test_generated_plan_policy.py` — 143 passed.
 - Full `make verify` — 998 tests passed; Ruff, Actions configuration, OpenAPI snapshot and Compose configuration passed. Existing Starlette/httpx deprecation warning remains.
-- Focused Ruff and `git diff --check` passed. Clean-room `make local-proof` and hosted CI pending.
+- Isolated clean-room `make local-proof` passed 998 tests plus API/CORS contract, customer-plan E2E, fixture seed and trace checks. Six local demo/failure cases passed after one immediate post-restart attempt was retried after readiness succeeded. See `docs/test/test363.md`.
 
 ## Evidence files produced
 
-- `docs/test/test363.md` — pending clean-room run; no AWS workload was run.
+- `docs/test/test363.md` — local clean-room and policy evidence; no AWS workload was run.
 
 ## Boundaries
 
@@ -63,4 +63,4 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 
 ## Follow-up work
 
-- Verify focused and clean-room evidence and required CI before merge. Pricing, hosted planning, exact-plan approval/apply, health, restore, teardown, and composed workload certification remain separately incomplete.
+- Required GitHub CI and review remain before merge. Pricing, hosted planning, exact-plan approval/apply, health, restore, teardown, and composed workload certification remain separately incomplete.
