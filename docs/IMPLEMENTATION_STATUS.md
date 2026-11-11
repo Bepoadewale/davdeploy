@@ -7,7 +7,7 @@
 | Capability | Evidence |
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
-| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. Merged PR #322 marks regional pricing unavailable and blocks approval until complete region-bound cost evidence is present. PR #328 adds a disabled-by-default backend-free initial plan runner; PRs #331–#332 add gated state API and isolated-state wiring, while #333–#334 add tenant-scoped plan request history. The November 11 rollout provisions the dedicated encrypted/versioned state bucket, but the state API, runner, plan review and role verification remain disabled. The backend-free runner cannot produce an approvable remote-state plan. The trusted pricing evaluator and verified least-privilege customer plan role are not integrated. PR #318 is closed and its pricing approach remains held for account-owner direction. No Nova-generated AWS plan has been applied. |
+| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. Merged PR #322 marks regional pricing unavailable and blocks approval until complete region-bound cost evidence is present. PR #328 adds a disabled-by-default initial plan runner; PRs #331–#332 add gated state API and isolated-state wiring, while #333–#334 add tenant-scoped plan request history. PR #340 adds a bounded customer metadata-read role profile, proposal-scoped explicit-deny STS session policy, and manifest binding; its control-plane package was deployed in the November 11 release documented in `docs/test/test341.md`. The dedicated encrypted/versioned state bucket is provisioned, but the state API, runner, plan review and role verification remain disabled. Customer role installation/effective permissions are unverified. The runner cannot yet produce an approvable plan because complete regional pricing and exact cost-bound approval are unavailable. PR #318 is closed and its pricing approach remains held for account-owner direction. No Nova-generated AWS plan has been applied. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -40,7 +40,7 @@
 | Identity boundary | Local signed-token fixture coverage plus hosted Cognito JWKS/OIDC verification; browser tokens are resolved to server-side membership and never grant cloud authority |
 | Workspace views | Separate signed local developer and administrator fixture identities; backend-enforced current-user, tenant-scoped dashboard and administrator-only review APIs; browser sign-in/sign-out, filtered administrator queues, rich review evidence, explicit approved-not-deployed banners and seedable demo records |
 | Audit evidence | Human-readable audit evidence endpoint and UI timeline with actor, role, action label, revision, digest, decision reason and export-ready structure for governance review |
-| UI and monitoring | Static React/TypeScript client in the private `davdeploy-frontend` repository; this control plane exposes `/metrics`, Prometheus, business OTel spans, Tempo and Grafana datasources/dashboard for request, plan-policy and observed-execution outcomes |
+| UI and monitoring | Static React/TypeScript client in the public `davdeploy-frontend` repository; this control plane exposes `/metrics`, Prometheus, business OTel spans, Tempo and Grafana datasources/dashboard for request, plan-policy and observed-execution outcomes |
 | Agent clients | Authenticated REST API, thin CLI, and stdio MCP server. They use the same API and do not expose approval, cloud credentials, shell, Terraform, Kubernetes, or secrets. The full local Compose proof exercises MCP tool discovery. |
 
 ## Simulated
@@ -64,7 +64,28 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current hosted execution status — 2026-11-10
+# Current hosted execution status — 2026-11-11
+
+Backend PR #340 merged as `8d3b4764bcefae8cb9f93a930b064e10fd893762` and is
+deployed in the protected control-plane release. Exact plan/apply and post-
+release evidence is in `docs/test/test341.md`. The release updated six Lambda
+packages in place (zero creates, deletes, or replacements), migration
+verification passed, all six functions are active with successful updates, and
+`/healthz` returned `{"status":"ok","product":"davdeploy"}`. Plan reviews,
+the plan-only runner, customer role verification, and the state API remain
+disabled. The updated customer plan-role template has not been installed in a
+customer account; no customer role or workload was changed. PR #340's fixed
+proposal-scoped session policy is deployed as code, but no hosted customer plan
+has run and regional pricing remains unavailable. No Nova-generated AWS
+workload has been applied, operated, or certified.
+
+The plan reported one Terraform state-drift record on parent bucket metadata
+for the Nova state bucket; its separately managed policy, versioning, and
+encryption resources were no-ops, and the bucket had no planned action. The
+saved plan's exact digest and redacted action summary are retained in
+`docs/test/test341.md`.
+
+# Historical hosted execution status — 2026-11-10
 
 PR #328 merged to `main` as `64bfd2c55cf22b61c20305106dcbcec65ef48352`. Its fixed Nova runner for backend-free initial Terraform plans is included in the November 10 hosted backend release, but remains disabled by default; its artifacts cannot be approved or applied. The runner has no remote state or lock, and it does not integrate regional pricing. The customer plan role denies customer service actions. No Nova-generated AWS workload has been applied, operated, or certified. Durable tenant-isolated state, costed exact-plan approval, scoped apply, health observations, recovery, and teardown remain incomplete.
 

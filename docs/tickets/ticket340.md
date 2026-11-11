@@ -1,6 +1,6 @@
 # ticket340 — constrain customer Nova planning permissions
 
-PR: [#340](https://github.com/Bepoadewale/davdeploy/pull/340) (draft)
+PR: [#340](https://github.com/Bepoadewale/davdeploy/pull/340) (merged)
 Branch: `feat/nova-readonly-plan-scope-340`
 
 ## Problem / goal
@@ -14,9 +14,10 @@ policy to the saved plan manifest so the later approval can verify it.
 
 ## Current repo state
 
-- Backend `main` is `25e96307e78b9385a8a80a68e619991ce58a2be1`; PR #340 is an
-  open draft at implementation commit
-  `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`.
+- Backend `main` includes merge commit
+  `8d3b4764bcefae8cb9f93a930b064e10fd893762` for PR #340. Implementation was
+  `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`; final evidence commit was
+  `35a639143077c75ffbb820aaa4c867eb283e6ce2`.
 - The plan-only CloudFormation template previously denied all customer
   service actions. The Nova worker already verifies the connection ExternalId
   and target account before it invokes the fixed Terraform planner.
@@ -68,23 +69,29 @@ policy to the saved plan manifest so the later approval can verify it.
 - [x] The access-policy version and digest are bound into the result manifest
   and recomputed by the API before accepting worker output.
 - [x] Hosted execution gates remain disabled; existing customer roles are not
-  silently changed; no AWS calls or resource mutations are part of this PR.
+  silently changed; no customer roles or customer workloads are changed by
+  this implementation.
 - [x] Focused tests, full `make verify` (877 tests), and isolated clean-room
   proof pass at `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`.
-- [ ] Final evidence docs checks and required final-head CI pass.
+- [x] Evidence docs checks and required final-head CI pass (run `42971989437`).
+- [x] The production control-plane package was deployed separately; see
+  [test341](../test/test341.md). Customer planning and lifecycle gates remain
+  disabled.
 
 ## Acceptance status
 
-Implementation and local verification are complete on the draft PR. The
-clean-room run passed at the implementation commit; only its exact Compose
-project and generated artifacts were removed afterward. Final evidence-doc
-checks, independent review, and hosted CI remain pending. No AWS workload or
-customer permission was changed.
+Implementation and local verification are complete; PR #340 merged as
+`8d3b4764bcefae8cb9f93a930b064e10fd893762` after all seven required checks
+passed for final PR head `35a639143077c75ffbb820aaa4c867eb283e6ce2` in run
+`42971989437`. Post-merge CI run `42972528572` also passed. Its protected
+production control-plane release is recorded in `docs/test/test341.md`; all
+hosted customer planning and lifecycle gates remain disabled.
 
 ## Tests / validation performed
 
 See `docs/test/test340.md`; it will be updated with exact final commands,
-results, commit, and CI evidence before the PR is review-ready.
+results, commit, and CI evidence. Production release evidence is in
+`docs/test/test341.md`.
 
 ## Evidence files produced
 
