@@ -47,7 +47,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-11.11"
+POLICY_VERSION = "nova-generated-plan-2026-11-12.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -105,6 +105,8 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
         ("deletion_protection_enabled",),
+        ("point_in_time_recovery", "enabled"),
+        ("point_in_time_recovery", "recovery_period_in_days"),
     ),
 }
 
@@ -197,6 +199,7 @@ def _evaluate(
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
+    _check_dynamodb_recovery(resources, proposal, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
 
@@ -958,6 +961,85 @@ def _trusted_account_guard_matches(configuration: Any, expected_account_id: str)
     return condition == expected
 
 
+def _check_dynamodb_recovery(
+    resources: tuple[dict[str, Any], ...],
+    proposal: GeneratedDeploymentProposal,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Require known PITR when requested and review tables without recovery."""
+    for item in resources:
+        if item.get("type") != "aws_dynamodb_table":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "dynamodb_pitr_settings_invalid",
+                address,
+                "DavDeploy could not verify DynamoDB point-in-time recovery settings.",
+            )
+            continue
+
+        raw_pitr = values.get("point_in_time_recovery")
+        if raw_pitr is None or raw_pitr == []:
+            pitr = None
+        elif isinstance(raw_pitr, dict):
+            pitr = raw_pitr
+        elif (
+            isinstance(raw_pitr, list)
+            and len(raw_pitr) == 1
+            and isinstance(raw_pitr[0], dict)
+        ):
+            pitr = raw_pitr[0]
+        else:
+            pitr = "invalid"
+
+        if pitr is None:
+            enabled = False
+            recovery_period = None
+        elif isinstance(pitr, dict):
+            enabled = pitr.get("enabled")
+            recovery_period = pitr.get("recovery_period_in_days")
+        else:
+            enabled = None
+            recovery_period = None
+
+        if enabled is not True:
+            if proposal.recovery.backup_required:
+                _deny(
+                    findings,
+                    "dynamodb_pitr_required",
+                    address,
+                    "The proposal requires backups, but this DynamoDB table does not have confirmed point-in-time recovery enabled.",
+                )
+            elif enabled is False or pitr is None:
+                _review(
+                    findings,
+                    "dynamodb_pitr_disabled",
+                    address,
+                    "Point-in-time recovery is disabled for this DynamoDB table. Confirm that this data-recovery choice is intended.",
+                )
+            else:
+                _deny(
+                    findings,
+                    "dynamodb_pitr_settings_invalid",
+                    address,
+                    "DavDeploy could not verify DynamoDB point-in-time recovery settings.",
+                )
+            continue
+
+        if (
+            not isinstance(recovery_period, int)
+            or isinstance(recovery_period, bool)
+            or not 1 <= recovery_period <= 35
+        ):
+            _deny(
+                findings,
+                "dynamodb_pitr_recovery_period_invalid",
+                address,
+                "The plan does not confirm a valid DynamoDB point-in-time recovery period.",
+            )
 def _references_resource(references: tuple[str, ...], resource_address: Any) -> bool:
     if not isinstance(resource_address, str):
         return False

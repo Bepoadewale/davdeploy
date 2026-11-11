@@ -3,22 +3,22 @@
 PR: [#363](https://github.com/Bepoadewale/davdeploy/pull/363) (draft)
 Branch: `security/dynamodb-pitr-plan-policy-363`
 
-## Goal
+## Problem / goal
 
 Make actual Terraform plan review identify whether each generated DynamoDB table has point-in-time recovery (PITR), fail closed when its policy-critical PITR settings are unknown or malformed, and require PITR when the immutable proposal says backup is required. Keep Nova planning and execution feature gates disabled.
 
-## Current state
+## Current repo state
 
 Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actual-plan policy version `nova-generated-plan-2026-11-11.11` validates DynamoDB encryption and deletion protection, but does not currently validate the nested `point_in_time_recovery.enabled` or recovery period. AWS provider docs state PITR defaults to disabled when its block is omitted. The generated proposal has `recovery.backup_required`. Nova runner, state API, role verification, plan reviews and customer execution remain disabled.
 
-## References
+## Research / references used
 
 - AWS DynamoDB point-in-time recovery: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Point-in-time-recovery.html
 - HashiCorp AWS provider `aws_dynamodb_table`: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/dynamodb_table.html
 - Existing policy: `apps/api/src/davdeploy/generated_plan_policy.py`
 - Existing focused tests: `tests/test_generated_plan_policy.py`
 
-## Work planned
+## Work planned for the PR
 
 - Add critical unknown/malformed detection for DynamoDB PITR enabled and recovery-period values.
 - Require enabled PITR for generated proposals whose recovery contract requires backups; otherwise surface a clear human-review finding when PITR is disabled or absent.
@@ -36,11 +36,31 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 - [ ] Focused tests, full `make verify`, docs conventions, diff check and required GitHub CI pass.
 - [ ] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
 
-## Validation and evidence
+## Acceptance status
 
-- Pending implementation. Runtime evidence will be recorded in `docs/test/test363.md` because this changes executable plan policy.
+- [x] Unknown or malformed PITR enablement/recovery-period metadata is denied before approval.
+- [x] A proposal with `recovery.backup_required=true` is denied unless PITR is known enabled with a valid 1–35 day recovery period.
+- [x] A proposal without required backups receives a human-review finding when PITR is disabled or omitted.
+- [x] A known enabled PITR setting with a valid period passes this specific policy check.
+- [x] Policy findings do not contain sensitive plan values.
+- [ ] Focused tests, full `make verify`, docs conventions, diff check and required GitHub CI pass.
+- [x] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
 
-## Boundaries and follow-up
+## Tests / validation performed
+
+- Focused suite: `.venv/bin/python -m pytest -q tests/test_generated_plan_policy.py` — 143 passed.
+- Full `make verify` — 998 tests passed; Ruff, Actions configuration, OpenAPI snapshot and Compose configuration passed. Existing Starlette/httpx deprecation warning remains.
+- Focused Ruff and `git diff --check` passed. Clean-room `make local-proof` and hosted CI pending.
+
+## Evidence files produced
+
+- `docs/test/test363.md` — pending clean-room run; no AWS workload was run.
+
+## Boundaries
 
 - This does not implement pricing, approve plans, enable a hosted runner, apply resources, perform recovery, or certify customer workloads.
 - DynamoDB restore behavior and actual application data-recovery verification remain future lifecycle acceptance work.
+
+## Follow-up work
+
+- Verify focused and clean-room evidence and required CI before merge. Pricing, hosted planning, exact-plan approval/apply, health, restore, teardown, and composed workload certification remain separately incomplete.
