@@ -1018,6 +1018,93 @@ class ProductService:
             ],
         }
 
+    def customer_plan_revision_history(
+        self,
+        principal: Principal,
+        project_id: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        """List bounded, customer-safe plan revision summaries for one project."""
+        project = self._project(principal, project_id)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("plan history page size must be between 1 and 100")
+
+        visible = [
+            InfrastructurePlanRevision.organization_id == principal.organization_id,
+            InfrastructurePlan.organization_id == principal.organization_id,
+            InfrastructurePlan.project_id == project.id,
+        ]
+        if not self._is_workspace_administrator(principal):
+            visible.append(InfrastructurePlan.creator_subject == principal.subject)
+
+        query = (
+            select(InfrastructurePlanRevision, InfrastructurePlan)
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlan.id == InfrastructurePlanRevision.infrastructure_plan_id,
+            )
+            .where(*visible)
+        )
+        if cursor is not None:
+            try:
+                canonical_cursor = str(uuid.UUID(cursor))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("plan history cursor is invalid") from None
+            anchor = self.db.execute(
+                select(InfrastructurePlanRevision, InfrastructurePlan)
+                .join(
+                    InfrastructurePlan,
+                    InfrastructurePlan.id
+                    == InfrastructurePlanRevision.infrastructure_plan_id,
+                )
+                .where(*visible, InfrastructurePlanRevision.id == canonical_cursor)
+            ).first()
+            if anchor is None:
+                raise PermissionError("plan history cursor is not visible")
+            anchor_revision = anchor[0]
+            query = query.where(
+                or_(
+                    InfrastructurePlanRevision.created_at < anchor_revision.created_at,
+                    and_(
+                        InfrastructurePlanRevision.created_at == anchor_revision.created_at,
+                        InfrastructurePlanRevision.id < anchor_revision.id,
+                    ),
+                )
+            )
+
+        selected = list(
+            self.db.execute(
+                query.order_by(
+                    InfrastructurePlanRevision.created_at.desc(),
+                    InfrastructurePlanRevision.id.desc(),
+                ).limit(limit + 1)
+            )
+        )
+        has_more = len(selected) > limit
+        page = selected[:limit]
+        return {
+            "project_id": project.id,
+            "items": [
+                {
+                    "id": revision.id,
+                    "plan_id": plan.id,
+                    "project_id": plan.project_id,
+                    "title": plan.title,
+                    "revision": revision.revision_number,
+                    "state": revision.state,
+                    "content_digest": revision.content_digest,
+                    "created_at": revision.created_at.isoformat() if revision.created_at else None,
+                    "submitted_at": (
+                        revision.submitted_at.isoformat() if revision.submitted_at else None
+                    ),
+                }
+                for revision, plan in page
+            ],
+            "next_cursor": page[-1][0].id if has_more and page else None,
+        }
+
     def pending_infrastructure_plan_revisions(self, principal: Principal) -> list[dict[str, Any]]:
         if not self._is_workspace_administrator(principal):
             raise PermissionError("workspace administrator role required for pending approvals")
