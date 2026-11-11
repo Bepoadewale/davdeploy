@@ -32,18 +32,18 @@ Update the source/deployment readiness record and PR #326–#338 evidence to ref
 - [x] Post-apply storage controls and disabled Nova gates are stated precisely.
 - [x] No claim of hosted customer planning, approval, apply, health, recovery, teardown, or certification is introduced.
 - [x] Documentation conventions, `make verify`, and diff checks pass locally.
-- [ ] Required PR CI passes for the final head.
+- [x] All seven PR checks passed in run [42960223307](https://github.com/Bepoadewale/davdeploy/actions/runs/42960223307) for head `35b6de8`; final evidence-only head must pass the same required checks before merge.
 
 ## Acceptance status
 
-Implementation and evidence reconciliation are complete. Documentation convention, `make verify`, and diff checks passed locally; required hosted PR checks are pending.
+Implementation and evidence reconciliation are complete. Documentation convention, `make verify`, and diff checks passed locally; all seven hosted PR checks passed in run [42960223307](https://github.com/Bepoadewale/davdeploy/actions/runs/42960223307) for `35b6de8`. The final evidence-only commit remains subject to its own required CI.
 
 ## Tests / validation performed
 
 - `python3.12 scripts/check_doc_conventions.py` — passed.
 - `make verify` — 867 passed; Ruff, OpenAPI, Actions configuration, and Compose checks passed. One existing Starlette/httpx deprecation warning remains.
 - `git diff --check` — passed.
-- Required hosted PR checks — pending.
+- All seven required PR checks passed in run [42960223307](https://github.com/Bepoadewale/davdeploy/actions/runs/42960223307) for `35b6de8`; the evidence update is documentation-only and its latest-head CI is the merge gate.
 
 ## Evidence files produced
 
