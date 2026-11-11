@@ -2,7 +2,7 @@
 
 Date: 2026-11-11
 Execution type: Real AWS control-plane Terraform saved-plan apply; no customer workload.
-Customer repository: Not applicable; this released the private DavDeploy control plane.
+Customer repository: Not applicable; this was DavDeploy's control-plane release, not a customer workload repository.
 Commit: `0896ae6106fe1e7526dba90105639f894d5534b8`
 AWS account: `654654474502`
 AWS region: `us-east-1`
