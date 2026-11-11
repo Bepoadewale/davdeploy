@@ -55,6 +55,11 @@ def test_quick_create_plan_role_is_separate_and_has_bounded_read_only_actions():
     policy = plan_role.split("Policies:", 1)[1]
 
     assert "plan-only" in template
+    assert any(
+        line.startswith("Description: davdeploy AWS connection.")
+        and "bounded planning metadata reads" in line
+        for line in template.splitlines()
+    )
     assert 'RoleName: !Sub "davdeployPlan-${ConnectionId}"' in plan_role
     assert "Condition: CreateNovaPlanOnlyRole" in plan_role
     assert "davdeployDiscoveryBrokerRoleArn" in plan_role

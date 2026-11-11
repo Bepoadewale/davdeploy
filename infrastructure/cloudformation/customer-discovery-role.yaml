@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: davdeploy AWS connection. Nova plan policy is expected to deny customer actions, but effective permissions are not verified; administrator pilot is separate.
+Description: davdeploy AWS connection. Nova plan role grants bounded planning metadata reads; the fixed planner applies a proposal-scoped explicit-deny session policy. Effective customer permissions are not attested; administrator pilot is separate.
 Parameters:
   davdeployDiscoveryBrokerRoleArn:
     Type: String

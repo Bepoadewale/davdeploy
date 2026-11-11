@@ -5793,8 +5793,8 @@ class ProductService:
             "customer_steps": (
                 [
                     "Open the AWS Quick Create link in the customer account already connected for discovery.",
-                    "Review the template's expected deny-all policy for customer service actions; DavDeploy does not attest effective permissions.",
-                    "Create the stack, then return to davdeploy to verify plan-role trust and account identity.",
+                    "Review the template's bounded planning metadata reads. The fixed planner also scopes each temporary session to the proposed resources and denies other actions.",
+                    "Create the stack, then return to DavDeploy to verify plan-role trust and account identity; effective permissions and later policy changes are not attested.",
                 ]
                 if access_mode == "plan-only"
                 else [
@@ -5804,7 +5804,7 @@ class ProductService:
                 ]
             ),
             "boundary": (
-                "This action only creates a setup link. The template requests a separate Nova plan role with an explicit deny for customer service actions. DavDeploy verifies role trust and account identity, but does not inspect or attest effective permissions."
+                "This action only creates a setup link. The customer template grants bounded metadata reads, and each fixed Nova planner session adds a proposal-scoped explicit-deny policy. DavDeploy verifies role trust and account identity only; it does not inspect or attest effective permissions or later customer policy changes."
                 if access_mode == "plan-only"
                 else "This action only creates a setup link. Discovery is read-only; administrator-pilot creates a separate execution role that can modify customer AWS resources after product approval."
             ),

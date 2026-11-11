@@ -667,6 +667,10 @@ def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separat
     assert saved.plan_role_arn == setup["plan_role_arn"]
     assert saved.plan_role_setup_state == "SETUP_LINK_GENERATED"
     assert "external_id" not in setup
+    assert any("bounded planning metadata reads" in step for step in setup["customer_steps"])
+    assert any("effective permissions" in step for step in setup["customer_steps"])
+    assert "proposal-scoped explicit-deny policy" in setup["boundary"]
+    assert "does not inspect or attest effective permissions" in setup["boundary"]
     detail = service.cloud_connection_detail(founder(), connection.id)
     assert detail["plan_role_policy_status"] == "EXPECTED_UNVERIFIED"
     assert "expected to install" in detail["plan_role_policy"]
