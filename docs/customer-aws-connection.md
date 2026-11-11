@@ -40,3 +40,9 @@ Current hosted template URL:
 ```text
 https://davdeploy-customer-templates-654654474502.s3.us-east-1.amazonaws.com/cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml
 ```
+
+On 2026-11-11, the new immutable template was published and the protected
+control-plane configuration was updated to this URL. The previous 7e URL
+remains available for existing customer setup links. This rollout published
+the customer role template and updated DavDeploy's Quick Create URL; it did
+not create or change a customer CloudFormation stack or role.

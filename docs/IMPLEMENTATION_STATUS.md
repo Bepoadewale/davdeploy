@@ -7,7 +7,7 @@
 | Capability | Evidence |
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
-| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. Merged PR #322 marks regional pricing unavailable and blocks approval until complete region-bound cost evidence is present. PR #328 adds a disabled-by-default initial plan runner; PRs #331–#332 add gated state API and isolated-state wiring, while #333–#334 add tenant-scoped plan request history. PR #340 adds a bounded customer metadata-read role profile, proposal-scoped explicit-deny STS session policy, and manifest binding; its control-plane package was deployed in the November 11 release documented in `docs/test/test341.md`. The dedicated encrypted/versioned state bucket is provisioned, but the state API, runner, plan review and role verification remain disabled. Customer role installation/effective permissions are unverified. The runner cannot yet produce an approvable plan because complete regional pricing and exact cost-bound approval are unavailable. PR #318 is closed and its pricing approach remains held for account-owner direction. No Nova-generated AWS plan has been applied. |
+| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. Merged PR #322 marks regional pricing unavailable and blocks approval until complete region-bound cost evidence is present. PR #328 adds a disabled-by-default initial plan runner; PRs #331–#332 add gated state API and isolated-state wiring, while #333–#334 add tenant-scoped plan request history. PR #340 adds a bounded customer metadata-read role profile, proposal-scoped explicit-deny STS session policy, and manifest binding; its control-plane package is in the current November 11 release documented in `docs/test/test345.md` (the earlier #340 release is preserved in `docs/test/test341.md`). PR #344 publishes the current versioned customer role template; it has not been installed in a customer account. The dedicated encrypted/versioned state bucket is provisioned, but the state API, runner, plan review and role verification remain disabled. Customer role installation/effective permissions are unverified. The runner cannot yet produce an approvable plan because complete regional pricing and exact cost-bound approval are unavailable. PR #318 is closed and its pricing approach remains held for account-owner direction. No Nova-generated AWS plan has been applied. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -64,7 +64,31 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current hosted execution status — 2026-11-11
+# Current hosted execution status — 2026-11-11, after PR #345 rollout
+
+Backend `main` commit `10103149d444805877b464ae4e9afe056f8af3f8` is deployed
+by protected apply run [42985628568](https://github.com/Bepoadewale/davdeploy/actions/runs/42985628568).
+PR #344 published the new immutable customer Quick Create template while
+retaining the former 7e URL. Both old and new public URLs returned HTTP 200;
+the S3 objects remain versioned and AES256-encrypted. The protected
+`terraform-plan` environment now points to the new f3d9e1 URL. Control-plane
+plan run [42985045247](https://github.com/Bepoadewale/davdeploy/actions/runs/42985045247)
+and its exact saved-plan apply changed six Lambda functions in place with zero
+creates or destroys. The plan manifest digest is
+`c6a7f6577ee92645dd8f570e5736f2fee64fdea00819385048b5ed041cd78733`.
+Database migration verification passed. All six functions are Active with
+successful updates, and `/healthz` returned `{"status":"ok","product":"davdeploy"}`.
+
+The Nova plan-review, plan-only runner, plan-role verification, and Terraform
+state API flags remain `false`. The existing legacy `ALLOW_CLOUD_APPLY=true`
+configuration was not changed by this rollout and does not enable the Nova
+saved-plan path. No Nova-generated customer plan or customer workload has been
+applied, operated, or certified. Pricing remains unavailable for approval;
+Nova plan generation, exact costed approval, customer health, recovery, and
+teardown remain incomplete. Full template-host and protected release evidence
+is in `docs/test/test345.md`.
+
+# Historical hosted execution status — 2026-11-11, PR #340
 
 Backend PR #340 merged as `8d3b4764bcefae8cb9f93a930b064e10fd893762` and is
 deployed in the protected control-plane release. Exact plan/apply and post-

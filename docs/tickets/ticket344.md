@@ -65,12 +65,14 @@ address.
 
 ## Acceptance status
 
-The final implementation/evidence head is `dda5068`. Focused tests passed (9),
-Terraform format and all-root validation passed, and documentation conventions
-and diff checks passed. The corrected read-only hosted plan proposes one object
-creation (the new f3d9e1 template), moves the old active state to the retained
-7e key, and has zero changes or destroys. All seven required checks passed in
-run `42982526696`. No AWS write occurred.
+PR #344 merged as `10103149d444805877b464ae4e9afe056f8af3f8`. Focused tests
+passed (9), Terraform format and all-root validation passed, docs conventions
+and diff checks passed, and all seven final-head CI checks passed in run
+`42983095723`. The merged-main saved plan created one object (the new f3d9e1
+template), moved the active state to the retained 7e key, and had zero updates
+or destroys. The exact saved plan was applied through the repository PID
+monitor and completed successfully. PR #345 records object metadata, URL
+checks, and the separate control-plane rollout.
 
 ## Tests / validation performed
 
@@ -89,8 +91,7 @@ shows a safe object addition with the old key retained.
 
 ## Follow-up work
 
-After merge, re-run the protected account-guarded template-host plan. If safe,
-apply through the repository Terraform PID monitor, verify old and new object
-metadata, update the control-plane template URL, and deploy via the protected
-serverless-control-plane plan/apply workflow. Record these runtime changes in
-a separate evidence PR.
+Follow-up completed in PR #345: the protected template-host saved plan was
+applied, both public URLs were verified, the protected URL variable was
+updated, and the serverless control plane was deployed through its saved-plan
+workflow. No customer stack or role was changed.

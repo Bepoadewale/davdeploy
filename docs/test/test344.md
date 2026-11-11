@@ -60,10 +60,11 @@ None. No cloud or local disposable resources were created by these checks.
 The initial plan refreshed the existing bucket and objects, then stopped at
 Terraform's configuration validation before proposing actions. A second plan
 proposed two creates because state showed the live 7e object under the `active`
-address and the configured 0e key had no S3 object. The corrected plan moves
-the active state to retained[7e], creates the new f3d9e1 object, and proposes
-zero destroy or in-place changes. No plan was applied; no object upload,
-deletion, customer role change, or control-plane deployment occurred.
+address and the configured 0e key had no S3 object. The corrected plan moved
+the active state to retained[7e], created the new f3d9e1 object, and proposed
+zero destroys or in-place changes. That exact merged-main plan was later
+applied successfully; see `docs/test/test345.md` for deployment and URL checks.
+No customer role or workload changed.
 
 ## Resources created / teardown
 
@@ -71,6 +72,7 @@ None. No teardown was needed.
 
 ## Final boundary
 
-The Terraform failure is evidence that PR #343 alone cannot publish the new
-object. The corrected plan is read-only and preserves the old URL. Any apply
-must use a freshly saved and reviewed plan after this PR merges.
+The Terraform failure is evidence that PR #343 alone could not publish the new
+object. PR #344 corrected the mapping, and the exact merged-main plan was
+applied successfully. See `docs/test/test345.md`; no customer role or workload
+was deployed.

@@ -53,12 +53,13 @@ stacks and saved setup links keep working.
 
 ## Acceptance status
 
-The retention key and state move are in bootstrap commit `93dfea5`; regression
-coverage and evidence are in `ea29d07`. The focused test (9 passed), all-root
-Terraform validation, docs convention check, and diff check pass locally. All
-seven required CI checks passed in run `42980400532`, including clean-room
-integration. No Terraform apply or CloudFormation template publication has
-occurred.
+The retention key and state move were implemented in commits `93dfea5` and
+`ea29d07`; PR #343 merged as `9eb5b79e35bb4f805de8bf6fc2450165b177f913`.
+Focused tests (9 passed), all-root Terraform validation, docs conventions,
+diff checks, and all seven CI jobs passed in run `42980959224`, including
+clean-room integration. PR #344 corrected the actual state move and was
+applied separately. PR #345 records that publication and control-plane URL
+rollout. No customer stack or role was changed.
 
 ## Tests / validation performed
 
@@ -77,7 +78,6 @@ and control-plane URL update require exact, separately reviewed plans.
 
 ## Follow-up work
 
-After this PR merges, plan and review the separate `connection-template-host`
-Terraform root, apply only if the exact plan creates the new version while
-retaining the old one, then update the control-plane's template URL and deploy
-it through the protected serverless-control-plane plan/apply workflow.
+Follow-up completed in PRs #344 and #345: the exact host plan was applied with
+the old URL retained, and the protected control-plane URL was deployed and
+verified. No customer stack or role was changed.
