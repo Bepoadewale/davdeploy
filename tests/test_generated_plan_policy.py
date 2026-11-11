@@ -760,6 +760,20 @@ def test_exact_passrole_with_literal_service_condition_requires_human_review():
     assert "iam_passrole_requires_review" in codes(result)
 
 
+def test_scoped_read_only_iam_policy_remains_eligible():
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+                "Resource": "arn:aws:s3:::application-files/*",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.findings == ()
+
+
 def test_specific_same_account_assume_role_requires_human_review():
     result = evaluate_application_policy(
         {
