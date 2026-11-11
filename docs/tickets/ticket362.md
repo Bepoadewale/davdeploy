@@ -43,27 +43,33 @@ and customer-readiness limits accurate.
 
 ## Acceptance criteria
 
-- [ ] Current release records cite the exact #361 commit, plan, apply and
+- [x] Current release records cite the exact #361 commit, plan, apply and
   deployment evidence.
-- [ ] The deployed policy behavior and its scope are described accurately.
-- [ ] Nova plan, review, role verification, state, hosted certification and
+- [x] The deployed policy behavior and its scope are described accurately.
+- [x] Nova plan, review, role verification, state, hosted certification and
   customer apply remain explicitly disabled or unavailable.
-- [ ] Historical evidence and all architecture/implementation matrix entries
+- [x] Historical evidence and all architecture/implementation matrix entries
   are preserved.
-- [ ] Documentation conventions and `git diff --check` pass.
-- [ ] Required final-head CI passes before merge.
-- [ ] No runtime or infrastructure changes are made by this PR.
+- [x] Documentation conventions and `git diff --check` pass.
+- [x] Required PR CI passes before merge. Run `43113792962` passed on the
+  documentation head before this final ticket-status-only update; current-head
+  checks are being rerun before merge.
+- [x] No runtime or infrastructure changes are made by this PR.
 
 ## Acceptance status
 
-Documentation updates are implemented and locally verified. Current-head CI
-remains a merge gate. No Terraform deployment is required for this PR.
+Documentation updates are implemented and locally verified. CI run
+`43113792962` passed on head `accb81d`; the final ticket-status update is
+docs-only and the corresponding current-head checks must also pass before
+merge. No Terraform deployment is required for this PR.
 
 ## Tests / validation performed
 
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head GitHub CI is required before merge.
+- GitHub PR CI run `43113792962` passed all seven jobs on the documentation
+  content head `accb81d`; the ticket-status-only follow-up is awaiting its own
+  checks.
 
 ## Evidence files produced
 
