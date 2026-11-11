@@ -7,6 +7,7 @@ from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResourceOwnershipRecord
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
+    _check_rds_final_snapshot_changes,
     _path_contains_unknown,
     evaluate_generated_plan_policy,
 )
@@ -826,7 +827,7 @@ def test_unknown_database_encryption_is_denied_even_when_after_values_look_safe(
         resource(
             "aws_db_instance.database",
             "aws_db_instance",
-            {"publicly_accessible": False, "storage_encrypted": True},
+            {"publicly_accessible": False, "storage_encrypted": True, "backup_retention_period": 7},
         )
     )
     document["resource_changes"].append(
@@ -843,8 +844,41 @@ def test_unknown_database_encryption_is_denied_even_when_after_values_look_safe(
                 "resource_id": "database",
                 "resource_type": "aws_db_instance",
                 "name": "database",
-                "arguments": {"publicly_accessible": False, "storage_encrypted": True},
+                "arguments": {"publicly_accessible": False, "storage_encrypted": True, "backup_retention_period": 7},
                 "rationale": "Keep application data private and encrypted.",
+            },
+        ]
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_unknown_rds_backup_retention_is_denied_even_when_after_values_look_safe():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            "aws_db_instance.database",
+            "aws_db_instance",
+            {"publicly_accessible": False, "storage_encrypted": True, "backup_retention_period": 7},
+        )
+    )
+    document["resource_changes"].append(
+        change(
+            "aws_db_instance.database",
+            "aws_db_instance",
+            after_unknown={"backup_retention_period": True},
+        )
+    )
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "database",
+                "resource_type": "aws_db_instance",
+                "name": "database",
+                "arguments": {"publicly_accessible": False, "storage_encrypted": True, "backup_retention_period": 7},
+                "rationale": "Keep application data private, encrypted, and recoverable.",
             },
         ]
     )
@@ -1317,9 +1351,9 @@ def test_wildcard_role_trust_and_administrator_attachment_are_denied():
 @pytest.mark.parametrize(
     "kind,values,expected",
     [
-        ("aws_db_instance", {"publicly_accessible": True, "storage_encrypted": True}, "database_publicly_accessible"),
-        ("aws_db_instance", {"publicly_accessible": False, "storage_encrypted": False}, "database_encryption_required"),
-        ("aws_db_instance", {"storage_encrypted": True}, "database_publicly_accessible"),
+        ("aws_db_instance", {"publicly_accessible": True, "storage_encrypted": True, "backup_retention_period": 7}, "database_publicly_accessible"),
+        ("aws_db_instance", {"publicly_accessible": False, "storage_encrypted": False, "backup_retention_period": 7}, "database_encryption_required"),
+        ("aws_db_instance", {"storage_encrypted": True, "backup_retention_period": 7}, "database_publicly_accessible"),
     ],
 )
 def test_database_publicness_and_encryption_fail_closed(kind, values, expected):
@@ -1328,6 +1362,173 @@ def test_database_publicness_and_encryption_fail_closed(kind, values, expected):
     proposal_value = proposal([{"resource_id": "database", "resource_type": kind, "name": "database", "arguments": {"identifier": "database", **values}, "rationale": "Database."}])
     result = evaluate(plan(resources, [change(address, kind), change("terraform_data.account_guard", "terraform_data")]), proposal_value)
     assert expected in codes(result)
+
+
+@pytest.mark.parametrize(
+    "kind,retention",
+    [
+        ("aws_db_instance", _OMIT),
+        ("aws_db_instance", "seven"),
+        ("aws_rds_cluster", _OMIT),
+        ("aws_rds_cluster", 1.5),
+    ],
+)
+def test_rds_backup_retention_must_be_explicit_and_well_formed(kind, retention):
+    values = {"publicly_accessible": False, "storage_encrypted": True}
+    if retention is not _OMIT:
+        values["backup_retention_period"] = retention
+    address = f"{kind}.database"
+    resources = [
+        resource(address, kind, values),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "database",
+                "resource_type": kind,
+                "name": "database",
+                "arguments": {"identifier": "database", **values},
+                "rationale": "Database with an explicit backup policy.",
+            }
+        ]
+    )
+    result = evaluate(
+        plan(resources, [change(address, kind), change("terraform_data.account_guard", "terraform_data")]),
+        proposal_value,
+    )
+    assert "database_backup_retention_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "kind,retention,expected",
+    [
+        ("aws_db_instance", 0, "database_backup_retention_disabled"),
+        ("aws_db_instance", -1, "database_backup_retention_invalid"),
+        ("aws_db_instance", 36, "database_backup_retention_invalid"),
+        ("aws_db_instance", True, "database_backup_retention_invalid"),
+        ("aws_rds_cluster", 0, "database_backup_retention_invalid"),
+        ("aws_rds_cluster", 7, None),
+    ],
+)
+def test_rds_backup_retention_is_bounded_and_disabled_instance_backups_require_review(kind, retention, expected):
+    values = {
+        "publicly_accessible": False,
+        "storage_encrypted": True,
+        "backup_retention_period": retention,
+    }
+    address = f"{kind}.database"
+    resources = [
+        resource(address, kind, values),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "database",
+                "resource_type": kind,
+                "name": "database",
+                "arguments": {"identifier": "database", **values},
+                "rationale": "Database with an explicit backup policy.",
+            }
+        ]
+    )
+    result = evaluate(
+        plan(resources, [change(address, kind), change("terraform_data.account_guard", "terraform_data")]),
+        proposal_value,
+    )
+    if expected is None:
+        assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+        assert "database_backup_retention_invalid" not in codes(result)
+    else:
+        assert expected in codes(result)
+
+
+@pytest.mark.parametrize(
+    "skip_snapshot,identifier,expected",
+    [
+        (True, None, "rds_final_snapshot_skipped"),
+        (False, "final-database-snapshot", None),
+        (False, None, "rds_final_snapshot_identifier_missing"),
+    ],
+)
+def test_rds_replacement_requires_valid_final_snapshot_or_explicit_review(skip_snapshot, identifier, expected):
+    address = "aws_db_instance.database"
+    before = {
+        "tags": ownership_scope().tags(),
+        "skip_final_snapshot": skip_snapshot,
+        "final_snapshot_identifier": identifier,
+    }
+    values = {
+        "publicly_accessible": False,
+        "storage_encrypted": True,
+        "backup_retention_period": 7,
+    }
+    document = plan(
+        [
+            resource(address, "aws_db_instance", values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        [
+            change(
+                address,
+                "aws_db_instance",
+                ("delete", "create"),
+                before=before,
+                after={"tags": ownership_scope().tags()},
+            ),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "database",
+                "resource_type": "aws_db_instance",
+                "name": "database",
+                "arguments": {"identifier": "database", **values},
+                "rationale": "Database with explicit retention and encryption.",
+            }
+        ]
+    )
+    result = evaluate(document, proposal_value)
+    if expected is None:
+        assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+        assert "rds_final_snapshot_skipped" not in codes(result)
+        assert "destructive_change_requires_review" in codes(result)
+    else:
+        assert expected in codes(result)
+
+
+@pytest.mark.parametrize(
+    "before,expected",
+    [
+        ({"skip_final_snapshot": True}, "rds_final_snapshot_skipped"),
+        ({"skip_final_snapshot": False, "final_snapshot_identifier": "final-db"}, None),
+        ({"skip_final_snapshot": False}, "rds_final_snapshot_identifier_missing"),
+        ({"skip_final_snapshot": "unknown"}, "rds_final_snapshot_setting_unknown"),
+    ],
+)
+def test_rds_delete_final_snapshot_policy(before, expected):
+    findings = []
+    _check_rds_final_snapshot_changes(
+        {
+            "resource_changes": [
+                {
+                    "address": "aws_db_instance.database",
+                    "type": "aws_db_instance",
+                    "change": {"actions": ["delete"], "before": before},
+                }
+            ]
+        },
+        findings,
+    )
+    codes_found = {finding.code for finding in findings}
+    if expected is None:
+        assert "rds_final_snapshot_skipped" not in codes_found
+        assert "rds_final_snapshot_identifier_missing" not in codes_found
+    else:
+        assert expected in codes_found
 
 
 def test_unexpected_region_or_resource_inventory_is_denied():

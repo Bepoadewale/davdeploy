@@ -47,7 +47,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-11.10"
+POLICY_VERSION = "nova-generated-plan-2026-11-11.11"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -89,12 +89,14 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("storage_encrypted",),
         ("deletion_protection",),
         ("skip_final_snapshot",),
+        ("backup_retention_period",),
     ),
     "aws_rds_cluster": (
         ("publicly_accessible",),
         ("storage_encrypted",),
         ("deletion_protection",),
         ("skip_final_snapshot",),
+        ("backup_retention_period",),
     ),
     "aws_rds_cluster_instance": (("publicly_accessible",),),
     "aws_redshift_cluster": (("publicly_accessible",), ("encrypted",)),
@@ -195,6 +197,7 @@ def _evaluate(
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
+    _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
 
     if summary.delete_count or summary.replacement_count:
@@ -807,8 +810,77 @@ def _check_databases(resources: tuple[dict[str, Any], ...], findings: list[PlanP
             _deny(findings, "database_publicly_accessible", address, "The plan makes a database reachable from the public internet.")
         if kind in encrypted_database_types and values.get("storage_encrypted") is not True:
             _deny(findings, "database_encryption_required", address, "The plan does not confirm encryption at rest for this database.")
+        if kind == "aws_db_instance":
+            retention = values.get("backup_retention_period")
+            if not isinstance(retention, int) or isinstance(retention, bool) or not 0 <= retention <= 35:
+                _deny(
+                    findings,
+                    "database_backup_retention_invalid",
+                    address,
+                    "The plan does not confirm a valid RDS backup retention period.",
+                )
+            elif retention == 0:
+                _review(
+                    findings,
+                    "database_backup_retention_disabled",
+                    address,
+                    "Automated backups and point-in-time recovery are disabled for this database. Confirm that this data-retention choice is intended.",
+                )
+        if kind == "aws_rds_cluster":
+            retention = values.get("backup_retention_period")
+            if not isinstance(retention, int) or isinstance(retention, bool) or not 1 <= retention <= 35:
+                _deny(
+                    findings,
+                    "database_backup_retention_invalid",
+                    address,
+                    "The plan does not confirm a valid RDS cluster backup retention period.",
+                )
         if kind == "aws_redshift_cluster" and values.get("encrypted") is not True:
             _deny(findings, "database_encryption_required", address, "The plan does not confirm encryption at rest for this database.")
+
+
+def _check_rds_final_snapshot_changes(
+    document: dict[str, Any], findings: list[PlanPolicyFinding]
+) -> None:
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        raise GeneratedPlanPolicyError("resource changes are malformed")
+    for item in changes:
+        if not isinstance(item, dict) or item.get("type") not in {"aws_db_instance", "aws_rds_cluster"}:
+            continue
+        change_value = item.get("change")
+        if not isinstance(change_value, dict):
+            raise GeneratedPlanPolicyError("resource change is malformed")
+        actions = change_value.get("actions")
+        if not isinstance(actions, list) or not all(isinstance(action, str) for action in actions):
+            raise GeneratedPlanPolicyError("resource change actions are malformed")
+        # Terraform represents replacement as delete + create.
+        if "delete" not in actions:
+            continue
+        before = change_value.get("before")
+        address = item.get("address")
+        if not isinstance(before, dict) or not isinstance(before.get("skip_final_snapshot"), bool):
+            _deny(
+                findings,
+                "rds_final_snapshot_setting_unknown",
+                address,
+                "DavDeploy could not verify whether this database change preserves a final snapshot.",
+            )
+            continue
+        if before["skip_final_snapshot"]:
+            _review(
+                findings,
+                "rds_final_snapshot_skipped",
+                address,
+                "This database will be removed or replaced without a final snapshot. Confirm that the data can be discarded.",
+            )
+        elif not isinstance(before.get("final_snapshot_identifier"), str) or not before["final_snapshot_identifier"].strip():
+            _deny(
+                findings,
+                "rds_final_snapshot_identifier_missing",
+                address,
+                "A final snapshot is required for this database change, but its identifier is missing.",
+            )
 
 
 def _check_ebs_volumes(
