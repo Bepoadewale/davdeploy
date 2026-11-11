@@ -1,7 +1,10 @@
 # test340 — customer Nova plan-role permission profile
 
 Date: 2026-11-11
-Execution type: Local code and policy validation only. No customer AWS API calls, AWS resource changes, or Nova model calls.
+Execution type: Local code and policy validation for PR #340. Its implementation
+tests made no customer AWS API calls, changed no customer resources, and made no
+Nova model calls. The later protected production control-plane release is
+recorded separately in [test341](test341.md).
 Customer repository: Not applicable; this PR changes the DavDeploy backend and customer-role setup template.
 PR implementation head: `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`.
 Commit: `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b` — `feat: constrain Nova customer planning permissions`.
@@ -10,7 +13,8 @@ AWS region: None used for this test.
 
 ## Resources created
 
-None. No customer role was assumed and no AWS resources were created or changed.
+No customer resources. No customer role was assumed. The subsequent release
+updated six DavDeploy control-plane Lambda packages; see [test341](test341.md).
 
 ## Commands executed
 
@@ -47,7 +51,7 @@ limit.
 
 ## Teardown
 
-No AWS resources were created. After the clean-room run, only its dedicated
+No customer AWS resources were created. After the clean-room run, only its dedicated
 Docker Compose project `davdeploy_pr340_20261111` was stopped and removed,
 including its containers, generated network, and generated PostgreSQL volume.
 The clean-room worktree's generated `.venv` and `.local` were also removed by
@@ -59,5 +63,7 @@ resources, or shared production resources were removed.
 Passing local policy tests do not attest an installed customer role policy,
 AWS organization policies, customer account permissions, hosted worker
 behavior, regional pricing, approval, apply, health, recovery, or teardown.
-Hosted feature gates remain disabled. The existing customer setup role is not
-changed by this PR until the customer installs the updated template.
+Hosted feature gates remain disabled. The production release did not change an
+existing customer setup role; the revised customer template is not installed
+until a customer applies it. The production release and its exact evidence are
+recorded in [test341](test341.md).
