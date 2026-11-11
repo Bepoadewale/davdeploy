@@ -97,12 +97,13 @@ project and live CodeBuild build before issuing them.
   ID and derives build identity from SigV4, with its IAM permission restricted
   to the fixed project. All Nova planning gates remain off by default.
 - [x] Focused tests, `make verify`, Terraform validation and documentation
-  checks pass; all seven required GitHub checks pass on code/evidence commit
-  `ed85ef1`. Full verification used in-memory SQLite to avoid recreating the
+  checks pass; all seven required GitHub checks pass on implementation commit
+  `46d6f48`. Full verification used in-memory SQLite to avoid recreating the
   local runtime database path; focused state tests cover the no-store response
   headers.
-- [x] Fresh isolated `make local-proof`, full local demo/failure sequence, and
-  exact test-resource cleanup pass.
+- [x] Fresh isolated `make local-proof`, full local demo/failure sequence and
+  exact test-resource cleanup pass at both initial implementation and retry
+  fix commits.
 - [ ] Independent current-head review passes.
 - [x] No customer role, AWS workload, or infrastructure is mutated by tests.
 
@@ -112,7 +113,8 @@ Implementation, focused/full local verification and the isolated clean-room
 proof are complete. Only the exact PR-specific test worktree, Compose
 containers, network and PostgreSQL volume were removed; existing DavDeploy
 containers and data remain untouched. All seven required GitHub checks passed
-for code/evidence commit `ed85ef1`; independent review remains the merge gate.
+for implementation commit `46d6f48`; all review threads have been addressed
+and resolved by the PR author.
 
 ## Tests / validation performed
 

@@ -41,6 +41,13 @@ default off.
 - After adding the publication retry, the same in-memory `make verify` command
   passed **903 tests**; Terraform formatting/validation, docs conventions,
   `git diff --check` and the `.local` absence check also passed.
+- At implementation commit `46d6f48`, a second fresh detached worktree using
+  Compose project `davdeploy-pr348-retry-cleanroom` passed `make local-proof`,
+  all simple/complex/degraded/Day-2/policy/readiness-failure demos, trace checks
+  and verification (903 tests). The run's uniquely named containers, network,
+  PostgreSQL volume, generated `.venv`/`.local` and worktree were removed;
+  the pre-existing DavDeploy container remained running.
+- GitHub CI run `43031093621` passed all seven required jobs on `46d6f48`.
 - `terraform fmt -check -recursive infrastructure/terraform/serverless-control-plane`:
   passed.
 - `terraform -chdir=infrastructure/terraform/serverless-control-plane init
