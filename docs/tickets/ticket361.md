@@ -1,7 +1,8 @@
 # ticket361 — enforce explicit RDS backup and snapshot safety
 
-PR: [#361](https://github.com/Bepoadewale/davdeploy/pull/361) (draft; number reserved)
-Branch: `security/rds-retention-policy-361`
+PR: [#361](https://github.com/Bepoadewale/davdeploy/pull/361) (merged)
+Merge commit: `5775d766584f31f8a31b6b22e8e523b4e8a3f257`
+Branch: `security/rds-retention-policy-361` (deleted after merge)
 Base: `main`
 
 ## Problem / goal
@@ -14,9 +15,12 @@ flows and keep all Nova execution gates disabled.
 
 ## Current repo state
 
-- Backend `main` is `31fe14147182e830b69d3d9a97c2d8d67932e00c`; its merged-main
-  CI run `43105046826` passed all seven jobs.
-- `POLICY_CRITICAL_UNKNOWN_PATHS` currently covers RDS encryption, publicness,
+- This records the state when PR #361 was opened. Backend `main` before
+  implementation was `31fe14147182e830b69d3d9a97c2d8d67932e00c`; the Nova
+  runtime gates were disabled.
+- PR #361 final-head CI run `43109585051` passed all seven jobs; current-head
+  Codex review reported no major issues. Merged-main CI `43110311710` passed.
+- At PR start, `POLICY_CRITICAL_UNKNOWN_PATHS` covered RDS encryption, publicness,
   deletion protection and `skip_final_snapshot`, but not
   `backup_retention_period`.
 - `_check_databases` denies public RDS resources and unknown encryption but
@@ -56,16 +60,19 @@ flows and keep all Nova execution gates disabled.
 - [x] Existing safe RDS plan cases and unrelated policy tests remain valid.
 - [x] Focused tests, full `make verify`, clean-room `make local-proof`, docs
   conventions, and diff checks pass.
-- [x] Required final-head GitHub CI passes before merge (run `43108729167`, head
-  `4cda796155dfc7e392bfe61672f436fc6fa2b10d`).
-- [x] No runtime gate is enabled and no AWS/customer infrastructure is changed.
+- [x] Required final-head GitHub CI passes before merge (run `43109585051`, head
+  `23c0e305052885f4dff40836896fe4823f2fbfb2`).
+- [x] Nova runtime gates remain disabled and no customer infrastructure is
+  changed. The policy source was deployed to the DavDeploy control plane under
+  the protected release recorded in `docs/test/test361.md`.
 
 ## Acceptance status
 
-Implemented and verified locally and on final-head GitHub CI. The change adds
-critical unknown-value checks, bounded retention validation, explicit review
-for disabled instance backups and RDS replacement without a final snapshot,
-plus fail-closed snapshot metadata checks. It does not deploy or enable Nova.
+Implemented, verified locally, merged, and deployed to the DavDeploy control
+plane. The change adds critical unknown-value checks, bounded retention
+validation, explicit review for disabled instance backups and RDS changes
+without a final snapshot, plus fail-closed snapshot metadata checks. Nova
+runtime gates remain disabled; this is not a customer workload deployment.
 
 ## Tests / validation performed
 
@@ -74,20 +81,24 @@ plus fail-closed snapshot metadata checks. It does not deploy or enable Nova.
   and Compose configuration passed.
 - `make local-proof`: local stack readiness, API/CORS contract, customer-plan
   E2E, fixture seeding, trace check, and `make verify` passed (986 tests).
-- Documentation convention and diff checks are recorded in `docs/test/test361.md`.
-- No AWS workload test or infrastructure mutation was performed.
+- Documentation convention and diff checks passed.
+- Protected control-plane plan `43111051028`, exact saved-plan apply
+  `43112125588`, deployment `7722764924`; migrations and live health/Lambda
+  checks passed. No customer workload plan or infrastructure mutation was
+  performed.
 
 ## Evidence files produced
 
-`docs/test/test361.md` will record local verification and the non-AWS execution
-boundary required for a runnable PR.
+`docs/test/test361.md` records local verification and the exact control-plane
+release evidence, while keeping customer-workload evidence limits explicit.
 
 ## Boundaries
 
-This PR changes actual-plan security policy and tests only. It does not
+The implementation PR changed actual-plan security policy and tests. The
+protected release updated DavDeploy control-plane Lambdas only. It does not
 integrate pricing, enable plan generation, install a customer role, dispatch a
-hosted plan, or add customer apply/destroy behavior. PR #318 pricing work stays
-closed and held.
+hosted customer plan, or add customer apply/destroy behavior. PR #318 pricing
+work stays closed and held.
 
 ## Follow-up work
 

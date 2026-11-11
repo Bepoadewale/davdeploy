@@ -56,13 +56,14 @@ and customer-readiness limits accurate.
 
 ## Acceptance status
 
-Not started. This PR is documentation-only and does not perform a Terraform
-deployment.
+Documentation updates are implemented and locally verified. Current-head CI
+remains a merge gate. No Terraform deployment is required for this PR.
 
 ## Tests / validation performed
 
-Planned: `python3 scripts/check_doc_conventions.py` and `git diff --check`.
-Final-head GitHub CI is required before merge.
+- `python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head GitHub CI is required before merge.
 
 ## Evidence files produced
 
