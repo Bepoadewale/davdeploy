@@ -3,7 +3,7 @@
 Date: 2026-11-11
 Execution type: Focused and full local tests plus isolated clean-room verification
 Customer repository: N/A; no customer repository or workload was used
-Commit: `b20b73d` (implementation)
+Commit: `eddfc92` (final implementation and contract-test head; clean-room proof at `b20b73d`)
 AWS account: N/A; no AWS commands were required for this implementation
 AWS region: N/A; no AWS commands were required for this implementation
 

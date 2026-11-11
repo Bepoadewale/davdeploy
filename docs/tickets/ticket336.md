@@ -48,23 +48,25 @@ configuration incomplete.
 - [x] Contract tests assert the mappings and fail-closed Terraform validations.
 - [x] No hosted state API, runner, or customer workload is enabled by this PR.
 - [x] Focused and full local verification pass.
-- [ ] Required GitHub CI checks pass.
+- [x] Required GitHub CI checks pass.
 
 ## Acceptance status
 
 Workflow mappings, explicit allowlist entries, static contract checks, and
 configuration documentation are implemented. Focused, full, and isolated
-clean-room verification passed. Required GitHub CI remains.
+clean-room verification passed. All seven required GitHub checks passed for
+head `eddfc92` in run `42946980091`.
 
 ## Tests / validation performed
 
 `docs/test/test336.md` records 16 focused tests, `make verify` (866 tests),
 and isolated `make local-proof` (866 tests), plus local cleanup evidence.
-Required GitHub CI is pending.
+All seven required GitHub checks passed in run `42946980091` for head
+`eddfc92`.
 
 ## Evidence files produced
 
-- `docs/test/test336.md` will record test results and boundaries.
+- `docs/test/test336.md` records test results and boundaries.
 
 ## Boundaries
 
