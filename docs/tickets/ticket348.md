@@ -91,30 +91,32 @@ project and live CodeBuild build before issuing them.
   to the fixed project. All Nova planning gates remain off by default.
 - [x] Focused tests, `make verify`, Terraform validation and documentation
   checks pass; all seven required GitHub checks pass on implementation commit
-  `7f66011`.
-- [ ] Fresh `make local-proof` and independent current-head review pass.
+  `1da2f97`.
+- [x] Fresh isolated `make local-proof`, full local demo/failure sequence, and
+  exact test-resource cleanup pass.
+- [ ] Independent current-head review passes.
 - [x] No customer role, AWS workload, or infrastructure is mutated by tests.
 
 ## Acceptance status
 
-Implementation and focused/full local verification are complete. The isolated
-clean-room proof is awaiting permission to remove only its exact isolated
-Compose resources and temporary worktree after completion. Existing DavDeploy
-containers, databases and their data will remain untouched. All seven required
-GitHub checks passed for implementation commit `7f66011`; independent review
-and clean-room proof remain the merge gate.
+Implementation, focused/full local verification and the isolated clean-room
+proof are complete. Only the exact PR-specific test worktree, Compose
+containers, network and PostgreSQL volume were removed; existing DavDeploy
+containers and data remain untouched. All seven required GitHub checks passed
+for implementation commit `1da2f97`; independent review remains the merge gate.
 
 ## Tests / validation performed
 
 - Focused suite: 124 passed across Terraform state identity, Nova plan worker,
-  infrastructure contract, customer connection contract and product tests.
+  infrastructure contract, customer connection contract and product tests;
+  final focused Terraform-state tests passed (26).
 - `make verify`: 899 passed; Ruff, Actions configuration, OpenAPI and Compose
   configuration checks passed.
 - Terraform formatting/validation, focused tests, documentation conventions
-  and `git diff --check` passed. GitHub run `43023798614` passed all seven
-  required jobs for implementation commit `7f66011`; isolated `make
-  local-proof` and independent review remain pending. No AWS calls or customer
-  infrastructure changes were made.
+  and `git diff --check` passed. GitHub run `43025299664` passed all seven
+  required jobs for implementation commit `1da2f97`. The full isolated local
+  proof and cleanup passed. No AWS calls or customer infrastructure changes
+  were made; independent current-head review remains pending.
 
 ## Evidence files produced
 

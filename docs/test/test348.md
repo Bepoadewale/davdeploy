@@ -25,7 +25,8 @@ default off.
 ## Commands executed
 
 - Focused broker, worker, infrastructure-contract, customer-connection and
-  product tests: **124 passed**.
+  product tests: **124 passed** before the final state-bootstrap audit addition;
+  focused Terraform-state tests then passed (**26 passed**).
 - `make verify`: **899 passed**; Ruff, configuration checks, OpenAPI snapshot
   and Docker Compose configuration passed. One existing Starlette/httpx
   deprecation warning remains.
@@ -34,6 +35,14 @@ default off.
 - `terraform -chdir=infrastructure/terraform/serverless-control-plane init
   -backend=false -lockfile=readonly` and `terraform ... validate`: passed.
 - `git diff --check`: passed.
+- At commit `1da2f97` in a fresh detached worktree with the unique Compose
+  project `davdeploy-pr348-cleanroom`, `make local-proof` passed. The extra
+  `demo-simple`, `demo-complex`, `demo-degraded`, `demo-day2`, `demo-failure`
+  and `demo-readiness-failure` targets, `trace-check` and `verify` also passed.
+- `make clean-local` removed that exact isolated project's containers,
+  network and PostgreSQL volume, plus its generated `.venv` and `.local`; the
+  exact worktree was then removed. The pre-existing DavDeploy container was
+  verified still running.
 - No AWS or Bedrock calls were made. No customer role was assumed and no AWS
   resource was created or changed.
 
@@ -44,13 +53,15 @@ tests. Both the plan-credential broker and Terraform-state bootstrap derive
 the build ID from the authenticated CodeBuild session; each signed request
 carries only a durable run ID. Their CodeBuild IAM permissions are scoped to
 the fixed project's build ARN. Both credential issuances record a non-secret
-audit event, committed before credentials are returned. The configured production
-path remains disabled, and no hosted plan or customer role assumption was
-attempted.
+audit event, committed before credentials are returned. The configured
+production path remains disabled, and no hosted plan or customer role
+assumption was attempted.
 
 ## Resources created
 
-None. Tests used local fakes and did not start containers or contact AWS.
+The isolated local Compose stack, network and PostgreSQL volume were created
+for this proof and removed after it completed. No AWS or customer resources
+were created.
 
 ## Limitations
 
@@ -61,16 +72,17 @@ customer workload. The credential broker and Nova runner remain disabled in
 hosted AWS. The PR does not grant a general CodeBuild caller access: the AWS
 IAM policy requires the fixed project's `codebuild:BuildArn`, and the API
 derives the build ID from the authenticated `AWSCodeBuild-<build-UUID>` session
-instead of accepting it from the request. GitHub CI run `43023798614` passed
-all seven required checks for implementation commit `7f66011`. Current-head
-independent review and the full local clean-room proof remain pending. The
-proof will use a separate Compose project; approval to remove its exact
-generated artifacts is still pending.
+instead of accepting it from the request. GitHub CI run `43025299664` passed
+all seven required checks for implementation commit `1da2f97`. The isolated
+local clean-room proof also passed and its temporary resources were removed.
+Current-head independent review remains pending. This local fixture workflow
+does not exercise the hosted Nova runner or a customer AWS role.
 
 ## Teardown
 
-No cloud or local infrastructure resources were created for these checks; no
-teardown was required.
+No AWS or customer infrastructure resources were created. The isolated local
+test containers, network, volume and worktree were removed after the run;
+unrelated DavDeploy resources were retained.
 
 ## Final boundary
 
