@@ -61,9 +61,9 @@ def make_input_document(
     revision_id="revision-a",
     control_plane_run_id=None,
     environment_id="production",
+    region="us-east-1",
 ):
     build_arn = build_arn or build_arn_for(run_id)
-    region = "us-east-1"
     source_plan_id = f"source-{plan_id}"
     revision = {
         "target": {
@@ -99,6 +99,7 @@ def make_input_document(
         requirements=WorkloadRequirements(region=region),
     )
     request_document = {
+        "contract": "davdeploy.nova-plan-request.v1",
         "organization_id": organization_id,
         "project_id": project_id,
         "plan_id": plan_id,
@@ -107,10 +108,14 @@ def make_input_document(
         "target_account_id": account_id,
         "region": region,
         "connection_id": connection_id,
+        "plan_role_arn": f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection_id}",
         "source_deployment_plan_id": source_plan_id,
+        "generator_model": "fixture-nova-model",
+        "runner_project": PROJECT,
     }
     proposal_document = proposal.model_dump(mode="json")
     return {
+        **request_document,
         "contract": codebuild_runner.INPUT_CONTRACT,
         "run_id": run_id,
         "control_plane_run_id": control_plane_run_id or run_id,
@@ -123,10 +128,7 @@ def make_input_document(
         "revision_sha256": revision_sha256,
         "proposal": proposal_document,
         "proposal_sha256": canonical_json_digest(proposal_document),
-        "plan_role": {
-            "arn": f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection_id}",
-            "external_id": external_id,
-        },
+        "plan_role": {"arn": f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection_id}"},
         "ownership_scope": {
             "organization_id": ownership.organization_id,
             "workspace_id": ownership.workspace_id,
@@ -138,6 +140,7 @@ def make_input_document(
             "plan_id_sha256": ownership.plan_id_sha256(),
             "tags": ownership.tags(),
         },
+        "created_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
 
 
@@ -155,6 +158,9 @@ def build_env(run_id=RUN_ID, project=PROJECT, build_arn=None):
         "DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN": KMS_KEY,
         "DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER": ACCOUNT_A,
         "AWS_DEFAULT_REGION": "us-east-1",
+        "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL": (
+            "https://fixture.execute-api.us-east-1.amazonaws.com/api/v1/nova-plan/credentials"
+        ),
     }
 
 
@@ -234,28 +240,38 @@ class FakeS3:
 
 class FakeSTS:
     def __init__(self, accepted_external_ids):
-        self.accepted_external_ids = accepted_external_ids
+        self.accepted_role_arns = set(accepted_external_ids)
         self.calls = []
 
-    def assume_role(self, **kwargs):
+    def __call__(self, **kwargs):
         self.calls.append(kwargs)
-        if self.accepted_external_ids.get(kwargs["RoleArn"]) != kwargs["ExternalId"]:
-            raise ClientError(
-                {"Error": {"Code": "AccessDenied", "Message": "external ID mismatch"}},
-                "AssumeRole",
-            )
-        return {
-            "Credentials": {
+        if kwargs["expected_role_arn"] not in self.accepted_role_arns:
+            raise codebuild_runner.NovaPlanCredentialError("credential broker denied role")
+        return SimpleNamespace(
+            role_arn=kwargs["expected_role_arn"],
+            account_id=kwargs["expected_account_id"],
+            region=kwargs["region"],
+            policy_version=kwargs["expected_policy_version"],
+            policy_sha256=kwargs["expected_policy_sha256"],
+            boto3_credentials=lambda: {
                 "AccessKeyId": "ASIAFIXTUREACCESSKEY",
                 "SecretAccessKey": "fixture-secret-credential",
                 "SessionToken": "fixture-session-token",
-            }
-        }
+            },
+        )
 
 
 class FakeSession:
     def __init__(self, **kwargs):
         self.credentials = kwargs
+
+    def get_credentials(self):
+        frozen = SimpleNamespace(
+            access_key="ASIAFIXTUREACCESSKEY",
+            secret_key="fixture-codebuild-secret",
+            token="fixture-codebuild-session-token",
+        )
+        return SimpleNamespace(get_frozen_credentials=lambda: frozen)
 
     def client(self, name):
         assert name == "sts"
@@ -360,12 +376,12 @@ def run_build(
         RUN_ID,
         environment=env or build_env(),
         s3_client=s3,
-        sts_client=sts,
         runner=runner,
         workspace_root=tmp_path,
         input_poll_attempts=1,
         input_poll_interval_seconds=0,
         state_bootstrapper=state_bootstrapper,
+        credential_requester=sts,
     )
     return result, document, key, version_id, s3, sts, runner
 
@@ -379,25 +395,11 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
 
     assert s3.head_calls == [(BUCKET, input_key, ACCOUNT_A)]
     assert s3.get_calls == [(BUCKET, input_key, input_version, ACCOUNT_A)]
-    assert sts.calls[0]["RoleArn"] == f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}"
-    assert sts.calls[0]["ExternalId"] == EXTERNAL_A
-    assert sts.calls[0]["RoleSessionName"] == f"davdeploy-nova-plan-{RUN_ID[:8]}"
-    session_policy = json.loads(sts.calls[0]["Policy"])
-    assert {statement["Effect"] for statement in session_policy["Statement"]} == {
-        "Allow",
-        "Deny",
-    }
-    deny = next(
-        statement for statement in session_policy["Statement"] if statement["Effect"] == "Deny"
-    )
-    assert "s3:GetObject" not in deny["NotAction"]
-    assert "lambda:InvokeFunction" not in deny["NotAction"]
-    allow = next(
-        statement for statement in session_policy["Statement"] if statement["Effect"] == "Allow"
-    )
-    assert "s3:GetObject" not in allow["Action"]
-    assert allow["Resource"] == ["arn:aws:s3:::fixture-app-storage"]
-    assert len(sts.calls[0]["Policy"]) <= 2048
+    assert sts.calls[0]["expected_role_arn"] == f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}"
+    assert sts.calls[0]["expected_account_id"] == ACCOUNT_A
+    assert sts.calls[0]["expected_policy_sha256"] == runner.calls[0]["plan_access_policy_sha256"]
+    assert "external_id" not in document["plan_role"]
+    assert EXTERNAL_A not in json.dumps(document)
     assert runner.calls[0]["aws_credentials"]["SecretAccessKey"] == "fixture-secret-credential"
     assert len(s3.put_calls) == 2
 
@@ -430,6 +432,15 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
     assert result["saved_plan"].version_id == "output-version-1"
     assert not hasattr(runner, "apply")
     assert not hasattr(runner, "destroy")
+
+
+def test_broker_checks_customer_target_region_not_codebuild_region(monkeypatch, tmp_path):
+    document = make_input_document(region="us-west-2")
+    _result, _document, _key, _version, _s3, broker, runner = run_build(
+        monkeypatch, tmp_path, document=document
+    )
+    assert broker.calls[0]["region"] == "us-west-2"
+    assert runner.calls[0]["region"] == "us-west-2"
 
 
 def test_retry_attempt_can_bind_a_distinct_control_plane_request_id(monkeypatch, tmp_path):
@@ -501,7 +512,6 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
             "bootstrap_url": env["DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"],
             "state_api_url": env["DAVDEPLOY_TERRAFORM_STATE_API_URL"],
             "durable_run_id": control_plane_run_id,
-            "codebuild_build_id": env["CODEBUILD_BUILD_ID"],
             "region": "us-east-1",
         }
     ]
@@ -586,7 +596,7 @@ def test_enabled_remote_state_fails_closed_without_trusted_bootstrap_configurati
             RUN_ID,
             environment=env,
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -622,7 +632,7 @@ def test_enabled_remote_state_does_not_fall_back_when_bootstrap_fails(monkeypatc
             RUN_ID,
             environment=env,
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -648,7 +658,7 @@ def test_invalid_control_plane_request_id_is_rejected_before_assume_role(monkeyp
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -687,7 +697,7 @@ def test_tampered_input_wrong_run_build_or_tenant_stops_before_assume_role(
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -712,7 +722,7 @@ def test_wrong_input_version_is_rejected_before_assume_role(monkeypatch, tmp_pat
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -744,7 +754,7 @@ def test_input_revision_or_account_tampering_is_rejected_before_assume_role(
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -773,7 +783,7 @@ def test_input_body_digest_tampering_is_rejected_before_assume_role(monkeypatch,
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -803,7 +813,7 @@ def test_unsupported_proposal_fails_before_customer_role_assumption(monkeypatch,
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -849,7 +859,7 @@ def test_tampered_saved_plan_is_rejected_before_s3_write(tmp_path):
     assert s3.put_calls == []
 
 
-def test_cross_tenant_plan_role_fails_exact_external_id_trust(monkeypatch, tmp_path):
+def test_cross_account_plan_role_credentials_fail_identity_check(monkeypatch, tmp_path):
     build_arn = build_arn_for()
     document = make_input_document(
         build_arn=build_arn,
@@ -868,12 +878,12 @@ def test_cross_tenant_plan_role_fails_exact_external_id_trust(monkeypatch, tmp_p
     runner = FakePlanRunner()
     monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
 
-    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="could not be verified"):
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="account does not match"):
         codebuild_runner.run_nova_plan_build(
             RUN_ID,
             environment=build_env(),
             s3_client=s3,
-            sts_client=sts,
+            credential_requester=sts,
             runner=runner,
             workspace_root=tmp_path,
             input_poll_attempts=1,
@@ -881,8 +891,44 @@ def test_cross_tenant_plan_role_fails_exact_external_id_trust(monkeypatch, tmp_p
         )
 
     assert len(sts.calls) == 1
-    assert sts.calls[0]["RoleArn"] == role_b
-    assert sts.calls[0]["ExternalId"] == EXTERNAL_A
+    assert sts.calls[0]["expected_role_arn"] == role_b
+    assert sts.calls[0]["expected_account_id"] == ACCOUNT_B
+    assert runner.calls == []
+    assert s3.put_calls == []
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        lambda document: document.update(external_id=EXTERNAL_A),
+        lambda document: document["plan_role"].update(external_id=EXTERNAL_A),
+        lambda document: document["request_document"].update(unreviewed=True),
+    ],
+)
+def test_staged_input_rejects_secret_or_unrecognized_fields_before_broker_call(
+    monkeypatch, tmp_path, tamper
+):
+    document = make_input_document(build_arn=build_arn_for())
+    tamper(document)
+    s3 = FakeS3()
+    s3.seed_input(build_arn_for(), document)
+    broker = FakeSTS({f"arn:aws:iam::{ACCOUNT_A}:role/davdeployPlan-{CONNECTION_A}": EXTERNAL_A})
+    runner = FakePlanRunner()
+    monkeypatch.setattr(codebuild_runner.boto3, "Session", FakeSession)
+
+    with pytest.raises(codebuild_runner.NovaPlanBuildError, match="binding is invalid|role ARN"):
+        codebuild_runner.run_nova_plan_build(
+            RUN_ID,
+            environment=build_env(),
+            s3_client=s3,
+            credential_requester=broker,
+            runner=runner,
+            workspace_root=tmp_path,
+            input_poll_attempts=1,
+            input_poll_interval_seconds=0,
+        )
+
+    assert broker.calls == []
     assert runner.calls == []
     assert s3.put_calls == []
 
@@ -890,7 +936,8 @@ def test_cross_tenant_plan_role_fails_exact_external_id_trust(monkeypatch, tmp_p
 def test_customer_plan_role_trust_requires_external_id_and_read_only_permission_guard():
     template = (ROOT / "infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
     plan_role = template.split("  NovaPlanOnlyRole:", 1)[1].split("  ExecutionRole:", 1)[0]
-    assert "!Ref davdeployNovaPlanBrokerRoleArn" in plan_role
+    assert "!Ref davdeployNovaPlanBrokerRoleArn" not in plan_role
+    assert "AWS: !Ref davdeployDiscoveryBrokerRoleArn" in plan_role
     assert "StringEquals:" in plan_role
     assert "sts:ExternalId: !Ref ExternalId" in plan_role
     assert "Effect: Deny" in plan_role

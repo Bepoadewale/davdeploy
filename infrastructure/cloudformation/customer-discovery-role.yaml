@@ -1,14 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: davdeploy AWS connection. Nova plan role grants bounded planning metadata reads; the fixed planner applies a proposal-scoped explicit-deny session policy. Effective customer permissions are not attested; administrator pilot is separate.
+Description: davdeploy AWS connection. Nova plan role grants bounded planning metadata reads; the control-plane credential broker applies a proposal-scoped explicit-deny session policy. Effective customer permissions are not attested; administrator pilot is separate.
 Parameters:
   davdeployDiscoveryBrokerRoleArn:
     Type: String
   davdeployExecutionBrokerRoleArn:
     Type: String
-  davdeployNovaPlanBrokerRoleArn:
-    Type: String
-    Default: unused
-    AllowedPattern: "^(unused|arn:aws:iam::[0-9]{12}:role/.+)$"
   AccessMode:
     Type: String
     Default: discovery
@@ -22,7 +18,6 @@ Parameters:
 Conditions:
   CreateDiscoveryRole: !Not [!Equals [!Ref AccessMode, plan-only]]
   CreateNovaPlanOnlyRole: !Equals [!Ref AccessMode, plan-only]
-  CreateNovaPlanBrokerTrust: !Not [!Equals [!Ref davdeployNovaPlanBrokerRoleArn, unused]]
   CreateAdministratorPilotRole: !Equals [!Ref AccessMode, administrator-pilot]
 Resources:
   DiscoveryRole:
@@ -91,7 +86,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub "davdeployPlan-${ConnectionId}"
-      Description: DavDeploy does not attest effective permissions or later customer policy changes. Template grants bounded planning metadata reads; the fixed worker applies an explicit-deny proposal-scoped session policy.
+      Description: DavDeploy does not attest effective permissions or later customer policy changes. Template grants bounded planning metadata reads; the control-plane credential broker applies an explicit-deny proposal-scoped session policy.
       MaxSessionDuration: 3600
       Tags:
         - Key: ManagedBy
@@ -105,10 +100,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !If
-                - CreateNovaPlanBrokerTrust
-                - [!Ref davdeployDiscoveryBrokerRoleArn, !Ref davdeployNovaPlanBrokerRoleArn]
-                - !Ref davdeployDiscoveryBrokerRoleArn
+              AWS: !Ref davdeployDiscoveryBrokerRoleArn
             Action: sts:AssumeRole
             Condition:
               StringEquals:

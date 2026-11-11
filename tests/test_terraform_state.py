@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 from davdeploy import main
 from davdeploy.models import (
+    AuditEvent,
     Base,
     Environment,
     GeneratedPlanRun,
@@ -31,6 +32,7 @@ from davdeploy.terraform_state import (
     parse_terraform_lock,
     parse_terraform_state,
     terraform_state_scope_digest,
+    trusted_codebuild_build_id,
     trusted_codebuild_role_matches,
     validate_terraform_state_lock_id,
 )
@@ -148,6 +150,31 @@ def test_bootstrap_principal_must_be_the_exact_assumed_codebuild_role():
     assert not trusted_codebuild_role_matches(expected, expected)
 
 
+def test_codebuild_build_id_is_derived_from_the_authenticated_session():
+    expected = "arn:aws:iam::654654474502:role/service-role/davdeploy-nova-plan-only"
+    build_id = "davdeploy-nova-plan-only:12345678-1234-4234-8234-123456789abc"
+    caller = (
+        "arn:aws:sts::654654474502:assumed-role/service-role/davdeploy-nova-plan-only/"
+        "AWSCodeBuild-12345678-1234-4234-8234-123456789abc"
+    )
+    assert trusted_codebuild_build_id(
+        caller, expected, "davdeploy-nova-plan-only"
+    ) == build_id
+    assert trusted_codebuild_build_id(
+        caller, expected, "another-project"
+    ) == "another-project:12345678-1234-4234-8234-123456789abc"
+    assert trusted_codebuild_build_id(
+        caller.replace("/AWSCodeBuild-", "/manual-session-"),
+        expected,
+        "davdeploy-nova-plan-only",
+    ) is None
+    assert trusted_codebuild_build_id(
+        caller.replace("12345678-1234-4234-8234-123456789abc", "not-a-uuid"),
+        expected,
+        "davdeploy-nova-plan-only",
+    ) is None
+
+
 def test_bootstrap_rejects_environment_from_another_tenant_or_project():
     class FakeDb:
         def get(self, _model, _environment_id):
@@ -193,7 +220,6 @@ def test_state_credential_bootstrap_stays_disabled_by_default(monkeypatch):
         "/api/v1/terraform-state/credentials",
         json={
             "run_id": "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0",
-            "codebuild_build_id": "fixed-plan:build-id",
         },
     )
     assert response.status_code == 404
@@ -217,7 +243,6 @@ def test_state_credential_bootstrap_rejects_non_runner_role_before_aws_call(monk
         },
         json={
             "run_id": "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0",
-            "codebuild_build_id": "fixed-plan:build-id",
         },
     )
     assert response.status_code == 403
@@ -235,14 +260,13 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
     revision_id = "fdac3a35-9b91-4b45-84a7-c6067106d485"
     run_id = "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0"
     attempt_id = "ed350f1b-61b1-4edc-9799-35332aa96283"
-    build_id = "fixed-plan:build-1"
-    build_arn = "arn:aws:codebuild:us-east-1:654654474502:build/fixed-plan:build-1"
+    build_uuid = "12345678-1234-4234-8234-123456789abc"
+    build_id = f"fixed-plan:{build_uuid}"
+    build_arn = f"arn:aws:codebuild:us-east-1:654654474502:build/{build_id}"
     account_id = "654654474502"
     region = "us-east-1"
     build_role = "arn:aws:iam::654654474502:role/fixed-plan"
-    assumed_build_role = (
-        "arn:aws:sts::654654474502:assumed-role/fixed-plan/AWSCodeBuild-session"
-    )
+    assumed_build_role = f"arn:aws:sts::654654474502:assumed-role/fixed-plan/AWSCodeBuild-{build_uuid}"
     other_org = "27af5383-fba8-4b93-a7cb-37a603fc2ee8"
     other_project = "a2c9862d-2203-47c1-a83b-46d6d7ef6ab0"
     other_environment = "c87bc13e-c3bb-4b46-b852-9f2884c1c981"
@@ -355,9 +379,12 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
         response = client.post(
             "/api/v1/terraform-state/credentials",
             headers=headers,
-            json={"run_id": run_id, "codebuild_build_id": build_id},
+            json={"run_id": run_id},
         )
         assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.headers["pragma"] == "no-cache"
+        assert codebuild.calls == [[build_id]]
         credential_document = response.json()
         assert credential_document["scope_sha256"] == terraform_state_scope_digest(
             organization_id=ORG,
@@ -378,6 +405,44 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
         assert credential.run_id == run_id
         assert credential.codebuild_build_id == build_id
         assert credential.password_sha256 != credential_document["password"]
+        audit_event = db.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "terraform_state_credentials.issued"
+            )
+        )
+        assert audit_event is not None
+        assert audit_event.actor_subject == assumed_build_role
+        assert audit_event.entity_id == run_id
+        assert audit_event.detail == {
+            "codebuild_build_arn": build_arn,
+            "project_id": PROJECT,
+            "revision_id": revision_id,
+            "revision_sha256": "d" * 64,
+            "state_id": credential_document["state_id"],
+            "state_scope_sha256": credential_document["scope_sha256"],
+            "target_account_id": account_id,
+            "region": region,
+        }
+        assert credential_document["password"] not in repr(audit_event.detail)
+
+        another_build_session = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers={
+                "x-davdeploy-bootstrap-principal": (
+                    "arn:aws:sts::654654474502:assumed-role/fixed-plan/"
+                    "AWSCodeBuild-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                )
+            },
+            json={"run_id": run_id},
+        )
+        assert another_build_session.status_code == 403
+
+        caller_selected_build = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers=headers,
+            json={"run_id": run_id, "codebuild_build_id": "fixed-plan:other-build"},
+        )
+        assert caller_selected_build.status_code == 422
 
         cross_tenant = client.get(
             f"/api/v1/terraform-state/{other_state}",

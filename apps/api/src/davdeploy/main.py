@@ -15,10 +15,11 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import Counter, generate_latest
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
+from davdeploy.connection_secrets import configured_connection_secret_store
 from davdeploy.db import (
     AuroraDatabaseUnavailable,
     SessionLocal,
@@ -53,6 +54,7 @@ from davdeploy.domain import (
     InvitationRequest,
     LocalLoginRequest,
     MembershipRoleRequest,
+    NovaPlanCredentialRequest,
     OnboardingRequest,
     PlanCommentRequest,
     ProjectRequest,
@@ -64,17 +66,24 @@ from davdeploy.domain import (
     TerraformStateCredentialRequest,
 )
 from davdeploy.edge_origin import edge_origin_is_authorized
+from davdeploy.generated_plan_artifacts import canonical_json_digest
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
+    AuditEvent,
+    CloudConnection,
     Environment,
     GeneratedPlanRun,
+    InfrastructurePlan,
+    InfrastructurePlanDecisionRecord,
     InfrastructurePlanRevision,
     TerraformRemoteState,
     TerraformStateCredential,
     TerraformStateLock,
 )
-from davdeploy.nova_plan_dispatch import NovaPlanDispatchError
+from davdeploy.nova_plan_access import NovaPlanAccessError, build_nova_plan_access_policy
+from davdeploy.nova_plan_codebuild import NovaPlanBuildError, _validate_input_document
+from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
 from davdeploy.product_readiness import security_headers
 from davdeploy.rate_limit import SlidingWindowRateLimiter
 from davdeploy.security import (
@@ -84,7 +93,7 @@ from davdeploy.security import (
     verify_identity_token,
     verify_token,
 )
-from davdeploy.service import ProductService
+from davdeploy.service import ProductService, plan_hash
 from davdeploy.telemetry import configure_tracing
 from davdeploy.terraform_state import (
     MAX_TERRAFORM_STATE_BYTES,
@@ -94,6 +103,7 @@ from davdeploy.terraform_state import (
     credential_matches,
     issue_terraform_state_credential,
     terraform_state_scope_digest,
+    trusted_codebuild_build_id,
     trusted_codebuild_role_matches,
     validate_terraform_state_lock_id,
 )
@@ -191,7 +201,15 @@ async def apply_api_guardrails(request: Request, call_next):
             os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN"),
         )
     )
-    if not is_terraform_state_bootstrap and not edge_origin_is_authorized(
+    is_nova_plan_credential_bootstrap = (
+        request.method == "POST"
+        and request.url.path == "/api/v1/nova-plan/credentials"
+        and trusted_codebuild_role_matches(
+            request.headers.get("x-davdeploy-bootstrap-principal"),
+            os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN"),
+        )
+    )
+    if not (is_terraform_state_bootstrap or is_nova_plan_credential_bootstrap) and not edge_origin_is_authorized(
         request.headers.get("x-davdeploy-edge")
     ):
         return JSONResponse(
@@ -287,23 +305,21 @@ def issue_terraform_state_credentials(
     if not trusted_codebuild_role_matches(principal_arn, expected_role):
         raise HTTPException(403, "Terraform state bootstrap requires the trusted plan-only role")
     expected_project = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "")
-    if not expected_project or ":" not in body.codebuild_build_id:
+    build_id = trusted_codebuild_build_id(principal_arn, expected_role, expected_project)
+    if not expected_project or build_id is None:
         raise HTTPException(403, "CodeBuild identity is invalid")
-    build_project, _ = body.codebuild_build_id.split(":", 1)
-    if build_project != expected_project:
-        raise HTTPException(403, "CodeBuild project is not the fixed plan-only project")
 
     run = db.get(GeneratedPlanRun, body.run_id)
     if (
         run is None
-        or run.codebuild_build_id != body.codebuild_build_id
+        or run.codebuild_build_id != build_id
         or run.codebuild_project != expected_project
         or run.state != "BUILD_STARTED"
         or not run.runner_run_id
     ):
         raise HTTPException(403, "CodeBuild run is not bound to a durable DavDeploy plan request")
     try:
-        response = boto3.client("codebuild").batch_get_builds(ids=[body.codebuild_build_id])
+        response = boto3.client("codebuild").batch_get_builds(ids=[build_id])
     except (BotoCoreError, ClientError, TypeError, ValueError):
         raise HTTPException(503, "Could not verify the active plan build") from None
     builds = response.get("builds", []) if isinstance(response, dict) else []
@@ -369,14 +385,36 @@ def issue_terraform_state_credentials(
 
     issued, password_digest = issue_terraform_state_credential()
     expires_at = datetime.now(UTC) + timedelta(minutes=25)
+    build_arn = builds[0].get("arn")
+    if not isinstance(principal_arn, str) or len(principal_arn) > 160:
+        raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
     db.add(
         TerraformStateCredential(
             username=issued.username,
             password_sha256=password_digest,
             state_id=state.id,
             run_id=run.id,
-            codebuild_build_id=body.codebuild_build_id,
+            codebuild_build_id=build_id,
             expires_at=expires_at,
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=run.organization_id,
+            actor_subject=principal_arn,
+            action="terraform_state_credentials.issued",
+            entity_type="generated_plan_run",
+            entity_id=run.id,
+            detail={
+                "codebuild_build_arn": build_arn,
+                "project_id": run.project_id,
+                "revision_id": run.revision_id,
+                "revision_sha256": run.revision_sha256,
+                "state_id": state.id,
+                "state_scope_sha256": scope_sha256,
+                "target_account_id": account_id,
+                "region": region,
+            },
         )
     )
     try:
@@ -386,16 +424,259 @@ def issue_terraform_state_credentials(
         raise HTTPException(503, "Terraform state credential could not be issued") from None
 
     address = f"{state_base_url}/api/v1/terraform-state/{state.id}"
-    return {
-        "state_id": state.id,
-        "scope_sha256": scope_sha256,
-        "address": address,
-        "lock_address": f"{address}/lock",
-        "unlock_address": f"{address}/unlock",
-        "username": issued.username,
-        "password": issued.password,
-        "expires_at": expires_at.isoformat(),
+    return JSONResponse(
+        {
+            "state_id": state.id,
+            "scope_sha256": scope_sha256,
+            "address": address,
+            "lock_address": f"{address}/lock",
+            "unlock_address": f"{address}/unlock",
+            "username": issued.username,
+            "password": issued.password,
+            "expires_at": expires_at.isoformat(),
+        },
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+
+@app.post("/api/v1/nova-plan/credentials", include_in_schema=False)
+def issue_nova_plan_role_credentials(
+    body: NovaPlanCredentialRequest,
+    request: Request,
+    db: Session = Depends(session),
+):
+    """Issue exact proposal-scoped customer-role credentials to one live plan build."""
+    if os.getenv("DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED", "false").lower() != "true":
+        raise HTTPException(404, "Nova plan credential brokerage is not enabled")
+    principal_arn = request.headers.get("x-davdeploy-bootstrap-principal")
+    expected_role = os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN")
+    project_name = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "")
+    build_id = trusted_codebuild_build_id(principal_arn, expected_role, project_name)
+    if not project_name or build_id is None:
+        raise HTTPException(403, "CodeBuild project is not the fixed plan-only project")
+
+    run = db.get(GeneratedPlanRun, body.run_id)
+    if (
+        run is not None
+        and run.codebuild_project == project_name
+        and run.codebuild_build_id == build_id
+        and run.state == "PREPARING"
+        and run.preparation_phase == "STAGING_BUILD_INPUT"
+        and run.runner_run_id
+    ):
+        raise HTTPException(
+            425,
+            "The exact build input is still being published; retry credential bootstrap",
+        )
+    if (
+        run is None
+        or run.state != "BUILD_STARTED"
+        or run.codebuild_project != project_name
+        or run.codebuild_build_id != build_id
+        or not run.runner_run_id
+        or not run.input_key
+        or not run.input_version_id
+        or not run.input_sha256
+        or not run.proposal_sha256
+        or not isinstance(run.request_document, dict)
+        or canonical_json_digest(run.request_document) != run.request_sha256
+    ):
+        raise HTTPException(403, "CodeBuild run is not bound to a durable Nova plan request")
+    try:
+        build_response = boto3.client("codebuild").batch_get_builds(ids=[build_id])
+    except (BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(503, "Could not verify the active Nova plan build") from None
+    builds = build_response.get("builds", []) if isinstance(build_response, dict) else []
+    if (
+        len(builds) != 1
+        or not isinstance(builds[0], dict)
+        or builds[0].get("id") != build_id
+        or not _build_matches_generated_plan_run(builds[0], run, project_name)
+    ):
+        raise HTTPException(403, "CodeBuild build is not the active trusted plan attempt")
+
+    try:
+        dispatcher = NovaPlanOnlyDispatcher.from_environment()
+        if dispatcher is None:
+            raise NovaPlanDispatchError("Nova plan input reader is disabled")
+        build_arn = builds[0]["arn"]
+        if (
+            run.input_key != dispatcher.build_input_key(build_arn)
+            or run.result_key != dispatcher.build_result_key(build_arn)
+            or (run.result_metadata or {}).get("codebuild_build_arn") != build_arn
+        ):
+            raise NovaPlanDispatchError("durable artifacts do not match the active build")
+        staged_input = dispatcher.read_staged_input_document(
+            run.runner_run_id,
+            run.input_key,
+            run.input_version_id,
+            run.input_sha256,
+        )
+        binding = _validate_input_document(
+            staged_input, run.runner_run_id, project_name, build_arn
+        )
+    except (NovaPlanBuildError, NovaPlanDispatchError, BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(409, "Exact Nova plan input could not be verified") from None
+    request_document = run.request_document
+    if (
+        staged_input.get("control_plane_run_id") != run.id
+        or staged_input.get("request_document") != request_document
+        or staged_input.get("request_sha256") != run.request_sha256
+        or binding["control_plane_run_id"] != run.id
+        or binding["proposal_sha256"] != run.proposal_sha256
+        or binding["organization_id"] != run.organization_id
+        or binding["project_id"] != run.project_id
+        or binding["revision_id"] != run.revision_id
+        or binding["revision_sha256"] != run.revision_sha256
+        or binding["account_id"] != request_document.get("target_account_id")
+        or binding["region"] != request_document.get("region")
+        or request_document.get("runner_project") != project_name
+        or request_document.get("connection_id") != binding["connection_id"]
+        or request_document.get("plan_role_arn") != binding["plan_role_arn"]
+    ):
+        raise HTTPException(409, "Nova plan request bindings do not match this durable run")
+
+    revision = db.get(InfrastructurePlanRevision, run.revision_id)
+    plan = db.get(InfrastructurePlan, revision.infrastructure_plan_id) if revision else None
+    connection = db.get(CloudConnection, binding["connection_id"])
+    latest = (
+        db.scalar(
+            select(InfrastructurePlanRevision)
+            .where(
+                InfrastructurePlanRevision.infrastructure_plan_id == plan.id,
+                InfrastructurePlanRevision.organization_id == run.organization_id,
+            )
+            .order_by(InfrastructurePlanRevision.revision_number.desc())
+            .limit(1)
+        )
+        if plan
+        else None
+    )
+    target = (revision.content or {}).get("target", {}) if revision else {}
+    if (
+        revision is None
+        or plan is None
+        or binding["plan_id"] != plan.id
+        or connection is None
+        or revision.organization_id != run.organization_id
+        or revision.id != run.revision_id
+        or revision.content_digest != run.revision_sha256
+        or revision.content_digest != plan_hash(revision.content or {})
+        or revision.state not in {"SUBMITTED", "APPROVED"}
+        or latest is None
+        or latest.id != revision.id
+        or plan.organization_id != run.organization_id
+        or plan.project_id != run.project_id
+        or connection.organization_id != run.organization_id
+        or connection.provider != "aws"
+        or connection.setup_state != "VERIFIED"
+        or connection.plan_role_setup_state != "VERIFIED"
+        or connection.account_id != binding["account_id"]
+        or connection.plan_role_arn != binding["plan_role_arn"]
+        or not connection.external_id_secret_ref
+        or target.get("connection_id") != connection.id
+        or target.get("account_id") != binding["account_id"]
+        or target.get("region") != binding["region"]
+    ):
+        raise HTTPException(409, "Customer plan role or immutable revision is no longer current")
+    if revision.state == "APPROVED":
+        decision = db.scalar(
+            select(InfrastructurePlanDecisionRecord).where(
+                InfrastructurePlanDecisionRecord.revision_id == revision.id,
+                InfrastructurePlanDecisionRecord.organization_id == run.organization_id,
+            )
+        )
+        if (
+            decision is None
+            or decision.decision != "APPROVED"
+            or decision.approved_digest != revision.content_digest
+        ):
+            raise HTTPException(409, "Customer revision approval is no longer current")
+
+    try:
+        access_policy = build_nova_plan_access_policy(
+            binding["proposal"], account_id=binding["account_id"], region=binding["region"]
+        )
+        external_id = configured_connection_secret_store().get_external_id(
+            connection.external_id_secret_ref
+        )
+        assumed = boto3.client("sts").assume_role(
+            RoleArn=binding["plan_role_arn"],
+            RoleSessionName=f"davdeploy-nova-plan-{run.runner_run_id}",
+            ExternalId=external_id,
+            DurationSeconds=900,
+            Policy=json.dumps(
+                access_policy.document, sort_keys=True, separators=(",", ":")
+            ),
+        )
+        credentials = assumed.get("Credentials") if isinstance(assumed, dict) else None
+        if not isinstance(credentials, dict):
+            raise TypeError("temporary credentials are absent")
+        session = boto3.Session(
+            aws_access_key_id=credentials.get("AccessKeyId"),
+            aws_secret_access_key=credentials.get("SecretAccessKey"),
+            aws_session_token=credentials.get("SessionToken"),
+        )
+        identity = session.client("sts").get_caller_identity()
+    except NovaPlanAccessError:
+        raise HTTPException(403, "Nova proposal exceeds the fixed plan permission profile") from None
+    except (BotoCoreError, ClientError, OSError, RuntimeError, TypeError, ValueError):
+        raise HTTPException(403, "The exact customer plan role could not be verified") from None
+    expected_identity = (
+        f"arn:aws:sts::{binding['account_id']}:assumed-role/"
+        f"davdeployPlan-{connection.id}/davdeploy-nova-plan-{run.runner_run_id}"
+    )
+    if (
+        not isinstance(identity, dict)
+        or identity.get("Account") != binding["account_id"]
+        or identity.get("Arn") != expected_identity
+        or not isinstance(credentials.get("Expiration"), datetime)
+        or credentials["Expiration"].tzinfo is None
+    ):
+        raise HTTPException(403, "Customer plan role identity did not match the durable run")
+    if len(principal_arn) > 160:
+        raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
+    db.add(
+        AuditEvent(
+            organization_id=run.organization_id,
+            actor_subject=principal_arn,
+            action="nova_plan_credentials.issued",
+            entity_type="generated_plan_run",
+            entity_id=run.id,
+            detail={
+                "codebuild_build_arn": build_arn,
+                "project_id": run.project_id,
+                "revision_id": run.revision_id,
+                "revision_sha256": run.revision_sha256,
+                "proposal_sha256": run.proposal_sha256,
+                "plan_role_arn": binding["plan_role_arn"],
+                "account_id": binding["account_id"],
+                "region": binding["region"],
+                "policy_version": access_policy.version,
+                "policy_sha256": access_policy.sha256,
+            },
+        )
+    )
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "Credential issuance could not be recorded safely") from None
+    response = {
+        "contract": "davdeploy.nova-plan-credentials.v1",
+        "role_arn": binding["plan_role_arn"],
+        "account_id": binding["account_id"],
+        "region": binding["region"],
+        "policy_version": access_policy.version,
+        "policy_sha256": access_policy.sha256,
+        "credentials": {
+            "access_key_id": credentials.get("AccessKeyId"),
+            "secret_access_key": credentials.get("SecretAccessKey"),
+            "session_token": credentials.get("SessionToken"),
+            "expires_at": credentials["Expiration"].astimezone(UTC).isoformat(),
+        },
     }
+    return JSONResponse(response, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
 
 
 def _terraform_state_authorization(

@@ -74,6 +74,17 @@ variable "enable_nova_plan_role_verification" {
   default     = false
 }
 
+variable "enable_nova_plan_credential_broker" {
+  type        = bool
+  description = "Allow only the fixed Nova plan CodeBuild attempt to request proposal-scoped temporary customer-role credentials through the control plane. Defaults to false."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_plan_credential_broker || var.enable_nova_plan_role_verification
+    error_message = "Nova plan credential brokerage requires customer plan-role identity verification."
+  }
+}
+
 variable "nova_plan_artifact_bucket" {
   type        = string
   description = "Existing versioned SSE-KMS Terraform plan bucket used for Nova artifacts when review storage is enabled."
@@ -125,6 +136,11 @@ variable "enable_nova_plan_only_runner" {
   validation {
     condition     = !var.enable_nova_plan_only_runner || var.enable_nova_plan_role_verification
     error_message = "The Nova plan-only runner requires plan-role trust/account verification to be enabled."
+  }
+
+  validation {
+    condition     = !var.enable_nova_plan_only_runner || var.enable_nova_plan_credential_broker
+    error_message = "The Nova plan-only runner requires its run-scoped control-plane credential broker."
   }
 }
 

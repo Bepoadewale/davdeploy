@@ -78,6 +78,8 @@ def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
     assert '"$context.identity.userArn"' in integration
     assert "execute-api:Invoke" in role_policy
     assert "terraform-state/credentials" in role_policy
+    assert '"codebuild:BuildArn"' in role_policy
+    assert 'build/${local.nova_plan_only_project_name}:*' in role_policy
     assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)' in MAIN
     assert 'DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""' in MAIN
     state_policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only_state_bootstrap")
@@ -163,17 +165,35 @@ def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scop
     assert '"sts:RoleSessionName" = "davdeploy-plan-verify-*"' in verification
     assert 'Resource = "*"' not in verification
 
+    api_policy = resource_block(MAIN, "aws_iam_role_policy", "api")
+    api_base = api_policy.split("var.enable_nova_plan_role_verification ? [{", 1)[0]
+    assert '"arn:aws:iam::*:role/davdeployPlan-*"' not in api_base
+    broker = MAIN.split("var.enable_nova_plan_credential_broker ? [{", 1)[1].split("}] : []", 1)[0]
+    assert '"arn:aws:iam::*:role/davdeployPlan-*"' in broker
+    assert '"sts:RoleSessionName" = "davdeploy-nova-plan-*"' in broker
+
     runner_validation = VARIABLES.split('variable "enable_nova_plan_only_runner"', 1)[1].split(
         "\nvariable ", 1
     )[0]
     assert "var.enable_nova_plan_role_verification" in runner_validation
+    assert "var.enable_nova_plan_credential_broker" in runner_validation
+
+    broker_variable = VARIABLES.split('variable "enable_nova_plan_credential_broker"', 1)[1].split(
+        "\nvariable ", 1
+    )[0]
+    assert "default     = false" in broker_variable
+    assert "var.enable_nova_plan_role_verification" in broker_variable
 
 
 def test_plan_broker_env_is_derived_from_runner_and_not_required_for_setup_only() -> None:
-    assert "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN" in MAIN
-    assert (
-        'var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""' in MAIN
+    assert "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED" in MAIN
+    assert "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL" in MAIN
+    assert "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN" not in MAIN
+    credential_policy = resource_block(
+        MAIN, "aws_iam_role_policy", "nova_plan_credentials_bootstrap"
     )
+    assert '"codebuild:BuildArn"' in credential_policy
+    assert 'build/${local.nova_plan_only_project_name}:*' in credential_policy
 
 
 def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_logs() -> None:
@@ -200,10 +220,15 @@ def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_log
         '"terraform:Destroy"',
     ):
         assert forbidden not in policy
-    assert 'Action   = ["sts:AssumeRole"]' in policy
-    assert 'role/davdeployPlan-*' in policy
-    assert '"sts:ExternalId"      = "?*"' in policy
-    assert '"sts:RoleSessionName" = "davdeploy-nova-plan-????????"' in policy
+    assert '"sts:AssumeRole"' not in policy
+    assert 'role/davdeployPlan-*' not in policy
+
+    credential_policy = resource_block(
+        MAIN, "aws_iam_role_policy", "nova_plan_credentials_bootstrap"
+    )
+    assert "count = var.enable_nova_plan_credential_broker ? 1 : 0" in credential_policy
+    assert 'Action   = ["execute-api:Invoke"]' in credential_policy
+    assert "/POST/api/v1/nova-plan/credentials" in credential_policy
 
     role = resource_block(MAIN, "aws_iam_role", "nova_plan_only")
     assert '"aws:SourceAccount"' in role
@@ -221,6 +246,17 @@ def test_api_can_start_only_this_project_with_the_trusted_run_id_override() -> N
     assert '"codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "?*"' in policy
     assert '"ForAnyValue:StringNotEquals"' in policy
     assert "nova_plan_only_blocked_start_build_keys" in policy
+
+
+def test_nova_plan_credential_route_is_iam_authenticated_and_gateway_bound():
+    integration = resource_block(MAIN, "aws_apigatewayv2_integration", "nova_plan_credentials")
+    route = resource_block(MAIN, "aws_apigatewayv2_route", "nova_plan_credentials")
+    assert '"overwrite:header.x-davdeploy-bootstrap-principal"' in integration
+    assert '"$context.identity.userArn"' in integration
+    assert 'route_key          = "POST /api/v1/nova-plan/credentials"' in route
+    assert 'authorization_type = "AWS_IAM"' in route
+    codebuild = resource_block(MAIN, "aws_codebuild_project", "nova_plan_only")
+    assert "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL" in codebuild
 
     blocked_keys = MAIN.split("nova_plan_only_blocked_start_build_keys = [", 1)[1].split("]", 1)[0]
     for override in (

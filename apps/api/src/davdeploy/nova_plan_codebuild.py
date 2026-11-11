@@ -43,6 +43,10 @@ from davdeploy.nova_plan_access import (
     NovaPlanAccessError,
     build_nova_plan_access_policy,
 )
+from davdeploy.nova_plan_credentials import (
+    NovaPlanCredentialError,
+    request_nova_plan_credentials,
+)
 from davdeploy.nova_terraform_state_client import (
     TerraformHTTPBackend,
     TerraformStateBootstrapError,
@@ -68,13 +72,13 @@ def run_nova_plan_build(
     *,
     environment: dict[str, str] | None = None,
     s3_client: Any | None = None,
-    sts_client: Any | None = None,
     runner: GeneratedTerraformPlanRunner | None = None,
     workspace_root: str | Path | None = None,
     input_poll_attempts: int = 30,
     input_poll_interval_seconds: float = 2.0,
     sleeper=time.sleep,
     state_bootstrapper=None,
+    credential_requester=None,
 ) -> dict[str, Any]:
     """Verify one staged request, plan it, and write exact encrypted artifacts."""
     env = dict(os.environ if environment is None else environment)
@@ -121,22 +125,28 @@ def run_nova_plan_build(
             "proposal exceeds the fixed customer plan permission profile"
         ) from None
 
-    sts = sts_client or boto3.client("sts", region_name=region)
+    broker_url = env.get("DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL", "")
     try:
-        assumed = sts.assume_role(
-            RoleArn=binding["plan_role_arn"],
-            RoleSessionName=f"davdeploy-nova-plan-{run_id[:8]}",
-            ExternalId=binding["external_id"],
-            DurationSeconds=3600,
-            Policy=json.dumps(
-                access_policy.document,
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
+        credential_request = credential_requester or request_nova_plan_credentials
+        broker_credentials = credential_request(
+            broker_url=broker_url,
+            durable_run_id=binding["control_plane_run_id"],
+            region=binding["region"],
+            expected_role_arn=binding["plan_role_arn"],
+            expected_account_id=binding["account_id"],
+            expected_policy_version=access_policy.version,
+            expected_policy_sha256=access_policy.sha256,
+            credentials=boto3.Session().get_credentials(),
         )
-        credentials = assumed.get("Credentials") if isinstance(assumed, dict) else None
-        if not isinstance(credentials, dict):
-            raise NovaPlanBuildError("customer plan role returned no temporary credentials")
+        if (
+            broker_credentials.role_arn != binding["plan_role_arn"]
+            or broker_credentials.account_id != binding["account_id"]
+            or broker_credentials.region != binding["region"]
+            or broker_credentials.policy_version != access_policy.version
+            or broker_credentials.policy_sha256 != access_policy.sha256
+        ):
+            raise NovaPlanBuildError("credential broker response did not match the trusted plan")
+        credentials = broker_credentials.boto3_credentials()
         session = boto3.Session(
             aws_access_key_id=credentials.get("AccessKeyId"),
             aws_secret_access_key=credentials.get("SecretAccessKey"),
@@ -146,7 +156,15 @@ def run_nova_plan_build(
         identity = session.client("sts").get_caller_identity()
     except NovaPlanBuildError:
         raise
-    except (BotoCoreError, ClientError, OSError, TypeError, ValueError):
+    except (
+        NovaPlanCredentialError,
+        BotoCoreError,
+        ClientError,
+        OSError,
+        TypeError,
+        ValueError,
+        AttributeError,
+    ):
         raise NovaPlanBuildError("the exact customer plan role could not be verified") from None
     if not isinstance(identity, dict) or identity.get("Account") != binding["account_id"]:
         raise NovaPlanBuildError("customer plan role account does not match the durable request")
@@ -166,7 +184,6 @@ def run_nova_plan_build(
                     bootstrap_url=bootstrap_url,
                     state_api_url=state_api_url,
                     durable_run_id=binding["control_plane_run_id"],
-                    codebuild_build_id=build_id,
                     region=region,
                 )
             else:
@@ -174,7 +191,6 @@ def run_nova_plan_build(
                     bootstrap_url=bootstrap_url,
                     state_api_url=state_api_url,
                     durable_run_id=binding["control_plane_run_id"],
-                    codebuild_build_id=build_id,
                     region=region,
                     credentials=boto3.Session().get_credentials(),
                 )
@@ -305,8 +321,15 @@ def run_nova_plan_build(
     result_bytes = _canonical_json(result)
     if len(result_bytes) > MAX_RESULT_BYTES:
         raise NovaPlanBuildError("the verified plan result exceeds its size limit")
-    if binding["external_id"].encode("utf-8") in result_bytes:
-        raise NovaPlanBuildError("the verified plan result contains customer trust material")
+    if any(
+        isinstance(secret, str) and secret and secret.encode("utf-8") in result_bytes
+        for secret in (
+            credentials.get("AccessKeyId"),
+            credentials.get("SecretAccessKey"),
+            credentials.get("SessionToken"),
+        )
+    ):
+        raise NovaPlanBuildError("the verified plan result contains temporary credential material")
     result_sha256 = hashlib.sha256(result_bytes).hexdigest()
     result_key = _build_object_key(build_arn, "result.json")
     try:
@@ -438,6 +461,38 @@ def _read_exact_input(
 def _validate_input_document(
     document: dict[str, Any], run_id: str, project_name: str, build_arn: str
 ) -> dict[str, Any]:
+    expected_fields = {
+        "contract",
+        "run_id",
+        "control_plane_run_id",
+        "runner_project",
+        "codebuild_build_arn",
+        "request_document",
+        "request_sha256",
+        "customer_revision",
+        "revision_id",
+        "revision_sha256",
+        "proposal",
+        "proposal_sha256",
+        "plan_role",
+        "ownership_scope",
+        "created_at",
+    }
+    expected_request_fields = {
+        "contract",
+        "organization_id",
+        "project_id",
+        "plan_id",
+        "revision_id",
+        "revision_sha256",
+        "source_deployment_plan_id",
+        "connection_id",
+        "plan_role_arn",
+        "target_account_id",
+        "region",
+        "generator_model",
+        "runner_project",
+    }
     request_document = document.get("request_document")
     request_sha256 = document.get("request_sha256")
     control_plane_run_id = document.get("control_plane_run_id")
@@ -446,12 +501,15 @@ def _validate_input_document(
     except (AttributeError, TypeError, ValueError):
         raise NovaPlanBuildError("durable control-plane request ID is invalid") from None
     if (
-        document.get("contract") != INPUT_CONTRACT
+        set(document) != expected_fields | expected_request_fields
+        or document.get("contract") != INPUT_CONTRACT
         or document.get("run_id") != run_id
         or canonical_control_plane_run_id != control_plane_run_id
         or document.get("runner_project") != project_name
         or document.get("codebuild_build_arn") != build_arn
         or not isinstance(request_document, dict)
+        or set(request_document) != expected_request_fields
+        or any(document.get(key) != request_document.get(key) for key in expected_request_fields)
         or not _is_digest(request_sha256)
         or canonical_json_digest(request_document) != request_sha256
     ):
@@ -507,15 +565,9 @@ def _validate_input_document(
     ):
         raise NovaPlanBuildError("customer account or region does not match the revision")
     plan_role_arn = plan_role.get("arn")
-    external_id = plan_role.get("external_id")
     expected_role_arn = f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection_id}"
-    if (
-        plan_role_arn != expected_role_arn
-        or not isinstance(external_id, str)
-        or len(external_id) < 24
-        or len(external_id) > 1224
-    ):
-        raise NovaPlanBuildError("customer plan role ARN or ExternalId binding is invalid")
+    if set(plan_role) != {"arn"} or plan_role_arn != expected_role_arn:
+        raise NovaPlanBuildError("customer plan role ARN binding is invalid")
     ownership_scope = PlanOwnershipScope(
         organization_id=organization_id,
         workspace_id=organization_id,
@@ -548,7 +600,6 @@ def _validate_input_document(
         "region": region,
         "connection_id": connection_id,
         "plan_role_arn": plan_role_arn,
-        "external_id": external_id,
         "proposal": proposal,
         "proposal_sha256": document["proposal_sha256"],
         "context_sha256": proposal.context_digest,

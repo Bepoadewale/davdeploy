@@ -51,7 +51,7 @@ def _response_document(**overrides):
     return document
 
 
-def test_bootstrap_sigv4_binds_durable_request_and_build_identity():
+def test_bootstrap_sigv4_sends_only_the_durable_run_identity():
     captured = {}
 
     def opener(request, *, timeout):
@@ -63,7 +63,6 @@ def test_bootstrap_sigv4_binds_durable_request_and_build_identity():
         bootstrap_url="https://api-id.execute-api.us-east-1.amazonaws.com/api/v1/terraform-state/credentials",
         state_api_url="https://api.davdeploy.tech",
         durable_run_id="87654321-4321-4321-4321-210987654321",
-        codebuild_build_id="davdeploy-nova-plan:build-attempt-1",
         region="eu-west-1",
         credentials=_Credentials(),
         opener=opener,
@@ -74,10 +73,7 @@ def test_bootstrap_sigv4_binds_durable_request_and_build_identity():
     assert captured["timeout"] == 15
     assert "AWS4-HMAC-SHA256 Credential=ASIAEXAMPLE/" in request.get_header("Authorization")
     assert "/us-east-1/execute-api/aws4_request" in request.get_header("Authorization")
-    assert json.loads(request.data) == {
-        "run_id": "87654321-4321-4321-4321-210987654321",
-        "codebuild_build_id": "davdeploy-nova-plan:build-attempt-1",
-    }
+    assert json.loads(request.data) == {"run_id": "87654321-4321-4321-4321-210987654321"}
     assert backend.backend_configuration() == {
         "address": STATE_URL,
         "lock_address": f"{STATE_URL}/lock",
@@ -109,7 +105,6 @@ def test_bootstrap_rejects_invalid_state_contract(overrides):
             bootstrap_url="https://api-id.execute-api.us-east-1.amazonaws.com/api/v1/terraform-state/credentials",
             state_api_url="https://api.davdeploy.tech",
             durable_run_id="87654321-4321-4321-4321-210987654321",
-            codebuild_build_id="davdeploy-nova-plan:build-attempt-1",
             region="us-east-1",
             credentials=_Credentials(),
             opener=lambda *_args, **_kwargs: _Response(_response_document(**overrides)),
@@ -120,7 +115,6 @@ def test_bootstrap_fails_closed_on_bad_identity_transport_or_server_status():
     request_args = {
         "state_api_url": "https://api.davdeploy.tech",
         "durable_run_id": "87654321-4321-4321-4321-210987654321",
-        "codebuild_build_id": "davdeploy-nova-plan:build-attempt-1",
         "region": "us-east-1",
         "credentials": _Credentials(),
     }

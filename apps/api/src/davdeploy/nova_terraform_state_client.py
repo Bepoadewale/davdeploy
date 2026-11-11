@@ -65,7 +65,6 @@ def request_terraform_http_backend(
     bootstrap_url: str,
     state_api_url: str,
     durable_run_id: str,
-    codebuild_build_id: str,
     region: str,
     credentials: Any,
     opener: Callable[..., Any] = _open_without_redirects,
@@ -82,9 +81,7 @@ def request_terraform_http_backend(
     except (AttributeError, TypeError, ValueError):
         raise TerraformStateBootstrapError("durable control-plane request ID is invalid") from None
     if (
-        not isinstance(codebuild_build_id, str)
-        or not re.fullmatch(r"[A-Za-z0-9_-]{2,255}:[A-Za-z0-9_-]{1,255}", codebuild_build_id)
-        or not isinstance(region, str)
+        not isinstance(region, str)
         or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region)
         or credentials is None
     ):
@@ -107,7 +104,7 @@ def request_terraform_http_backend(
         raise TerraformStateBootstrapError("trusted API Gateway region is invalid")
 
     payload = json.dumps(
-        {"run_id": durable_run_id, "codebuild_build_id": codebuild_build_id},
+        {"run_id": durable_run_id},
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")

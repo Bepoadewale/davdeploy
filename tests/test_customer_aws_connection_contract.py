@@ -63,7 +63,7 @@ def test_quick_create_plan_role_is_separate_and_has_bounded_read_only_actions():
     assert 'RoleName: !Sub "davdeployPlan-${ConnectionId}"' in plan_role
     assert "Condition: CreateNovaPlanOnlyRole" in plan_role
     assert "davdeployDiscoveryBrokerRoleArn" in plan_role
-    assert "davdeployNovaPlanBrokerRoleArn" in plan_role
+    assert "davdeployNovaPlanBrokerRoleArn" not in plan_role
     assert "sts:ExternalId: !Ref ExternalId" in plan_role
     assert "Effect: Deny" in policy
     assert "NotAction:" in policy
@@ -85,15 +85,13 @@ def test_quick_create_plan_role_is_separate_and_has_bounded_read_only_actions():
     assert "NovaPlanOnlyRoleArn" in template
 
 
-def test_quick_create_omits_optional_nova_broker_principal_when_runner_is_disabled():
+def test_quick_create_plan_role_trusts_only_the_control_plane_broker():
     template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
     plan_role = template.split("\n  NovaPlanOnlyRole:\n", 1)[1].split("\n  ExecutionRole:\n", 1)[0]
 
-    assert "Default: unused" in template
-    assert "CreateNovaPlanBrokerTrust: !Not [!Equals [!Ref davdeployNovaPlanBrokerRoleArn, unused]]" in template
-    assert "AWS: !If" in plan_role
-    assert "[!Ref davdeployDiscoveryBrokerRoleArn, !Ref davdeployNovaPlanBrokerRoleArn]" in plan_role
-    assert "- !Ref davdeployDiscoveryBrokerRoleArn" in plan_role
+    assert "CreateNovaPlanBrokerTrust" not in template
+    assert "davdeployNovaPlanBrokerRoleArn" not in template
+    assert "AWS: !Ref davdeployDiscoveryBrokerRoleArn" in plan_role
     assert "DavDeploy does not attest effective permissions" in template
     assert "It has no customer service permissions" not in template
 
