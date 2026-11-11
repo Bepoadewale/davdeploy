@@ -3,7 +3,7 @@
 Date: 2026-11-11
 Execution type: Local automated and Terraform validation; no AWS mutation.
 Customer repository: Not applicable; control-plane Terraform IAM conditions only.
-Commit: `f75fb0c` implementation; this evidence update records validation at that commit.
+Commit: `4bcd70a` implementation and validation evidence.
 AWS account: `654654474502` (prior read-only identity verification; this PR makes no AWS calls).
 AWS region: `us-east-1`
 
@@ -25,7 +25,7 @@ None.
 
 ## Observed result
 
-The storage flag no longer grants API Lambda S3 state-object or KMS permissions by itself. Those permissions require both storage and state API flags; the HTTP state API route and its independent gates remain off in the reviewed storage-only configuration. The plan from run `42955035771` was not applied because it included the prior access coupling; no AWS resources changed.
+The storage flag no longer grants API Lambda S3 state-object or KMS permissions by itself. Those permissions require both storage and state API flags; the HTTP state API route and its independent gates remain off in the reviewed storage-only configuration. The plan from run `42955035771` was not applied because it included the prior access coupling; no AWS resources changed. All seven required CI checks passed at `4bcd70a` in [run 42956394546](https://github.com/Bepoadewale/davdeploy/actions/runs/42956394546).
 
 ## Teardown
 

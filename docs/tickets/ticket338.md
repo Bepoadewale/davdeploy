@@ -30,14 +30,14 @@ Storage provisioning and runtime access are separate capabilities. The state-sto
 
 - [x] Runtime state object and KMS permissions are conditioned on both storage and state API flags; bucket/key provisioning remains controlled by storage.
 - [x] Storage plus state API configuration retains the existing exact-prefix S3 and bucket-context KMS permissions.
-- [x] Focused tests, full verification, clean-room proof, Terraform validation, and docs checks pass locally; required CI is pending on the current PR head.
+- [x] Focused tests, full verification, clean-room proof, Terraform validation, and docs checks pass locally. All seven required CI checks passed in [run 42956394546](https://github.com/Bepoadewale/davdeploy/actions/runs/42956394546) for `4bcd70a`.
 - [ ] A fresh saved Terraform plan on the merged commit confirms storage resources are created while state API, runner, review, and role-verification gates remain disabled.
 - [ ] No state API permissions or route are applied as part of storage-only setup.
 
 ## Acceptance status
 
 - [x] Implementation, focused/full local validation, and isolated clean-room are complete.
-- [ ] Required CI is pending.
+- [x] Required CI passed for evidence head `4bcd70a`; final evidence-update head must also pass required CI before merge.
 - [ ] No AWS apply is in scope for this PR; the corrected saved plan and storage rollout follow after merge.
 
 ## Tests / validation performed
