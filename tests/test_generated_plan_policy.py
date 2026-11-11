@@ -13,6 +13,7 @@ from davdeploy.generated_plan_policy import (
 
 ACCOUNT = "654654474502"
 REGION = "us-east-1"
+_OMIT = object()
 
 
 def ownership_scope():
@@ -177,6 +178,36 @@ def add_lambda_permission(document, values, **change_metadata):
         change(address, "aws_lambda_permission", **change_metadata)
     )
     return document
+
+
+def add_api_gateway_route(document, authorization_type=_OMIT, *, after_unknown=None):
+    address = "aws_apigatewayv2_route.application"
+    values = {"api_id": "api-123", "route_key": "GET /items"}
+    if authorization_type is not _OMIT:
+        values["authorization_type"] = authorization_type
+    document["planned_values"]["root_module"]["resources"].append(
+        {"address": address, "mode": "managed", "type": "aws_apigatewayv2_route", "values": values}
+    )
+    planned_after = values.copy()
+    document["resource_changes"].append(
+        change(
+            address,
+            "aws_apigatewayv2_route",
+            after=planned_after,
+            after_unknown=after_unknown or {},
+        )
+    )
+    proposal_resources = [item.model_dump(mode="json") for item in proposal().resources]
+    proposal_resources.append(
+        {
+            "resource_id": "application-route",
+            "resource_type": "aws_apigatewayv2_route",
+            "name": "application",
+            "arguments": values,
+            "rationale": "Route API requests to the application.",
+        }
+    )
+    return document, proposal(proposal_resources)
 
 
 def codes(result):
@@ -506,6 +537,51 @@ def test_specific_lambda_service_principal_is_not_public_invoke():
 
     assert "lambda_unscoped_public_invoke_denied" not in codes(evaluate(document))
     assert "lambda_public_invoke_review" not in codes(evaluate(document))
+
+
+def test_open_api_gateway_route_requires_human_review():
+    document, proposal_value = add_api_gateway_route(plan(), "NONE")
+
+    result = evaluate(document, proposal_value)
+
+    # This provider resource has no tags argument, so ownership fails closed
+    # until exact ownership records for untaggable resources are implemented.
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "api_gateway_open_route_review" in codes(result)
+    finding = next(item for item in result.findings if item.code == "api_gateway_open_route_review")
+    assert "GET /items" not in repr(finding)
+
+
+@pytest.mark.parametrize("authorization_type", ["JWT", "AWS_IAM", "CUSTOM"])
+def test_authenticated_api_gateway_routes_do_not_trigger_open_route_review(authorization_type):
+    document, proposal_value = add_api_gateway_route(plan(), authorization_type)
+
+    result = evaluate(document, proposal_value)
+
+    assert "api_gateway_open_route_review" not in codes(result)
+    # Route authorization is recognized, while untaggable ownership remains denied.
+    assert result.verdict == PlanPolicyVerdict.DENY
+
+
+@pytest.mark.parametrize("authorization_type", [_OMIT, None, "", "INVALID", ["JWT"]])
+def test_missing_or_invalid_api_gateway_route_authorization_is_denied(authorization_type):
+    document, proposal_value = add_api_gateway_route(plan(), authorization_type)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "api_gateway_route_authorization_unknown" in codes(result)
+
+
+def test_unknown_api_gateway_route_authorization_is_denied():
+    document, proposal_value = add_api_gateway_route(
+        plan(), "JWT", after_unknown={"authorization_type": True}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 @pytest.mark.parametrize(
