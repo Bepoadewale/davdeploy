@@ -11,7 +11,8 @@ Repository: `Bepoadewale/davdeploy`, branch `security/rds-retention-policy-361`.
 
 Customer repository: None. Plan documents are synthetic local fixtures.
 
-Commit: Pending final implementation commit.
+Commit: `96f149f804aa270aeb0fc4d3ec2bcee2f099167a` (source and tests; local
+verification ran on this commit).
 
 AWS account: None. No AWS session was used.
 
