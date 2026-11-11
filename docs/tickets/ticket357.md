@@ -50,12 +50,16 @@ Nova execution is enabled.
 - [x] Held pricing work and customer-role verification limitations remain
   explicit; no capability or scenario is removed from the matrix.
 - [x] Documentation conventions and diff checks pass.
-- [ ] Required hosted CI passes on the final PR head.
+- [x] Required hosted CI passes on the current PR head; all seven checks in
+  run `43084561564` passed.
 
 ## Acceptance status
 
-Documentation reconciliation is complete and locally checked. Required
-hosted CI and current-head review are pending.
+Documentation reconciliation is complete and locally checked. Codex review
+found the current diff limited to the stated readiness and release-evidence
+updates; no scope or evidence blocker remains. All seven required checks passed
+on final head `1bb72c1fade7f93bb0f1b482d9afcc0a0c03b02b` in run
+`43084561564`.
 
 ## Tests / validation performed
 
