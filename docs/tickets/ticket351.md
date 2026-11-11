@@ -1,6 +1,6 @@
 # ticket351 — Expose Nova plan-role setup readiness
 
-PR: [#351](https://github.com/Bepoadewale/davdeploy/pull/351) (draft)
+PR: [#351](https://github.com/Bepoadewale/davdeploy/pull/351)
 Branch: `feat/nova-plan-role-setup-status-351`
 Base: `main`
 
@@ -32,11 +32,11 @@ The API already generates a plan-only Quick Create link for workspace administra
 - [x] Existing execution roles, unverified connections, configured plan roles, and disabled/missing setup gates yield false.
 - [x] Cross-tenant access remains denied; the availability field exposes no secrets or role credentials.
 - [x] The setup endpoint remains authoritative and no planning or AWS mutation is enabled by this PR.
-- [ ] Focused tests, full verification, documentation conventions, and required GitHub CI pass.
+- [x] Focused tests, full verification, documentation conventions, and required GitHub CI pass.
 
 ## Acceptance status
 
-The customer-safe readiness signal and fail-closed tests are implemented. Focused and full local verification passed; required GitHub CI and current-head review remain.
+The customer-safe readiness signal and fail-closed tests are implemented. Focused and full local verification passed. All seven required GitHub CI jobs passed on head `ebadfe80eb93e577ebfb491261e91e8441379c2d` in run `43051387339`; current-head Codex review found no major issues.
 
 ## Tests / validation performed
 
