@@ -3,7 +3,7 @@
 Date: 2026-11-11
 Execution type: Local validation and isolated local clean-room; AWS infrastructure rollout is pending.
 Customer repository: Not applicable; this PR updates control-plane Terraform apply permissions.
-Commit: `e900203` (initial implementation; update to final PR head before merge).
+Commit: `cadcf57` (implementation and evidence headings).
 AWS account: `654654474502` (read-only identity check; no resource mutation performed by this PR yet).
 AWS region: `us-east-1`
 
@@ -20,11 +20,11 @@ None during local validation. The state bucket, KMS alias, IAM policy rollout, a
 - `make verify` — 867 passed; ruff, OpenAPI check, Actions configuration check, and Compose configuration check passed. One existing Starlette/httpx deprecation warning remains.
 - `git diff --check` — passed.
 - `COMPOSE_PROJECT_NAME=davdeploy_pr337_20261111 make local-proof` in `/private/tmp/davdeploy-pr337-cleanroom-20261111` — passed (867 tests); isolated Compose config check passed.
-- `COMPOSE_PROJECT_NAME=davdeploy_pr337_20261111 make clean-local` — removed only PR #337 clean-room containers, network, volume, `.venv`, and `.local`; absence verification pending.
+- `COMPOSE_PROJECT_NAME=davdeploy_pr337_20261111 make clean-local` — removed only PR #337 clean-room containers, network, volume, `.venv`, and `.local`; follow-up checks found all absent.
 
 ## Observed result
 
-Focused and full local verification passed. PR checks are running; the first docs-convention job identified required repository ticket headings, which have been added and will be verified on the updated head.
+Focused and full local verification passed. All seven required checks passed in [run 42952648024](https://github.com/Bepoadewale/davdeploy/actions/runs/42952648024) for `cadcf57`. The earlier docs-convention failure was corrected before this run. The state-storage infrastructure plan/apply is a post-merge rollout step and remains pending; no AWS resources were created by this validation.
 
 ## Teardown
 

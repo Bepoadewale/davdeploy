@@ -37,7 +37,7 @@ Allow the existing GitHub Terraform apply role to finish provisioning the dedica
 ## Acceptance status
 
 - [x] Exact permission scopes and static regression coverage are implemented.
-- [ ] Focused tests, full verification, clean-room proof, Terraform formatting/validation, docs checks, and required CI pass.
+- [x] Focused tests, full verification, clean-room proof, Terraform formatting/validation, docs checks, and required CI pass at implementation head `cadcf57`.
 - [ ] Bootstrap saved plan has no unrelated changes; exact reviewed plan is applied and state reconciled.
 - [ ] Dedicated state bucket is versioned, SSE-KMS, private, and owner-enforced; state API and runner remain off.
 
