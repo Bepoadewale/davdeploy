@@ -385,6 +385,9 @@ def issue_terraform_state_credentials(
 
     issued, password_digest = issue_terraform_state_credential()
     expires_at = datetime.now(UTC) + timedelta(minutes=25)
+    build_arn = builds[0].get("arn")
+    if not isinstance(principal_arn, str) or len(principal_arn) > 160:
+        raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
     db.add(
         TerraformStateCredential(
             username=issued.username,
@@ -393,6 +396,25 @@ def issue_terraform_state_credentials(
             run_id=run.id,
             codebuild_build_id=build_id,
             expires_at=expires_at,
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=run.organization_id,
+            actor_subject=principal_arn,
+            action="terraform_state_credentials.issued",
+            entity_type="generated_plan_run",
+            entity_id=run.id,
+            detail={
+                "codebuild_build_arn": build_arn,
+                "project_id": run.project_id,
+                "revision_id": run.revision_id,
+                "revision_sha256": run.revision_sha256,
+                "state_id": state.id,
+                "state_scope_sha256": scope_sha256,
+                "target_account_id": account_id,
+                "region": region,
+            },
         )
     )
     try:

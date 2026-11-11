@@ -43,7 +43,8 @@ The control-plane API and fixed worker contract passed the local automated
 tests. Both the plan-credential broker and Terraform-state bootstrap derive
 the build ID from the authenticated CodeBuild session; each signed request
 carries only a durable run ID. Their CodeBuild IAM permissions are scoped to
-the fixed project's build ARN. The configured production
+the fixed project's build ARN. Both credential issuances record a non-secret
+audit event, committed before credentials are returned. The configured production
 path remains disabled, and no hosted plan or customer role assumption was
 attempted.
 

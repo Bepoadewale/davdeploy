@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest
 from davdeploy import main
 from davdeploy.models import (
+    AuditEvent,
     Base,
     Environment,
     GeneratedPlanRun,
@@ -402,6 +403,25 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
         assert credential.run_id == run_id
         assert credential.codebuild_build_id == build_id
         assert credential.password_sha256 != credential_document["password"]
+        audit_event = db.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "terraform_state_credentials.issued"
+            )
+        )
+        assert audit_event is not None
+        assert audit_event.actor_subject == assumed_build_role
+        assert audit_event.entity_id == run_id
+        assert audit_event.detail == {
+            "codebuild_build_arn": build_arn,
+            "project_id": PROJECT,
+            "revision_id": revision_id,
+            "revision_sha256": "d" * 64,
+            "state_id": credential_document["state_id"],
+            "state_scope_sha256": credential_document["scope_sha256"],
+            "target_account_id": account_id,
+            "region": region,
+        }
+        assert credential_document["password"] not in repr(audit_event.detail)
 
         another_build_session = client.post(
             "/api/v1/terraform-state/credentials",

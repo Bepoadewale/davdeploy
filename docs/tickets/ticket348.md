@@ -62,7 +62,8 @@ project and live CodeBuild build before issuing them.
 - Return short-lived STS credentials over the SigV4 TLS response; keep them out
   of logs, database rows, artifacts and exception text. Bound response shape
   and credential lifetime. Harden state bootstrap with the same session-derived
-  build identity, run-only request body and fixed-project build-ARN permission.
+  build identity, run-only request body and fixed-project build-ARN permission;
+  commit a non-secret audit event before either credential response is returned.
 - Remove ExternalId material from staged build input and remove customer-role
   assumption permission from the CodeBuild service role. Make the worker use
   only the broker response; reject secret-bearing staged input and unexpected
@@ -79,6 +80,8 @@ project and live CodeBuild build before issuing them.
   artifacts and is never included in model context, logs, results or manifests.
 - [x] Only the exact active fixed CodeBuild attempt can receive short-lived
   customer plan-role credentials, and only for the proposal-scoped policy.
+- [x] Customer plan-role and Terraform state credential issuances persist a
+  non-secret actor/run/build/scope audit event before returning credentials.
 - [x] Credential brokerage fails closed on tenant, project, revision, build,
   account, region, connection, digest, role, policy, secret-store or STS errors.
 - [x] CodeBuild has no `sts:AssumeRole` permission to customer plan roles.
