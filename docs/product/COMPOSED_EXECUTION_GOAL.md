@@ -1,13 +1,33 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-04. This checklist tracks the goal in the attached execution
+Updated: 2026-11-11. This checklist tracks the goal in the private execution
 specification. It is not a launch-readiness claim. “Implemented” means code
 exists; only “AWS verified” and “deployed” records those stronger states.
+
+## Current deployed status — 2026-11-10
+
+Backend `main` commit `f0c6f3af36a0ab14a5dafb9a1684c41140da7eef` was deployed
+by protected plan run [42902031985](https://github.com/Bepoadewale/davdeploy/actions/runs/42902031985)
+and apply run [42902934302](https://github.com/Bepoadewale/davdeploy/actions/runs/42902934302).
+The saved plan reported 6 additions, 8 in-place changes, and 0 destroys;
+migrations passed. The deployed API returned HTTP 200 from `/healthz`; its
+unauthenticated plan-history route returned HTTP 401. PRs #333 and #334 are
+deployed, so exact-revision plan history is available behind authentication.
+An authenticated customer history journey remains unverified. Nova plan
+reviews, plan-runner readiness, role verification, and the state API remain
+disabled; no state bucket is configured. No Nova-generated customer workload
+has been applied, health-checked, recovered, or destroyed. Costed exact-plan
+approval, customer apply, application health, recovery, teardown, and composed
+certification remain incomplete.
+
+The ordered checklist below preserves the 2026-11-04 baseline as historical
+evidence. Where it says PR #303 was not deployed or describes the prior hosted
+release as current, use this dated status and the readiness matrix instead.
 
 Allowed status values: `not started`, `in progress`, `implemented`,
 `locally verified`, `AWS verified`, `deployed`.
 
-## Ordered execution checklist
+## Ordered execution checklist — historical baseline 2026-11-04
 
 | Step | Status | Evidence and next action |
 |---|---|---|
@@ -26,10 +46,16 @@ Allowed status values: `not started`, `in progress`, `implemented`,
 
 ## Active implementation
 
-- PR #303 merged as `ea9de3a` with all seven required checks passing. It fixes the executor dispatcher input allowlist for the typed DynamoDB `table_name`. The latest successful hosted apply remains PR #302 commit `7d087d0` (run `41781326222`), which predates #303. No customer workload was executed and the routes remain gated. The next step is to review and deploy the current-main Terraform plan, then run the controlled hosted lifecycle before enabling any renderer.
-- No local Terraform apply or destroy process is active. The local monitor registry contains historical `FINISHED_UNKNOWN_EXIT` entries, not proven successes; inspect their logs and reconcile AWS state before counting those tests as clean.
+- Backend `main` is `f0c6f3af36a0ab14a5dafb9a1684c41140da7eef`, deployed by
+  apply run `42902934302` after plan run `42902031985`. The deployed plan
+  history APIs from #333/#334 remain behind authentication; the authenticated
+  customer journey is not yet verified.
+- PR #303 is included in the November 10 release. Renderer routes remain
+  gated; no hosted composed customer workload has run. Plan pricing, exact
+  costed approval, customer apply, health observation, recovery, teardown, and
+  independent absence evidence remain outstanding.
 
-## Current verified boundary
+## Verified boundary — historical detail, read with current status above
 
 - Backend main is commit `ea9de3a` (PR #303). The latest hosted release is still PR #302 commit `7d087d0`, deployed by apply run `41781326222`; the reviewed plan changed 6 Lambda packages in place with 0 additions or removals. PR #303 fixes the DynamoDB dispatcher input allowlist in source and passed CI, but is not yet deployed. Renderer routes remain gated. PR #295 validates typed outputs and exposes dependency-output resolution as a library helper; PR #298 schedules one ready module at a time; PR #299 adds a gated private S3 renderer; PR #300 resolves one S3 bucket-name input into Lambda with bucket-scoped IAM; PR #301 adds a gated DynamoDB table renderer; PR #302 binds its table name to Lambda. No hosted composed customer workload has run. PR #275 (`ff5103f`) adds
   project-scoped Lambda/API Terraform state, artifacts, saved plans, results,
@@ -64,10 +90,9 @@ Allowed status values: `not started`, `in progress`, `implemented`,
 ## Nova plan-only runner milestone
 
 - PR #328 merged as `64bfd2c55cf22b61c20305106dcbcec65ef48352` on 2026-11-10.
-  It adds a fixed, versioned, disabled-by-default runner for backend-free
-  initial Terraform plans. Its artifacts are review-only, unapprovable, and
-  non-deployable; the source change is not deployed and regional pricing remains
-  unavailable.
+  Its fixed, versioned, disabled-by-default backend-free planning code is
+  included in the November 10 release. Its artifacts are review-only,
+  unapprovable, and non-deployable; regional pricing remains unavailable.
 - Durable remote state remains a blocker. Proposed ADR-013 selects Terraform's
   built-in HTTP backend, with DavDeploy enforcing tenant/workspace/project/
   environment access and storing encrypted versioned state objects in a
