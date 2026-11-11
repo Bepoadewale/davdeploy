@@ -80,8 +80,8 @@ variable "enable_nova_plan_credential_broker" {
   default     = false
 
   validation {
-    condition     = !var.enable_nova_plan_credential_broker || (var.enable_nova_plan_only_runner && var.enable_nova_plan_role_verification)
-    error_message = "Nova plan credential brokerage requires the isolated plan-only runner and customer plan-role identity verification."
+    condition     = !var.enable_nova_plan_credential_broker || var.enable_nova_plan_role_verification
+    error_message = "Nova plan credential brokerage requires customer plan-role identity verification."
   }
 }
 

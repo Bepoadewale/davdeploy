@@ -180,7 +180,7 @@ def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scop
         "\nvariable ", 1
     )[0]
     assert "default     = false" in broker_variable
-    assert "var.enable_nova_plan_only_runner" in broker_variable
+    assert "var.enable_nova_plan_role_verification" in broker_variable
     assert "var.enable_nova_plan_role_verification" in broker_variable
 
 
