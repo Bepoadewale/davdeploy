@@ -752,6 +752,11 @@ resource "aws_iam_role_policy" "nova_plan_credentials_bootstrap" {
       Effect   = "Allow"
       Action   = ["execute-api:Invoke"]
       Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/nova-plan/credentials"
+      Condition = {
+        ArnLike = {
+          "codebuild:BuildArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:build/${local.nova_plan_only_project_name}:*"
+        }
+      }
     }]
   })
 }

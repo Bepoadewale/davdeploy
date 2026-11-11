@@ -181,13 +181,17 @@ def test_customer_plan_role_verification_is_separate_opt_in_and_role_prefix_scop
     )[0]
     assert "default     = false" in broker_variable
     assert "var.enable_nova_plan_role_verification" in broker_variable
-    assert "var.enable_nova_plan_role_verification" in broker_variable
 
 
 def test_plan_broker_env_is_derived_from_runner_and_not_required_for_setup_only() -> None:
     assert "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED" in MAIN
     assert "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL" in MAIN
     assert "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN" not in MAIN
+    credential_policy = resource_block(
+        MAIN, "aws_iam_role_policy", "nova_plan_credentials_bootstrap"
+    )
+    assert '"codebuild:BuildArn"' in credential_policy
+    assert 'build/${local.nova_plan_only_project_name}:*' in credential_policy
 
 
 def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_logs() -> None:

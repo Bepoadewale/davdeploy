@@ -61,9 +61,9 @@ def make_input_document(
     revision_id="revision-a",
     control_plane_run_id=None,
     environment_id="production",
+    region="us-east-1",
 ):
     build_arn = build_arn or build_arn_for(run_id)
-    region = "us-east-1"
     source_plan_id = f"source-{plan_id}"
     revision = {
         "target": {
@@ -432,6 +432,15 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
     assert result["saved_plan"].version_id == "output-version-1"
     assert not hasattr(runner, "apply")
     assert not hasattr(runner, "destroy")
+
+
+def test_broker_checks_customer_target_region_not_codebuild_region(monkeypatch, tmp_path):
+    document = make_input_document(region="us-west-2")
+    _result, _document, _key, _version, _s3, broker, runner = run_build(
+        monkeypatch, tmp_path, document=document
+    )
+    assert broker.calls[0]["region"] == "us-west-2"
+    assert runner.calls[0]["region"] == "us-west-2"
 
 
 def test_retry_attempt_can_bind_a_distinct_control_plane_request_id(monkeypatch, tmp_path):

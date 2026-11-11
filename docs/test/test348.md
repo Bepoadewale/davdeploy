@@ -24,12 +24,14 @@ default off.
 ## Commands executed
 
 - Focused broker, worker, infrastructure-contract, customer-connection and
-  product tests: **146 passed**.
-- `make verify`: **896 passed**; Ruff, configuration checks, OpenAPI snapshot
+  product tests: **124 passed**.
+- `make verify`: **899 passed**; Ruff, configuration checks, OpenAPI snapshot
   and Docker Compose configuration passed. One existing Starlette/httpx
   deprecation warning remains.
 - `terraform fmt -check -recursive infrastructure/terraform/serverless-control-plane`:
   passed.
+- `terraform -chdir=infrastructure/terraform/serverless-control-plane init
+  -backend=false -lockfile=readonly` and `terraform ... validate`: passed.
 - `git diff --check`: passed.
 - No AWS or Bedrock calls were made. No customer role was assumed and no AWS
   resource was created or changed.
@@ -50,9 +52,10 @@ These tests use mocks for CodeBuild, S3, Secrets Manager and STS. They do not
 prove the hosted API Gateway SigV4 integration, deployed Lambda package,
 customer-role installation, regional pricing, saved-plan approval, or a
 customer workload. The credential broker and Nova runner remain disabled in
-hosted AWS. Isolated clean-room `make local-proof`, GitHub CI and independent
-review are still pending. The checkout has active DavDeploy Docker containers
-and databases, so the local proof was not run against those existing resources.
+hosted AWS. The PR does not grant a general CodeBuild caller access: the AWS
+IAM policy requires the fixed project's `codebuild:BuildArn`, and the API
+matches the authenticated `AWSCodeBuild-<build-UUID>` session to the requested
+live build. GitHub CI and independent review are still pending.
 
 ## Teardown
 

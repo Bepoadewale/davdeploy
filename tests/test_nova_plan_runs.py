@@ -22,6 +22,7 @@ from davdeploy.generated_plan_artifacts import canonical_json_digest
 from davdeploy.main import app, product_service
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
+    AuditEvent,
     GeneratedPlanArtifact,
     GeneratedPlanRun,
     GeneratedPlanRunIdempotencyKey,
@@ -2011,7 +2012,7 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
                 headers={
                     "x-davdeploy-bootstrap-principal": (
                         "arn:aws:sts::654654474502:assumed-role/"
-                        "davdeploy-nova-plan-only/build-session"
+                        f"davdeploy-nova-plan-only/AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
                     )
                 },
             )
@@ -2030,12 +2031,27 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         assert assumed["RoleSessionName"] == f"davdeploy-nova-plan-{run.runner_run_id}"
         policy = json.loads(assumed["Policy"])
         assert {statement["Effect"] for statement in policy["Statement"]} == {"Allow", "Deny"}
+        audit_event = db.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "nova_plan_credentials.issued",
+                AuditEvent.entity_id == run.id,
+            )
+        )
+        assert audit_event is not None
+        assert audit_event.actor_subject.endswith(
+            f"AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
+        )
+        assert audit_event.detail["codebuild_build_arn"] == run.result_metadata[
+            "codebuild_build_arn"
+        ]
+        assert audit_event.detail["revision_sha256"] == run.revision_sha256
+        assert external_id not in json.dumps(audit_event.detail)
     finally:
         app.dependency_overrides.pop(api_main.session, None)
         db.close()
 
 
-@pytest.mark.parametrize("invalid_case", ["wrong_build", "wrong_caller"])
+@pytest.mark.parametrize("invalid_case", ["wrong_build", "wrong_caller", "wrong_session"])
 def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_role(
     monkeypatch, invalid_case
 ):
@@ -2081,7 +2097,11 @@ def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_
                         + (
                             "wrong-role/build-session"
                             if invalid_case == "wrong_caller"
-                            else "davdeploy-nova-plan-only/build-session"
+                        else (
+                            "davdeploy-nova-plan-only/AWSCodeBuild-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                            if invalid_case == "wrong_session"
+                            else f"davdeploy-nova-plan-only/AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
+                        )
                         )
                     )
                 },

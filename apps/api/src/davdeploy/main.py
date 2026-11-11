@@ -15,7 +15,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_client import Counter, generate_latest
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -69,6 +69,7 @@ from davdeploy.generated_plan_artifacts import canonical_json_digest
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
+    AuditEvent,
     CloudConnection,
     Environment,
     GeneratedPlanRun,
@@ -101,6 +102,7 @@ from davdeploy.terraform_state import (
     credential_matches,
     issue_terraform_state_credential,
     terraform_state_scope_digest,
+    trusted_codebuild_build_matches,
     trusted_codebuild_role_matches,
     validate_terraform_state_lock_id,
 )
@@ -424,10 +426,14 @@ def issue_nova_plan_role_credentials(
         raise HTTPException(404, "Nova plan credential brokerage is not enabled")
     principal_arn = request.headers.get("x-davdeploy-bootstrap-principal")
     expected_role = os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN")
-    if not trusted_codebuild_role_matches(principal_arn, expected_role):
-        raise HTTPException(403, "Nova plan credentials require the trusted plan-only role")
     project_name = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "")
-    if not project_name or not body.codebuild_build_id.startswith(f"{project_name}:"):
+    if (
+        not project_name
+        or not body.codebuild_build_id.startswith(f"{project_name}:")
+        or not trusted_codebuild_build_matches(
+            principal_arn, expected_role, project_name, body.codebuild_build_id
+        )
+    ):
         raise HTTPException(403, "CodeBuild project is not the fixed plan-only project")
 
     run = db.get(GeneratedPlanRun, body.run_id)
@@ -596,6 +602,34 @@ def issue_nova_plan_role_credentials(
         or credentials["Expiration"].tzinfo is None
     ):
         raise HTTPException(403, "Customer plan role identity did not match the durable run")
+    if len(principal_arn) > 160:
+        raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
+    db.add(
+        AuditEvent(
+            organization_id=run.organization_id,
+            actor_subject=principal_arn,
+            action="nova_plan_credentials.issued",
+            entity_type="generated_plan_run",
+            entity_id=run.id,
+            detail={
+                "codebuild_build_arn": build_arn,
+                "project_id": run.project_id,
+                "revision_id": run.revision_id,
+                "revision_sha256": run.revision_sha256,
+                "proposal_sha256": run.proposal_sha256,
+                "plan_role_arn": binding["plan_role_arn"],
+                "account_id": binding["account_id"],
+                "region": binding["region"],
+                "policy_version": access_policy.version,
+                "policy_sha256": access_policy.sha256,
+            },
+        )
+    )
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "Credential issuance could not be recorded safely") from None
     response = {
         "contract": "davdeploy.nova-plan-credentials.v1",
         "role_arn": binding["plan_role_arn"],

@@ -41,13 +41,16 @@ project and live CodeBuild build before issuing them.
   integrations, API and CodeBuild IAM, customer-role verification gates.
 - `infrastructure/cloudformation/customer-discovery-role.yaml`: existing
   plan-role trust boundary.
+- AWS [CodeBuild IAM condition keys](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html): `codebuild:BuildArn` is present when calls are made by a role assumed by CodeBuild.
+- AWS [CodeBuild sandbox troubleshooting](https://docs.aws.amazon.com/codebuild/latest/userguide/sandbox-troubleshooting.html): shows the CodeBuild assumed-role session name format, which is matched to the build UUID.
 
 ## Work planned for the PR
 
 - Add a separate AWS_IAM-authenticated credential bootstrap route. API Gateway
   must overwrite the caller-principal header from the authenticated identity.
-- Authenticate only the exact fixed Nova CodeBuild role. Match the request to
-  one active CodeBuild build and one durable `BUILD_STARTED` attempt, then
+- Authenticate only the exact fixed Nova CodeBuild role and its build-specific
+  role session. Match the request to one active CodeBuild build and one durable
+  `BUILD_STARTED` attempt, then
   independently verify the run, revision, tenant, connection, target, input
   version/digest and proposal digest.
 - Resolve ExternalId from the control-plane secret store and assume only the
@@ -63,7 +66,8 @@ project and live CodeBuild build before issuing them.
 - Add negative tests for unauthenticated/wrong-role callers, stale/wrong build,
   cross-tenant or stale revision, connection/account/region mismatch, tampered
   proposal/input, missing secret, invalid STS identity, response leakage and
-  credential expiry.
+  credential expiry. Persist a non-secret audit event before returning any
+  credentials.
 
 ## Acceptance criteria
 
@@ -89,13 +93,14 @@ GitHub checks and independent review remain the merge gate.
 
 ## Tests / validation performed
 
-- Focused suite: 146 passed across the Nova plan worker, broker,
+- Focused suite: 124 passed across Terraform state identity, Nova plan worker,
   infrastructure contract, customer connection contract and product tests.
-- `make verify`: 896 passed; Ruff, Actions configuration, OpenAPI and Compose
+- `make verify`: 899 passed; Ruff, Actions configuration, OpenAPI and Compose
   configuration checks passed.
-- Terraform formatting, focused tests, `git diff --check` and documentation
-  checks passed. Isolated `make local-proof`, hosted CI and independent review
-  remain pending. No AWS calls or customer infrastructure changes were made.
+- Terraform formatting/validation, focused tests, documentation conventions
+  and `git diff --check` passed. Isolated `make local-proof`, final-head GitHub
+  checks and independent review remain pending. No AWS calls or customer
+  infrastructure changes were made.
 
 ## Evidence files produced
 
