@@ -31,18 +31,19 @@ Backend `main` is `334865159a0a6f7dcf155dc7595f4cc455aea679` (PR #352). `generat
 - [x] Actual generated-plan IAM policy analysis fails closed for unsafe `NotAction`, permission-management, and role-delegation constructs.
 - [x] A tightly scoped pass-role grant is surfaced for human review; broad or unconditioned pass-role grants are denied.
 - [x] Regression tests cover positive and negative policy documents and preserve safe policies.
-- [ ] Focused tests, Ruff, full verification, clean-room proof if required by the execution-security change, documentation conventions, and diff checks pass.
+- [x] Focused tests, Ruff, full verification, clean-room proof, documentation conventions, and diff checks pass.
 - [ ] Required final-head CI passes and the current-head code review has no unresolved blocking findings.
 - [x] Runner, state API, role verification, plan review, and customer apply remain disabled; no AWS customer resources are changed.
 
 ## Acceptance status
 
-The implementation is in progress on draft PR #353. The policy now denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The focused test file passed (78 tests), `make verify` passed (917 tests), documentation conventions passed, and `git diff --check` passed. Clean-room verification, final-head CI, and review are pending.
+The implementation is complete on draft PR #353, pending final-head CI and review. The policy denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The focused test file passed (78 tests), `make verify` passed (917 tests), and clean-room `make local-proof` passed with 917 tests in isolated worktree `/private/tmp/davdeploy-pr353-cleanroom` at commit `86757b1`. The isolated stack was stopped; its worktree and local test artifacts were retained. Documentation conventions and `git diff --check` passed. Final-head CI and review are pending.
 
 ## Tests / validation performed
 
 - `uv run pytest -q tests/test_generated_plan_policy.py` — 78 passed.
 - `make verify` — 917 passed; Ruff, Actions configuration, OpenAPI, and Docker Compose configuration checks passed. One existing Starlette/httpx deprecation warning remains.
+- `COMPOSE_PROJECT_NAME=davdeploy-pr353-cleanroom make local-proof` in a fresh worktree at `86757b1` — local services ready, API contract and customer-plan E2E passed, demo data seeded locally, trace check passed, and all 917 tests passed. No AWS calls or customer infrastructure changes occurred. The isolated Docker stack is stopped; its local worktree and generated test artifacts remain available for review.
 - `GITHUB_PR_NUMBER=353 python3.12 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 - Clean-room verification and hosted CI are pending.
