@@ -1,6 +1,6 @@
 # ticket339 — reconcile Nova hosted execution evidence
 
-PR: Draft PR pending creation
+PR: [#339](https://github.com/Bepoadewale/davdeploy/pull/339) (draft)
 Branch: `docs/reconcile-nova-hosted-evidence-339`
 
 ## Problem / goal
@@ -20,7 +20,7 @@ Update the source/deployment readiness record and PR #326–#338 evidence to ref
 - AWS read-only post-apply checks recorded in the local handoff; repository evidence must include only non-secret configuration and observed control-plane status.
 - `docs/IMPLEMENTATION_STATUS.md`, `docs/product/EXECUTION_READINESS_MATRIX.md`, and PR-numbered tickets/evidence.
 
-## Work to be done
+## Work planned for the PR
 
 - Correct #337/#338/#326 ticket and evidence statuses with exact commit, CI, plan/apply run IDs, resource controls, and disabled-feature boundaries.
 - Update implementation/readiness documents to identify deployed source and state-storage infrastructure separately from disabled hosted plan execution.
@@ -28,16 +28,24 @@ Update the source/deployment readiness record and PR #326–#338 evidence to ref
 
 ## Acceptance criteria
 
-- [ ] Repository evidence matches GitHub merge/CI and protected plan/apply records.
-- [ ] Post-apply storage controls and disabled Nova gates are stated precisely.
-- [ ] No claim of hosted customer planning, approval, apply, health, recovery, teardown, or certification is introduced.
-- [ ] Documentation conventions, `make verify`, and diff checks pass; required CI passes.
+- [x] Repository evidence matches GitHub merge/CI and protected plan/apply records.
+- [x] Post-apply storage controls and disabled Nova gates are stated precisely.
+- [x] No claim of hosted customer planning, approval, apply, health, recovery, teardown, or certification is introduced.
+- [x] Documentation conventions, `make verify`, and diff checks pass locally.
+- [ ] Required PR CI passes for the final head.
 
-## Validation performed
+## Acceptance status
 
-Pending.
+Implementation and evidence reconciliation are complete. Documentation convention, `make verify`, and diff checks passed locally; required hosted PR checks are pending.
 
-## Evidence files
+## Tests / validation performed
+
+- `python3.12 scripts/check_doc_conventions.py` — passed.
+- `make verify` — 867 passed; Ruff, OpenAPI, Actions configuration, and Compose checks passed. One existing Starlette/httpx deprecation warning remains.
+- `git diff --check` — passed.
+- Required hosted PR checks — pending.
+
+## Evidence files produced
 
 - `docs/test/test339.md`
 

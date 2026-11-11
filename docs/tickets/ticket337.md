@@ -29,21 +29,21 @@ Allow the existing GitHub Terraform apply role to finish provisioning the dedica
 ## Acceptance criteria
 
 - [x] IAM grants are limited to the exact dedicated state bucket and tagged state key/alias.
-- [ ] The apply role gains no object read/write, bucket deletion, alias deletion, runner, state API, or customer workload permission from this change.
-- [ ] Focused tests, `make verify`, clean-room proof, Terraform formatting/validation, docs checks, and required CI pass.
-- [ ] Bootstrap saved plan has no unrelated changes; exact reviewed plan is applied and state reconciled.
-- [ ] The dedicated state bucket is versioned, SSE-KMS, private, and owner-enforced. State API and runner remain off.
+- [x] The apply role grants only the scoped setup actions; it gains no state-object access, bucket deletion, alias deletion, runner, state API, or customer workload permission from this change.
+- [x] Focused tests, `make verify`, clean-room proof, Terraform formatting/validation, docs checks, and required CI pass; all seven CI checks passed in run [42953078494](https://github.com/Bepoadewale/davdeploy/actions/runs/42953078494).
+- [x] The scoped operations-bootstrap permission update completed, then the fresh reviewed serverless plan from merged #338 was applied and reconciled.
+- [x] The dedicated state bucket is versioned, SSE-KMS encrypted, private, and owner-enforced. State API, runner, plan review, and plan-role verification remain off.
 
 ## Acceptance status
 
 - [x] Exact permission scopes and static regression coverage are implemented.
 - [x] Focused tests, full verification, clean-room proof, Terraform formatting/validation, docs checks, and required CI pass at implementation head `cadcf57`.
-- [ ] Bootstrap saved plan has no unrelated changes; exact reviewed plan is applied and state reconciled.
-- [ ] Dedicated state bucket is versioned, SSE-KMS, private, and owner-enforced; state API and runner remain off.
+- [x] The exact state-storage rollout was applied from current main and reconciled; see `docs/test/test337.md`.
+- [x] Bucket controls were verified read-only; state API, runner, plan review, and role verification remain disabled.
 
 ## Tests / validation performed
 
-See `docs/test/test337.md`; add final commit, CI run, plan/apply run IDs, and post-apply AWS observations before merge/final status.
+See `docs/test/test337.md` for final commits, CI, protected plan/apply runs, and read-only post-apply observations.
 
 ## Evidence files produced
 
@@ -55,4 +55,4 @@ This does not enable the Nova plan runner, state API, plan review, or customer a
 
 ## Follow-up work
 
-After provisioning is reconciled, the next goal dependency is safe hosted plan generation and persistence with the runner and state API gates still disabled until their own evidence and approvals are complete.
+State storage is provisioned. Safe hosted planning still requires a customer plan role with an attested least-privilege policy, tenant-isolated remote state through the separately gated state API, complete trusted regional pricing, and a durable worker path. Keep the runner, state API, plan review, and role verification disabled until their own security evidence and gates are satisfied.
