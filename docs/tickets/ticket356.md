@@ -45,6 +45,8 @@ treated as safe.
 - [x] Unknown critical permission metadata is denied.
 - [x] Focused tests, full verification, Ruff, docs checks and diff checks pass
   locally.
+- [x] Isolated `make local-proof` passes without AWS or customer-resource
+  mutation.
 - [ ] Required hosted CI passes on the final PR head.
 
 ## Acceptance status
@@ -57,6 +59,11 @@ current-head review are pending.
 - `uv run pytest tests/test_generated_plan_policy.py -q` — 97 passed.
 - `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 948
   passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed.
+- `COMPOSE_PROJECT_NAME=davdeploy-pr356-proof
+  DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make local-proof` — passed
+  (948 tests, API contract, customer-plan E2E, seeded demo, trace check and
+  Compose validation). Its dedicated project containers are stopped; the
+  isolated worktree and seeded local database are retained for reproducibility.
 - Focused Ruff, docs conventions and diff checks passed.
 - No AWS calls or customer-resource mutations were made.
 
