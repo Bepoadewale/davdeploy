@@ -17,10 +17,22 @@ above.
 
 ## Commands executed
 
-No Terraform or AWS command was run for this documentation-only PR. The
-workflow, Lambda, and HTTP observations below were collected during the
-November 10 deployment verification and rechecked against its recorded
-evidence.
+No Terraform or AWS mutation was run for this documentation-only PR. Read-only
+AWS CLI checks reconfirmed account `654654474502`, plan/state bucket
+versioning, encryption, and public-access blocks. The workflow, Lambda, and
+HTTP observations below were collected during the November 10 deployment
+verification and rechecked against its recorded evidence.
+
+```text
+aws sts get-caller-identity --profile ai-platform-pilot-key --query Account --output text
+aws s3api list-buckets --profile ai-platform-pilot-key --query 'Buckets[?contains(Name, `davdeploy`)].Name' --output text
+aws s3api get-bucket-versioning --profile ai-platform-pilot-key --bucket davdeploy-tfplans-654654474502
+aws s3api get-bucket-encryption --profile ai-platform-pilot-key --bucket davdeploy-tfplans-654654474502
+aws s3api get-public-access-block --profile ai-platform-pilot-key --bucket davdeploy-tfplans-654654474502
+aws s3api get-bucket-versioning --profile ai-platform-pilot-key --bucket davdeploy-tfstate-654654474502
+aws s3api get-bucket-encryption --profile ai-platform-pilot-key --bucket davdeploy-tfstate-654654474502
+aws s3api get-public-access-block --profile ai-platform-pilot-key --bucket davdeploy-tfstate-654654474502
+```
 
 ## Evidence reviewed
 
@@ -41,7 +53,12 @@ evidence.
   returned HTTP 401. This confirms the route is protected; it does not verify
   an authenticated customer's access or plan history.
 - Nova plan review, runner readiness, role verification, and Terraform state
-  API switches remain false; no state bucket is configured.
+  API switches remain false; no bucket is configured for Nova tenant state.
+- Read-only account inventory found the existing `davdeploy-tfplans-654654474502`
+  bucket is versioned, KMS-encrypted with the DavDeploy plans key, and has all
+  four public-access blocks enabled. The existing
+  `davdeploy-tfstate-654654474502` bucket is versioned and has all four public
+  access blocks enabled, but currently uses S3-managed `AES256` encryption.
 
 ## Result and limits
 

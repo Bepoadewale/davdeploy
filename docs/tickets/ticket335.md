@@ -47,11 +47,11 @@ ready.
       observations.
 - [x] State which Nova feature switches remain disabled and whether hosted
       customer plan history has been authenticated end to end.
-- [x] Reconcile stale “not deployed” statements for PRs #333/#334 without
+- [x] Reconcile stale “not deployed” statements for PRs #303/#328 without
       erasing historical evidence or overstating customer execution readiness.
 - [x] Keep the private Nova goal ledger outside the repository.
-- [ ] Run documentation conventions and diff checks; required GitHub checks
-      pass.
+- [x] Run documentation conventions and diff checks; all seven required
+      GitHub checks pass.
 
 ## Boundaries
 
@@ -60,12 +60,14 @@ feature enablement, or public product claim change.
 
 ## Acceptance status
 
-Documentation edits are complete. Convention and diff checks are being run;
-GitHub checks remain the merge gate.
+Documentation edits are complete. Convention and diff checks passed, as did
+all seven required GitHub checks for PR head `53f0bcf` in run `42945360507`.
 
 ## Tests / validation performed
 
-- Pending documentation convention and diff checks for this PR.
+- `python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- GitHub Actions run `42945360507` — all seven required checks passed.
 - No application tests or infrastructure operations are part of this
   documentation-only change.
 
