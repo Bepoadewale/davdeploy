@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
+from davdeploy import main as api_main
 from davdeploy.db import make_engine, run_migrations
 from davdeploy.domain import GeneratedPlanGenerationReconciliationRequest
 from davdeploy.generated_deployment_contract import (
@@ -1892,4 +1894,201 @@ def test_plan_history_http_route_returns_safe_page_and_denies_other_tenants(tmp_
             assert foreign.status_code == 403
     finally:
         app.dependency_overrides.pop(product_service, None)
+        db.close()
+
+
+def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_build(
+    monkeypatch,
+):
+    service, db, _generator, dispatcher = service_with_dispatcher()
+    class BrokerGenerator(StaticGenerator):
+        def generate(self, **kwargs):
+            generated = super().generate(**kwargs)
+            proposal = generated.proposal.model_copy(
+                update={
+                    "resources": (
+                        GeneratedResource(
+                            resource_id="app-storage",
+                            resource_type="aws_s3_bucket",
+                            name="app_data",
+                            arguments={"bucket": "fixture-plan-broker-bucket"},
+                            rationale="Private application storage.",
+                        ),
+                    )
+                }
+            )
+            return SimpleNamespace(proposal=proposal, response=generated.response)
+
+    service.terraform_generator = BrokerGenerator()
+    _, connection, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    run_summary = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-credential-broker-test-0001"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, run_summary["id"])
+    assert run.state == "BUILD_STARTED"
+    api_main._validate_input_document(
+        dispatcher.build_staged[0][1],
+        run.runner_run_id,
+        PROJECT,
+        run.result_metadata["codebuild_build_arn"],
+    )
+    assumed = {}
+    external_id = service.connection_secrets.get_external_id(connection.external_id_secret_ref)
+
+    class FakeCodeBuild:
+        def batch_get_builds(self, *, ids):
+            assert ids == [run.codebuild_build_id]
+            return {
+                "builds": [
+                    {
+                        "id": run.codebuild_build_id,
+                        "projectName": PROJECT,
+                        "buildStatus": "IN_PROGRESS",
+                        "arn": run.result_metadata["codebuild_build_arn"],
+                        "environment": {
+                            "environmentVariables": [
+                                {"name": "DAVDEPLOY_NOVA_PLAN_RUN_ID", "value": run.runner_run_id}
+                            ]
+                        },
+                    }
+                ]
+            }
+
+    class FakeSTS:
+        def assume_role(self, **kwargs):
+            assumed.update(kwargs)
+            return {
+                "Credentials": {
+                    "AccessKeyId": "ASIAABCDEFGHIJKLMNOP",
+                    "SecretAccessKey": "A" * 40,
+                    "SessionToken": "temporary-session-token-value",
+                    "Expiration": datetime.now(UTC) + timedelta(minutes=10),
+                }
+            }
+
+    class FakeSession:
+        def __init__(self, **_kwargs):
+            pass
+
+        def client(self, name):
+            assert name == "sts"
+            return SimpleNamespace(
+                get_caller_identity=lambda: {
+                    "Account": "654654474502",
+                    "Arn": (
+                        f"arn:aws:sts::654654474502:assumed-role/"
+                        f"davdeployPlan-{connection.id}/davdeploy-nova-plan-{run.runner_run_id}"
+                    ),
+                }
+            )
+
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_PROJECT", PROJECT)
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN",
+        "arn:aws:iam::654654474502:role/davdeploy-nova-plan-only",
+    )
+    monkeypatch.setattr(
+        api_main.NovaPlanOnlyDispatcher,
+        "from_environment",
+        classmethod(lambda _cls: dispatcher),
+    )
+    monkeypatch.setattr(api_main, "configured_connection_secret_store", lambda: service.connection_secrets)
+    monkeypatch.setattr(
+        api_main.boto3,
+        "client",
+        lambda name: FakeCodeBuild() if name == "codebuild" else FakeSTS(),
+    )
+    monkeypatch.setattr(api_main.boto3, "Session", FakeSession)
+    app.dependency_overrides[api_main.session] = lambda: db
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/nova-plan/credentials",
+                json={"run_id": run.id, "codebuild_build_id": run.codebuild_build_id},
+                headers={
+                    "x-davdeploy-bootstrap-principal": (
+                        "arn:aws:sts::654654474502:assumed-role/"
+                        "davdeploy-nova-plan-only/build-session"
+                    )
+                },
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["contract"] == "davdeploy.nova-plan-credentials.v1"
+        assert body["role_arn"] == connection.plan_role_arn
+        assert body["account_id"] == "654654474502"
+        assert body["credentials"]["secret_access_key"] == "A" * 40
+        assert "no-store" in response.headers["cache-control"]
+        assert external_id not in response.text
+        assert external_id not in json.dumps(dispatcher.build_staged[0][1])
+        assert assumed["RoleArn"] == connection.plan_role_arn
+        assert assumed["ExternalId"] == external_id
+        assert assumed["DurationSeconds"] == 900
+        assert assumed["RoleSessionName"] == f"davdeploy-nova-plan-{run.runner_run_id}"
+        policy = json.loads(assumed["Policy"])
+        assert {statement["Effect"] for statement in policy["Statement"]} == {"Allow", "Deny"}
+    finally:
+        app.dependency_overrides.pop(api_main.session, None)
+        db.close()
+
+
+@pytest.mark.parametrize("invalid_case", ["wrong_build", "wrong_caller"])
+def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_role(
+    monkeypatch, invalid_case
+):
+    service, db, _generator, _dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    run_summary = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-credential-broker-test-0002"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, run_summary["id"])
+    assume_calls = []
+
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_PROJECT", PROJECT)
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN",
+        "arn:aws:iam::654654474502:role/davdeploy-nova-plan-only",
+    )
+    client_calls = []
+    monkeypatch.setattr(
+        api_main.boto3,
+        "client",
+        lambda _name: client_calls.append(_name) or SimpleNamespace(),
+    )
+    monkeypatch.setattr(api_main, "configured_connection_secret_store", lambda: SimpleNamespace())
+    app.dependency_overrides[api_main.session] = lambda: db
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/nova-plan/credentials",
+                json={
+                    "run_id": run.id,
+                    "codebuild_build_id": (
+                        f"{PROJECT}:different-build"
+                        if invalid_case == "wrong_build"
+                        else run.codebuild_build_id
+                    ),
+                },
+                headers={
+                    "x-davdeploy-bootstrap-principal": (
+                        "arn:aws:sts::654654474502:assumed-role/"
+                        + (
+                            "wrong-role/build-session"
+                            if invalid_case == "wrong_caller"
+                            else "davdeploy-nova-plan-only/build-session"
+                        )
+                    )
+                },
+            )
+        assert response.status_code == 403
+        assert assume_calls == []
+        assert client_calls == []
+    finally:
+        app.dependency_overrides.pop(api_main.session, None)
         db.close()

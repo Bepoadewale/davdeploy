@@ -16,14 +16,14 @@ project and live CodeBuild build before issuing them.
 
 ## Current repo state
 
-- `service.py` reads the connection ExternalId and embeds it in staged input.
-- `nova_plan_codebuild.py` reads the value and assumes the customer plan role.
+- `service.py` previously read the connection ExternalId and embedded it in staged input.
+- `nova_plan_codebuild.py` previously read that value and assumed the customer plan role.
 - The API already has an AWS_IAM/SigV4 CodeBuild-only Terraform state bootstrap
   route and run/build verification helpers.
-- The API role can assume `davdeployPlan-*` roles when role verification is
-  enabled. The customer plan role trust already includes the control-plane
-  broker principal, and its permissions are bounded by a proposal-scoped,
-  explicit-deny session policy.
+- The API role can assume `davdeployPlan-*` roles for verification and for the
+  separate run-scoped credential broker. The customer plan role trusts only
+  the control-plane role. Its issued session is bounded by a proposal-scoped,
+  explicit-deny policy.
 - Hosted plan runner, state API, plan review, apply and customer execution
   remain disabled. This PR must not enable them.
 
@@ -39,8 +39,8 @@ project and live CodeBuild build before issuing them.
   lookup.
 - `infrastructure/terraform/serverless-control-plane/main.tf`: route
   integrations, API and CodeBuild IAM, customer-role verification gates.
-- `infrastructure/terraform/connection-template-host/customer-connection.yaml`:
-  existing plan-role trust boundary (confirm path before implementation).
+- `infrastructure/cloudformation/customer-discovery-role.yaml`: existing
+  plan-role trust boundary.
 
 ## Work planned for the PR
 
@@ -67,26 +67,39 @@ project and live CodeBuild build before issuing them.
 
 ## Acceptance criteria
 
-- [ ] Customer ExternalId is absent from both request-stage and build-stage
+- [x] Customer ExternalId is absent from both request-stage and build-stage
   artifacts and is never included in model context, logs, results or manifests.
-- [ ] Only the exact active fixed CodeBuild attempt can receive short-lived
+- [x] Only the exact active fixed CodeBuild attempt can receive short-lived
   customer plan-role credentials, and only for the proposal-scoped policy.
-- [ ] Credential brokerage fails closed on tenant, project, revision, build,
+- [x] Credential brokerage fails closed on tenant, project, revision, build,
   account, region, connection, digest, role, policy, secret-store or STS errors.
-- [ ] CodeBuild has no `sts:AssumeRole` permission to customer plan roles.
-- [ ] Existing state bootstrap behavior and unrelated execution paths remain
+- [x] CodeBuild has no `sts:AssumeRole` permission to customer plan roles.
+- [x] Existing state bootstrap behavior and unrelated execution paths remain
   compatible; all Nova planning gates remain off by default.
 - [ ] Focused tests, `make verify`, documentation checks, and a fresh
   `make local-proof` pass; GitHub checks and independent review pass.
-- [ ] No customer role, AWS workload, or infrastructure is mutated by tests.
+- [x] No customer role, AWS workload, or infrastructure is mutated by tests.
+
+## Acceptance status
+
+Implementation and focused/full local verification are complete. The isolated
+clean-room proof was not run because the existing checkout has active DavDeploy
+Docker containers and databases; this PR will not reuse or remove their data.
+GitHub checks and independent review remain the merge gate.
 
 ## Tests / validation performed
 
-- Draft bootstrap only. No implementation or tests yet.
+- Focused suite: 146 passed across the Nova plan worker, broker,
+  infrastructure contract, customer connection contract and product tests.
+- `make verify`: 896 passed; Ruff, Actions configuration, OpenAPI and Compose
+  configuration checks passed.
+- Terraform formatting, focused tests, `git diff --check` and documentation
+  checks passed. Isolated `make local-proof`, hosted CI and independent review
+  remain pending. No AWS calls or customer infrastructure changes were made.
 
 ## Evidence files produced
 
-- To be added as `docs/test/test348.md` after implementation.
+- `docs/test/test348.md`
 
 ## Boundaries
 
@@ -97,7 +110,7 @@ customer workload. The runner, state service and approval gates stay disabled.
 
 ## Follow-up work
 
-- Verify the customer plan-role installation supports the control-plane
+- Verify the customer plan-role installation uses the control-plane
   assumption principal for all existing connections before any hosted plan.
 - Continue the tenant-isolated remote-state, trusted pricing, exact-plan
   approval, apply, health, recovery, teardown and composed-workload gates.

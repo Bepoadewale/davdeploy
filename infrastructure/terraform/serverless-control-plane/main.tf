@@ -234,13 +234,11 @@ resource "aws_iam_role_policy" "api" {
         Action = ["sts:AssumeRole"]
         # The discovery role stays read-only. An execution role exists only
         # when a customer explicitly selected and acknowledged the separate
-        # administrator-pilot connection path; verification must be able to
-        # prove both trusted roles belong to that same account before any
-        # bounded runner can be considered.
+        # administrator-pilot connection path. Plan roles are granted only by
+        # the separate verification and run-scoped credential-broker gates.
         Resource = [
           "arn:aws:iam::*:role/davdeployDiscovery-*",
           "arn:aws:iam::*:role/davdeployExecution-*",
-          "arn:aws:iam::*:role/davdeployPlan-*",
         ]
       },
       {
@@ -285,6 +283,20 @@ resource "aws_iam_role_policy" "api" {
           StringLike = {
             "sts:ExternalId"      = "?*"
             "sts:RoleSessionName" = "davdeploy-plan-verify-*"
+          }
+        }
+      }] : [],
+      var.enable_nova_plan_credential_broker ? [{
+        # Only the run-scoped broker can assume a customer plan role for the
+        # exact active build. Its proposal-derived session policy is applied
+        # to each AssumeRole call; this base grant stays off by default.
+        Effect   = "Allow"
+        Action   = ["sts:AssumeRole"]
+        Resource = "arn:aws:iam::*:role/davdeployPlan-*"
+        Condition = {
+          StringLike = {
+            "sts:ExternalId"      = "?*"
+            "sts:RoleSessionName" = "davdeploy-nova-plan-*"
           }
         }
       }] : [],
@@ -725,18 +737,22 @@ resource "aws_iam_role_policy" "nova_plan_only" {
           }
         }
       },
-      {
-        Effect   = "Allow"
-        Action   = ["sts:AssumeRole"]
-        Resource = "arn:${data.aws_partition.current.partition}:iam::*:role/davdeployPlan-*"
-        Condition = {
-          StringLike = {
-            "sts:ExternalId"      = "?*"
-            "sts:RoleSessionName" = "davdeploy-nova-plan-????????"
-          }
-        }
-      },
     ]
+  })
+}
+
+resource "aws_iam_role_policy" "nova_plan_credentials_bootstrap" {
+  count = var.enable_nova_plan_credential_broker ? 1 : 0
+
+  name = "nova-plan-credential-bootstrap"
+  role = aws_iam_role.nova_plan_only[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["execute-api:Invoke"]
+      Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/nova-plan/credentials"
+    }]
   })
 }
 
@@ -884,6 +900,11 @@ resource "aws_codebuild_project" "nova_plan_only" {
     environment_variable {
       name  = "DAVDEPLOY_NOVA_PLAN_PROJECT_NAME"
       value = local.nova_plan_only_project_name
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL"
+      value = var.enable_nova_plan_credential_broker ? "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/nova-plan/credentials" : ""
       type  = "PLAINTEXT"
     }
     environment_variable {
@@ -1159,7 +1180,6 @@ locals {
     DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED                 = "true"
     DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN                  = aws_iam_role.api.arn
     DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
-    DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN                  = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
     DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                    = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)
@@ -1169,6 +1189,7 @@ locals {
     DAVDEPLOY_TERRAFORM_STATE_BUCKET_OWNER               = var.enable_nova_terraform_state_storage ? data.aws_caller_identity.current.account_id : ""
     DAVDEPLOY_NOVA_PLAN_RUNNER_READY                     = tostring(var.enable_nova_plan_only_runner)
     DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED              = tostring(var.enable_nova_plan_role_verification)
+    DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED        = tostring(var.enable_nova_plan_credential_broker)
     DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
     DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
     DAVDEPLOY_CLOUD_EXECUTION_BACKEND                    = "codebuild"
@@ -1295,6 +1316,19 @@ resource "aws_apigatewayv2_integration" "terraform_state_bootstrap" {
   }
 }
 
+# API Gateway authenticates the fixed plan worker and overwrites its principal
+# header before the Lambda can issue customer role credentials.
+resource "aws_apigatewayv2_integration" "nova_plan_credentials" {
+  api_id                 = aws_apigatewayv2_api.control_plane.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 29000
+  request_parameters = {
+    "overwrite:header.x-davdeploy-bootstrap-principal" = "$context.identity.userArn"
+  }
+}
+
 resource "aws_apigatewayv2_route" "authenticated" {
   api_id             = aws_apigatewayv2_api.control_plane.id
   route_key          = "$default"
@@ -1307,6 +1341,13 @@ resource "aws_apigatewayv2_route" "terraform_state_bootstrap" {
   api_id             = aws_apigatewayv2_api.control_plane.id
   route_key          = "POST /api/v1/terraform-state/credentials"
   target             = "integrations/${aws_apigatewayv2_integration.terraform_state_bootstrap.id}"
+  authorization_type = "AWS_IAM"
+}
+
+resource "aws_apigatewayv2_route" "nova_plan_credentials" {
+  api_id             = aws_apigatewayv2_api.control_plane.id
+  route_key          = "POST /api/v1/nova-plan/credentials"
+  target             = "integrations/${aws_apigatewayv2_integration.nova_plan_credentials.id}"
   authorization_type = "AWS_IAM"
 }
 
@@ -1428,6 +1469,7 @@ resource "aws_apigatewayv2_stage" "default" {
   depends_on = [
     aws_apigatewayv2_route.sensitive,
     aws_apigatewayv2_route.terraform_state_bootstrap,
+    aws_apigatewayv2_route.nova_plan_credentials,
     aws_apigatewayv2_route.terraform_state,
   ]
 

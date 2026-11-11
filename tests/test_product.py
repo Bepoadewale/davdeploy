@@ -660,7 +660,7 @@ def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separat
     )
     assert parameters["param_AccessMode"] == ["plan-only"]
     assert parameters["param_ExternalId"] == [external_id]
-    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == ["unused"]
+    assert "param_davdeployNovaPlanBrokerRoleArn" not in parameters
     assert saved.external_id_secret_ref == secret_ref
     assert saved.setup_state == "VERIFIED"
     assert saved.execution_role_arn is None
@@ -681,10 +681,6 @@ def test_plan_only_setup_url_requires_same_workspace_administrator(monkeypatch):
     monkeypatch.setenv(
         "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
         "arn:aws:iam::111122223333:role/davdeploy-api",
-    )
-    monkeypatch.setenv(
-        "DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN",
-        "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only",
     )
     monkeypatch.setenv(
         "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "https://templates.example/customer.yaml"
@@ -766,10 +762,10 @@ def test_plan_only_quick_create_is_available_without_runner_when_role_verificati
         workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
     )
     parameters = parse_qs(urlsplit(setup["quick_create_url"]).fragment.split("?", 1)[1])
-    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == ["unused"]
+    assert "param_davdeployNovaPlanBrokerRoleArn" not in parameters
 
 
-def test_plan_only_quick_create_uses_runner_role_only_when_runner_is_enabled(monkeypatch):
+def test_plan_only_quick_create_does_not_trust_the_codebuild_runner_role(monkeypatch):
     monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
     monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "davdeploy-nova-plan-only")
     monkeypatch.setenv(
@@ -800,9 +796,7 @@ def test_plan_only_quick_create_uses_runner_role_only_when_runner_is_enabled(mon
         workspace_admin(), connection.id, "123456789012", access_mode="plan-only"
     )
     parameters = parse_qs(urlsplit(setup["quick_create_url"]).fragment.split("?", 1)[1])
-    assert parameters["param_davdeployNovaPlanBrokerRoleArn"] == [
-        "arn:aws:iam::111122223333:role/davdeploy-nova-plan-only"
-    ]
+    assert "param_davdeployNovaPlanBrokerRoleArn" not in parameters
 
 
 def test_plan_only_setup_is_disabled_by_default(monkeypatch):

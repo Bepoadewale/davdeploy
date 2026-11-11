@@ -3899,9 +3899,6 @@ class ProductService:
                     "customer_revision": revision.content,
                     "plan_role": {
                         "arn": connection.plan_role_arn,
-                        "external_id": self.connection_secrets.get_external_id(
-                            connection.external_id_secret_ref
-                        ),
                     },
                     "proposal_sha256": proposal_sha256,
                     "ownership_scope": {
@@ -4791,8 +4788,7 @@ class ProductService:
             or staged_input.get("revision_sha256") != revision.content_digest
             or staged_input.get("customer_revision") != revision_content
             or staged_input.get("proposal_sha256") != run.proposal_sha256
-            or staged_input.get("plan_role")
-            != {"arn": exact_role_arn, "external_id": external_id}
+            or staged_input.get("plan_role") != {"arn": exact_role_arn}
         ):
             raise ValueError("exact staged Nova input no longer matches its durable row")
 
@@ -5706,7 +5702,7 @@ class ProductService:
                     "role trust verification failed; the expected template policy is not verified"
                     if connection.plan_role_setup_state == "VERIFICATION_FAILED"
                     else (
-                        "role trust and account are verified; installed policy contents and later changes are not attested; the fixed planner applies its own proposal-scoped explicit-deny session policy"
+                        "role trust and account are verified; installed policy contents and later changes are not attested; the control-plane credential broker applies a proposal-scoped explicit-deny session policy to each exact active plan run"
                         if connection.plan_role_setup_state == "VERIFIED"
                         else "template is expected to install bounded Terraform metadata reads with an explicit deny outside the profile; setup is not yet verified"
                     )
@@ -5773,8 +5769,6 @@ class ProductService:
                 )
         discovery_broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
         execution_broker_role_arn = os.getenv("DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN")
-        nova_plan_broker_role_arn = os.getenv("DAVDEPLOY_NOVA_PLAN_BROKER_ROLE_ARN", "").strip()
-        nova_plan_project = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "").strip()
         # Compatibility is intentionally temporary for pre-split hosted configurations.
         legacy_broker_role_arn = os.getenv("DAVDEPLOY_CONTROL_PLANE_ROLE_ARN")
         discovery_broker_role_arn = discovery_broker_role_arn or legacy_broker_role_arn
@@ -5795,17 +5789,6 @@ class ProductService:
                 raise ValueError(
                     "a plan-only setup has already been started for this connection; verify it or create a new connection"
                 )
-            if nova_plan_project and not re.fullmatch(
-                r"arn:aws:iam::[0-9]{12}:role/.+", nova_plan_broker_role_arn
-            ):
-                raise RuntimeError(
-                    "Nova plan-only runner is enabled without its configured broker role ARN"
-                )
-            # With the runner disabled, the API can still create and verify the
-            # plan-only role. The CloudFormation template then omits the optional
-            # future runner principal from its trust policy.
-            if not nova_plan_project:
-                nova_plan_broker_role_arn = ""
             external_id = self.connection_secrets.get_external_id(connection.external_id_secret_ref)
             plan_role_arn = f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
             stack_name = f"davdeploy-Plan-{connection.id}"
@@ -5828,7 +5811,6 @@ class ProductService:
         parameters = {
             "davdeployDiscoveryBrokerRoleArn": discovery_broker_role_arn,
             "davdeployExecutionBrokerRoleArn": execution_broker_role_arn or "unused",
-            "davdeployNovaPlanBrokerRoleArn": nova_plan_broker_role_arn or "unused",
             "AccessMode": access_mode,
             "ExternalId": external_id,
             "ConnectionId": connection.id,
@@ -5880,7 +5862,7 @@ class ProductService:
             "customer_steps": (
                 [
                     "Open the AWS Quick Create link in the customer account already connected for discovery.",
-                    "Review the template's bounded planning metadata reads. The fixed planner also scopes each temporary session to the proposed resources and denies other actions.",
+                    "Review the template's bounded planning metadata reads. The control plane scopes each temporary plan session to the proposed resources and denies other actions.",
                     "Create the stack, then return to DavDeploy to verify plan-role trust and account identity; effective permissions and later policy changes are not attested.",
                 ]
                 if access_mode == "plan-only"
