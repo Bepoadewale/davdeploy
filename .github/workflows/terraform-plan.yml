@@ -41,6 +41,9 @@ jobs:
       TF_VAR_enable_nova_plan_reviews: ${{ vars.NOVA_PLAN_REVIEWS_ENABLED || 'false' }}
       TF_VAR_enable_nova_plan_role_verification: ${{ vars.NOVA_PLAN_ROLE_VERIFICATION_ENABLED || 'false' }}
       TF_VAR_enable_nova_plan_only_runner: ${{ vars.NOVA_PLAN_ONLY_RUNNER_ENABLED || 'false' }}
+      TF_VAR_enable_nova_terraform_state_storage: ${{ vars.NOVA_TERRAFORM_STATE_STORAGE_ENABLED || 'false' }}
+      TF_VAR_enable_nova_terraform_state_api: ${{ vars.NOVA_TERRAFORM_STATE_API_ENABLED || 'false' }}
+      TF_VAR_nova_terraform_state_api_url: ${{ vars.NOVA_TERRAFORM_STATE_API_URL || '' }}
       TF_VAR_nova_plan_artifact_bucket: ${{ vars.TF_PLAN_BUCKET }}
       TF_VAR_nova_plan_kms_key_arn: ${{ vars.TF_PLAN_KMS_KEY_ARN }}
       TF_VAR_enable_customer_cloud_execution: ${{ vars.ENABLE_CUSTOMER_CLOUD_EXECUTION || 'false' }}
