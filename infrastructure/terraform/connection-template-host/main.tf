@@ -95,22 +95,15 @@ resource "aws_s3_object" "retained_customer_templates" {
   }
 }
 
-# Retain the formerly published template referenced by active customer stacks
-# and saved Quick Create URLs when this newer role template is published.
+# Retain the currently published template referenced by customer stacks and
+# saved Quick Create URLs when this newer role template is published.
 moved {
   from = aws_s3_object.active_customer_discovery_role
-  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-0e3209bff02286acf582ec3ed73858266261b294ae0c7e0d30ae37550a8926b2.yaml"]
+  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]
 }
 
 # Preserve the original object address from the first published template.
 moved {
   from = aws_s3_object.customer_discovery_role
   to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]
-}
-
-# Preserve the currently published template URL before publishing the next
-# immutable version. Existing stacks and saved Quick Create links keep working.
-moved {
-  from = aws_s3_object.current_customer_discovery_role
-  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]
 }
