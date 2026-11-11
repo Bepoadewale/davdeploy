@@ -55,14 +55,14 @@ saved-plan manifest.
   and covered by the approved manifest digest.
 - [x] Unproposed and unsupported actions remain denied; replacement/deletion
   still requires human review.
-- [ ] Focused tests, full clean-room proof, documentation conventions, and all
+- [x] Focused tests, full clean-room proof, documentation conventions, and all
   required hosted CI pass.
 - [x] No AWS customer plan/apply or infrastructure mutation is performed.
 
 ## Acceptance status
 
-Implementation is locally verified and the clean-room proof passed. Hosted CI
-and independent review are pending. The feature still does not enable remote
+Implementation, clean-room proof, and all required hosted CI are verified.
+Code review found no blocking issue. The feature still does not enable remote
 state or customer execution.
 
 ## Tests / validation performed
@@ -82,6 +82,11 @@ state or customer execution.
   Ruff, and Compose validation. One existing Starlette/httpx deprecation
   warning remains. Project `davdeploy-pr359` containers were stopped; the
   worktree and generated test volume/database were retained.
+- Final-head GitHub Actions run `43092825058` passed all seven required jobs at
+  commit `978b7bfb387b6d09dff93cc915b997ffaa1cc71b`.
+- Final code review of the route-target binding, state-scope check, ownership
+  inventory reconstruction, manifest binding, and fail-closed defaults found
+  no blocking issue.
 
 ## Evidence files produced
 
