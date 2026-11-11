@@ -39,7 +39,9 @@ verified.
 - [x] Explicit `NONE` yields an open-route review finding; `JWT`, `AWS_IAM`,
   and `CUSTOM` do not yield that finding.
 - [x] Focused tests, full verification, clean-room local proof, and
-  documentation conventions pass; required hosted CI is pending.
+  documentation conventions pass; all seven required checks passed on
+  implementation commit `e4c846b` in run `43086747416`. The current ticket-only
+  update requires a final-head check run.
 - [x] No customer AWS plan or infrastructure mutation was performed.
 
 ## Acceptance status
@@ -48,6 +50,9 @@ The policy check and focused tests are implemented. The complete policy still
 denies these untaggable route resources at the ownership boundary until exact
 ownership records for non-taggable resources are implemented. Hosted planning
 remains disabled; no customer AWS plan or infrastructure mutation occurred.
+Codex review found the current implementation bounded to policy versioning,
+unknown-value denial, and explicit review for open routes; it does not claim
+that untaggable routes can pass the ownership gate.
 
 ## Tests / validation performed
 
