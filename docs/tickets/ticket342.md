@@ -43,19 +43,23 @@ claiming that DavDeploy attests effective customer permissions.
   not attested.
 - [ ] Plan-role verification continues to check trust/account only and never
   claims policy verification.
-- [ ] Focused tests, full `make verify`, docs conventions, and required CI pass.
+- [x] Focused tests (10), Ruff, documentation conventions, and diff checks
+  pass.
+- [ ] Required final-head CI passes.
 - [ ] Hosted execution flags remain off; no AWS/customer role changes occur.
 
 ## Acceptance status
 
-The template summary line is corrected in bootstrap commit `e386f04`. Remaining
-setup copy, verifier documentation, regression tests, and validation are in
-progress.
+The template summary, customer setup instructions, boundary response, and
+verifier docstring are corrected at implementation commit
+`a7c7df1fbba39c333418afd86b24b793a36c00f1`. Ten focused tests, Ruff, docs
+conventions, and diff checks pass. Required hosted CI remains pending. No AWS
+or customer role changes occurred.
 
 ## Tests / validation performed
 
-See `docs/test/test342.md`; exact commands and results will be added before the
-PR is review-ready.
+See `docs/test/test342.md` for exact commands, results, the initial corrected
+test failure, and boundaries.
 
 ## Evidence files produced
 
