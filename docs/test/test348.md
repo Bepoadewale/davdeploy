@@ -60,10 +60,11 @@ customer workload. The credential broker and Nova runner remain disabled in
 hosted AWS. The PR does not grant a general CodeBuild caller access: the AWS
 IAM policy requires the fixed project's `codebuild:BuildArn`, and the API
 derives the build ID from the authenticated `AWSCodeBuild-<build-UUID>` session
-instead of accepting it from the request. Final-head GitHub CI and independent
-review are still pending. The full local clean-room proof has not been run;
-only a separate, isolated Compose project will be used if cleanup of its exact
-test artifacts is approved.
+instead of accepting it from the request. GitHub CI run `43023798614` passed
+all seven required checks for implementation commit `7f66011`. Current-head
+independent review and the full local clean-room proof remain pending. The
+proof will use a separate Compose project; approval to remove its exact
+generated artifacts is still pending.
 
 ## Teardown
 

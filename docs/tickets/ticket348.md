@@ -86,8 +86,10 @@ project and live CodeBuild build before issuing them.
   bound to the same active run; its request now carries only the durable run
   ID and derives build identity from SigV4, with its IAM permission restricted
   to the fixed project. All Nova planning gates remain off by default.
-- [ ] Focused tests, `make verify`, documentation checks, and a fresh
-  `make local-proof` pass; GitHub checks and independent review pass.
+- [x] Focused tests, `make verify`, Terraform validation and documentation
+  checks pass; all seven required GitHub checks pass on implementation commit
+  `7f66011`.
+- [ ] Fresh `make local-proof` and independent current-head review pass.
 - [x] No customer role, AWS workload, or infrastructure is mutated by tests.
 
 ## Acceptance status
@@ -95,8 +97,9 @@ project and live CodeBuild build before issuing them.
 Implementation and focused/full local verification are complete. The isolated
 clean-room proof is awaiting permission to remove only its exact isolated
 Compose resources and temporary worktree after completion. Existing DavDeploy
-containers, databases and their data will remain untouched. GitHub checks and
-independent review remain the merge gate.
+containers, databases and their data will remain untouched. All seven required
+GitHub checks passed for implementation commit `7f66011`; independent review
+and clean-room proof remain the merge gate.
 
 ## Tests / validation performed
 
@@ -105,8 +108,9 @@ independent review remain the merge gate.
 - `make verify`: 899 passed; Ruff, Actions configuration, OpenAPI and Compose
   configuration checks passed.
 - Terraform formatting/validation, focused tests, documentation conventions
-  and `git diff --check` passed. Isolated `make local-proof`, final-head GitHub
-  checks and independent review remain pending. No AWS calls or customer
+  and `git diff --check` passed. GitHub run `43023798614` passed all seven
+  required jobs for implementation commit `7f66011`; isolated `make
+  local-proof` and independent review remain pending. No AWS calls or customer
   infrastructure changes were made.
 
 ## Evidence files produced
