@@ -31,7 +31,7 @@ from davdeploy.terraform_state import (
     parse_terraform_lock,
     parse_terraform_state,
     terraform_state_scope_digest,
-    trusted_codebuild_build_matches,
+    trusted_codebuild_build_id,
     trusted_codebuild_role_matches,
     validate_terraform_state_lock_id,
 )
@@ -149,34 +149,29 @@ def test_bootstrap_principal_must_be_the_exact_assumed_codebuild_role():
     assert not trusted_codebuild_role_matches(expected, expected)
 
 
-def test_codebuild_principal_must_match_the_exact_build_session_uuid():
+def test_codebuild_build_id_is_derived_from_the_authenticated_session():
     expected = "arn:aws:iam::654654474502:role/service-role/davdeploy-nova-plan-only"
     build_id = "davdeploy-nova-plan-only:12345678-1234-4234-8234-123456789abc"
     caller = (
         "arn:aws:sts::654654474502:assumed-role/service-role/davdeploy-nova-plan-only/"
         "AWSCodeBuild-12345678-1234-4234-8234-123456789abc"
     )
-    assert trusted_codebuild_build_matches(
-        caller, expected, "davdeploy-nova-plan-only", build_id
-    )
-    assert not trusted_codebuild_build_matches(
-        caller,
-        expected,
-        "davdeploy-nova-plan-only",
-        "davdeploy-nova-plan-only:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    )
-    assert not trusted_codebuild_build_matches(
+    assert trusted_codebuild_build_id(
+        caller, expected, "davdeploy-nova-plan-only"
+    ) == build_id
+    assert trusted_codebuild_build_id(
+        caller, expected, "another-project"
+    ) == "another-project:12345678-1234-4234-8234-123456789abc"
+    assert trusted_codebuild_build_id(
         caller.replace("/AWSCodeBuild-", "/manual-session-"),
         expected,
         "davdeploy-nova-plan-only",
-        build_id,
-    )
-    assert not trusted_codebuild_build_matches(
-        caller,
+    ) is None
+    assert trusted_codebuild_build_id(
+        caller.replace("12345678-1234-4234-8234-123456789abc", "not-a-uuid"),
         expected,
         "davdeploy-nova-plan-only",
-        "another-project:12345678-1234-4234-8234-123456789abc",
-    )
+    ) is None
 
 
 def test_bootstrap_rejects_environment_from_another_tenant_or_project():

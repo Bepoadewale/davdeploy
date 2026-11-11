@@ -18,7 +18,7 @@ Role verification proves that STS can assume the role and that its caller identi
 
 ## Trust boundary
 
-Discovery and plan roles require the connection's unique ExternalId. Both trust the control-plane role. For Nova planning, the API verifies the durable run, active CodeBuild build, immutable revision and proposal before assuming the exact plan role with a proposal-scoped explicit-deny session policy. CodeBuild has no customer-role `sts:AssumeRole` permission.
+Discovery and plan roles require the connection's unique ExternalId. Both trust the control-plane role. For Nova planning, the API derives the build ID from the authenticated CodeBuild role session, then verifies the durable run, active build, immutable revision and proposal before assuming the exact plan role with a proposal-scoped explicit-deny session policy. The broker request contains only a run ID; callers cannot select a build ID. CodeBuild has no customer-role `sts:AssumeRole` permission.
 
 The ExternalId stays in the control-plane secret store, but Quick Create includes it in the AWS Console URL so CloudFormation can write the trust condition. Treat that link as sensitive until the role is installed. It is not an AWS access key or customer workload credential.
 

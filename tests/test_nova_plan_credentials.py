@@ -12,7 +12,6 @@ from davdeploy.nova_plan_credentials import (
 )
 
 RUN_ID = "12345678-1234-1234-1234-123456789012"
-BUILD_ID = "davdeploy-nova-plan-only:build-abc123"
 ROLE_ARN = "arn:aws:iam::654654474502:role/davdeployPlan-connection-a"
 ACCOUNT = "654654474502"
 REGION = "us-east-1"
@@ -65,7 +64,6 @@ def request(**overrides):
     values = {
         "broker_url": URL,
         "durable_run_id": RUN_ID,
-        "codebuild_build_id": BUILD_ID,
         "region": REGION,
         "expected_role_arn": ROLE_ARN,
         "expected_account_id": ACCOUNT,
@@ -77,7 +75,7 @@ def request(**overrides):
     return values
 
 
-def test_request_sigv4s_only_durable_run_and_exact_build_and_returns_redacted_repr():
+def test_request_sigv4s_only_durable_run_and_returns_redacted_repr():
     seen = {}
     document = credentials_response()
 
@@ -94,7 +92,7 @@ def test_request_sigv4s_only_durable_run_and_exact_build_and_returns_redacted_re
     assert seen["method"] == "POST"
     assert seen["url"] == URL
     assert "authorization" in {name.lower() for name in seen["headers"]}
-    assert json.loads(seen["body"]) == {"run_id": RUN_ID, "codebuild_build_id": BUILD_ID}
+    assert json.loads(seen["body"]) == {"run_id": RUN_ID}
     assert seen["timeout"] == 15
     assert result.role_arn == ROLE_ARN
     assert result.account_id == ACCOUNT

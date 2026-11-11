@@ -83,29 +83,24 @@ def trusted_codebuild_role_matches(
     )
 
 
-def trusted_codebuild_build_matches(
+def trusted_codebuild_build_id(
     actual_principal_arn: str | None,
     expected_role_arn: str | None,
     expected_project_name: str,
-    codebuild_build_id: str,
-) -> bool:
-    """Bind an authenticated CodeBuild role session to its exact build UUID."""
+) -> str | None:
+    """Derive the caller's build ID from its authenticated CodeBuild session."""
     if not trusted_codebuild_role_matches(actual_principal_arn, expected_role_arn):
-        return False
+        return None
     if (
         not isinstance(actual_principal_arn, str)
         or not isinstance(expected_project_name, str)
-        or not isinstance(codebuild_build_id, str)
-        or not codebuild_build_id.startswith(f"{expected_project_name}:")
     ):
-        return False
+        return None
     actual = _ASSUMED_ROLE_ARN.fullmatch(actual_principal_arn)
-    build_uuid = codebuild_build_id.rsplit(":", 1)[-1]
-    return bool(
-        actual
-        and _UUID.fullmatch(build_uuid)
-        and actual.group("session") == f"AWSCodeBuild-{build_uuid}"
-    )
+    session = re.fullmatch(r"AWSCodeBuild-(?P<build_uuid>[0-9a-f-]{36})", actual.group("session")) if actual else None
+    if session is None or not _UUID.fullmatch(session.group("build_uuid")):
+        return None
+    return f"{expected_project_name}:{session.group('build_uuid')}"
 
 
 def terraform_state_scope_digest(

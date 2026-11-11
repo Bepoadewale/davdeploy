@@ -57,7 +57,6 @@ def request_nova_plan_credentials(
     *,
     broker_url: str,
     durable_run_id: str,
-    codebuild_build_id: str,
     region: str,
     expected_role_arn: str,
     expected_account_id: str,
@@ -75,7 +74,6 @@ def request_nova_plan_credentials(
         raise NovaPlanCredentialError("durable Nova plan run ID is invalid") from None
     if (
         signing_region is None
-        or not re.fullmatch(r"[A-Za-z0-9_-]{2,255}:[A-Za-z0-9_-]{1,255}", codebuild_build_id)
         or not re.fullmatch(r"\d{12}", expected_account_id)
         or not re.fullmatch(
             rf"arn:aws:iam::{expected_account_id}:role/davdeployPlan-[A-Za-z0-9-]{{1,100}}",
@@ -98,7 +96,7 @@ def request_nova_plan_credentials(
         raise NovaPlanCredentialError("CodeBuild service-role credentials are unavailable") from None
 
     body = json.dumps(
-        {"run_id": durable_run_id, "codebuild_build_id": codebuild_build_id},
+        {"run_id": durable_run_id},
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")

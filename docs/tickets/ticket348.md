@@ -49,8 +49,9 @@ project and live CodeBuild build before issuing them.
 - Add a separate AWS_IAM-authenticated credential bootstrap route. API Gateway
   must overwrite the caller-principal header from the authenticated identity.
 - Authenticate only the exact fixed Nova CodeBuild role and its build-specific
-  role session. Match the request to one active CodeBuild build and one durable
-  `BUILD_STARTED` attempt, then
+  role session. Derive the build ID from that authenticated session; accept
+  only the durable run ID in the broker request. Match the session-derived ID
+  to one active CodeBuild build and one durable `BUILD_STARTED` attempt, then
   independently verify the run, revision, tenant, connection, target, input
   version/digest and proposal digest.
 - Resolve ExternalId from the control-plane secret store and assume only the
@@ -87,9 +88,10 @@ project and live CodeBuild build before issuing them.
 ## Acceptance status
 
 Implementation and focused/full local verification are complete. The isolated
-clean-room proof was not run because the existing checkout has active DavDeploy
-Docker containers and databases; this PR will not reuse or remove their data.
-GitHub checks and independent review remain the merge gate.
+clean-room proof is awaiting permission to remove only its exact isolated
+Compose resources and temporary worktree after completion. Existing DavDeploy
+containers, databases and their data will remain untouched. GitHub checks and
+independent review remain the merge gate.
 
 ## Tests / validation performed
 

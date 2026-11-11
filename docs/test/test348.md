@@ -39,8 +39,10 @@ default off.
 ## Observed result
 
 The control-plane API and fixed worker contract passed the local automated
-tests. The configured production path remains disabled, and no hosted plan or
-customer role assumption was attempted.
+tests. The API derives the build ID from the authenticated CodeBuild session;
+the signed request carries only a durable run ID. The configured production
+path remains disabled, and no hosted plan or customer role assumption was
+attempted.
 
 ## Resources created
 
@@ -54,8 +56,11 @@ customer-role installation, regional pricing, saved-plan approval, or a
 customer workload. The credential broker and Nova runner remain disabled in
 hosted AWS. The PR does not grant a general CodeBuild caller access: the AWS
 IAM policy requires the fixed project's `codebuild:BuildArn`, and the API
-matches the authenticated `AWSCodeBuild-<build-UUID>` session to the requested
-live build. GitHub CI and independent review are still pending.
+derives the build ID from the authenticated `AWSCodeBuild-<build-UUID>` session
+instead of accepting it from the request. Final-head GitHub CI and independent
+review are still pending. The full local clean-room proof has not been run;
+only a separate, isolated Compose project will be used if cleanup of its exact
+test artifacts is approved.
 
 ## Teardown
 

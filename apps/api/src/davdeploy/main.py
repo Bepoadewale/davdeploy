@@ -54,6 +54,7 @@ from davdeploy.domain import (
     InvitationRequest,
     LocalLoginRequest,
     MembershipRoleRequest,
+    NovaPlanCredentialRequest,
     OnboardingRequest,
     PlanCommentRequest,
     ProjectRequest,
@@ -102,7 +103,7 @@ from davdeploy.terraform_state import (
     credential_matches,
     issue_terraform_state_credential,
     terraform_state_scope_digest,
-    trusted_codebuild_build_matches,
+    trusted_codebuild_build_id,
     trusted_codebuild_role_matches,
     validate_terraform_state_lock_id,
 )
@@ -417,7 +418,7 @@ def issue_terraform_state_credentials(
 
 @app.post("/api/v1/nova-plan/credentials", include_in_schema=False)
 def issue_nova_plan_role_credentials(
-    body: TerraformStateCredentialRequest,
+    body: NovaPlanCredentialRequest,
     request: Request,
     db: Session = Depends(session),
 ):
@@ -427,13 +428,8 @@ def issue_nova_plan_role_credentials(
     principal_arn = request.headers.get("x-davdeploy-bootstrap-principal")
     expected_role = os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN")
     project_name = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "")
-    if (
-        not project_name
-        or not body.codebuild_build_id.startswith(f"{project_name}:")
-        or not trusted_codebuild_build_matches(
-            principal_arn, expected_role, project_name, body.codebuild_build_id
-        )
-    ):
+    build_id = trusted_codebuild_build_id(principal_arn, expected_role, project_name)
+    if not project_name or build_id is None:
         raise HTTPException(403, "CodeBuild project is not the fixed plan-only project")
 
     run = db.get(GeneratedPlanRun, body.run_id)
@@ -441,7 +437,7 @@ def issue_nova_plan_role_credentials(
         run is None
         or run.state != "BUILD_STARTED"
         or run.codebuild_project != project_name
-        or run.codebuild_build_id != body.codebuild_build_id
+        or run.codebuild_build_id != build_id
         or not run.runner_run_id
         or not run.input_key
         or not run.input_version_id
@@ -452,13 +448,14 @@ def issue_nova_plan_role_credentials(
     ):
         raise HTTPException(403, "CodeBuild run is not bound to a durable Nova plan request")
     try:
-        build_response = boto3.client("codebuild").batch_get_builds(ids=[body.codebuild_build_id])
+        build_response = boto3.client("codebuild").batch_get_builds(ids=[build_id])
     except (BotoCoreError, ClientError, TypeError, ValueError):
         raise HTTPException(503, "Could not verify the active Nova plan build") from None
     builds = build_response.get("builds", []) if isinstance(build_response, dict) else []
     if (
         len(builds) != 1
         or not isinstance(builds[0], dict)
+        or builds[0].get("id") != build_id
         or not _build_matches_generated_plan_run(builds[0], run, project_name)
     ):
         raise HTTPException(403, "CodeBuild build is not the active trusted plan attempt")

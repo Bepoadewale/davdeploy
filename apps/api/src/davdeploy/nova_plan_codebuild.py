@@ -131,7 +131,6 @@ def run_nova_plan_build(
         broker_credentials = credential_request(
             broker_url=broker_url,
             durable_run_id=binding["control_plane_run_id"],
-            codebuild_build_id=build_id,
             region=binding["region"],
             expected_role_arn=binding["plan_role_arn"],
             expected_account_id=binding["account_id"],

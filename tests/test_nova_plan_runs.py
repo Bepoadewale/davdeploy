@@ -2008,7 +2008,7 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/nova-plan/credentials",
-                json={"run_id": run.id, "codebuild_build_id": run.codebuild_build_id},
+                json={"run_id": run.id},
                 headers={
                     "x-davdeploy-bootstrap-principal": (
                         "arn:aws:sts::654654474502:assumed-role/"
@@ -2051,7 +2051,9 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         db.close()
 
 
-@pytest.mark.parametrize("invalid_case", ["wrong_build", "wrong_caller", "wrong_session"])
+@pytest.mark.parametrize(
+    "invalid_case", ["caller_supplied_build", "wrong_caller", "wrong_session"]
+)
 def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_role(
     monkeypatch, invalid_case
 ):
@@ -2083,14 +2085,8 @@ def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/nova-plan/credentials",
-                json={
-                    "run_id": run.id,
-                    "codebuild_build_id": (
-                        f"{PROJECT}:different-build"
-                        if invalid_case == "wrong_build"
-                        else run.codebuild_build_id
-                    ),
-                },
+                json=({"run_id": run.id, "codebuild_build_id": run.codebuild_build_id}
+                      if invalid_case == "caller_supplied_build" else {"run_id": run.id}),
                 headers={
                     "x-davdeploy-bootstrap-principal": (
                         "arn:aws:sts::654654474502:assumed-role/"
@@ -2106,7 +2102,7 @@ def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_
                     )
                 },
             )
-        assert response.status_code == 403
+        assert response.status_code == (422 if invalid_case == "caller_supplied_build" else 403)
         assert assume_calls == []
         assert client_calls == []
     finally:
