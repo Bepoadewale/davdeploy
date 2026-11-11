@@ -1,7 +1,7 @@
 # ticket356 — review unscoped Lambda invocation permissions in Nova plans
 
-PR: [#356](https://github.com/Bepoadewale/davdeploy/pull/356) (draft)
-Branch: `security/lambda-public-invoke-policy-356`
+PR: [#356](https://github.com/Bepoadewale/davdeploy/pull/356) (merged)
+Branch: `security/lambda-public-invoke-policy-356` (deleted after merge)
 Base: `main`
 
 ## Problem / goal
@@ -14,11 +14,14 @@ must not be treated as safe.
 
 ## Current repo state
 
+- PR #356 merged as `11e66e878933a69638128a8bab80115c051d230a` and was
+  deployed through the protected control-plane workflow.
 - Backend `main` includes the SQS public-policy hardening from PR #355.
 - Generated-plan policy has separate deterministic checks for IAM, S3, SQS,
   databases, network ingress and EBS encryption.
-- The customer Nova plan runner and approval gates remain disabled; this PR
-  does not run Terraform or contact AWS.
+- The customer Nova plan runner and approval gates remain disabled. The
+  control-plane release updates the existing DavDeploy service only; it does
+  not create or mutate customer infrastructure.
 
 ## Research / references used
 
@@ -48,16 +51,16 @@ must not be treated as safe.
   locally.
 - [x] Isolated `make local-proof` passes without AWS or customer-resource
   mutation.
-- [ ] Required hosted CI passes on the final PR head.
+- [x] Required hosted CI passes on the final PR head.
 
 ## Acceptance status
 
-Implementation and local verification are complete; hosted CI and
-current-head review are pending.
+Merged, locally verified, clean-room verified, and deployed. Final-head PR CI
+run `43081014081` passed all seven required jobs. Codex review found no
+blocker. Protected release evidence is in [`test356.md`](../test/test356.md).
 
 ## Tests / validation performed
 
-- `uv run pytest tests/test_generated_plan_policy.py -q` — 97 passed.
 - `uv run pytest tests/test_generated_plan_policy.py -q` — 101 passed.
 - `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 952
   passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed.
@@ -67,13 +70,18 @@ current-head review are pending.
   Compose validation). Its dedicated project containers are stopped; the
   isolated worktree and seeded local database are retained for reproducibility.
 - Focused Ruff, docs conventions and diff checks passed.
-- No AWS calls or customer-resource mutations were made.
+- Control-plane plan `43081890092` and exact saved-plan apply
+  `43082767507` deployed merge commit `11e66e8`; migrations completed, all six
+  Lambdas are Active/Successful, and `/healthz` returned HTTP 200. No customer
+  plan, role, workload or resource was created or changed.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket356.md` records scope, tests and rollout boundary.
 - The generated-plan policy regression tests are in
   `tests/test_generated_plan_policy.py`.
+- `docs/test/test356.md` records the exact protected release and post-deployment
+  health evidence.
 
 ## Boundaries
 
