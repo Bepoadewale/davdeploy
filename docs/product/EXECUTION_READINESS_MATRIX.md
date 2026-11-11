@@ -1,8 +1,30 @@
 # Execution readiness matrix
 
-Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below for the November 11 release; the dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
+Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current hosted release — 2026-11-11, PR #356
+## Current hosted release — 2026-11-11, PR #358
+
+Backend `main` commit `4de1022592fdf65cdd38f32386cbccbce5a40071` (PR #358) was
+applied by protected Terraform plan
+[43088843169](https://github.com/Bepoadewale/davdeploy/actions/runs/43088843169)
+and exact saved-plan apply
+[43091195912](https://github.com/Bepoadewale/davdeploy/actions/runs/43091195912),
+deployment `7720114909`. Reviewed summary: 0 additions, 6 in-place Lambda
+updates, 0 destroys, no drift, and 8 output changes. Migrations passed. All
+six Lambdas are Active with successful updates and share
+`CodeSha256=ow5dokRWRp4rsyxb3NnPpkjIfil1xps+G4/OwLcgV9g=`. Read-only identity was
+account `654654474502` in `us-east-1`; `/healthz` returned
+`{"status":"ok","product":"davdeploy"}`. Nova runner, role verification,
+credential broker, Terraform state API, plan reviews, and hosted certification
+flags are `false`. The legacy cloud-execution command and `ALLOW_CLOUD_PLAN` /
+`ALLOW_CLOUD_APPLY` remain `true`; they are not Nova plan/apply gates. PR #358
+adds actual-plan API Gateway route authorization policy; PR #359's exact
+state-backed ownership code is merged in source at `d734547` but was not part
+of this deployed package. No Nova customer plan or workload was applied,
+operated, health-checked, or certified. Release evidence:
+[`test358.md`](../test/test358.md).
+
+## Historical hosted release — 2026-11-11, PR #356
 
 Backend `main` commit `11e66e878933a69638128a8bab80115c051d230a` was applied
 by protected Terraform plan [43081890092](https://github.com/Bepoadewale/davdeploy/actions/runs/43081890092)
@@ -10,14 +32,24 @@ and apply [43082767507](https://github.com/Bepoadewale/davdeploy/actions/runs/43
 deployment `7718925708`. Saved-plan manifest SHA-256:
 `e6b6babaa01f0e4ebcf2b30023231e47e45f2edc2c142ff71a905bcc005efecf`.
 Reviewed summary: 0 additions, 6 in-place Lambda updates, 0 destroys, no drift,
-and 8 output changes. Migrations passed; all six Lambdas are Active and
+and 8 output changes. Migrations passed; all six Lambdas were Active and
 Successful with `CodeSha256=qdnufg4s7uxN9qJyxhyWs8rD/GXgt+PzXeKlKLYyt3g=`;
-`/healthz` returned HTTP 200. PR #354's bounded plan-log summary and PRs
-#355–#356's SQS/Lambda invocation plan checks are deployed. The Nova plan
-runner, customer-role verification, broker, plan reviews, state API and
-hosted certification remain false or absent. No customer Nova plan/workload
-was created, applied, operated, or certified. Full release evidence is in
-[`docs/test/test356.md`](../test/test356.md).
+`/healthz` returned HTTP 200. The Nova plan runner, customer-role verification,
+broker, plan reviews, state API and hosted certification remained false or
+absent. No customer Nova plan/workload was created, applied, operated, or
+certified. Full release evidence is in [`test356.md`](../test/test356.md).
+
+## Source merged after the latest deployment — PR #359
+
+PR #359 merged as `d734547a0551e85c5eafcc7349561e3ea7790589` after all seven
+final-head checks passed (PR run `43093754779`; merged-main run
+`43094436034`). It adds bounded state-backed ownership for API Gateway route
+resources and requires each route to reference an API in the same proposal and
+actual plan. The change is in source but not in the deployed Lambda package.
+Its protected rollout plan has not produced a Terraform job; the first
+workflow attempt ended `startup_failure` with no jobs or logs. Do not treat
+that workflow attempt as a plan or deployment. Current Nova feature gates
+remain disabled.
 
 ## Historical hosted release — 2026-11-11, PR #351
 
@@ -27,7 +59,7 @@ and apply [43056460175](https://github.com/Bepoadewale/davdeploy/actions/runs/43
 
 Earlier the same day, backend commit `a533d131b50add04b9a9d3501ebba07d76ffbd52` (PR #348) was applied by protected Terraform plan [43033942614](https://github.com/Bepoadewale/davdeploy/actions/runs/43033942614) and apply [43034517260](https://github.com/Bepoadewale/davdeploy/actions/runs/43034517260). The plan reported 2 additions, 7 in-place changes, and 0 deletions. Apply used that exact saved plan and verified database migrations. All six Lambda functions were Active with successful updates and shared deployed `CodeSha256` `JfulBnszTNX+JkZ2iUZG31R9QYwlYbu+0Gl0jxRq8YA=`, matching the versioned control-plane artifact from that commit (S3 version `HxTxhux_5PFgg4SriG5okf4dh85FAcmY`). `/healthz` returned HTTP 200. The credential route and integration were deployed, but live flags for the broker, plan runner, plan-role verification, state API and plan reviews were all `false`. PR #349 later merged a workflow variable mapping with a `false` default; it did not change the deployed Lambda package. The dedicated versioned SSE-KMS state bucket remains provisioned, and the API Lambda has no access to Terraform state objects. PRs #333/#334 plan-history APIs, #340's bounded plan-role metadata-read/session-policy contract, and #346's paginated customer revision-history API are deployed in control-plane code. PR #344 published the versioned f3d9e1 customer plan-role template and retained the previous 7e setup URL; the protected control-plane URL points to f3d9e1. The template has not been installed for a customer, and effective customer permissions are not attested. The new #346 API was not called with an authenticated customer identity; the customer history UI has not integrated it. No Nova customer plan or workload has been applied, operated, or certified.
 
-Current Nova source also includes the isolated CodeBuild plan boundary (#324), durable plan requests (#325), customer plan-role contract (#326), pinned initial planner (#328), remote state API and isolated state wiring (#331–#332), tenant-scoped run history (#333–#334), the fixed customer plan-access profile (#340), paginated customer revision history (#346), the run-scoped credential broker (#348), and actual-plan hardening for IAM, SQS and Lambda invocation (#353, #355–#356). The bounded protected plan-log summary is also deployed (#354). The broker API code is deployed but disabled; PR #349 exposes its protected workflow flag with a default of `false`. The state bucket is provisioned, but the state API, plan worker, role verification, credential broker and plan reviews remain disabled. The customer plan-role template allows bounded metadata reads; the control plane applies an explicit-deny session policy scoped to declared proposal resources before returning short-lived credentials to the exact active CodeBuild run. Customer role installation and effective account permissions remain unverified. Tenant-specific remote-state path isolation is not active. The initial runner remains non-approvable because complete regional pricing and exact cost-bound approval are unavailable. No Nova-generated customer plan or workload has been run, applied, health-checked, recovered, or destroyed. PR #313 closed unmerged and is superseded by #314; PR #318 pricing work remains held after being closed by the account owner.
+Current Nova source also includes the isolated CodeBuild plan boundary (#324), durable plan requests (#325), customer plan-role contract (#326), pinned initial planner (#328), remote state API and isolated state wiring (#331–#332), tenant-scoped run history (#333–#334), the fixed customer plan-access profile (#340), paginated customer revision history (#346), the run-scoped credential broker (#348), and actual-plan hardening for IAM, SQS, Lambda invocation, and API Gateway route authorization (#353, #355–#356, #358). PR #359 adds an exact ownership record for untaggable API Gateway routes, but is not yet deployed. The bounded protected plan-log summary is deployed (#354). The broker API code is deployed but disabled; PR #349 exposes its protected workflow flag with a default of `false`. The state bucket is provisioned, but the state API, plan worker, role verification, credential broker and plan reviews remain disabled. The customer plan-role template allows bounded metadata reads; the control plane applies an explicit-deny session policy scoped to declared proposal resources before returning short-lived credentials to the exact active CodeBuild run. Customer role installation and effective account permissions remain unverified. Tenant-specific remote-state path isolation is not active. The initial runner remains non-approvable because complete regional pricing and exact cost-bound approval are unavailable. No Nova-generated customer plan or workload has been run, applied, health-checked, recovered, or destroyed. PR #313 closed unmerged and is superseded by #314; PR #318 pricing work remains held after being closed by the account owner.
 
 ## Hosted deployment evidence
 
@@ -51,7 +83,7 @@ certification gate disabled and its workspace allowlist empty.
 | Layer | Current evidence | State |
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
-| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access plus actual-plan policy hardening for IAM, SQS and Lambda invocation (#314, #324–#334, #340, #353, #355–#356) | Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
+| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access plus actual-plan policy hardening for IAM, SQS, Lambda invocation and API Gateway route authorization (#314, #324–#334, #340, #353, #355–#356, #358–#359) | #358 policy is deployed; #359 ownership support is merged but pending rollout. Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api`, `aws-file-storage` and `aws-nosql-data` disabled | One customer renderer enabled; S3 and DynamoDB renderer routes remain gated; PR #303's allowlist correction is included in the November 10 backend release |
 | CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling; #299 adds the gated S3 dispatch mapping; #300 adds a validated S3 bucket input for Lambda; #301 adds the gated DynamoDB dispatch route; #302 adds its `table_name` input; #303 corrects the source allowlist for that input. | #303 is deployed with renderer gates still disabled; live composed lifecycle remains unproven |
