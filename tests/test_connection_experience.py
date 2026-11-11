@@ -209,6 +209,62 @@ def test_cloud_connection_list_reports_plan_role_policy_as_unattested_when_ident
     assert item["plan_role_policy_status"] == "POLICY_UNATTESTED"
 
 
+def test_plan_role_setup_availability_requires_a_ready_discovery_only_connection(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
+        "arn:aws:iam::654654474502:role/davdeploy-discovery-broker",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL",
+        "https://example.invalid/customer-discovery-role.yaml",
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer account", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        "arn:aws:iam::123456789012:role/davdeployDiscovery-connection"
+    )
+    connection.external_id_secret_ref = "secret-reference"
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+
+    item = next(
+        entry for entry in list_cloud_connections(founder(), service) if entry["id"] == connection.id
+    )
+    assert item["plan_role_setup_available"] is True
+
+    monkeypatch.delenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
+    assert service.plan_role_setup_available(connection) is False
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
+        "arn:aws:iam::654654474502:role/davdeploy-discovery-broker",
+    )
+    monkeypatch.delenv("DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL")
+    assert service.plan_role_setup_available(connection) is False
+    monkeypatch.setenv(
+        "DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL",
+        "https://example.invalid/customer-discovery-role.yaml",
+    )
+
+    connection.execution_role_arn = "arn:aws:iam::123456789012:role/davdeployExecution-connection"
+    assert service.plan_role_setup_available(connection) is False
+    connection.execution_role_arn = None
+    connection.setup_state = "SETUP_LINK_GENERATED"
+    assert service.plan_role_setup_available(connection) is False
+    connection.setup_state = "VERIFIED"
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-connection"
+    connection.plan_role_setup_state = "VERIFIED"
+    assert service.plan_role_setup_available(connection) is False
+    connection.plan_role_arn = None
+    connection.plan_role_setup_state = "NOT_CONFIGURED"
+
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false")
+    assert service.plan_role_setup_available(connection) is False
+
+
 def signed_fixture_webhook(service, event: str, delivery_id: str, payload: dict):
     return service.receive_github_webhook(
         event=event,

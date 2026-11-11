@@ -1,5 +1,6 @@
 # ticket351 — Expose Nova plan-role setup readiness
 
+PR: [#351](https://github.com/Bepoadewale/davdeploy/pull/351) (draft)
 Branch: `feat/nova-plan-role-setup-status-351`
 Base: `main`
 
@@ -27,19 +28,23 @@ The API already generates a plan-only Quick Create link for workspace administra
 
 ## Acceptance criteria
 
-- [ ] Setup availability is true only when every server-side prerequisite is present.
-- [ ] Existing execution roles, unverified connections, configured plan roles, and disabled/missing setup gates yield false.
-- [ ] Cross-tenant access remains denied; the availability field exposes no secrets or role credentials.
-- [ ] The setup endpoint remains authoritative and no planning or AWS mutation is enabled by this PR.
+- [x] Setup availability is true only when every server-side prerequisite is present.
+- [x] Existing execution roles, unverified connections, configured plan roles, and disabled/missing setup gates yield false.
+- [x] Cross-tenant access remains denied; the availability field exposes no secrets or role credentials.
+- [x] The setup endpoint remains authoritative and no planning or AWS mutation is enabled by this PR.
 - [ ] Focused tests, full verification, documentation conventions, and required GitHub CI pass.
 
 ## Acceptance status
 
-Implementation has not started. This ticket is the draft-PR bootstrap record.
+The customer-safe readiness signal and fail-closed tests are implemented. Focused and full local verification passed; required GitHub CI and current-head review remain.
 
 ## Tests / validation performed
 
-- None yet.
+- `GITHUB_PR_NUMBER=351 python scripts/check_doc_conventions.py` — passed.
+- `uv run ruff check apps/api/src/davdeploy/main.py apps/api/src/davdeploy/service.py tests/test_connection_experience.py` — passed.
+- `uv run pytest tests/test_connection_experience.py -q` — 16 passed; one existing Starlette/httpx deprecation warning.
+- `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 904 tests passed; Actions configuration, Ruff, OpenAPI snapshot, and Docker Compose configuration passed. The existing Starlette/httpx deprecation warning remains.
+- No AWS calls, plan-role setup, infrastructure changes, or customer workload were used.
 
 ## Evidence files produced
 
@@ -51,4 +56,4 @@ This PR only describes whether role setup can be offered. It does not attest eff
 
 ## Follow-up work
 
-Expose the administrator-only plan-role setup and verification flow in the customer Connections page; keep it unavailable unless the backend says setup is ready.
+Merge/deploy the administrator-only Connections-page setup flow from frontend PR #102 together with this readiness field. Keep plan-role setup unavailable until the runtime gate and required setup configuration are deliberately enabled and verified.

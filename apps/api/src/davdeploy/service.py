@@ -5724,6 +5724,32 @@ class ProductService:
             return "VERIFICATION_FAILED"
         return "EXPECTED_UNVERIFIED"
 
+    @staticmethod
+    def plan_role_setup_available(connection: CloudConnection) -> bool:
+        """Tell the UI when the guarded plan-role setup action can be offered.
+
+        This is only a customer-safe display hint. The setup operation repeats
+        every check and remains the authorization boundary.
+        """
+        discovery_broker_role = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN") or os.getenv(
+            "DAVDEPLOY_CONTROL_PLANE_ROLE_ARN"
+        )
+        template_url = os.getenv("DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL", "").strip()
+        return bool(
+            connection.provider == "aws"
+            and connection.setup_state == "VERIFIED"
+            and connection.account_id
+            and connection.discovery_role_arn
+            and connection.external_id_secret_ref
+            and not connection.execution_role_arn
+            and not connection.plan_role_arn
+            and connection.plan_role_setup_state == "NOT_CONFIGURED"
+            and os.getenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false").lower()
+            == "true"
+            and discovery_broker_role
+            and template_url
+        )
+
     def disconnect_cloud_connection(self, principal: Principal, connection_id: str) -> None:
         connection = self._cloud_connection(principal, connection_id)
         self.db.query(CloudDiscoveryJob).filter(
