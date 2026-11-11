@@ -42,20 +42,21 @@ configuration incomplete.
 
 ## Acceptance criteria
 
-- [ ] The protected Terraform plan passes the three state inputs, with enable
+- [x] The protected Terraform plan passes the three state inputs, with enable
       flags defaulting to false and URL defaulting to empty.
-- [ ] The Actions variable allowlist accepts only the new named variables.
-- [ ] Contract tests assert the mappings and fail-closed Terraform validations.
-- [ ] No hosted state API, runner, or customer workload is enabled by this PR.
+- [x] The Actions variable allowlist accepts only the new named variables.
+- [x] Contract tests assert the mappings and fail-closed Terraform validations.
+- [x] No hosted state API, runner, or customer workload is enabled by this PR.
 - [ ] Focused and full verification pass; required CI checks pass.
 
 ## Acceptance status
 
-Implementation has not started.
+Workflow mappings, explicit allowlist entries, static contract checks, and
+configuration documentation are implemented. Verification remains.
 
 ## Tests / validation performed
 
-Pending implementation.
+Pending focused/full verification and required CI.
 
 ## Evidence files produced
 

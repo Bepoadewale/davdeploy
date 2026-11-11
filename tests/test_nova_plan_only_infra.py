@@ -56,6 +56,19 @@ def test_nova_plan_only_resources_are_opt_in_and_fail_closed() -> None:
 
 
 def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
+    assert (
+        "TF_VAR_enable_nova_terraform_state_storage: "
+        "${{ vars.NOVA_TERRAFORM_STATE_STORAGE_ENABLED || 'false' }}"
+    ) in PLAN_WORKFLOW
+    assert (
+        "TF_VAR_enable_nova_terraform_state_api: "
+        "${{ vars.NOVA_TERRAFORM_STATE_API_ENABLED || 'false' }}"
+    ) in PLAN_WORKFLOW
+    assert (
+        "TF_VAR_nova_terraform_state_api_url: "
+        "${{ vars.NOVA_TERRAFORM_STATE_API_URL || '' }}"
+    ) in PLAN_WORKFLOW
+
     route = resource_block(MAIN, "aws_apigatewayv2_route", "terraform_state_bootstrap")
     integration = resource_block(MAIN, "aws_apigatewayv2_integration", "terraform_state_bootstrap")
     role_policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only_state_bootstrap")

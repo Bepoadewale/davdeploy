@@ -17,6 +17,9 @@ The current Terraform environments use these non-secret variables:
 - `GOOGLE_IDENTITY_PROVIDER_ENABLED`
 - `NOVA_PLAN_ONLY_RUNNER_ENABLED`
 - `NOVA_PLAN_ROLE_VERIFICATION_ENABLED`
+- `NOVA_TERRAFORM_STATE_API_ENABLED`
+- `NOVA_TERRAFORM_STATE_API_URL`
+- `NOVA_TERRAFORM_STATE_STORAGE_ENABLED`
 - `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED`
 - `SERVERLESS_CERTIFICATION_WORKSPACE_IDS_JSON`
 - `TF_PLAN_BUCKET`
@@ -30,15 +33,22 @@ These values identify deployment configuration. They do not authenticate a calle
 GitHub Actions variables. Bucket policies, IAM trust policies, KMS policies, branch restrictions,
 and environment protections provide authorization.
 
-`NOVA_PLAN_ONLY_RUNNER_ENABLED` defaults to `false`. Keep it disabled until the reviewed fixed
-Nova plan-only runner is wired. When enabled, Terraform creates a separate CodeBuild project and
-scoped role, but its checked-in buildspec still fails closed until that runner replaces the stub.
+`NOVA_PLAN_ONLY_RUNNER_ENABLED` defaults to `false`. When enabled, Terraform creates a separate
+fixed CodeBuild project and scoped role. Its generated plans remain unapprovable while complete
+regional pricing evidence is unavailable; enabling this flag alone does not authorize customer
+resource changes.
 
 `NOVA_PLAN_ROLE_VERIFICATION_ENABLED` maps to Terraform's
 `enable_nova_plan_role_verification` input and defaults to `false` when unset. The protected
 `terraform-plan` workflow reads this Actions variable; leave it unset or explicitly `false` in the
 hosted environment until plan-role verification is deliberately enabled. This setting is separate
 from the Nova runner flag and does not attest customer role permissions or enable deployment.
+
+`NOVA_TERRAFORM_STATE_STORAGE_ENABLED` and `NOVA_TERRAFORM_STATE_API_ENABLED` both default to
+`false`; `NOVA_TERRAFORM_STATE_API_URL` defaults to an empty value. The API flag is rejected by
+Terraform unless the isolated Nova runner and dedicated state bucket are also enabled and the URL
+is a valid HTTPS origin. These workflow mappings only pass configuration to the reviewed saved
+plan. They do not change the hosted values or enable remote state by themselves.
 
 The serverless API certification inputs are off by default. Set
 `SERVERLESS_API_HOSTED_CERTIFICATION_ENABLED` to `true` only for a controlled certification and
