@@ -9,8 +9,8 @@ Base: `main`
 The Nova plan access profile supports `aws_lambda_permission`, but generated
 Terraform plan policy did not inspect its actual invocation principal or
 source restriction. A wildcard principal with no source ARN can permit
-unbounded function invocation. Unknown principal/source values must not be
-treated as safe.
+unbounded function invocation. Unknown security-relevant permission values
+must not be treated as safe.
 
 ## Current repo state
 
@@ -30,8 +30,8 @@ treated as safe.
 
 ## Work planned for the PR
 
-- Include Lambda permission action, function, principal and source ARN in
-  policy-critical unknown checks.
+- Include Lambda permission action, function, principal, organization, source,
+  and function-URL authentication fields in policy-critical unknown checks.
 - Deny wildcard-principal invocation without a nonempty, non-wildcard source
   ARN.
 - Mark a wildcard principal with a source ARN for explicit human review.
@@ -42,7 +42,8 @@ treated as safe.
 - [x] Wildcard principal without a scoped source is denied.
 - [x] Wildcard principal with a source restriction requires human review.
 - [x] A specific service principal is not classified as wildcard public access.
-- [x] Unknown critical permission metadata is denied.
+- [x] Unknown principal, organization, source account/ARN, action, function,
+  and function-URL authentication metadata is denied.
 - [x] Focused tests, full verification, Ruff, docs checks and diff checks pass
   locally.
 - [x] Isolated `make local-proof` passes without AWS or customer-resource
@@ -57,11 +58,12 @@ current-head review are pending.
 ## Tests / validation performed
 
 - `uv run pytest tests/test_generated_plan_policy.py -q` — 97 passed.
-- `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 948
+- `uv run pytest tests/test_generated_plan_policy.py -q` — 101 passed.
+- `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 952
   passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed.
-- `COMPOSE_PROJECT_NAME=davdeploy-pr356-proof
+- `COMPOSE_PROJECT_NAME=davdeploy-pr356-final-proof
   DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make local-proof` — passed
-  (948 tests, API contract, customer-plan E2E, seeded demo, trace check and
+  (952 tests, API contract, customer-plan E2E, seeded demo, trace check and
   Compose validation). Its dedicated project containers are stopped; the
   isolated worktree and seeded local database are retained for reproducibility.
 - Focused Ruff, docs conventions and diff checks passed.

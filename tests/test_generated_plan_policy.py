@@ -508,7 +508,11 @@ def test_specific_lambda_service_principal_is_not_public_invoke():
     assert "lambda_public_invoke_review" not in codes(evaluate(document))
 
 
-def test_unknown_lambda_permission_principal_is_denied():
+@pytest.mark.parametrize(
+    "unknown_field",
+    ["principal", "source_arn", "source_account", "principal_org_id", "function_url_auth_type"],
+)
+def test_unknown_lambda_permission_security_fields_are_denied(unknown_field):
     document = add_lambda_permission(
         plan(),
         {
@@ -516,7 +520,7 @@ def test_unknown_lambda_permission_principal_is_denied():
             "function_name": "application-handler",
             "principal": "apigateway.amazonaws.com",
         },
-        after_unknown={"principal": True},
+        after_unknown={unknown_field: True},
     )
 
     assert "policy_critical_value_unknown" in codes(evaluate(document))

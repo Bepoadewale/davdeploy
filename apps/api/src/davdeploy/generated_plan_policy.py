@@ -73,7 +73,10 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_lambda_permission": (
         ("action",),
         ("function_name",),
+        ("function_url_auth_type",),
         ("principal",),
+        ("principal_org_id",),
+        ("source_account",),
         ("source_arn",),
     ),
     "aws_db_instance": (
