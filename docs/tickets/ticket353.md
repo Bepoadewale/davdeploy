@@ -52,7 +52,10 @@ The implementation is complete on draft PR #353. The policy denies IAM allow sta
 
 ## Evidence files produced
 
-A runtime evidence file will be added only if a customer workload or AWS mutation is performed. This PR is intended to use local policy fixtures and tests only.
+The PR implementation was tested with local policy fixtures and tests only.
+The later protected control-plane release is recorded in
+[`test353.md`](../test/test353.md); it did not create or change customer
+workloads or customer IAM roles.
 
 ## Boundaries
 
@@ -61,3 +64,11 @@ This is plan-level policy hardening. It does not install or attest customer IAM 
 ## Follow-up work
 
 Continue the hosted plan-worker/state/pricing prerequisites and exact-cost approval. PR #318 remains closed and held for account-owner direction.
+
+## Post-merge control-plane release
+
+The merged policy change was deployed with the protected saved-plan workflow.
+The exact plan and deployment, migration result, six Lambda identities, health
+check, and still-disabled Nova runtime gates are recorded in
+[`test353.md`](../test/test353.md). This release did not apply a Nova customer
+plan or customer workload.

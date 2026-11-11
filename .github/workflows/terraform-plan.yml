@@ -131,7 +131,14 @@ jobs:
             -backend-config="encrypt=true"
           terraform fmt -check -recursive
           terraform validate
-          terraform plan -input=false -out=tfplan
+          if ! terraform plan -input=false -out=tfplan -no-color >/dev/null 2>/dev/null; then
+            echo "Terraform planning failed; raw plan diagnostics were suppressed." >&2
+            exit 1
+          fi
+          if ! terraform show -json -no-color tfplan 2>/dev/null | python ../../../scripts/summarize_terraform_plan.py; then
+            echo "Terraform plan summary failed closed; no saved plan was published." >&2
+            exit 1
+          fi
           sha256sum tfplan | awk '{print $1}' >tfplan.sha256
           plan_key="plans/serverless-control-plane/${GITHUB_SHA}/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"
           jq -n \
