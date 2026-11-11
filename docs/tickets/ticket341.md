@@ -36,6 +36,9 @@ evidence separate from production release evidence.
   values in `docs/test/test341.md`.
 - Reconcile PR #340's ticket and local-only test evidence with its merge and
   later production control-plane release.
+- Reconcile the current source/deployment statements in `PROJECT_STATUS.md`,
+  `docs/IMPLEMENTATION_STATUS.md`, `docs/product/EXECUTION_READINESS_MATRIX.md`,
+  and `CODEX_BACKLOG.md` without changing product claims.
 - Preserve sensitive plan values, environment values, and customer details
   from the evidence.
 
@@ -47,6 +50,8 @@ evidence separate from production release evidence.
   are recorded.
 - [x] Customer roles/workloads and hosted Nova gates are clearly stated as
   unchanged/disabled.
+- [x] Current technical status docs identify the deployed backend commit and
+  preserve pricing, customer-role verification, and lifecycle limitations.
 - [x] Local documentation convention checks and `git diff --check` pass.
 - [ ] Required final-head CI passes.
 
@@ -70,6 +75,9 @@ checks and CI before merge.
 
 - `docs/test/test341.md`
 - Reconciled: `docs/test/test340.md`, `docs/tickets/ticket340.md`
+- Current-state reconciliation: `PROJECT_STATUS.md`, `CODEX_BACKLOG.md`,
+  `docs/IMPLEMENTATION_STATUS.md`,
+  `docs/product/EXECUTION_READINESS_MATRIX.md`
 
 ## Boundaries
 
