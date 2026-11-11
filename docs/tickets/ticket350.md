@@ -30,16 +30,18 @@ PR #348 was merged as `a533d131b50add04b9a9d3501ebba07d76ffbd52` and deployed by
 - [x] Matrix cites exact commit, plan/apply runs, migration result, Lambda status, artifact identity, and health check.
 - [x] Matrix explicitly says the Nova broker and runner remain disabled and no customer plan/workload was created.
 - [x] Ticket records the exact PR number and deployment evidence.
-- [ ] Documentation conventions and required final-head CI pass.
+- [x] Documentation conventions and required CI pass on evidence commit `5d2e15e` in run `43039364305`.
 
 ## Acceptance status
 
-Matrix update and source evidence reconciliation are complete. Documentation convention and diff checks passed; final-head CI remains pending.
+Matrix update and source evidence reconciliation are complete. Documentation convention and diff checks passed; all seven required checks passed on `5d2e15e` in run `43039364305`, and current-head Codex review found no major issues. This ticket now records the evidence; its final documentation-only update will receive the merge-gate checks.
 
 ## Tests / validation performed
 
 - `python scripts/check_doc_conventions.py` passed.
 - `git diff --check` passed.
+- PR CI run `43039364305` passed all seven jobs on evidence commit `5d2e15e`.
+- Current-head Codex review of `5d2e15e` found no major issues.
 - No runtime tests are required for this documentation-only PR. The cited AWS and workflow evidence was collected before opening the PR.
 
 ## Evidence files produced
