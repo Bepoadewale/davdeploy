@@ -31,24 +31,23 @@ Backend `main` is `334865159a0a6f7dcf155dc7595f4cc455aea679` (PR #352). `generat
 - [x] Actual generated-plan IAM policy analysis fails closed for unsafe `NotAction`, permission-management, and role-delegation constructs.
 - [x] A tightly scoped pass-role grant is surfaced for human review; broad or unconditioned pass-role grants are denied.
 - [x] Regression tests cover positive and negative policy documents and preserve safe policies.
-- [ ] Focused tests, Ruff, full verification, clean-room proof, documentation conventions, and diff checks pass on the final code head.
-- [ ] Required final-head CI passes and the current-head code review has no unresolved blocking findings.
+- [x] Focused tests, Ruff, full verification, clean-room proof, documentation conventions, and diff checks pass on the final code head.
+- [ ] Required latest-head CI passes and the latest code review has no unresolved blocking findings.
 - [x] Runner, state API, role verification, plan review, and customer apply remain disabled; no AWS customer resources are changed.
 
 ## Acceptance status
 
-The implementation is in progress on draft PR #353, pending final clean-room proof, CI, and review. The policy denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, rejects wildcard/unverified and external-account trust principals, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition, same-account role trust, and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The expanded focused tests pass (82 tests) and current `make verify` passes (921 tests); the isolated clean-room run on this expanded code is pending. Hosted CI and review are pending.
+The implementation is complete on draft PR #353. The policy denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, rejects wildcard/unverified and external-account trust principals, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition, same-account role trust, and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The focused tests pass (82 tests), `make verify` passes (921 tests), and final-code clean-room `make local-proof` passes in isolated worktree `/private/tmp/davdeploy-pr353-final-cleanroom` at commit `549c0ab`. Documentation conventions and diff checks passed. The isolated Docker stack is stopped; its worktree and local test artifacts are retained. CI run `43063902324` passed all seven jobs on code commit `549c0ab`; Codex review of that exact code commit found no major issues. A latest-head CI run and review are needed after this ticket update.
 
 ## Tests / validation performed
 
 - `uv run ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
 - `uv run pytest -q tests/test_generated_plan_policy.py` — 82 passed after expanding trust checks.
 - `make verify` — 921 passed; Ruff, Actions configuration, OpenAPI, and Docker Compose configuration checks passed. One existing Starlette/httpx deprecation warning remains.
-- An earlier clean-room `COMPOSE_PROJECT_NAME=davdeploy-pr353-cleanroom make local-proof` at `86757b1` passed before the trust-check expansion; it is superseded for final-head evidence. The isolated Docker stack was stopped and its worktree/local test artifacts retained.
-- Final-code clean-room proof, documentation convention checks, and diff checks are pending.
+- An earlier clean-room run at `86757b1` passed before the trust-check expansion and is superseded.
+- `COMPOSE_PROJECT_NAME=davdeploy-pr353-final-cleanroom make local-proof` in a fresh worktree at `549c0ab` — local services ready, API contract and customer-plan E2E passed, demo data seeded locally, trace check passed, and all 921 tests passed. No AWS calls or customer infrastructure changes occurred. The isolated Docker stack is stopped; its worktree and generated test artifacts remain available for review.
 - `GITHUB_PR_NUMBER=353 python3.12 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Clean-room verification and hosted CI are pending.
 
 ## Evidence files produced
 
