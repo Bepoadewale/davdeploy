@@ -19,6 +19,9 @@ control-plane code distinct from disabled customer planning and lifecycle.
   0 drift, and 8 output changes. Migrations passed; all six Lambda functions
   are Active/Successful with `CodeSha256=vg52ZDcTSAhZ3hK7dra2Ou7oExSdzGDPjMBjoNQe4ZM=`;
   `/healthz` returned `{"status":"ok","product":"davdeploy"}`.
+- All seven GitHub CI jobs passed for the release-evidence content at commit
+  `86001cbdd7d065ed780ec3d43161fdaacbd36a99` in run
+  [43103241448](https://github.com/Bepoadewale/davdeploy/actions/runs/43103241448).
 - Nova plan runner, role verification, credential broker, Terraform state API,
   plan review, and hosted certification remain disabled. No Nova customer plan
   or workload was applied, operated, health-checked, or certified.
@@ -57,22 +60,27 @@ control-plane code distinct from disabled customer planning and lifecycle.
 - [x] Historical PR #358 release evidence remains intact.
 - [x] Pricing is clearly unavailable and PR #318 remains held; the coverage
   matrix and capability counts are retained.
-- [ ] Documentation convention checks and `git diff --check` pass on final head.
-- [ ] All required hosted CI checks pass on final head.
+- [x] Documentation convention checks and `git diff --check` pass for the
+  release-evidence content at `86001cb`.
+- [x] All seven required hosted CI jobs passed for that content in run
+  `43103241448`. This ticket evidence update must also pass the PR's required
+  final-head checks before merge.
 - [x] This documentation PR did not dispatch or perform an AWS mutation. The
   separate protected #359 release is recorded as evidence.
 
 ## Acceptance status
 
-Content is updated with observed release evidence. Final local checks and
-required hosted CI remain pending.
+Release content and its hosted checks are complete. The ticket now records
+those results; final-head checks for this ticket update remain required before
+merge.
 
 ## Tests / validation performed
 
-- Before the #359 rollout update, `python scripts/check_doc_conventions.py`
-  and `git diff --check` passed.
-- The final documentation changes require those checks again, followed by
-  required GitHub Actions CI.
+- `python scripts/check_doc_conventions.py` and `git diff --check` passed on
+  the release-evidence content at `86001cb`.
+- All seven required GitHub CI jobs passed in run `43103241448` for that
+  release-evidence content. The final ticket-only update requires a fresh
+  successful final-head check before merge.
 - No customer workload test was run by this documentation PR; no new runtime
   test file is required for PR #360.
 
