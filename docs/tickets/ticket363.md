@@ -33,7 +33,7 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 - [x] A proposal without required backups receives a human-review finding when PITR is disabled or omitted.
 - [x] A known enabled PITR setting with a valid period passes this specific policy check.
 - [x] Policy findings do not contain sensitive plan values.
-- [ ] Required GitHub CI and review pass.
+- [x] Final-head CI run `43117539516` passed all seven required jobs; current-head Codex review reported no major issues.
 - [x] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
 
 ## Acceptance status
@@ -43,7 +43,7 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 - [x] A proposal without required backups receives a human-review finding when PITR is disabled or omitted.
 - [x] A known enabled PITR setting with a valid period passes this specific policy check.
 - [x] Policy findings do not contain sensitive plan values.
-- [x] Focused tests, full `make verify`, clean-room local proof, docs conventions and diff check pass. Required GitHub CI is pending.
+- [x] Focused tests, full `make verify`, clean-room local proof, docs conventions, diff check, final-head CI and current-head review pass.
 - [x] Nova runner and customer execution remain disabled; no AWS workload is created or changed.
 
 ## Tests / validation performed
@@ -63,4 +63,4 @@ Backend `main` is `36ec596f83cff1ed427fc04e79e1314ae30d6224` after PR #362. Actu
 
 ## Follow-up work
 
-- Required GitHub CI and review remain before merge. Pricing, hosted planning, exact-plan approval/apply, health, restore, teardown, and composed workload certification remain separately incomplete.
+- All local and hosted gates have passed for head `7a4dd70`; merge is ready. Pricing, hosted planning, exact-plan approval/apply, health, restore, teardown, and composed workload certification remain separately incomplete.

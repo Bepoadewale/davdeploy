@@ -35,4 +35,4 @@ AWS region: Not accessed
 
 ## Final boundary
 
-The evidence validates deterministic local plan-policy behavior and the repository's local clean-room workflow. It does not establish regional pricing, hosted customer plan generation, customer role permissions, exact-plan approval/apply, data restore behavior, health monitoring, teardown authorization, or composed workload certification. Required GitHub CI and review remain pending.
+The evidence validates deterministic local plan-policy behavior and the repository's local clean-room workflow. It does not establish regional pricing, hosted customer plan generation, customer role permissions, exact-plan approval/apply, data restore behavior, health monitoring, teardown authorization, or composed workload certification. Final-head GitHub CI run `43117539516` passed all seven required jobs, and current-head Codex review reported no major issues. The control-plane release was not deployed because this policy remains part of the disabled Nova workflow.
