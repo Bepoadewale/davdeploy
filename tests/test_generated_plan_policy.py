@@ -157,6 +157,17 @@ def evaluate(document=None, proposal_value=None):
     )
 
 
+def add_sqs_queue_policy(document, policy, **change_metadata):
+    address = "aws_sqs_queue_policy.queue_access"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, "aws_sqs_queue_policy", {"policy": policy})
+    )
+    document["resource_changes"].append(
+        change(address, "aws_sqs_queue_policy", **change_metadata)
+    )
+    return document
+
+
 def codes(result):
     return {finding.code for finding in result.findings}
 
@@ -338,6 +349,106 @@ def test_public_s3_policy_is_denied():
     result = evaluate(document, proposal_value)
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "s3_public_policy_denied" in codes(result)
+
+
+@pytest.mark.parametrize("principal", ["*", {"AWS": "*"}, {"AWS": ["*"]}])
+def test_public_sqs_queue_policy_is_denied(principal):
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": principal,
+                "Action": "sqs:ReceiveMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_public_policy_denied" in codes(evaluate(document))
+
+
+def test_sqs_queue_policy_allow_with_not_principal_is_denied():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "NotPrincipal": {"AWS": "arn:aws:iam::654654474502:root"},
+                "Action": "sqs:ReceiveMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_public_policy_denied" in codes(evaluate(document))
+
+
+def test_specific_sqs_queue_policy_principal_does_not_trigger_public_policy_denial():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_public_policy_denied" not in codes(evaluate(document))
+
+
+def test_unknown_sqs_queue_policy_is_denied_even_if_after_value_looks_safe():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy), after_unknown={"policy": True})
+
+    assert "policy_critical_value_unknown" in codes(evaluate(document))
+
+
+def test_malformed_sqs_queue_policy_is_denied_without_echoing_policy_text():
+    secret_text = "private-policy-secret"
+    document = add_sqs_queue_policy(plan(), f"{{{secret_text}")
+
+    result = evaluate(document)
+
+    assert "policy_document_invalid" in codes(result)
+    assert secret_text not in repr(result)
+
+
+def test_public_sqs_queue_policy_finding_does_not_echo_policy_values():
+    secret_action = "sqs:SendMessage-private-policy-secret"
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": secret_action,
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    result = evaluate(document)
+
+    assert "sqs_public_policy_denied" in codes(result)
+    assert secret_action not in repr(result)
 
 
 @pytest.mark.parametrize(
