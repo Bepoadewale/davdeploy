@@ -15,7 +15,8 @@ policy to the saved plan manifest so the later approval can verify it.
 ## Current repo state
 
 - Backend `main` is `25e96307e78b9385a8a80a68e619991ce58a2be1`; PR #340 is an
-  open draft whose bootstrap head is `e747e438c1ada16f557f490735b0b8781d7e724b`.
+  open draft at implementation commit
+  `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`.
 - The plan-only CloudFormation template previously denied all customer
   service actions. The Nova worker already verifies the connection ExternalId
   and target account before it invokes the fixed Terraform planner.
@@ -68,14 +69,17 @@ policy to the saved plan manifest so the later approval can verify it.
   and recomputed by the API before accepting worker output.
 - [x] Hosted execution gates remain disabled; existing customer roles are not
   silently changed; no AWS calls or resource mutations are part of this PR.
-- [ ] Focused tests, full `make verify`, isolated clean-room proof, docs checks,
-  and required final-head CI pass.
+- [x] Focused tests, full `make verify` (877 tests), and isolated clean-room
+  proof pass at `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`.
+- [ ] Final evidence docs checks and required final-head CI pass.
 
 ## Acceptance status
 
-Implementation is in progress on the draft PR. Focused tests and Ruff checks
-pass so far. Full verification, clean-room proof, final review, and hosted CI
-remain pending; no AWS workload or customer permission was changed.
+Implementation and local verification are complete on the draft PR. The
+clean-room run passed at the implementation commit; only its exact Compose
+project and generated artifacts were removed afterward. Final evidence-doc
+checks, independent review, and hosted CI remain pending. No AWS workload or
+customer permission was changed.
 
 ## Tests / validation performed
 

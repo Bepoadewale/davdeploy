@@ -3,8 +3,8 @@
 Date: 2026-11-11
 Execution type: Local code and policy validation only. No customer AWS API calls, AWS resource changes, or Nova model calls.
 Customer repository: Not applicable; this PR changes the DavDeploy backend and customer-role setup template.
-PR implementation head: Pending final commit.
-Commit: Pending final implementation commit.
+PR implementation head: `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b`.
+Commit: `d46fe7fd60b6ba5bfa31cb319318d6417d2c6b1b` — `feat: constrain Nova customer planning permissions`.
 AWS account: None used for this test.
 AWS region: None used for this test.
 
@@ -16,14 +16,19 @@ None. No customer role was assumed and no AWS resources were created or changed.
 
 - Focused Nova plan-access, CodeBuild contract, customer connection template,
   generated-plan manifest, and related service tests — 34 passed before the
-  final composed-profile regression was added. The full final command/result
-  will be recorded after rerun.
-- Ruff check on changed Python files — passed before the final regression was
-  added. Final lint and formatting results are pending.
-- `make verify` — pending.
-- Isolated `make local-proof` — pending.
-- `python3.12 scripts/check_doc_conventions.py` — pending.
-- `git diff --check` — pending.
+  final composed-profile regression was added; the final regression is covered
+  by the full suite below.
+- `.venv/bin/ruff check apps/api/src tests scripts` — passed.
+- `make verify` — passed: 877 tests; Ruff, Actions configuration, OpenAPI
+  snapshot, and Docker Compose configuration checks passed. One existing
+  Starlette/httpx deprecation warning was reported.
+- Isolated clean-room `make local-proof` at the exact implementation commit —
+  passed: 877 tests; API readiness, worker and executor readiness, API/CORS
+  contract, customer-plan end-to-end fixture, trace check, Actions config,
+  Ruff, OpenAPI, and Compose configuration checks passed.
+- `python3.12 scripts/check_doc_conventions.py` — passed for the final evidence
+  text.
+- `git diff --check` — passed.
 
 ## Observed result
 
@@ -36,15 +41,18 @@ the saved-plan manifest and independently recomputed before the API accepts
 the result.
 
 The first composed profile contains API Gateway v2, Lambda/SQS async work,
-private S3, DynamoDB, and scoped IAM role policy resources. It must remain under
-the 2,048-character AWS STS inline policy limit. Exact length and final test
-results will be recorded after final verification.
+private S3, DynamoDB, and scoped IAM role policy resources. The regression
+test confirms it remains under the 2,048-character AWS STS inline policy
+limit.
 
 ## Teardown
 
-No AWS resources were created. The isolated clean-room cycle’s exact project
-containers and generated artifacts will be recorded after it runs; no existing
-customer or shared production resources may be removed.
+No AWS resources were created. After the clean-room run, only its dedicated
+Docker Compose project `davdeploy_pr340_20261111` was stopped and removed,
+including its containers, generated network, and generated PostgreSQL volume.
+The clean-room worktree's generated `.venv` and `.local` were also removed by
+`make clean-local`. No other worktrees, containers, volumes, customer
+resources, or shared production resources were removed.
 
 ## Final boundary
 
