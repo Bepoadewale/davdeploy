@@ -184,7 +184,6 @@ def run_nova_plan_build(
                     bootstrap_url=bootstrap_url,
                     state_api_url=state_api_url,
                     durable_run_id=binding["control_plane_run_id"],
-                    codebuild_build_id=build_id,
                     region=region,
                 )
             else:
@@ -192,7 +191,6 @@ def run_nova_plan_build(
                     bootstrap_url=bootstrap_url,
                     state_api_url=state_api_url,
                     durable_run_id=binding["control_plane_run_id"],
-                    codebuild_build_id=build_id,
                     region=region,
                     credentials=boto3.Session().get_credentials(),
                 )

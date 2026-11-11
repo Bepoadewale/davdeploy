@@ -12,9 +12,10 @@ AWS region: none accessed
 ## Scope
 
 This change moves plan-role assumption and ExternalId lookup into the
-control-plane API. The API accepts requests only through a dedicated AWS
-Identity and Access Management (IAM) authenticated route, validates the
-authenticated CodeBuild role and exact active build against the durable run,
+control-plane API. The API accepts requests only through dedicated AWS
+Identity and Access Management (IAM) authenticated routes, validates the
+authenticated CodeBuild role and derives the exact active build ID from its
+authenticated session before checking the durable run,
 reads the immutable staged input, revalidates current revision and approval,
 and returns 15-minute credentials for the exact customer plan role with a
 proposal-scoped explicit-deny session policy. The CodeBuild role has no
@@ -39,8 +40,10 @@ default off.
 ## Observed result
 
 The control-plane API and fixed worker contract passed the local automated
-tests. The API derives the build ID from the authenticated CodeBuild session;
-the signed request carries only a durable run ID. The configured production
+tests. Both the plan-credential broker and Terraform-state bootstrap derive
+the build ID from the authenticated CodeBuild session; each signed request
+carries only a durable run ID. Their CodeBuild IAM permissions are scoped to
+the fixed project's build ARN. The configured production
 path remains disabled, and no hosted plan or customer role assumption was
 attempted.
 

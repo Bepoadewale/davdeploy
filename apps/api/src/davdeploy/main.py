@@ -305,23 +305,21 @@ def issue_terraform_state_credentials(
     if not trusted_codebuild_role_matches(principal_arn, expected_role):
         raise HTTPException(403, "Terraform state bootstrap requires the trusted plan-only role")
     expected_project = os.getenv("DAVDEPLOY_NOVA_PLAN_PROJECT", "")
-    if not expected_project or ":" not in body.codebuild_build_id:
+    build_id = trusted_codebuild_build_id(principal_arn, expected_role, expected_project)
+    if not expected_project or build_id is None:
         raise HTTPException(403, "CodeBuild identity is invalid")
-    build_project, _ = body.codebuild_build_id.split(":", 1)
-    if build_project != expected_project:
-        raise HTTPException(403, "CodeBuild project is not the fixed plan-only project")
 
     run = db.get(GeneratedPlanRun, body.run_id)
     if (
         run is None
-        or run.codebuild_build_id != body.codebuild_build_id
+        or run.codebuild_build_id != build_id
         or run.codebuild_project != expected_project
         or run.state != "BUILD_STARTED"
         or not run.runner_run_id
     ):
         raise HTTPException(403, "CodeBuild run is not bound to a durable DavDeploy plan request")
     try:
-        response = boto3.client("codebuild").batch_get_builds(ids=[body.codebuild_build_id])
+        response = boto3.client("codebuild").batch_get_builds(ids=[build_id])
     except (BotoCoreError, ClientError, TypeError, ValueError):
         raise HTTPException(503, "Could not verify the active plan build") from None
     builds = response.get("builds", []) if isinstance(response, dict) else []
@@ -393,7 +391,7 @@ def issue_terraform_state_credentials(
             password_sha256=password_digest,
             state_id=state.id,
             run_id=run.id,
-            codebuild_build_id=body.codebuild_build_id,
+            codebuild_build_id=build_id,
             expires_at=expires_at,
         )
     )

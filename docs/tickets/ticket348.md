@@ -18,8 +18,10 @@ project and live CodeBuild build before issuing them.
 
 - `service.py` previously read the connection ExternalId and embedded it in staged input.
 - `nova_plan_codebuild.py` previously read that value and assumed the customer plan role.
-- The API already has an AWS_IAM/SigV4 CodeBuild-only Terraform state bootstrap
-  route and run/build verification helpers.
+- The API already has AWS_IAM/SigV4 Terraform state bootstrap. This PR also
+  binds that route to the authenticated CodeBuild session instead of trusting
+  a build ID from the request, closing the same build-selection gap at both
+  credential endpoints.
 - The API role can assume `davdeployPlan-*` roles for verification and for the
   separate run-scoped credential broker. The customer plan role trusts only
   the control-plane role. Its issued session is bounded by a proposal-scoped,
@@ -59,7 +61,8 @@ project and live CodeBuild build before issuing them.
   explicit-deny session policy. Verify the returned STS identity account.
 - Return short-lived STS credentials over the SigV4 TLS response; keep them out
   of logs, database rows, artifacts and exception text. Bound response shape
-  and credential lifetime. Preserve the current safe state-bootstrap route.
+  and credential lifetime. Harden state bootstrap with the same session-derived
+  build identity, run-only request body and fixed-project build-ARN permission.
 - Remove ExternalId material from staged build input and remove customer-role
   assumption permission from the CodeBuild service role. Make the worker use
   only the broker response; reject secret-bearing staged input and unexpected
@@ -80,7 +83,9 @@ project and live CodeBuild build before issuing them.
   account, region, connection, digest, role, policy, secret-store or STS errors.
 - [x] CodeBuild has no `sts:AssumeRole` permission to customer plan roles.
 - [x] Existing state bootstrap behavior and unrelated execution paths remain
-  compatible; all Nova planning gates remain off by default.
+  bound to the same active run; its request now carries only the durable run
+  ID and derives build identity from SigV4, with its IAM permission restricted
+  to the fixed project. All Nova planning gates remain off by default.
 - [ ] Focused tests, `make verify`, documentation checks, and a fresh
   `make local-proof` pass; GitHub checks and independent review pass.
 - [x] No customer role, AWS workload, or infrastructure is mutated by tests.

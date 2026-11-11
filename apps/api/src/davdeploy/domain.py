@@ -388,10 +388,11 @@ class GeneratedPlanRunRequest(BaseModel):
 
 
 class TerraformStateCredentialRequest(BaseModel):
-    """Build identity presented during SigV4 state credential bootstrap."""
+    """Only a durable run ID is sent; CodeBuild identity comes from SigV4."""
+
+    model_config = ConfigDict(extra="forbid")
 
     run_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
-    codebuild_build_id: str = Field(min_length=1, max_length=255)
 
 
 class NovaPlanCredentialRequest(BaseModel):

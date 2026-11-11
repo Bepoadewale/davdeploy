@@ -512,7 +512,6 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
             "bootstrap_url": env["DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"],
             "state_api_url": env["DAVDEPLOY_TERRAFORM_STATE_API_URL"],
             "durable_run_id": control_plane_run_id,
-            "codebuild_build_id": env["CODEBUILD_BUILD_ID"],
             "region": "us-east-1",
         }
     ]

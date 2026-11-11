@@ -78,6 +78,8 @@ def test_state_bootstrap_is_exact_route_signed_by_the_plan_only_role() -> None:
     assert '"$context.identity.userArn"' in integration
     assert "execute-api:Invoke" in role_policy
     assert "terraform-state/credentials" in role_policy
+    assert '"codebuild:BuildArn"' in role_policy
+    assert 'build/${local.nova_plan_only_project_name}:*' in role_policy
     assert 'DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)' in MAIN
     assert 'DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""' in MAIN
     state_policy = resource_block(MAIN, "aws_iam_role_policy", "nova_plan_only_state_bootstrap")
