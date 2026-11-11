@@ -70,8 +70,8 @@ completed while this PR was being implemented. That release is recorded in
 
 ## Tests / validation performed
 
-- `uv run pytest tests/test_terraform_plan_summary.py -q` — 10 passed.
-- `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 932
+- `uv run pytest tests/test_terraform_plan_summary.py -q` — 12 passed.
+- `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` — 934
   passed; Ruff, Actions configuration, OpenAPI, and Docker Compose checks
   passed. One existing Starlette/httpx deprecation warning remains.
 - `GITHUB_PR_NUMBER=354 python3.12 scripts/check_doc_conventions.py` and

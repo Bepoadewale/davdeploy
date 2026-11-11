@@ -45,6 +45,13 @@ def _resource_actions(change: dict[str, Any]) -> list[str]:
         isinstance(action, str) and action in ALLOWED_ACTIONS for action in actions
     ):
         raise PlanSummaryError("invalid resource action metadata")
+    if (
+        not actions
+        or len(actions) > 2
+        or len(set(actions)) != len(actions)
+        or (len(actions) == 2 and set(actions) != {"create", "delete"})
+    ):
+        raise PlanSummaryError("invalid resource action metadata")
     return actions
 
 

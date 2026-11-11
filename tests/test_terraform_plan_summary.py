@@ -140,9 +140,10 @@ def test_missing_runtime_gate_fails_closed():
         summarize_plan(plan)
 
 
-def test_unknown_action_does_not_echo_untrusted_action_text():
+@pytest.mark.parametrize("actions", [["sensitive-action-text"], [], ["create", "update"]])
+def test_invalid_action_does_not_echo_untrusted_action_text(actions: list[str]):
     plan = _plan()
-    plan["resource_changes"][0]["change"]["actions"] = ["sensitive-action-text"]
+    plan["resource_changes"][0]["change"]["actions"] = actions
 
     with pytest.raises(PlanSummaryError, match="resource action metadata"):
         summarize_plan(plan)
