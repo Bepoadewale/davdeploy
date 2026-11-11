@@ -921,9 +921,11 @@ class StsAwsDiscovery:
     ) -> str:
         """Verify plan-role trust and account identity without retaining credentials.
 
-        This does not inspect or attest the role's effective policy. The reviewed
-        CloudFormation template installs its deny-all policy; customer changes
-        made after stack creation are outside this verification result.
+        This does not inspect or attest the role's effective permissions. The
+        reviewed template grants bounded planning metadata reads, and the fixed
+        planner adds a proposal-scoped explicit-deny session policy. Customer
+        policy changes and other account policy layers remain outside this
+        identity check.
         """
         sts = self.session.client("sts", region_name=region)
         assumed = sts.assume_role(
