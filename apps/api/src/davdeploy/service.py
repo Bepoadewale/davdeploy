@@ -60,7 +60,11 @@ from davdeploy.generated_plan_artifacts import (
     policy_evidence,
 )
 from davdeploy.generated_plan_inspection import TerraformPlanSummary
-from davdeploy.generated_plan_ownership import PlanOwnershipScope
+from davdeploy.generated_plan_ownership import (
+    UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP,
+    PlanOwnershipScope,
+    UntaggedResourceOwnershipRecord,
+)
 from davdeploy.generated_plan_policy import (
     GeneratedPlanPolicyResult,
     PlanPolicyFinding,
@@ -4669,6 +4673,7 @@ class ProductService:
             "binding",
             "policy_evidence",
             "policy_sha256",
+            "untagged_resource_ownership",
             "manifest",
             "manifest_sha256",
             "planning_boundary",
@@ -4684,6 +4689,17 @@ class ProductService:
         )
         if set(result) != expected_result_fields:
             raise ValueError("Nova plan result envelope shape is invalid")
+        untagged_records_doc = result.get("untagged_resource_ownership")
+        if not isinstance(untagged_records_doc, list) or len(untagged_records_doc) > 2_000:
+            raise ValueError("Nova result ownership inventory is invalid")
+        for item in untagged_records_doc:
+            if (
+                not isinstance(item, dict)
+                or set(item) != {"address", "resource_type"}
+                or not isinstance(item.get("address"), str)
+                or item.get("resource_type") not in UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP
+            ):
+                raise ValueError("Nova result ownership inventory is invalid")
         try:
             run_id = str(uuid.UUID(run.runner_run_id or run.id))
         except (AttributeError, ValueError):
@@ -4802,6 +4818,25 @@ class ProductService:
             or proposal.requirements.region != region
         ):
             raise ValueError("Nova result proposal or context digest is invalid")
+        proposal_addresses = {
+            f"{item.resource_type}.{item.name}": item.resource_type for item in proposal.resources
+        }
+        untagged_records: list[UntaggedResourceOwnershipRecord] = []
+        seen_untaggable_addresses: set[str] = set()
+        for item in untagged_records_doc:
+            if (
+                proposal_addresses.get(item["address"]) != item["resource_type"]
+                or item["address"] in seen_untaggable_addresses
+            ):
+                raise ValueError("Nova result ownership inventory is invalid")
+            seen_untaggable_addresses.add(item["address"])
+            untagged_records.append(
+                UntaggedResourceOwnershipRecord(
+                    address=item["address"], resource_type=item["resource_type"]
+                )
+            )
+        if untagged_records and boundary_mode != "TENANT_ISOLATED_HTTP_STATE":
+            raise ValueError("untaggable Nova resources require tenant-scoped remote state")
         ownership_scope = self._generated_plan_ownership_scope(
             actor,
             customer_plan.project_id,
@@ -4941,9 +4976,14 @@ class ProductService:
             "approval_allowed": False,
             "execution_allowed": False,
         }
-        expected_manifest_version = 5 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 4
+        expected_manifest_version = (
+            6
+            if untagged_records
+            else 5 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 4
+        )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
+        remote_state = None
         if boundary_mode == "TENANT_ISOLATED_HTTP_STATE":
             remote_state = result.get("remote_state")
             try:
@@ -5022,6 +5062,7 @@ class ProductService:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=saved_plan_sha256,
             saved_plan_path="",
+            untagged_resource_ownership=tuple(untagged_records),
             plan_access_policy_version=access_policy.version,
             plan_access_policy_sha256=access_policy.sha256,
         )
@@ -5034,6 +5075,7 @@ class ProductService:
             plan=generated_plan,
             policy_digest=result["policy_sha256"],
             created_at=manifest.get("created_at"),
+            remote_state=remote_state,
         )
         if expected_manifest != manifest:
             raise ValueError("Nova result manifest differs from verified run evidence")

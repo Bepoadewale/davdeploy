@@ -16,6 +16,10 @@ from typing import Any
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from davdeploy.generated_plan_ownership import (
+    UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP,
+    UntaggedResourceOwnershipRecord,
+)
 from davdeploy.generated_plan_policy import GeneratedPlanPolicyResult
 from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 
@@ -336,8 +340,26 @@ def generated_plan_manifest(
         or not re.fullmatch(r"[a-f0-9]{64}", plan.plan_access_policy_sha256)
     ):
         raise GeneratedPlanArtifactError("customer plan permission evidence is malformed")
+    untagged_resources = plan.untagged_resource_ownership
+    if untagged_resources and remote_state is None:
+        raise GeneratedPlanArtifactError(
+            "untaggable resource ownership requires tenant-scoped remote state"
+        )
+    if not isinstance(untagged_resources, tuple) or len(untagged_resources) > 2_000 or any(
+        not isinstance(item, UntaggedResourceOwnershipRecord)
+        or item.resource_type not in UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP
+        or not item.address.startswith(item.resource_type + ".")
+        for item in untagged_resources
+    ):
+        raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
+    if len({item.address for item in untagged_resources}) != len(untagged_resources):
+        raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
     manifest = {
-        "manifest_version": 5 if remote_state is not None else 4,
+        "manifest_version": (
+            6
+            if untagged_resources
+            else 5 if remote_state is not None else 4
+        ),
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -405,6 +427,15 @@ def generated_plan_manifest(
     }
     if remote_state is not None:
         manifest["remote_state"] = remote_state
+    if untagged_resources:
+        manifest["ownership_inventory"] = {
+            "version": 1,
+            "source": "TENANT_ISOLATED_HTTP_STATE",
+            "untaggable_resources": [
+                {"address": item.address, "resource_type": item.resource_type}
+                for item in untagged_resources
+            ],
+        }
     return manifest
 
 

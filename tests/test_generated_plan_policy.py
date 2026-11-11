@@ -4,7 +4,7 @@ import json
 
 import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
-from davdeploy.generated_plan_ownership import PlanOwnershipScope
+from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResourceOwnershipRecord
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
     _path_contains_unknown,
@@ -182,6 +182,11 @@ def add_lambda_permission(document, values, **change_metadata):
 
 def add_api_gateway_route(document, authorization_type=_OMIT, *, after_unknown=None):
     address = "aws_apigatewayv2_route.application"
+    api_address = "aws_apigatewayv2_api.application"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(api_address, "aws_apigatewayv2_api", {"name": "application-api", "protocol_type": "HTTP", "id": "api-123"})
+    )
+    document["resource_changes"].append(change(api_address, "aws_apigatewayv2_api"))
     values = {"api_id": "api-123", "route_key": "GET /items"}
     if authorization_type is not _OMIT:
         values["authorization_type"] = authorization_type
@@ -197,13 +202,41 @@ def add_api_gateway_route(document, authorization_type=_OMIT, *, after_unknown=N
             after_unknown=after_unknown or {},
         )
     )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": address,
+                "expressions": {
+                    "api_id": {"references": [f"{api_address}.id"]},
+                },
+            }
+        ]
+    }
     proposal_resources = [item.model_dump(mode="json") for item in proposal().resources]
+    proposal_resources.append(
+        {
+            "resource_id": "application-api",
+            "resource_type": "aws_apigatewayv2_api",
+            "name": "application",
+            "arguments": {"name": "application-api", "protocol_type": "HTTP"},
+            "outputs": [{"name": "id", "value_type": "string"}],
+            "rationale": "Provide the API that owns the application route.",
+        }
+    )
     proposal_resources.append(
         {
             "resource_id": "application-route",
             "resource_type": "aws_apigatewayv2_route",
             "name": "application",
-            "arguments": values,
+            "arguments": {
+                **values,
+                "api_id": {
+                    "kind": "resource_reference",
+                    "resource_id": "application-api",
+                    "output_name": "id",
+                    "value_type": "string",
+                },
+            },
             "rationale": "Route API requests to the application.",
         }
     )
@@ -561,6 +594,84 @@ def test_authenticated_api_gateway_routes_do_not_trigger_open_route_review(autho
     assert "api_gateway_open_route_review" not in codes(result)
     # Route authorization is recognized, while untaggable ownership remains denied.
     assert result.verdict == PlanPolicyVerdict.DENY
+
+
+def test_authenticated_route_with_exact_remote_state_record_passes_ownership_check():
+    document, proposal_value = add_api_gateway_route(plan(), "AWS_IAM")
+
+    result = evaluate_generated_plan_policy(
+        document,
+        proposal_value,
+        expected_account_id=ACCOUNT,
+        expected_region=REGION,
+        ownership_scope=ownership_scope(),
+        trusted_configuration={
+            "data": {"aws_caller_identity": {"trusted": {}}},
+            "resource": {
+                "terraform_data": {
+                    "account_guard": {
+                        "lifecycle": {
+                            "precondition": {
+                                "condition": '${data.aws_caller_identity.trusted.account_id == "'
+                                + ACCOUNT
+                                + '"}'
+                            }
+                        }
+                    }
+                }
+            },
+        },
+        untagged_resource_ownership=(
+            UntaggedResourceOwnershipRecord(
+                address="aws_apigatewayv2_route.application",
+                resource_type="aws_apigatewayv2_route",
+            ),
+        ),
+    )
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "resource_ownership_tags_missing" not in codes(result)
+    assert "api_gateway_open_route_review" not in codes(result)
+
+
+def test_api_gateway_route_cannot_target_api_outside_deployment():
+    document, proposal_value = add_api_gateway_route(plan(), "AWS_IAM")
+    document["configuration"]["root_module"]["resources"][0]["expressions"]["api_id"][
+        "references"
+    ] = ["aws_apigatewayv2_api.external.id"]
+
+    result = evaluate_generated_plan_policy(
+        document,
+        proposal_value,
+        expected_account_id=ACCOUNT,
+        expected_region=REGION,
+        ownership_scope=ownership_scope(),
+        trusted_configuration={
+            "data": {"aws_caller_identity": {"trusted": {}}},
+            "resource": {
+                "terraform_data": {
+                    "account_guard": {
+                        "lifecycle": {
+                            "precondition": {
+                                "condition": '${data.aws_caller_identity.trusted.account_id == "'
+                                + ACCOUNT
+                                + '"}'
+                            }
+                        }
+                    }
+                }
+            },
+        },
+        untagged_resource_ownership=(
+            UntaggedResourceOwnershipRecord(
+                address="aws_apigatewayv2_route.application",
+                resource_type="aws_apigatewayv2_route",
+            ),
+        ),
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "api_gateway_route_target_not_owned" in codes(result)
 
 
 @pytest.mark.parametrize("authorization_type", [_OMIT, None, "", "INVALID", ["JWT"]])

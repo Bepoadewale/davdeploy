@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import os
 import uuid
+from dataclasses import replace
 from io import BytesIO
 
 import pytest
@@ -18,6 +19,7 @@ from davdeploy.generated_plan_artifacts import (
     policy_evidence,
 )
 from davdeploy.generated_plan_inspection import TerraformPlanSummary
+from davdeploy.generated_plan_ownership import UntaggedResourceOwnershipRecord
 from davdeploy.generated_plan_policy import (
     GeneratedPlanPolicyResult,
     PlanPolicyFinding,
@@ -326,6 +328,51 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     assert canonical_json_digest(manifest) != canonical_json_digest(
         {**manifest, "created_at": "later"}
     )
+
+    remote_state = {"state_id": RUN_ID, "scope_sha256": "1" * 64}
+    route_plan = replace(
+        plan,
+        untagged_resource_ownership=(
+            UntaggedResourceOwnershipRecord(
+                address="aws_apigatewayv2_route.application",
+                resource_type="aws_apigatewayv2_route",
+            ),
+        ),
+    )
+    owned_manifest = generated_plan_manifest(
+        organization_id="org-1",
+        project_id="project-1",
+        revision_id="revision-1",
+        revision_sha256="e" * 64,
+        stored_object=stored,
+        plan=route_plan,
+        policy_digest=evidence_digest,
+        created_at="2026-11-04T00:00:00Z",
+        remote_state=remote_state,
+    )
+    assert owned_manifest["manifest_version"] == 6
+    assert owned_manifest["remote_state"] == remote_state
+    assert owned_manifest["ownership_inventory"] == {
+        "version": 1,
+        "source": "TENANT_ISOLATED_HTTP_STATE",
+        "untaggable_resources": [
+            {
+                "address": "aws_apigatewayv2_route.application",
+                "resource_type": "aws_apigatewayv2_route",
+            }
+        ],
+    }
+    with pytest.raises(GeneratedPlanArtifactError, match="requires tenant-scoped remote state"):
+        generated_plan_manifest(
+            organization_id="org-1",
+            project_id="project-1",
+            revision_id="revision-1",
+            revision_sha256="e" * 64,
+            stored_object=stored,
+            plan=route_plan,
+            policy_digest=evidence_digest,
+            created_at="2026-11-04T00:00:00Z",
+        )
 
 
 @pytest.mark.parametrize(

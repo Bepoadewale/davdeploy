@@ -4,6 +4,7 @@ import pytest
 from davdeploy.generated_plan_ownership import (
     PlanOwnershipError,
     PlanOwnershipScope,
+    UntaggedResourceOwnershipRecord,
     inject_trusted_ownership_tags,
 )
 
@@ -74,11 +75,92 @@ def test_reserved_ownership_tag_cannot_be_overridden():
 def test_resource_without_writable_tag_schema_is_rejected():
     generated = configuration()
 
-    with pytest.raises(PlanOwnershipError, match="no safely writable ownership tags"):
+    with pytest.raises(PlanOwnershipError, match="no supported ownership mechanism"):
         inject_trusted_ownership_tags(
             generated,
             provider_schema(tags_attribute=False),
             scope(),
+        )
+
+
+def untaggable_route_schema():
+    return {
+        "provider_schemas": {
+            "registry.terraform.io/hashicorp/aws": {
+                "resource_schemas": {
+                    "aws_apigatewayv2_route": {
+                        "block": {
+                            "attributes": {
+                                "api_id": {"type": "string", "required": True},
+                                "route_key": {"type": "string", "required": True},
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+def untaggable_route_configuration():
+    return {
+        "resource": {
+            "aws_apigatewayv2_route": {
+                "application": {"api_id": "api-123", "route_key": "GET /items"}
+            }
+        }
+    }
+
+
+def test_untaggable_api_route_requires_remote_state_and_records_exact_address():
+    generated = untaggable_route_configuration()
+    state_id = "12345678-1234-4234-8234-123456789012"
+
+    records = inject_trusted_ownership_tags(
+        generated,
+        untaggable_route_schema(),
+        scope(),
+        remote_state_id=state_id,
+        remote_state_scope_sha256="c" * 64,
+        expected_remote_state_scope_sha256="c" * 64,
+    )
+
+    assert records == (
+        UntaggedResourceOwnershipRecord(
+            address="aws_apigatewayv2_route.application",
+            resource_type="aws_apigatewayv2_route",
+        ),
+    )
+    assert "tags" not in generated["resource"]["aws_apigatewayv2_route"]["application"]
+
+
+def test_untaggable_api_route_fails_without_remote_state_or_on_scope_mismatch():
+    for state_args in (
+        {},
+        {
+            "remote_state_id": "12345678-1234-4234-8234-123456789012",
+            "remote_state_scope_sha256": "c" * 64,
+            "expected_remote_state_scope_sha256": "d" * 64,
+        },
+    ):
+        with pytest.raises(PlanOwnershipError, match="no safely writable ownership tags or verified remote state"):
+            inject_trusted_ownership_tags(
+                untaggable_route_configuration(),
+                untaggable_route_schema(),
+                scope(),
+                **state_args,
+            )
+
+
+def test_unsupported_untaggable_resource_stays_denied_even_with_state():
+    with pytest.raises(PlanOwnershipError, match="no supported ownership mechanism"):
+        inject_trusted_ownership_tags(
+            configuration(),
+            provider_schema(tags_attribute=False),
+            scope(),
+            remote_state_id="12345678-1234-4234-8234-123456789012",
+            remote_state_scope_sha256="c" * 64,
+            expected_remote_state_scope_sha256="c" * 64,
         )
 
 
