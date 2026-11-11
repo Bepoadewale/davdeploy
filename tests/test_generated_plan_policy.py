@@ -168,6 +168,17 @@ def add_sqs_queue_policy(document, policy, **change_metadata):
     return document
 
 
+def add_lambda_permission(document, values, **change_metadata):
+    address = "aws_lambda_permission.function_access"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, "aws_lambda_permission", values)
+    )
+    document["resource_changes"].append(
+        change(address, "aws_lambda_permission", **change_metadata)
+    )
+    return document
+
+
 def codes(result):
     return {finding.code for finding in result.findings}
 
@@ -449,6 +460,66 @@ def test_public_sqs_queue_policy_finding_does_not_echo_policy_values():
 
     assert "sqs_public_policy_denied" in codes(result)
     assert secret_action not in repr(result)
+
+
+@pytest.mark.parametrize("source_arn", [None, "", "*"])
+def test_unscoped_lambda_wildcard_principal_is_denied(source_arn):
+    values = {
+        "action": "lambda:InvokeFunction",
+        "function_name": "application-handler",
+        "principal": "*",
+    }
+    if source_arn is not None:
+        values["source_arn"] = source_arn
+    document = add_lambda_permission(plan(), values)
+
+    assert "lambda_unscoped_public_invoke_denied" in codes(evaluate(document))
+
+
+def test_scoped_lambda_wildcard_principal_requires_human_review():
+    document = add_lambda_permission(
+        plan(),
+        {
+            "action": "lambda:InvokeFunction",
+            "function_name": "application-handler",
+            "principal": "*",
+            "source_arn": "arn:aws:execute-api:us-east-1:654654474502:api-id/*/*/*",
+        },
+    )
+
+    result = evaluate(document)
+
+    assert "lambda_public_invoke_review" in codes(result)
+    assert result.human_approval_required
+
+
+def test_specific_lambda_service_principal_is_not_public_invoke():
+    document = add_lambda_permission(
+        plan(),
+        {
+            "action": "lambda:InvokeFunction",
+            "function_name": "application-handler",
+            "principal": "apigateway.amazonaws.com",
+            "source_arn": "arn:aws:execute-api:us-east-1:654654474502:api-id/*/*/*",
+        },
+    )
+
+    assert "lambda_unscoped_public_invoke_denied" not in codes(evaluate(document))
+    assert "lambda_public_invoke_review" not in codes(evaluate(document))
+
+
+def test_unknown_lambda_permission_principal_is_denied():
+    document = add_lambda_permission(
+        plan(),
+        {
+            "action": "lambda:InvokeFunction",
+            "function_name": "application-handler",
+            "principal": "apigateway.amazonaws.com",
+        },
+        after_unknown={"principal": True},
+    )
+
+    assert "policy_critical_value_unknown" in codes(evaluate(document))
 
 
 @pytest.mark.parametrize(

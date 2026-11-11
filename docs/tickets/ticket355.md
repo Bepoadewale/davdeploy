@@ -1,7 +1,7 @@
 # ticket355 — deny public SQS queue policies in Nova plans
 
-PR: [#355](https://github.com/Bepoadewale/davdeploy/pull/355) (draft)
-Branch: `security/sqs-public-policy-355`
+PR: [#355](https://github.com/Bepoadewale/davdeploy/pull/355) (merged)
+Branch: `security/sqs-public-policy-355` (deleted after merge)
 Base: `main`
 
 ## Problem / goal
@@ -13,7 +13,7 @@ unintended callers. Unknown queue policy data must not be treated as safe.
 
 ## Current repo state
 
-- Backend `main` is at `0896ae6106fe1e7526dba90105639f894d5534b8` (PR #353).
+- Backend PR #355 merged as `6e60da0075e22092c0b5278d68bb592114f21f61`.
 - `generated_plan_policy.py` checks public S3 policies and selected IAM
   policies, but does not check SQS queue policies.
 - The supported read-only plan access profile includes SQS queue metadata.
@@ -50,12 +50,14 @@ unintended callers. Unknown queue policy data must not be treated as safe.
 - [x] Findings contain no raw policy or queue values; existing S3 policy
   regressions remain covered.
 - [x] Focused tests, `make verify`, and docs checks pass locally.
-- [ ] Required hosted CI passes on the final PR head.
+- [x] Required hosted CI passes on the final PR head.
 
 ## Acceptance status
 
-Implementation and local verification are complete; hosted CI, current-head
-review, and merge are pending.
+Implementation, local verification, required hosted CI, current-head review
+and merge are complete. PR run `43076888679` passed all seven required jobs.
+The code is merged but not yet deployed. A protected plan for the merge
+commit is run `43078429737`; the plan must be reviewed before any apply.
 
 ## Tests / validation performed
 
@@ -66,7 +68,9 @@ review, and merge are pending.
   One existing Starlette/httpx deprecation warning remains.
 - `GITHUB_PR_NUMBER=355 python3.12 scripts/check_doc_conventions.py` and
   `git diff --check` — passed.
-- All hosted CI jobs and independent review remain pending.
+- Final PR head `d77a927085f1db817b83a11f937b193bd1261e9d` passed all seven
+  required CI jobs in run `43076888679`; merge commit is
+  `6e60da0075e22092c0b5278d68bb592114f21f61`.
 - No Terraform plan/apply, customer role setup, or AWS customer-resource
   mutation is in scope.
 

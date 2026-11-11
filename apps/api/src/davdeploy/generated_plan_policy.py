@@ -43,7 +43,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-11.7"
+POLICY_VERSION = "nova-generated-plan-2026-11-11.8"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -70,6 +70,12 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_iam_role": (("assume_role_policy",),),
     "aws_iam_role_policy": (("policy",),),
     "aws_sqs_queue_policy": (("policy",),),
+    "aws_lambda_permission": (
+        ("action",),
+        ("function_name",),
+        ("principal",),
+        ("source_arn",),
+    ),
     "aws_db_instance": (
         ("publicly_accessible",),
         ("storage_encrypted",),
@@ -168,6 +174,7 @@ def _evaluate(
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings)
     _check_sqs_queue_policies(resources, findings)
+    _check_lambda_permissions(resources, findings)
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
@@ -825,6 +832,50 @@ def _check_sqs_queue_policies(
                 "sqs_public_policy_denied",
                 address,
                 "The plan grants public or unbounded access to an SQS queue.",
+            )
+
+
+def _check_lambda_permissions(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_lambda_permission":
+            continue
+        values = item.get("values")
+        address = item.get("address")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "lambda_permission_unknown",
+                address,
+                "The function access permission is missing or unknown.",
+            )
+            continue
+        principal = values.get("principal")
+        if not isinstance(principal, str) or not principal:
+            _deny(
+                findings,
+                "lambda_permission_principal_unknown",
+                address,
+                "The function access principal is missing or unknown.",
+            )
+            continue
+        if principal.strip() != "*":
+            continue
+        source_arn = values.get("source_arn")
+        if not isinstance(source_arn, str) or not source_arn.strip() or source_arn.strip() == "*":
+            _deny(
+                findings,
+                "lambda_unscoped_public_invoke_denied",
+                address,
+                "The plan grants public function invocation without a scoped source.",
+            )
+        else:
+            _review(
+                findings,
+                "lambda_public_invoke_review",
+                address,
+                "The plan permits wildcard-principal function invocation with a source restriction; confirm the source is intended.",
             )
 
 
