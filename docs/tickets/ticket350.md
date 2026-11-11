@@ -1,6 +1,6 @@
 # ticket350 — Reconcile Nova broker deployment evidence
 
-PR: pending
+PR: [#350](https://github.com/Bepoadewale/davdeploy/pull/350)
 Branch: docs/reconcile-nova-broker-deployed-350
 Base: main
 
@@ -10,7 +10,7 @@ Update the execution-readiness matrix with authoritative merge and deployment ev
 
 ## Current repo state
 
-PR #348 was merged as a533d13. The exact saved Terraform plan was applied; migrations, Lambda status, package identity, and API health are being verified. The matrix still says PR #348 is under review and not deployed.
+PR #348 was merged as `a533d131b50add04b9a9d3501ebba07d76ffbd52` and deployed by exact saved plan/apply runs `43033942614`/`43034517260`. Migrations, six Lambda statuses, deployed package hash/artifact version, broker-off environment flags, and `/healthz` have been verified. The matrix still says PR #348 is under review and not deployed.
 
 ## Research / references used
 
@@ -27,22 +27,25 @@ PR #348 was merged as a533d13. The exact saved Terraform plan was applied; migra
 
 ## Acceptance criteria
 
-- [ ] Matrix cites exact commit, plan/apply runs, migration result, Lambda status, artifact identity, and health check.
-- [ ] Matrix explicitly says the Nova broker and runner remain disabled and no customer plan/workload was created.
-- [ ] Ticket records the exact PR number and final checks.
+- [x] Matrix cites exact commit, plan/apply runs, migration result, Lambda status, artifact identity, and health check.
+- [x] Matrix explicitly says the Nova broker and runner remain disabled and no customer plan/workload was created.
+- [x] Ticket records the exact PR number and deployment evidence.
 - [ ] Documentation conventions and required final-head CI pass.
 
 ## Acceptance status
 
-Bootstrap only. Deployment evidence is available locally; matrix edit and final CI are pending.
+Matrix update and source evidence reconciliation are complete. Documentation convention and diff checks passed; final-head CI remains pending.
 
 ## Tests / validation performed
 
-No checks run yet.
+- `python scripts/check_doc_conventions.py` passed.
+- `git diff --check` passed.
+- No runtime tests are required for this documentation-only PR. The cited AWS and workflow evidence was collected before opening the PR.
 
 ## Evidence files produced
 
 - No runtime evidence file is required because this PR only reconciles source/deployment documentation against already completed workflow and read-only runtime evidence.
+- Sources: plan run [43033942614](https://github.com/Bepoadewale/davdeploy/actions/runs/43033942614), apply run [43034517260](https://github.com/Bepoadewale/davdeploy/actions/runs/43034517260), migration success in the apply log, AWS `get-function-configuration` and S3 versioned artifact hash comparison, and `https://api.davdeploy.tech/healthz` HTTP 200.
 
 ## Boundaries
 
