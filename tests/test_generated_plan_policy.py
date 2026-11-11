@@ -562,19 +562,49 @@ def test_scoped_security_group_source_is_not_treated_as_unknown_or_public():
 
 
 @pytest.mark.parametrize(
-    "policy",
+    "policy,expected_code",
     [
-        {"Statement": {"Effect": "Allow", "Action": "*", "Resource": "*"}},
-        {"Statement": {"Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"}},
-        {"Statement": {"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}},
-        {"Statement": {"Effect": "Allow", "Action": "iam:CreateRole", "Resource": "arn:aws:iam::654654474502:role/*"}},
+        (
+            {"Statement": {"Effect": "Allow", "Action": "*", "Resource": "*"}},
+            "iam_privileged_wildcard",
+        ),
+        (
+            {"Statement": {"Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"}},
+            "iam_passrole_unbounded_denied",
+        ),
+        (
+            {"Statement": {"Effect": "Allow", "Action": "sts:AssumeRole", "Resource": "*"}},
+            "sts_assume_role_unbounded_denied",
+        ),
+        (
+            {
+                "Statement": {
+                    "Effect": "Allow",
+                    "Action": "sts:Assume*",
+                    "Resource": "arn:aws:iam::654654474502:role/app",
+                }
+            },
+            "sts_assume_role_unbounded_denied",
+        ),
+        (
+            {
+                "Statement": {
+                    "Effect": "Allow",
+                    "Action": "iam:CreateRole",
+                    "Resource": "arn:aws:iam::654654474502:role/*",
+                }
+            },
+            "iam_permission_management_denied",
+        ),
     ],
 )
-def test_wildcard_privileged_iam_is_denied(policy):
+def test_privileged_iam_is_denied(policy, expected_code):
     result = evaluate(
         plan(
             resources=[
-                resource("aws_iam_policy.application", "aws_iam_policy", {"policy": json.dumps(policy)}),
+                resource(
+                    "aws_iam_policy.application", "aws_iam_policy", {"policy": json.dumps(policy)}
+                ),
                 resource("terraform_data.account_guard", "terraform_data", {"input": None}),
             ],
             changes=[
@@ -584,11 +614,219 @@ def test_wildcard_privileged_iam_is_denied(policy):
         ),
         proposal(
             [
-                {"resource_id": "application", "resource_type": "aws_iam_policy", "name": "application", "arguments": {"name": "application", "policy": json.dumps(policy)}, "rationale": "Application permissions."}
+                {
+                    "resource_id": "application",
+                    "resource_type": "aws_iam_policy",
+                    "name": "application",
+                    "arguments": {"name": "application", "policy": json.dumps(policy)},
+                    "rationale": "Application permissions.",
+                }
             ]
         ),
     )
-    assert "iam_privileged_wildcard" in codes(result)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def evaluate_application_policy(policy_document):
+    encoded = json.dumps(policy_document)
+    resource_address = "aws_iam_policy.application"
+    resources = [
+        resource(resource_address, "aws_iam_policy", {"name": "application", "policy": encoded}),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    generated = proposal(
+        [
+            {
+                "resource_id": "application",
+                "resource_type": "aws_iam_policy",
+                "name": "application",
+                "arguments": {"name": "application", "policy": encoded},
+                "rationale": "Application permissions.",
+            }
+        ]
+    )
+    return evaluate(
+        plan(
+            resources,
+            [
+                change(resource_address, "aws_iam_policy"),
+                change("terraform_data.account_guard", "terraform_data"),
+            ],
+        ),
+        generated,
+    )
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "NotAction": "iam:DeleteRole",
+                "Resource": "arn:aws:iam::654654474502:role/app",
+            }
+        },
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": "iam:CreatePolicyVersion",
+                "Resource": "arn:aws:iam::654654474502:policy/app",
+            }
+        },
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": "iam:AttachRolePolicy",
+                "Resource": "arn:aws:iam::654654474502:role/app",
+            }
+        },
+    ],
+)
+def test_exact_resource_iam_management_and_not_action_are_denied(policy):
+    result = evaluate_application_policy(policy)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert {"iam_not_action_policy_denied", "iam_permission_management_denied"} & codes(result)
+
+
+@pytest.mark.parametrize(
+    "resource_arn,condition",
+    [
+        ("*", {"StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}}),
+        ("arn:aws:iam::654654474502:role/app", None),
+        (
+            "arn:aws:iam::654654474502:role/app",
+            {"StringNotEquals": {"iam:PassedToService": "lambda.amazonaws.com"}},
+        ),
+        (
+            "arn:aws:iam::654654474502:role/*",
+            {"StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}},
+        ),
+        (
+            "arn:aws:iam::654654474502:role/app",
+            {"StringEquals": {"iam:PassedToService": "*.amazonaws.com"}},
+        ),
+    ],
+)
+def test_unbounded_or_malformed_passrole_is_denied(resource_arn, condition):
+    statement = {"Effect": "Allow", "Action": "iam:PassRole", "Resource": resource_arn}
+    if condition is not None:
+        statement["Condition"] = condition
+    result = evaluate_application_policy({"Statement": statement})
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_passrole_unbounded_denied" in codes(result)
+
+
+def test_exact_passrole_with_literal_service_condition_requires_human_review():
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": "iam:PassRole",
+                "Resource": "arn:aws:iam::654654474502:role/app/runtime",
+                "Condition": {"StringEquals": {"iam:PassedToService": ["lambda.amazonaws.com"]}},
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "iam_passrole_requires_review" in codes(result)
+
+
+def test_specific_same_account_assume_role_requires_human_review():
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": "sts:AssumeRole",
+                "Resource": "arn:aws:iam::654654474502:role/app/reader",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "sts_assume_role_requires_review" in codes(result)
+
+
+def test_external_assume_role_is_denied():
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": "sts:AssumeRole",
+                "Resource": "arn:aws:iam::111122223333:role/external",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sts_assume_role_unbounded_denied" in codes(result)
+
+
+def test_non_admin_managed_policy_attachment_requires_human_review():
+    resources = [
+        resource(
+            "aws_iam_role.application",
+            "aws_iam_role",
+            {
+                "name": "application",
+                "assume_role_policy": json.dumps(
+                    {
+                        "Statement": {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                            "Action": "sts:AssumeRole",
+                        }
+                    }
+                ),
+            },
+        ),
+        resource(
+            "aws_iam_role_policy_attachment.runtime",
+            "aws_iam_role_policy_attachment",
+            {"policy_arn": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"},
+        ),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    generated = proposal(
+        [
+            {
+                "resource_id": "application",
+                "resource_type": "aws_iam_role",
+                "name": "application",
+                "arguments": {
+                    "name": "application",
+                    "assume_role_policy": {
+                        "Version": "2012-10-17",
+                        "Statement": {
+                            "Effect": "Allow",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                            "Action": "sts:AssumeRole",
+                        },
+                    },
+                },
+                "outputs": [{"name": "name", "value_type": "string"}],
+                "rationale": "Lambda runtime role.",
+            },
+            {
+                "resource_id": "runtime",
+                "resource_type": "aws_iam_role_policy_attachment",
+                "name": "runtime",
+                "arguments": {
+                    "role": {
+                        "kind": "resource_reference",
+                        "resource_id": "application",
+                        "output_name": "name",
+                        "value_type": "string",
+                    },
+                    "policy_arn": "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                },
+                "rationale": "Permit application logging.",
+            },
+        ]
+    )
+    document = plan(resources, [change(item["address"], item["type"]) for item in resources])
+    result = evaluate(document, generated)
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "iam_managed_policy_contents_unverified" in codes(result)
 
 
 def test_wildcard_role_trust_and_administrator_attachment_are_denied():

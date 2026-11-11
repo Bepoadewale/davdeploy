@@ -28,20 +28,24 @@ Backend `main` is `334865159a0a6f7dcf155dc7595f4cc455aea679` (PR #352). `generat
 
 ## Acceptance criteria
 
-- [ ] Actual generated-plan IAM policy analysis fails closed for unsafe `NotAction`, permission-management, and role-delegation constructs.
-- [ ] A tightly scoped pass-role grant is surfaced for human review; broad or unconditioned pass-role grants are denied.
-- [ ] Regression tests cover positive and negative policy documents and preserve safe policies.
+- [x] Actual generated-plan IAM policy analysis fails closed for unsafe `NotAction`, permission-management, and role-delegation constructs.
+- [x] A tightly scoped pass-role grant is surfaced for human review; broad or unconditioned pass-role grants are denied.
+- [x] Regression tests cover positive and negative policy documents and preserve safe policies.
 - [ ] Focused tests, Ruff, full verification, clean-room proof if required by the execution-security change, documentation conventions, and diff checks pass.
 - [ ] Required final-head CI passes and the current-head code review has no unresolved blocking findings.
-- [ ] Runner, state API, role verification, plan review, and customer apply remain disabled; no AWS customer resources are changed.
+- [x] Runner, state API, role verification, plan review, and customer apply remain disabled; no AWS customer resources are changed.
 
 ## Acceptance status
 
-Implementation has not started. This PR is a draft bootstrap.
+The implementation is in progress on draft PR #353. The policy now denies IAM allow statements that use `NotAction`, denies IAM permission-management actions regardless of resource wildcarding, denies unbounded `iam:PassRole`, and denies wildcard or cross-account role assumption. Exact same-account role passing with a literal `iam:PassedToService` condition and exact same-account role assumption are surfaced for human review. Managed policy attachments other than `AdministratorAccess` are also surfaced because their policy contents are not included in the Terraform plan. The focused test file passed (78 tests), `make verify` passed (917 tests), documentation conventions passed, and `git diff --check` passed. Clean-room verification, final-head CI, and review are pending.
 
 ## Tests / validation performed
 
-None yet; implementation is not started.
+- `uv run pytest -q tests/test_generated_plan_policy.py` — 78 passed.
+- `make verify` — 917 passed; Ruff, Actions configuration, OpenAPI, and Docker Compose configuration checks passed. One existing Starlette/httpx deprecation warning remains.
+- `GITHUB_PR_NUMBER=353 python3.12 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Clean-room verification and hosted CI are pending.
 
 ## Evidence files produced
 
