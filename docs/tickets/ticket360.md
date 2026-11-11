@@ -6,79 +6,92 @@ Base: `main`
 
 ## Problem / goal
 
-Reconcile the current Nova source and hosted-release status after the November 11
-control-plane rollout and the merged API Gateway ownership-policy change.
-Preserve the distinction between merged source, deployed package, gated Nova
-planning, and the legacy cloud-execution path.
+Reconcile Nova source, hosted release status, and the finite execution-readiness
+matrix using exact PR, commit, plan, apply, and runtime evidence. Keep deployed
+control-plane code distinct from disabled customer planning and lifecycle.
 
 ## Current repo state
 
-- Backend `main` is at `d734547a0551e85c5eafcc7349561e3ea7790589` (PR #359).
-- PR #358 is deployed by protected Terraform plan `43088843169` and exact saved-
-  plan apply `43091195912`; API health and disabled Nova flags are verified.
-- PR #359 is merged but its rollout plan has not completed. Run `43095354497`
-  ended `startup_failure` with no jobs or logs; a rerun request did not create
-  an additional attempt, so there is no active Terraform run.
-- The trusted pricing evaluator remains unavailable. PR #318 stays closed and
-  held for account-owner direction.
+- Backend `main` is `d734547a0551e85c5eafcc7349561e3ea7790589` (PR #359); this
+  commit is now deployed by protected plan `43098415855` and exact saved-plan
+  apply `43101777948` (deployment `7721332861`).
+- The plan reported 0 additions, 6 in-place Lambda package updates, 0 destroys,
+  0 drift, and 8 output changes. Migrations passed; all six Lambda functions
+  are Active/Successful with `CodeSha256=vg52ZDcTSAhZ3hK7dra2Ou7oExSdzGDPjMBjoNQe4ZM=`;
+  `/healthz` returned `{"status":"ok","product":"davdeploy"}`.
+- Nova plan runner, role verification, credential broker, Terraform state API,
+  plan review, and hosted certification remain disabled. No Nova customer plan
+  or workload was applied, operated, health-checked, or certified.
+- PR #318 pricing work remains closed and held for account-owner direction.
 
 ## Research / references used
 
-- Protected Terraform plan/apply records `43088843169` and `43091195912`.
-- Read-only AWS Lambda configuration and account identity checks; API
+- Protected plan `43098415855`, exact saved-plan apply `43101777948`, and
+  deployment `7721332861`.
+- Read-only AWS identity and Lambda package/gate queries in account
+  `654654474502`, region `us-east-1`, plus API health at
   `https://api.davdeploy.tech/healthz`.
-- Existing rollout evidence in `docs/test/test356.md` and merged policy tickets
-  #358 and #359.
+- Historical release evidence `docs/test/test358.md`; current release evidence
+  `docs/test/test359.md`.
 - `docs/product/EXECUTION_READINESS_MATRIX.md`,
   `docs/IMPLEMENTATION_STATUS.md`, `PROJECT_STATUS.md`, and `CODEX_BACKLOG.md`.
 
 ## Work planned for the PR
 
-- Update the current hosted-release entries with exact #358 deployment evidence.
-- Add `docs/test/test358.md` with the plan/apply, migration, Lambda package,
-  health, feature-gate, and customer-resource boundary evidence.
-- Record #359 as merged source pending deployment; do not claim its code is live.
-- Reconcile the Nova backlog and execution matrix, retaining all catalogue and
-  implementation scope and existing lifecycle gaps.
-- State the currently observed Nova feature-gate values separately from legacy
-  cloud execution settings.
+- Record the exact PR #359 control-plane release and retain PR #358 as
+  historical evidence.
+- Keep the initial no-job plan failure and successful retry accurately
+  distinguished.
+- Reconcile source, deployment, feature gates, pricing and customer-lifecycle
+  limitations in status and readiness documents.
+- Retain all capability catalogue and implementation scope; do not imply that
+  control-plane deployment certifies customer workloads.
 
 ## Acceptance criteria
 
-- [x] Exact PR, commit, plan/apply run, migration, Lambda package, API health,
-  account/region, and runtime flag evidence is recorded.
-- [x] Merged source and deployed versions are clearly distinguished.
-- [x] Pricing, customer planning, apply, health, recovery, teardown, and scenario
-  certification gaps remain explicit.
-- [ ] Documentation convention checks and `git diff --check` pass.
-- [ ] All required hosted CI checks pass.
-- [ ] No infrastructure mutation is performed by this documentation PR.
+- [x] Exact source commit, plan/apply run, deployment ID, action summary,
+  migration, Lambda package, API health, account/region, and gate evidence is
+  recorded.
+- [x] PR #359's deployed source is distinguished from customer planning,
+  approval, apply, health, recovery and teardown readiness.
+- [x] Historical PR #358 release evidence remains intact.
+- [x] Pricing is clearly unavailable and PR #318 remains held; the coverage
+  matrix and capability counts are retained.
+- [ ] Documentation convention checks and `git diff --check` pass on final head.
+- [ ] All required hosted CI checks pass on final head.
+- [x] This documentation PR did not dispatch or perform an AWS mutation. The
+  separate protected #359 release is recorded as evidence.
 
 ## Acceptance status
 
-Documentation is updated and locally verified. Hosted CI is pending.
+Content is updated with observed release evidence. Final local checks and
+required hosted CI remain pending.
 
 ## Tests / validation performed
 
-`GITHUB_PR_NUMBER=360 .venv/bin/python scripts/check_doc_conventions.py` and
-`git diff --check` passed locally. `docs/test/test358.md` records protected
-control-plane deployment evidence. No AWS mutation occurred for this PR.
+- Before the #359 rollout update, `python scripts/check_doc_conventions.py`
+  and `git diff --check` passed.
+- The final documentation changes require those checks again, followed by
+  required GitHub Actions CI.
+- No customer workload test was run by this documentation PR; no new runtime
+  test file is required for PR #360.
 
 ## Evidence files produced
 
-This ticket tracks the documentation reconciliation for PR #360.
+- `docs/test/test359.md` — exact protected deployment evidence for PR #359.
+- `docs/test/test358.md` — preserved prior deployment evidence for PR #358.
 
 ## Boundaries
 
-This PR records technical release evidence only. It does not enable Nova
-planning, change runtime gates, apply Terraform, or alter any customer or AWS
-resources. The private strategy and credential notes remain outside both
-repositories.
+This PR records technical evidence. It does not enable Nova planning or
+execution, alter customer resources, or contain the private goal ledger,
+pricing strategy, credentials, or operational access notes.
 
 ## Follow-up work
 
-Complete PR #359's protected rollout from an exact reviewed saved plan, then
-record its deployment separately. Continue trusted pricing only after the
-account owner directs how to proceed with held PR #318. Keep Nova customer
-planning and lifecycle gates disabled until their independent acceptance work
-is complete.
+Keep final cost-bound approval blocked until trusted complete regional pricing
+is available under the held account-owner pricing direction. Verify the
+customer plan role and effective permissions, then enable and exercise hosted
+planning only after tenant-isolated state and artifact protections are proven.
+Apply, health, recovery, retained-data handling, teardown and the composed
+scenario matrix remain unproved.
