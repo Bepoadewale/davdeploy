@@ -123,6 +123,19 @@ def test_public_template_host_allows_only_versioned_template_reads_and_is_confir
     )
     assert "prevent_destroy = true" in configuration
     assert "retained_template_keys" in variables
+    current_live_key = (
+        "cloudformation/customer-discovery-role-"
+        "7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"
+    )
+    assert current_live_key in variables
+    assert (
+        f'to   = aws_s3_object.retained_customer_templates["{current_live_key}"]'
+        in configuration
+    )
+    assert (
+        "from = aws_s3_object.current_customer_discovery_role\n"
+        in configuration
+    )
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
 
