@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from types import SimpleNamespace
+from urllib.error import HTTPError
 
 import pytest
 from davdeploy.nova_plan_credentials import (
@@ -45,10 +47,9 @@ class FrozenCredentials:
 
 
 class Response:
-    status = 200
-
-    def __init__(self, document):
+    def __init__(self, document, *, status=200):
         self.document = document
+        self.status = status
 
     def __enter__(self):
         return self
@@ -98,6 +99,62 @@ def test_request_sigv4s_only_durable_run_and_returns_redacted_repr():
     assert result.account_id == ACCOUNT
     assert result.boto3_credentials()["SecretAccessKey"] == "A" * 40
     assert "A" * 40 not in repr(result)
+
+
+def test_pending_build_publication_gets_bounded_retry_then_credentials():
+    attempts = []
+    delays = []
+
+    def opener(_request, *, timeout):
+        attempts.append(timeout)
+        if len(attempts) == 1:
+            raise HTTPError(URL, 425, "Too Early", {}, BytesIO())
+        if len(attempts) == 2:
+            return Response({}, status=425)
+        return Response(credentials_response())
+
+    issued = request_nova_plan_credentials(
+        **request(opener=opener, sleeper=delays.append)
+    )
+
+    assert len(attempts) == 3
+    assert attempts == [15, 15, 15]
+    assert delays == [0.1, 0.25]
+    assert issued.role_arn == ROLE_ARN
+
+
+def test_pending_build_publication_retry_is_bounded():
+    attempts = []
+    delays = []
+
+    def opener(_request, *, timeout):
+        attempts.append(timeout)
+        return Response({}, status=425)
+
+    with pytest.raises(NovaPlanCredentialError, match="remained pending"):
+        request_nova_plan_credentials(
+            **request(opener=opener, sleeper=delays.append)
+        )
+
+    assert len(attempts) == 5
+    assert delays == [0.1, 0.25, 0.5, 1.0]
+
+
+def test_authorization_failure_is_not_retried():
+    attempts = []
+    delays = []
+
+    def opener(_request, *, timeout):
+        attempts.append(timeout)
+        return Response({}, status=403)
+
+    with pytest.raises(NovaPlanCredentialError, match="was rejected"):
+        request_nova_plan_credentials(
+            **request(opener=opener, sleeper=delays.append)
+        )
+
+    assert attempts == [15]
+    assert delays == []
 
 
 @pytest.mark.parametrize(

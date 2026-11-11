@@ -457,6 +457,18 @@ def issue_nova_plan_role_credentials(
 
     run = db.get(GeneratedPlanRun, body.run_id)
     if (
+        run is not None
+        and run.codebuild_project == project_name
+        and run.codebuild_build_id == build_id
+        and run.state == "PREPARING"
+        and run.preparation_phase == "STAGING_BUILD_INPUT"
+        and run.runner_run_id
+    ):
+        raise HTTPException(
+            425,
+            "The exact build input is still being published; retry credential bootstrap",
+        )
+    if (
         run is None
         or run.state != "BUILD_STARTED"
         or run.codebuild_project != project_name

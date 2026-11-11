@@ -29,12 +29,18 @@ default off.
   focused Terraform-state tests then passed (**26 passed**), including the
   latest assertion that state-credential responses set `Cache-Control:
   no-store` and `Pragma: no-cache`.
-- On the final response-cache-header change,
+- The focused credential client and broker-route suites passed (**58 passed**),
+  covering retryable exact-build input publication, bounded backoff, retry
+  exhaustion and immediate failure for other authorization responses.
+- Before the publication-race follow-up,
   `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` passed
   **899 tests**; Ruff, configuration checks, OpenAPI snapshot and Docker
   Compose configuration passed. The in-memory database setting kept the
   local runtime database path absent. One existing Starlette/httpx
   deprecation warning remains.
+- After adding the publication retry, the same in-memory `make verify` command
+  passed **903 tests**; Terraform formatting/validation, docs conventions,
+  `git diff --check` and the `.local` absence check also passed.
 - `terraform fmt -check -recursive infrastructure/terraform/serverless-control-plane`:
   passed.
 - `terraform -chdir=infrastructure/terraform/serverless-control-plane init

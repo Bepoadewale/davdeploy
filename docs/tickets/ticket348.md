@@ -64,6 +64,9 @@ project and live CodeBuild build before issuing them.
   and credential lifetime. Harden state bootstrap with the same session-derived
   build identity, run-only request body and fixed-project build-ARN permission;
   commit a non-secret audit event before either credential response is returned.
+- Treat only the exact build's `PREPARING/STAGING_BUILD_INPUT` broker request
+  as a bounded publication retry; wrong-build and other authorization failures
+  remain immediate failures.
 - Remove ExternalId material from staged build input and remove customer-role
   assumption permission from the CodeBuild service role. Make the worker use
   only the broker response; reject secret-bearing staged input and unexpected
@@ -83,6 +86,9 @@ project and live CodeBuild build before issuing them.
 - [x] Customer plan-role and Terraform state credential issuances persist a
   non-secret actor/run/build/scope audit event before returning credentials.
 - [x] Both credential responses prohibit caching of ephemeral secret material.
+- [x] The exact build receives retryable `425 Too Early` only while its
+  build-scoped input is being published; worker retry/backoff is bounded and
+  `403` authorization failures are not retried.
 - [x] Credential brokerage fails closed on tenant, project, revision, build,
   account, region, connection, digest, role, policy, secret-store or STS errors.
 - [x] CodeBuild has no `sts:AssumeRole` permission to customer plan roles.

@@ -2108,3 +2108,59 @@ def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_
     finally:
         app.dependency_overrides.pop(api_main.session, None)
         db.close()
+
+
+def test_plan_credential_broker_marks_exact_build_input_publication_as_retryable(monkeypatch):
+    service, db, _generator, _dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+    run_summary = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-credential-publish-window"
+    )
+    assert service.run_next_generated_plan_run() is True
+    run = db.get(GeneratedPlanRun, run_summary["id"])
+    run.state = "PREPARING"
+    run.preparation_phase = "STAGING_BUILD_INPUT"
+    db.commit()
+
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_PROJECT", PROJECT)
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN",
+        "arn:aws:iam::654654474502:role/davdeploy-nova-plan-only",
+    )
+    client_calls = []
+    monkeypatch.setattr(
+        api_main.boto3,
+        "client",
+        lambda _name: client_calls.append(_name) or SimpleNamespace(),
+    )
+    app.dependency_overrides[api_main.session] = lambda: db
+    principal = (
+        "arn:aws:sts::654654474502:assumed-role/davdeploy-nova-plan-only/"
+        f"AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
+    )
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/nova-plan/credentials",
+                json={"run_id": run.id},
+                headers={"x-davdeploy-bootstrap-principal": principal},
+            )
+            wrong_session = client.post(
+                "/api/v1/nova-plan/credentials",
+                json={"run_id": run.id},
+                headers={
+                    "x-davdeploy-bootstrap-principal": (
+                        "arn:aws:sts::654654474502:assumed-role/"
+                        "davdeploy-nova-plan-only/"
+                        "AWSCodeBuild-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                    )
+                },
+            )
+        assert response.status_code == 425
+        assert wrong_session.status_code == 403
+        assert client_calls == []
+    finally:
+        app.dependency_overrides.pop(api_main.session, None)
+        db.close()

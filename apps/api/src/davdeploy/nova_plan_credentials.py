@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from botocore.awsrequest import AWSRequest
 MAX_RESPONSE_BYTES = 64 * 1024
 MAX_CREDENTIAL_TTL = timedelta(minutes=15)
 CREDENTIAL_PATH = "/api/v1/nova-plan/credentials"
+PENDING_RETRY_DELAYS_SECONDS = (0.1, 0.25, 0.5, 1.0)
 
 
 class NovaPlanCredentialError(RuntimeError):
@@ -64,6 +66,7 @@ def request_nova_plan_credentials(
     expected_policy_sha256: str,
     credentials,
     opener: Callable[..., object] = _open_without_redirects,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> NovaPlanRoleCredentials:
     """Request one exact customer role session from the authenticated API."""
     signing_region = _bootstrap_signing_region(broker_url)
@@ -114,15 +117,34 @@ def request_nova_plan_credentials(
         headers=dict(prepared.headers.items()),
         method=prepared.method,
     )
-    try:
-        with opener(request, timeout=15) as response:
-            if response.status != 200:
-                raise NovaPlanCredentialError("Nova plan credential request was rejected")
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-    except NovaPlanCredentialError:
-        raise
-    except (HTTPError, URLError, OSError, TimeoutError, TypeError, ValueError):
-        raise NovaPlanCredentialError("Nova plan credential request failed") from None
+    raw = None
+    for attempt in range(len(PENDING_RETRY_DELAYS_SECONDS) + 1):
+        retry_pending = False
+        try:
+            with opener(request, timeout=15) as response:
+                if response.status == 425:
+                    retry_pending = True
+                elif response.status != 200:
+                    raise NovaPlanCredentialError("Nova plan credential request was rejected")
+                else:
+                    raw = response.read(MAX_RESPONSE_BYTES + 1)
+        except HTTPError as error:
+            if error.code == 425:
+                retry_pending = True
+                error.close()
+            else:
+                raise NovaPlanCredentialError("Nova plan credential request was rejected") from None
+        except NovaPlanCredentialError:
+            raise
+        except (URLError, OSError, TimeoutError, TypeError, ValueError):
+            raise NovaPlanCredentialError("Nova plan credential request failed") from None
+        if not retry_pending:
+            break
+        if attempt == len(PENDING_RETRY_DELAYS_SECONDS):
+            raise NovaPlanCredentialError("Nova plan credential request remained pending")
+        sleeper(PENDING_RETRY_DELAYS_SECONDS[attempt])
+    if raw is None:
+        raise NovaPlanCredentialError("Nova plan credential response is invalid")
     if not isinstance(raw, bytes) or not raw or len(raw) > MAX_RESPONSE_BYTES:
         raise NovaPlanCredentialError("Nova plan credential response is invalid")
     try:
