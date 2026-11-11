@@ -29,9 +29,11 @@ default off.
   focused Terraform-state tests then passed (**26 passed**), including the
   latest assertion that state-credential responses set `Cache-Control:
   no-store` and `Pragma: no-cache`.
-- `make verify` before the response-cache-header follow-up: **899 passed**;
-  Ruff, configuration checks, OpenAPI snapshot
-  and Docker Compose configuration passed. One existing Starlette/httpx
+- On the final response-cache-header change,
+  `DAVDEPLOY_DATABASE_URL=sqlite+pysqlite:///:memory: make verify` passed
+  **899 tests**; Ruff, configuration checks, OpenAPI snapshot and Docker
+  Compose configuration passed. The in-memory database setting kept the
+  local runtime database path absent. One existing Starlette/httpx
   deprecation warning remains.
 - `terraform fmt -check -recursive infrastructure/terraform/serverless-control-plane`:
   passed.
