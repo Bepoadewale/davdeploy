@@ -3,7 +3,7 @@
 Date: 2026-11-11
 Execution type: Local automated and Terraform validation; no AWS mutation.
 Customer repository: Not applicable; control-plane Terraform IAM conditions only.
-Commit: implementation commit pending.
+Commit: `f75fb0c` implementation; this evidence update records validation at that commit.
 AWS account: `654654474502` (prior read-only identity verification; this PR makes no AWS calls).
 AWS region: `us-east-1`
 
@@ -20,11 +20,12 @@ None.
 - `make verify` — 867 passed; ruff, OpenAPI, Actions configuration, and Compose configuration checks passed. One existing Starlette/httpx deprecation warning remains.
 - `python3.12 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Isolated `make local-proof` — pending.
+- `COMPOSE_PROJECT_NAME=davdeploy_pr338_20261111 make local-proof` in `/private/tmp/davdeploy-pr338-cleanroom-20261111` — passed (867 tests), with API/worker/executor/monitoring health, local customer-plan E2E, trace checks, OpenAPI, Actions and Compose checks passing.
+- `COMPOSE_PROJECT_NAME=davdeploy_pr338_20261111 make clean-local` — removed the isolated stack, volume, network, `.venv`, and `.local`; follow-up absence checks pending.
 
 ## Observed result
 
-The storage flag no longer grants API Lambda S3 state-object or KMS permissions by itself. Those permissions require both storage and state API flags; the HTTP state API route and its independent gates remain off in the reviewed storage-only configuration.
+The storage flag no longer grants API Lambda S3 state-object or KMS permissions by itself. Those permissions require both storage and state API flags; the HTTP state API route and its independent gates remain off in the reviewed storage-only configuration. The plan from run `42955035771` was not applied because it included the prior access coupling; no AWS resources changed.
 
 ## Teardown
 
