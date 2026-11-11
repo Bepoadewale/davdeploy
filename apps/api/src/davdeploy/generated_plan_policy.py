@@ -43,7 +43,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-11.6"
+POLICY_VERSION = "nova-generated-plan-2026-11-11.7"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -69,6 +69,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_iam_policy": (("policy",),),
     "aws_iam_role": (("assume_role_policy",),),
     "aws_iam_role_policy": (("policy",),),
+    "aws_sqs_queue_policy": (("policy",),),
     "aws_db_instance": (
         ("publicly_accessible",),
         ("storage_encrypted",),
@@ -166,6 +167,7 @@ def _evaluate(
     _check_resource_ownership(document, resources, ownership_scope, findings)
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings)
+    _check_sqs_queue_policies(resources, findings)
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
@@ -789,6 +791,8 @@ def _has_public_allow(policy: dict[str, Any]) -> bool:
     for statement in _statements(policy, require_resource=True, require_principal=True):
         if str(statement.get("Effect", "")).lower() != "allow":
             continue
+        if "NotPrincipal" in statement:
+            return True
         principal = statement.get("Principal")
         if principal == "*" or (
             isinstance(principal, dict)
@@ -796,6 +800,32 @@ def _has_public_allow(policy: dict[str, Any]) -> bool:
         ):
             return True
     return False
+
+
+def _check_sqs_queue_policies(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_sqs_queue_policy":
+            continue
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "sqs_policy_unknown",
+                item.get("address"),
+                "The queue access policy is missing or unknown.",
+            )
+            continue
+        address = item.get("address")
+        policy = _json_document(values.get("policy"), findings, address)
+        if policy is not None and _has_public_allow(policy):
+            _deny(
+                findings,
+                "sqs_public_policy_denied",
+                address,
+                "The plan grants public or unbounded access to an SQS queue.",
+            )
 
 
 def _check_iam_permissions(
