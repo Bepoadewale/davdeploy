@@ -47,24 +47,25 @@ flows and keep all Nova execution gates disabled.
 
 ## Acceptance criteria
 
-- [ ] Missing, malformed, out-of-range, and unknown RDS backup-retention values
+- [x] Missing, malformed, out-of-range, and unknown RDS backup-retention values
   produce explicit denial outcomes.
-- [ ] An RDS instance with automated backups disabled requires human review.
-- [ ] RDS delete/replacement plans that skip or cannot safely establish final
+- [x] An RDS instance with automated backups disabled requires human review.
+- [x] RDS delete/replacement plans that skip or cannot safely establish final
   snapshot behavior produce explicit outcomes; normal final-snapshot plans keep
   their existing destructive-change review.
-- [ ] Existing safe RDS plan cases and unrelated policy tests remain valid.
-- [ ] Focused tests, full `make verify`, clean-room `make local-proof`, docs
+- [x] Existing safe RDS plan cases and unrelated policy tests remain valid.
+- [x] Focused tests, full `make verify`, clean-room `make local-proof`, docs
   conventions, and diff checks pass.
-- [ ] Required final-head GitHub CI passes before merge.
-- [ ] No runtime gate is enabled and no AWS/customer infrastructure is changed.
+- [x] Required final-head GitHub CI passes before merge (run `43108729167`, head
+  `4cda796155dfc7e392bfe61672f436fc6fa2b10d`).
+- [x] No runtime gate is enabled and no AWS/customer infrastructure is changed.
 
 ## Acceptance status
 
-Implemented and locally verified; final-head pull request checks remain a merge
-gate. The change adds critical unknown-value checks, bounded retention
-validation, explicit review for disabled instance backups and RDS replacement
-without a final snapshot, plus fail-closed snapshot metadata checks.
+Implemented and verified locally and on final-head GitHub CI. The change adds
+critical unknown-value checks, bounded retention validation, explicit review
+for disabled instance backups and RDS replacement without a final snapshot,
+plus fail-closed snapshot metadata checks. It does not deploy or enable Nova.
 
 ## Tests / validation performed
 
