@@ -53,14 +53,14 @@ observed evidence.
 - [x] Nova review/runner/role-verification/state API flags remain disabled;
   no Nova workload or customer resource is claimed as deployed.
 - [x] Focused documentation convention and diff checks pass locally.
-- [ ] All required final-head CI checks pass.
+- [x] All required final-head CI checks pass.
 
 ## Acceptance status
 
 Runtime rollout completed and is recorded in `docs/test/test345.md`. The
 customer template source URL and current hosted status docs are reconciled.
-Documentation convention and diff checks pass locally; final-head CI remains
-pending.
+Documentation convention and diff checks pass locally. All seven final-head
+CI checks passed in run `42987624957`.
 
 ## Tests / validation performed
 

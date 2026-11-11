@@ -81,7 +81,9 @@ setting was unchanged and does not enable the Nova saved-plan path.
 
 Documentation checks run for this evidence PR:
 `GITHUB_PR_NUMBER=345 .venv/bin/python scripts/check_doc_conventions.py` and
-`git diff --check` both passed locally. Required final-head CI is pending.
+`git diff --check` both passed locally. All seven required final-head CI checks
+passed in run `42987624957` (cloud contracts, docs conventions, local
+integration, policy, Python, secrets, and supply chain).
 
 ## Observed result
 
