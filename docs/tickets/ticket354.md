@@ -1,7 +1,7 @@
 # ticket354 — redact hosted Terraform plan output
 
-PR: [#354](https://github.com/Bepoadewale/davdeploy/pull/354) (draft)
-Branch: `security/sanitize-terraform-plan-logs-354`
+PR: [#354](https://github.com/Bepoadewale/davdeploy/pull/354) (merged)
+Branch: `security/sanitize-terraform-plan-logs-354` (deleted after merge)
 Base: `main`
 
 ## Problem / goal
@@ -14,7 +14,8 @@ resource or variable values.
 
 ## Current repo state
 
-- Backend `main` is at `0896ae6106fe1e7526dba90105639f894d5534b8` (PR #353).
+- PR #354 merged as `9532983a768b1b47713363dd82eb7155ed09c4a2`; current
+  `main` has since advanced through PR #355.
 - Terraform plan workflow is `.github/workflows/terraform-plan.yml` and uses
   Terraform 1.14.7, a protected OIDC plan role, and an encrypted immutable
   saved-plan manifest. It currently prints the normal `terraform plan`
@@ -49,9 +50,8 @@ resource or variable values.
 
 ## Acceptance criteria
 
-- [ ] Successful plan logs show the exact resource action summary and selected
-  Nova/legacy feature-gate values, but no plan values. A protected plan run on
-  a merged commit with this workflow change is still required to prove this.
+- [x] A successful protected plan log shows the bounded resource action
+  summary and selected Nova/legacy feature-gate values, without plan values.
 - [x] Secret-like strings in planned values, prior state, variables, and
   resource diffs never appear in parser output or errors in regression tests.
 - [x] Malformed or oversized JSON, non-boolean feature gates, and plans that
@@ -59,14 +59,16 @@ resource or variable values.
 - [x] Saved-plan file, manifest, digest verification, protected environment,
   and apply workflow semantics remain unchanged.
 - [x] Focused tests, `make verify`, and docs checks pass locally.
-- [ ] Required hosted CI passes on the final PR head.
+- [x] Required hosted CI passes on the final PR head.
 
 ## Acceptance status
 
-Implementation and local verification are complete; final PR CI, current-head
-review, and merge are pending. The protected plan/apply workflow for PR #353
-completed while this PR was being implemented. That release is recorded in
-`docs/test/test353.md`; it is not an apply by this PR.
+Merged and locally/hostedly verified. The post-merge protected plan check
+passed against exact commit `9532983a768b1b47713363dd82eb7155ed09c4a2` in run
+`43077213967`. A fresh plan for current `main` (`6e60da0`) then passed in run
+`43078429737` and was applied exactly in run `43079436769`, deployment
+`7718460093`. That release includes PR #354's sanitized log workflow and PR
+#355's policy code; see [`test355.md`](../test/test355.md).
 
 ## Tests / validation performed
 
@@ -76,9 +78,14 @@ completed while this PR was being implemented. That release is recorded in
   passed. One existing Starlette/httpx deprecation warning remains.
 - `GITHUB_PR_NUMBER=354 python3.12 scripts/check_doc_conventions.py` and
   `git diff --check` — passed.
-- The new parser has not yet processed a protected hosted plan artifact; that
-  integration evidence is required after merge. No apply or customer AWS
-  resource mutation was performed for PR #354.
+- Required final-head CI run `43075119402` passed all seven jobs. PR #354 was
+  merged at `9532983a768b1b47713363dd82eb7155ed09c4a2`.
+- Protected plan run `43077213967` completed successfully on that merged
+  commit. Its log was checked for the sanitized summary; no raw plan values
+  were surfaced. This was a control-plane plan only, not an apply.
+- A later fresh protected plan for `main` commit `6e60da0` and exact saved-plan
+  apply run `43079436769` deployed the workflow; six Lambda package updates
+  completed, migration verification succeeded, and the API health check passed.
 
 ## Evidence files produced
 
@@ -94,6 +101,5 @@ the local-only Nova goal ledger.
 
 ## Follow-up work
 
-After merge, dispatch a protected plan for the merged commit and verify the
-sanitized summary contains actions and explicit feature gates without plan
-values. Do not apply until that exact summary has been reviewed.
+Continue to use the sanitized summary on every protected Terraform plan and
+review the exact saved plan before applying.
