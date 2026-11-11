@@ -658,6 +658,33 @@ def evaluate_application_policy(policy_document):
     )
 
 
+def evaluate_role_trust(trust_document):
+    encoded = json.dumps(trust_document)
+    role_address = "aws_iam_role.application"
+    resources = [
+        resource(role_address, "aws_iam_role", {"name": "application", "assume_role_policy": encoded}),
+        resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+    ]
+    generated = proposal(
+        [
+            {
+                "resource_id": "application",
+                "resource_type": "aws_iam_role",
+                "name": "application",
+                "arguments": {"name": "application", "assume_role_policy": trust_document},
+                "rationale": "Application runtime role.",
+            }
+        ]
+    )
+    return evaluate(
+        plan(
+            resources,
+            [change(role_address, "aws_iam_role"), change("terraform_data.account_guard", "terraform_data")],
+        ),
+        generated,
+    )
+
+
 @pytest.mark.parametrize(
     "policy",
     [
@@ -759,6 +786,62 @@ def test_external_assume_role_is_denied():
     )
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "sts_assume_role_unbounded_denied" in codes(result)
+
+
+def test_external_account_role_trust_is_denied():
+    result = evaluate_role_trust(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::111122223333:root"},
+                "Action": "sts:AssumeRole",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_external_trust_denied" in codes(result)
+
+
+def test_same_account_role_trust_requires_human_review():
+    result = evaluate_role_trust(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Principal": {"AWS": f"arn:aws:iam::{ACCOUNT}:root"},
+                "Action": "sts:AssumeRole",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "iam_same_account_trust_requires_review" in codes(result)
+
+
+def test_allow_not_principal_trust_is_denied():
+    result = evaluate_role_trust(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "NotPrincipal": {"AWS": f"arn:aws:iam::{ACCOUNT}:role/blocked"},
+                "Action": "sts:AssumeRole",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_not_principal_trust_denied" in codes(result)
+
+
+def test_exact_aws_service_trust_is_accepted_without_extra_review():
+    result = evaluate_role_trust(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Principal": {"Service": "lambda.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.findings == ()
 
 
 def test_non_admin_managed_policy_attachment_requires_human_review():
