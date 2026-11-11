@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
+import pytest
 from davdeploy.domain import InfrastructurePlanDecision, InfrastructurePlanState
+from davdeploy.main import list_customer_plan_revisions
 from davdeploy.security import LOCAL_USERS, Principal, issue_local_token, verify_token
 from test_infrastructure_plan_lifecycle import plan_content
 from test_product import founder, make_service
@@ -30,6 +34,110 @@ def test_developer_dashboard_shows_only_own_customer_plan_revisions():
     assert dashboard["user"]["role"] == "developer"
     assert dashboard["pending_approval_count"] == 0
     assert [item["id"] for item in dashboard["plans"]] == [revision.id]
+
+
+def test_customer_plan_revision_history_paginates_visible_summaries():
+    service, _ = make_service()
+    project = service.create_project(
+        founder(), "revision-history", "https://github.com/example/history"
+    )
+    own = [
+        service.create_infrastructure_plan(
+            founder(), project.id, f"Plan {index}", plan_content()
+        )
+        for index in range(3)
+    ]
+    collaborator = Principal("workspace-member", founder().organization_id, "developer")
+    other = service.create_infrastructure_plan(
+        collaborator, project.id, "Member plan", plan_content()
+    )
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    for index, revision in enumerate([*own, other]):
+        revision.created_at = base + timedelta(minutes=index)
+    service.db.commit()
+
+    first = service.customer_plan_revision_history(founder(), project.id, limit=2)
+    second = service.customer_plan_revision_history(
+        founder(), project.id, limit=2, cursor=first["next_cursor"]
+    )
+    admin = Principal("workspace-admin", founder().organization_id, "administrator")
+    all_revisions = service.customer_plan_revision_history(admin, project.id, limit=10)
+
+    assert [item["id"] for item in first["items"]] == [own[2].id, own[1].id]
+    assert first["next_cursor"] == own[1].id
+    assert [item["id"] for item in second["items"]] == [own[0].id]
+    assert second["next_cursor"] is None
+    assert {item["id"] for item in all_revisions["items"]} == {
+        revision.id for revision in [*own, other]
+    }
+    assert set(first["items"][0]) == {
+        "id",
+        "plan_id",
+        "project_id",
+        "title",
+        "revision",
+        "state",
+        "content_digest",
+        "created_at",
+        "submitted_at",
+    }
+    assert "creator_subject" not in first["items"][0]
+    assert "content" not in first["items"][0]
+
+
+def test_customer_plan_revision_history_rejects_invisible_cursors_and_bad_limits():
+    service, _ = make_service()
+    project = service.create_project(
+        founder(), "revision-history", "https://github.com/example/history"
+    )
+    own = service.create_infrastructure_plan(founder(), project.id, "Own", plan_content())
+    collaborator = Principal("workspace-member", founder().organization_id, "developer")
+    hidden = service.create_infrastructure_plan(
+        collaborator, project.id, "Hidden", plan_content()
+    )
+    other_project = service.create_project(
+        founder(), "other-project", "https://github.com/example/other"
+    )
+    foreign_project_revision = service.create_infrastructure_plan(
+        founder(), other_project.id, "Other project", plan_content()
+    )
+
+    with pytest.raises(PermissionError, match="cursor is not visible"):
+        service.customer_plan_revision_history(founder(), project.id, cursor=hidden.id)
+    with pytest.raises(PermissionError, match="cursor is not visible"):
+        service.customer_plan_revision_history(
+            founder(), project.id, cursor=foreign_project_revision.id
+        )
+    with pytest.raises(ValueError, match="cursor is invalid"):
+        service.customer_plan_revision_history(founder(), project.id, cursor="not-a-uuid")
+    with pytest.raises(ValueError, match="page size"):
+        service.customer_plan_revision_history(founder(), project.id, limit=101)
+    with pytest.raises(PermissionError, match="project not found"):
+        service.customer_plan_revision_history(
+            Principal("foreign-user", "foreign-organization", "developer"),
+            project.id,
+        )
+    assert service.customer_plan_revision_history(founder(), project.id)["items"][0]["id"] == own.id
+
+
+def test_customer_plan_revision_history_route_returns_the_service_contract():
+    service, _ = make_service()
+    project = service.create_project(
+        founder(), "revision-history", "https://github.com/example/history"
+    )
+    revision = service.create_infrastructure_plan(
+        founder(), project.id, "Customer plan", plan_content()
+    )
+
+    result = list_customer_plan_revisions(
+        project.id, limit=10, cursor=None, principal=founder(), service=service
+    )
+
+    assert result["project_id"] == project.id
+    assert result["items"][0]["id"] == revision.id
+    assert "content" not in result["items"][0]
+
+
 
 
 def test_administrator_dashboard_and_pending_queue_are_workspace_scoped():

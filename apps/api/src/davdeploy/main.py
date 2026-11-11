@@ -1664,6 +1664,24 @@ def get_generated_plan_run(
         translate(error)
 
 
+@app.get("/api/v1/projects/{project_id}/customer-plan-revisions")
+def list_customer_plan_revisions(
+    project_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None, min_length=1, max_length=36),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """List safe customer plan revision summaries for one authorized project."""
+    REQUESTS.labels("customer_plans.history").inc()
+    try:
+        return service.customer_plan_revision_history(
+            principal, project_id, limit=limit, cursor=cursor
+        )
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
 @app.get("/api/v1/projects/{project_id}/generated-plan-runs")
 def list_generated_plan_runs(
     project_id: str,
