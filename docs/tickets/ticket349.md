@@ -30,12 +30,12 @@ The backend control-plane change is merged in #348. The GitHub Terraform workflo
 - [x] The workflow maps the broker variable with a default of `false`.
 - [x] The Actions checker recognizes the new non-secret configuration variable.
 - [x] Terraform validation still requires role verification and the broker before the plan-only runner can be enabled.
-- [ ] Required final-head CI passes.
-- [ ] This ticket records the final commit and evidence before the PR is marked review-ready.
+- [x] Required checks pass on implementation/evidence commit `7acd56c` in run `43035847919`.
+- [x] This ticket records the tested commit and evidence before merge.
 
 ## Acceptance status
 
-Implementation and local validation are complete. Implementation commit `d711cf2` passed all seven required CI jobs in run `43035050359`; current-head Codex review of `d711cf2` found no major issues. Final-head CI after this evidence update remains pending.
+Implementation and validation are complete on `7acd56c`. All seven required CI jobs passed in run `43035847919`, and current-head Codex review found no major issues. The ticket now records that evidence; its documentation-only update will receive the final merge-gate CI run.
 
 ## Tests / validation performed
 
@@ -45,7 +45,8 @@ Implementation and local validation are complete. Implementation commit `d711cf2
 - `python scripts/check_doc_conventions.py` passed.
 - `git diff --check` passed.
 - PR CI run `43035050359` passed all seven jobs on implementation commit `d711cf2`; the required checks will rerun for the evidence update commit.
-- Current-head Codex review of `d711cf2` found no major issues.
+- PR CI run `43035847919` passed all seven jobs on `7acd56c`.
+- Current-head Codex review of `7acd56c` found no major issues.
 - No AWS plan/apply was run for this PR.
 
 ## Evidence files produced
