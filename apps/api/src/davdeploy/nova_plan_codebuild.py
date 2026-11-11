@@ -39,6 +39,10 @@ from davdeploy.generated_terraform_plan import (
     GeneratedTerraformPlanRunner,
     TerraformPlanExecutionError,
 )
+from davdeploy.nova_plan_access import (
+    NovaPlanAccessError,
+    build_nova_plan_access_policy,
+)
 from davdeploy.nova_terraform_state_client import (
     TerraformHTTPBackend,
     TerraformStateBootstrapError,
@@ -106,6 +110,17 @@ def run_nova_plan_build(
     )
     binding = _validate_input_document(input_document, run_id, project_name, build_arn)
 
+    try:
+        access_policy = build_nova_plan_access_policy(
+            binding["proposal"],
+            account_id=binding["account_id"],
+            region=binding["region"],
+        )
+    except NovaPlanAccessError:
+        raise NovaPlanBuildError(
+            "proposal exceeds the fixed customer plan permission profile"
+        ) from None
+
     sts = sts_client or boto3.client("sts", region_name=region)
     try:
         assumed = sts.assume_role(
@@ -113,6 +128,11 @@ def run_nova_plan_build(
             RoleSessionName=f"davdeploy-nova-plan-{run_id[:8]}",
             ExternalId=binding["external_id"],
             DurationSeconds=3600,
+            Policy=json.dumps(
+                access_policy.document,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
         )
         credentials = assumed.get("Credentials") if isinstance(assumed, dict) else None
         if not isinstance(credentials, dict):
@@ -195,6 +215,8 @@ def run_nova_plan_build(
             workspace=workspace,
             aws_credentials=credentials,
             remote_state=remote_state,
+            plan_access_policy_version=access_policy.version,
+            plan_access_policy_sha256=access_policy.sha256,
         )
     except (TerraformPlanExecutionError, OSError, TypeError, ValueError):
         raise NovaPlanBuildError("the fixed Terraform plan pipeline rejected this request") from None

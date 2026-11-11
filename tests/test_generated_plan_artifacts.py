@@ -306,7 +306,11 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 3
+    assert manifest["manifest_version"] == 4
+    assert manifest["customer_plan_access"] == {
+        "version": "NOT_APPLICABLE",
+        "session_policy_sha256": "0" * 64,
+    }
     assert manifest["pricing"] == {
         "status": "UNAVAILABLE",
         "region": "us-east-1",

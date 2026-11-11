@@ -65,6 +65,8 @@ class GeneratedTerraformPlan:
     ownership_plan_id_sha256: str
     saved_plan_sha256: str
     saved_plan_path: str
+    plan_access_policy_version: str = "NOT_APPLICABLE"
+    plan_access_policy_sha256: str = "0" * 64
 
 
 class GeneratedTerraformPlanRunner:
@@ -109,6 +111,8 @@ class GeneratedTerraformPlanRunner:
         workspace: str | Path,
         aws_credentials: dict[str, str] | None = None,
         remote_state: TerraformHTTPBackend | None = None,
+        plan_access_policy_version: str = "NOT_APPLICABLE",
+        plan_access_policy_sha256: str = "0" * 64,
     ) -> GeneratedTerraformPlan:
         """Validate and plan; never apply, destroy, or return resource values."""
         if not isinstance(ownership_scope, PlanOwnershipScope):
@@ -246,6 +250,8 @@ class GeneratedTerraformPlanRunner:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=hashlib.sha256(plan_bytes).hexdigest(),
             saved_plan_path=str(plan_path),
+            plan_access_policy_version=plan_access_policy_version,
+            plan_access_policy_sha256=plan_access_policy_sha256,
         )
 
     def _run(

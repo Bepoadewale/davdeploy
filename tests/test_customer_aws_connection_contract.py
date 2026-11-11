@@ -1,4 +1,7 @@
+import re
 from pathlib import Path
+
+from davdeploy.nova_plan_access import PLAN_ROLE_READ_ACTIONS
 
 ROOT = Path("infrastructure/terraform/customer-connection")
 
@@ -46,7 +49,7 @@ def test_quick_create_template_makes_administrator_pilot_explicit_and_separate()
     assert "GetSecretValue" not in template
 
 
-def test_quick_create_plan_role_is_separate_and_explicitly_denies_customer_actions():
+def test_quick_create_plan_role_is_separate_and_has_bounded_read_only_actions():
     template = Path("infrastructure/cloudformation/customer-discovery-role.yaml").read_text()
     plan_role = template.split("\n  NovaPlanOnlyRole:\n", 1)[1].split("\n  ExecutionRole:\n", 1)[0]
     policy = plan_role.split("Policies:", 1)[1]
@@ -58,9 +61,21 @@ def test_quick_create_plan_role_is_separate_and_explicitly_denies_customer_actio
     assert "davdeployNovaPlanBrokerRoleArn" in plan_role
     assert "sts:ExternalId: !Ref ExternalId" in plan_role
     assert "Effect: Deny" in policy
-    assert 'Action: "*"' in policy
+    assert "NotAction:" in policy
+    assert "aws:ResourceAccount: !Ref AWS::AccountId" in policy
     assert 'Resource: "*"' in policy
-    assert "Effect: Allow" not in policy
+    assert "Effect: Allow" in policy
+    assert "lambda:Get*" in policy
+    assert "dynamodb:Describe*" in policy
+    assert "s3:ListBucket" in policy
+    assert "s3:GetObject" not in policy
+    assert "dynamodb:GetItem" not in policy
+    assert "lambda:InvokeFunction" not in policy
+    assert "iam:PassRole" not in policy
+    template_actions = set(
+        re.findall(r"^\s+- ([a-z0-9*]+:[A-Za-z0-9*]+)$", policy, re.MULTILINE)
+    )
+    assert template_actions == set(PLAN_ROLE_READ_ACTIONS)
     assert "AdministratorAccess" not in plan_role
     assert "NovaPlanOnlyRoleArn" in template
 
