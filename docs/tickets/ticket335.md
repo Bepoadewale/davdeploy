@@ -61,13 +61,15 @@ feature enablement, or public product claim change.
 ## Acceptance status
 
 Documentation edits are complete. Convention and diff checks passed, as did
-all seven required GitHub checks for PR head `53f0bcf` in run `42945360507`.
+all seven required GitHub checks for final evidence head `e14fb14` in run
+`42945869544`.
 
 ## Tests / validation performed
 
 - `python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- GitHub Actions run `42945360507` — all seven required checks passed.
+- GitHub Actions run `42945869544` for head `e14fb14` — all seven required
+  checks passed.
 - No application tests or infrastructure operations are part of this
   documentation-only change.
 
