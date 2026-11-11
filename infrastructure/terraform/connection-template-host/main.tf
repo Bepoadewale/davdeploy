@@ -64,7 +64,9 @@ resource "aws_s3_bucket_policy" "templates" {
   depends_on = [aws_s3_bucket_public_access_block.templates]
 }
 
-resource "aws_s3_object" "current_customer_discovery_role" {
+# Each newly published content-hash object needs a fresh Terraform address.
+# The former address is moved into the immutable retained-object map below.
+resource "aws_s3_object" "published_customer_discovery_role" {
   bucket       = aws_s3_bucket.templates.id
   key          = local.template_key
   source       = local.template_source
