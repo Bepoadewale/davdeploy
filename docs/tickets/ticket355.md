@@ -13,9 +13,10 @@ unintended callers. Unknown queue policy data must not be treated as safe.
 
 ## Current repo state
 
-- Backend PR #355 merged as `6e60da0075e22092c0b5278d68bb592114f21f61`.
-- `generated_plan_policy.py` checks public S3 policies and selected IAM
-  policies, but does not check SQS queue policies.
+- Backend PR #355 merged as `6e60da0075e22092c0b5278d68bb592114f21f61` and
+  deployed by protected apply run `43079436769`.
+- PR #355 extends `generated_plan_policy.py` to check public SQS queue
+  policies alongside existing S3 and selected IAM checks.
 - The supported read-only plan access profile includes SQS queue metadata.
   The hosted Nova plan worker and state API remain disabled; this change does
   not enable them or perform AWS operations.
@@ -54,10 +55,11 @@ unintended callers. Unknown queue policy data must not be treated as safe.
 
 ## Acceptance status
 
-Implementation, local verification, required hosted CI, current-head review
-and merge are complete. PR run `43076888679` passed all seven required jobs.
-The code is merged but not yet deployed. A protected plan for the merge
-commit is run `43078429737`; the plan must be reviewed before any apply.
+Implementation, local verification, required hosted CI, current-head review,
+merge and control-plane deployment are complete. PR run `43076888679` passed
+all seven required jobs. Protected plan `43078429737` was reviewed and exact
+saved-plan apply `43079436769` succeeded. Live evidence is in
+[`test355.md`](../test/test355.md).
 
 ## Tests / validation performed
 
@@ -71,13 +73,14 @@ commit is run `43078429737`; the plan must be reviewed before any apply.
 - Final PR head `d77a927085f1db817b83a11f937b193bd1261e9d` passed all seven
   required CI jobs in run `43076888679`; merge commit is
   `6e60da0075e22092c0b5278d68bb592114f21f61`.
-- No Terraform plan/apply, customer role setup, or AWS customer-resource
-  mutation is in scope.
+- The protected control-plane plan/apply occurred after PR merge to deploy the
+  code; it did not create customer workloads, configure customer roles, or
+  mutate customer resources. The exact release evidence is in `test355.md`.
 
 ## Evidence files produced
 
-No customer-workload test evidence applies. Local test commands and results
-will be recorded in this ticket and the PR checks.
+No customer-workload test evidence applies. Local validation is above and
+hosted control-plane release evidence is in [`test355.md`](../test/test355.md).
 
 ## Boundaries
 

@@ -65,11 +65,10 @@ resource or variable values.
 
 Merged and locally/hostedly verified. The post-merge protected plan check
 passed against exact commit `9532983a768b1b47713363dd82eb7155ed09c4a2` in run
-`43077213967`. It emitted the bounded summary only: 0 additions, 6 updates,
-0 destroys, 0 drift, and 8 output changes. The Nova runner, role verification,
-credential broker, plan review, state and hosted-certification gates were
-false. This saved plan was not applied after PR #355 advanced `main`; a new
-plan for the current source is required before a control-plane deployment.
+`43077213967`. A fresh plan for current `main` (`6e60da0`) then passed in run
+`43078429737` and was applied exactly in run `43079436769`, deployment
+`7718460093`. That release includes PR #354's sanitized log workflow and PR
+#355's policy code; see [`test355.md`](../test/test355.md).
 
 ## Tests / validation performed
 
@@ -84,6 +83,9 @@ plan for the current source is required before a control-plane deployment.
 - Protected plan run `43077213967` completed successfully on that merged
   commit. Its log was checked for the sanitized summary; no raw plan values
   were surfaced. This was a control-plane plan only, not an apply.
+- A later fresh protected plan for `main` commit `6e60da0` and exact saved-plan
+  apply run `43079436769` deployed the workflow; six Lambda package updates
+  completed, migration verification succeeded, and the API health check passed.
 
 ## Evidence files produced
 
@@ -99,6 +101,5 @@ the local-only Nova goal ledger.
 
 ## Follow-up work
 
-Before applying current `main`, dispatch and review a fresh protected plan
-that includes PR #355's SQS policy code (and any intervening merged policy
-changes). The exact successful PR #354 plan is now stale for current `main`.
+Continue to use the sanitized summary on every protected Terraform plan and
+review the exact saved plan before applying.
