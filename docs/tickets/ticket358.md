@@ -40,8 +40,9 @@ verified.
   and `CUSTOM` do not yield that finding.
 - [x] Focused tests, full verification, clean-room local proof, and
   documentation conventions pass; all seven required checks passed on
-  implementation commit `e4c846b` in run `43086747416`. The current ticket-only
-  update requires a final-head check run.
+  implementation commit `e4c846b` in run `43086747416`. All seven checks also
+  passed after the evidence-only update in run `43087272263`; no executable
+  code changed after the implementation commit.
 - [x] No customer AWS plan or infrastructure mutation was performed.
 
 ## Acceptance status
