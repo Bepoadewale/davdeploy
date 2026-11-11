@@ -1,7 +1,7 @@
 # ticket326 — Add a customer-side Nova plan-only role
 
-PR: #326 (draft)
-Branch: `feat/customer-nova-plan-role-326` (current evidence was prepared in a fresh checkout after PR #325 merged)
+PR: [#326](https://github.com/Bepoadewale/davdeploy/pull/326) (merged 2026-11-10; merge commit `49bd5dbed1fd578704f955c664ed19e8a4e159ef`)
+Branch: `feat/customer-nova-plan-role-326` (merged; historical implementation branch)
 
 ## Problem / goal
 
@@ -55,7 +55,7 @@ Add an explicit customer AWS role for Nova's hosted Terraform plan path. The rol
 
 ## Acceptance status
 
-The plan-only authorization, opt-in identity verification and status-reporting safeguards are implemented. The PR targets `main`; its branch includes the merged plan-request path, and the v32 migration follows v31. Review feedback on Terraform's moved object address was fixed at `6bc9668` and the full local clean-room cycle plus all-root Terraform validation passed again; evidence is recorded in `docs/test/test326.md`. Current-head CI and review are pending. Verification proves role trust and account identity only; effective policy contents remain unattested and are reported as `POLICY_UNATTESTED`.
+The PR merged as `49bd5dbed1fd578704f955c664ed19e8a4e159ef` on 2026-11-10. The plan-only authorization, opt-in identity verification, v32 migration, and status-reporting safeguards are implemented and locally verified; required PR checks passed before merge (see the PR and `docs/test/test326.md`). Verification proves role trust and account identity only; effective policy contents remain unattested and are reported as `POLICY_UNATTESTED`. This role path remains distinct from the still-disabled hosted planner and does not prove effective customer-plan permissions.
 
 ## Tests / validation performed
 

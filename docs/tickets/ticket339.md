@@ -1,0 +1,58 @@
+# ticket339 — reconcile Nova hosted execution evidence
+
+PR: [#339](https://github.com/Bepoadewale/davdeploy/pull/339) (draft)
+Branch: `docs/reconcile-nova-hosted-evidence-339`
+
+## Problem / goal
+
+Update the source/deployment readiness record and PR #326–#338 evidence to reflect the merged code and the verified November 11 state-storage rollout. Clearly distinguish deployed storage groundwork from disabled plan execution, state API, plan review, customer-role verification, pricing, apply, health, recovery, and teardown.
+
+## Current repo state
+
+- Backend main includes PR #338 (`5af94db`); the Nova state bucket and KMS alias were provisioned by protected Terraform apply run `42958408176`.
+- PR #337 and #338 tickets/test evidence still describe the rollout as pending.
+- PR #326's ticket still labels the merged PR as draft/pending.
+- The execution readiness snapshot predates the latest source and infrastructure rollout.
+
+## Research / references used
+
+- Protected Terraform plan/apply workflow records and their exact saved-plan evidence.
+- AWS read-only post-apply checks recorded in the local handoff; repository evidence must include only non-secret configuration and observed control-plane status.
+- `docs/IMPLEMENTATION_STATUS.md`, `docs/product/EXECUTION_READINESS_MATRIX.md`, and PR-numbered tickets/evidence.
+
+## Work planned for the PR
+
+- Correct #337/#338/#326 ticket and evidence statuses with exact commit, CI, plan/apply run IDs, resource controls, and disabled-feature boundaries.
+- Update implementation/readiness documents to identify deployed source and state-storage infrastructure separately from disabled hosted plan execution.
+- Preserve historical failed/unapplied plan evidence and do not imply customer workload execution.
+
+## Acceptance criteria
+
+- [x] Repository evidence matches GitHub merge/CI and protected plan/apply records.
+- [x] Post-apply storage controls and disabled Nova gates are stated precisely.
+- [x] No claim of hosted customer planning, approval, apply, health, recovery, teardown, or certification is introduced.
+- [x] Documentation conventions, `make verify`, and diff checks pass locally.
+- [x] All seven PR checks passed in run [42960223307](https://github.com/Bepoadewale/davdeploy/actions/runs/42960223307) for head `35b6de8`; final evidence-only head must pass the same required checks before merge.
+
+## Acceptance status
+
+Implementation and evidence reconciliation are complete. Documentation convention, `make verify`, and diff checks passed locally; all seven hosted PR checks passed in run [42960223307](https://github.com/Bepoadewale/davdeploy/actions/runs/42960223307) for `35b6de8`. The final evidence-only commit remains subject to its own required CI.
+
+## Tests / validation performed
+
+- `python3.12 scripts/check_doc_conventions.py` — passed.
+- `make verify` — 867 passed; Ruff, OpenAPI, Actions configuration, and Compose checks passed. One existing Starlette/httpx deprecation warning remains.
+- `git diff --check` — passed.
+- All seven required PR checks passed in run [42960223307](https://github.com/Bepoadewale/davdeploy/actions/runs/42960223307) for `35b6de8`; the evidence update is documentation-only and its latest-head CI is the merge gate.
+
+## Evidence files produced
+
+- `docs/test/test339.md`
+
+## Boundaries
+
+Documentation reconciliation only. No AWS mutation, customer workload, feature-flag enablement, state/API credential change, or pricing implementation.
+
+## Follow-up work
+
+Continue with the next independent plan-worker security prerequisite. PR #318 pricing implementation remains held for account-owner direction.

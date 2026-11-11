@@ -31,18 +31,18 @@ Storage provisioning and runtime access are separate capabilities. The state-sto
 - [x] Runtime state object and KMS permissions are conditioned on both storage and state API flags; bucket/key provisioning remains controlled by storage.
 - [x] Storage plus state API configuration retains the existing exact-prefix S3 and bucket-context KMS permissions.
 - [x] Focused tests, full verification, clean-room proof, Terraform validation, and docs checks pass locally. All seven required CI checks passed in [run 42956394546](https://github.com/Bepoadewale/davdeploy/actions/runs/42956394546) for `4bcd70a`.
-- [ ] A fresh saved Terraform plan on the merged commit confirms storage resources are created while state API, runner, review, and role-verification gates remain disabled.
-- [ ] No state API permissions or route are applied as part of storage-only setup.
+- [x] Fresh saved plan [42957384890](https://github.com/Bepoadewale/davdeploy/actions/runs/42957384890) on merged main included storage resources while state API, runner, review, and role-verification gates remained disabled.
+- [x] The exact reviewed plan was applied by run [42958408176](https://github.com/Bepoadewale/davdeploy/actions/runs/42958408176); no state API permission or route was enabled.
 
 ## Acceptance status
 
 - [x] Implementation, focused/full local validation, and isolated clean-room are complete.
 - [x] Required CI passed for evidence head `4bcd70a`; final evidence-update head must also pass required CI before merge.
-- [ ] No AWS apply is in scope for this PR; the corrected saved plan and storage rollout follow after merge.
+- [x] No AWS apply occurred as part of this PR. A post-merge rollout applied the fresh reviewed plan; see `docs/test/test338.md`.
 
 ## Tests / validation performed
 
-See `docs/test/test338.md`; CI and isolated clean-room results will be added before merge.
+See `docs/test/test338.md` for final-head CI and clean-room results, plus post-merge protected plan/apply and read-only AWS checks.
 
 ## Evidence files produced
 
@@ -54,4 +54,4 @@ This PR does not enable the state API, Nova runner, plan review, role verificati
 
 ## Follow-up work
 
-After merge, create a new protected Terraform plan because the previous plan predates this permission-gate correction. Review it for storage-only actions, then apply the exact new saved plan and verify bucket controls and Lambda flags.
+The corrected storage-only plan has been applied and its controls verified. Future work must independently gate and review state API, customer plan-role verification, runner, pricing, and customer execution; storage provisioning alone does not enable hosted Nova plans.
