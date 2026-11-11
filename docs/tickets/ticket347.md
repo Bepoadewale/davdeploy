@@ -1,6 +1,6 @@
 # ticket347 — reconcile deployed customer plan history status
 
-PR: pending
+PR: [#347](https://github.com/Bepoadewale/davdeploy/pull/347)
 Branch: `docs/reconcile-deployed-plan-history-347`
 Base: `main`
 
@@ -29,18 +29,23 @@ The readiness matrix still says PR #346 is draft and undeployed. Reconcile it wi
 
 ## Acceptance criteria
 
-- [ ] Matrix cites exact merged source, Terraform plan and apply runs.
-- [ ] Lambda, migration, health and no-customer-workload evidence is stated accurately.
-- [ ] History UI integration and all major Nova execution gates remain explicitly unmet.
-- [ ] Documentation checks and required GitHub checks pass.
+- [x] Matrix cites exact merged source, Terraform plan and apply runs.
+- [x] Lambda, migration, health and no-customer-workload evidence is stated accurately.
+- [x] History UI integration and all major Nova execution gates remain explicitly unmet.
+- [x] Documentation checks pass locally; required GitHub checks remain the merge gate.
 
 ## Acceptance status
 
-Pending implementation and review.
+Documentation is updated and locally validated. Required GitHub checks and
+review are pending.
 
 ## Tests / validation performed
 
-Pending.
+- `python3.12 scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- GitHub required checks/review: pending.
+- Deployment claims are backed by #346 plan/apply workflow runs and read-only
+  post-apply checks; no new runtime or AWS operation is part of this PR.
 
 ## Evidence files produced
 
