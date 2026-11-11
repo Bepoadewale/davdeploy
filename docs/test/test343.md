@@ -8,7 +8,7 @@ validation. No AWS writes or customer role/resource changes.
 Customer repository: Not applicable; this PR changes the DavDeploy Terraform
 template-host root.
 
-Commit: Implementation commit pending.
+Commit: `ea29d07c58bb552329acd538868ba90974717d60` (evidence update pending).
 
 AWS account: `654654474502` (read-only object metadata check only).
 
@@ -31,7 +31,10 @@ passed (9 tests).
 `git diff --check` passed.
 
 The system `pytest` executable was unavailable; the repository virtualenv
-runner was used. Full clean-room verification and final-head CI remain pending.
+runner was used. Required CI run `42980400532` passed all seven checks,
+including `local-e2e`, cloud contracts, policy, Python, docs conventions,
+secrets, and supply-chain checks. The CI `local-e2e` job provides the clean
+integration proof; no live AWS resource mutation occurred.
 
 ## Observed result
 

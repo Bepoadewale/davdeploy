@@ -46,23 +46,23 @@ stacks and saved setup links keep working.
 - [x] The currently published immutable key is explicitly retained.
 - [x] Terraform state moves the current object into the retained set rather
   than deleting or replacing the old object.
-- [ ] Focused test, full verification, Terraform validation, docs checks, and
-  required final-head CI pass.
+- [x] Focused test, clean-room CI verification, Terraform validation, docs
+  checks, and required CI pass.
 - [x] No AWS write, customer role change, or new public object is part of this
   source PR.
 
 ## Acceptance status
 
-The retention key and state move are in bootstrap commit `93dfea5`. The focused
-regression test (9 passed), all-root Terraform validation, docs convention
-check, and diff check pass locally. Full clean-room verification and final-head
-CI remain pending. No Terraform apply or CloudFormation template publication
-has occurred.
+The retention key and state move are in bootstrap commit `93dfea5`; regression
+coverage and evidence are in `ea29d07`. The focused test (9 passed), all-root
+Terraform validation, docs convention check, and diff check pass locally. All
+seven required CI checks passed in run `42980400532`, including clean-room
+integration. No Terraform apply or CloudFormation template publication has
+occurred.
 
 ## Tests / validation performed
 
-See `docs/test/test343.md`; exact final commands and results will be recorded
-before the PR is review-ready.
+See `docs/test/test343.md` for exact local and hosted validation evidence.
 
 ## Evidence files produced
 
