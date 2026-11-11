@@ -43,7 +43,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-11.8"
+POLICY_VERSION = "nova-generated-plan-2026-11-11.9"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 RISKY_PUBLIC_PORTS = frozenset(
     {
@@ -79,6 +79,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("source_account",),
         ("source_arn",),
     ),
+    "aws_apigatewayv2_route": (("authorization_type",),),
     "aws_db_instance": (
         ("publicly_accessible",),
         ("storage_encrypted",),
@@ -178,6 +179,7 @@ def _evaluate(
     _check_s3(document, resources, findings)
     _check_sqs_queue_policies(resources, findings)
     _check_lambda_permissions(resources, findings)
+    _check_api_gateway_routes(resources, findings)
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
@@ -879,6 +881,32 @@ def _check_lambda_permissions(
                 "lambda_public_invoke_review",
                 address,
                 "The plan permits wildcard-principal function invocation with a source restriction; confirm the source is intended.",
+            )
+
+
+def _check_api_gateway_routes(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    authenticated_types = {"JWT", "AWS_IAM", "CUSTOM"}
+    for item in resources:
+        if item.get("type") != "aws_apigatewayv2_route":
+            continue
+        values = item.get("values")
+        address = item.get("address")
+        authorization_type = values.get("authorization_type") if isinstance(values, dict) else None
+        if not isinstance(authorization_type, str) or authorization_type not in authenticated_types | {"NONE"}:
+            _deny(
+                findings,
+                "api_gateway_route_authorization_unknown",
+                address,
+                "DavDeploy could not verify the authorization configured for this API route.",
+            )
+        elif authorization_type == "NONE":
+            _review(
+                findings,
+                "api_gateway_open_route_review",
+                address,
+                "This API route allows open access. Confirm that public access is required before approval.",
             )
 
 

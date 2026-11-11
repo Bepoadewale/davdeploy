@@ -34,20 +34,27 @@ verified.
 
 ## Acceptance criteria
 
-- [ ] Missing, unknown, malformed, and unsupported authorization values deny.
-- [ ] Explicit `NONE` yields human review; `JWT`, `AWS_IAM`, and `CUSTOM` do
-  not yield an open-route finding.
-- [ ] Focused tests, full verification, documentation conventions, and required
-  hosted CI pass.
-- [ ] No customer AWS plan or infrastructure mutation is performed.
+- [x] Missing, unknown, malformed, and unsupported authorization values deny.
+- [x] Explicit `NONE` yields an open-route review finding; `JWT`, `AWS_IAM`,
+  and `CUSTOM` do not yield that finding.
+- [x] Focused tests, full verification, and clean-room local proof pass;
+  documentation conventions and required hosted CI remain pending.
+- [x] No customer AWS plan or infrastructure mutation was performed.
 
 ## Acceptance status
 
-In progress. This bootstrap ticket reserves the PR number before implementation.
+The policy check and focused tests are implemented. The complete policy still
+denies these untaggable route resources at the ownership boundary until exact
+ownership records for non-taggable resources are implemented. Hosted planning
+remains disabled; no customer AWS plan or infrastructure mutation occurred.
 
 ## Tests / validation performed
 
-- None yet; implementation has not started.
+- `uv run pytest tests/test_generated_plan_policy.py -q` — 111 passed.
+- `uv run ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
+- `make local-proof` — passed with 962 tests, API contract, customer-plan E2E,
+  seed, trace, Compose validation and full verification (one existing
+  Starlette/httpx deprecation warning).
 
 ## Evidence files produced
 
@@ -56,7 +63,9 @@ In progress. This bootstrap ticket reserves the PR number before implementation.
 ## Boundaries
 
 This is a bounded actual-plan policy change. It does not claim complete API
-Gateway policy coverage or enable the customer executor.
+Gateway policy coverage, solve ownership for non-taggable resources, or enable
+the customer executor. Route ownership remains fail-closed until a separate
+trusted ownership-record path exists.
 
 ## Follow-up work
 
