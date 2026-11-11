@@ -313,12 +313,12 @@ resource "aws_iam_role_policy" "api" {
         Action   = ["s3:PutObject", "s3:GetObjectVersion"]
         Resource = "arn:aws:s3:::${var.nova_plan_artifact_bucket}/plans/nova-generated/*"
       }] : [],
-      var.enable_nova_terraform_state_storage ? [{
+      var.enable_nova_terraform_state_storage && var.enable_nova_terraform_state_api ? [{
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
         Resource = "${aws_s3_bucket.nova_terraform_state[0].arn}/terraform-state/*"
       }] : [],
-      var.enable_nova_terraform_state_storage ? [{
+      var.enable_nova_terraform_state_storage && var.enable_nova_terraform_state_api ? [{
         Effect   = "Allow"
         Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
         Resource = aws_kms_key.nova_terraform_state[0].arn
