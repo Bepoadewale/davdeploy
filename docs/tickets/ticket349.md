@@ -35,7 +35,7 @@ The backend control-plane change is merged in #348. The GitHub Terraform workflo
 
 ## Acceptance status
 
-Implementation and local validation are complete. Final-head CI and current-head review remain pending.
+Implementation and local validation are complete. Implementation commit `d711cf2` passed all seven required CI jobs in run `43035050359`; current-head Codex review of `d711cf2` found no major issues. Final-head CI after this evidence update remains pending.
 
 ## Tests / validation performed
 
@@ -44,6 +44,8 @@ Implementation and local validation are complete. Final-head CI and current-head
 - `terraform -chdir=infrastructure/terraform/serverless-control-plane fmt -check -recursive` passed.
 - `python scripts/check_doc_conventions.py` passed.
 - `git diff --check` passed.
+- PR CI run `43035050359` passed all seven jobs on implementation commit `d711cf2`; the required checks will rerun for the evidence update commit.
+- Current-head Codex review of `d711cf2` found no major issues.
 - No AWS plan/apply was run for this PR.
 
 ## Evidence files produced
