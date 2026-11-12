@@ -201,5 +201,25 @@ def test_missing_runtime_gate_reports_fixed_code_without_plan_values(
 
     assert result == 2
     assert "reason=runtime_gates_missing" in output.err
+    assert "missing_gates=DAVDEPLOY_NOVA_PLAN_RUNNER_READY" in output.err
     assert "sensitive-description-value" not in output.err
     assert "private-variable-value" not in output.err
+
+
+def test_missing_gate_detail_does_not_echo_unexpected_environment_names(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    variables = plan["planned_values"]["root_module"]["resources"][0]["values"][
+        "environment"
+    ]["variables"]
+    del variables["DAVDEPLOY_NOVA_PLAN_RUNNER_READY"]
+    variables["PRIVATE_TOKEN"] = "private-token-value"
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "missing_gates=DAVDEPLOY_NOVA_PLAN_RUNNER_READY" in output.err
+    assert "PRIVATE_TOKEN" not in output.err
+    assert "private-token-value" not in output.err
