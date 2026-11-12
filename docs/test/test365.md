@@ -18,7 +18,7 @@ The Nova proposal contract now rejects common literal credential and secret valu
 - Isolated Compose proof after review corrections: `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365c make local-proof` — passed API/worker/executor readiness, API/CORS contract, customer-plan local E2E, traces, and full verification.
 - Required full clean-room cycle: passed from detached worktree `/private/tmp/davdeploy-pr365-cleanroom-20261112` at code commit `a3a5d6d0e70e0dcaaf4c6fa85e3296a7d116cf0b`, using project `davdeploy-pr365-cleanroom`, tmpfs Postgres override `/private/tmp/davdeploy-pr365-cleanroom-compose.yml`, and external venv `/private/tmp/davdeploy-pr365-venv`.
 - Repository checks: `git diff --check` and `python3 scripts/check_doc_conventions.py` — passed.
-- Hosted CI runs `43127441913` and `43129916298` passed all seven jobs on earlier heads. Follow-up compatibility and clean-room evidence updates await final-head verification.
+- Hosted CI runs `43127441913` and `43129916298` passed all seven jobs on earlier heads. CI run `43130993027` passed all seven jobs for implementation/evidence head `30399edc00e9a24cfcf5532f382a2b5d2cbc4371`. Codex review of that head found no major issues. The later ticket-only update will receive its own required CI run.
 
 ## Observed result
 
