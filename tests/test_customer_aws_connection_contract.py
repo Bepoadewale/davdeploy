@@ -72,11 +72,21 @@ def test_quick_create_plan_role_is_separate_and_has_bounded_read_only_actions():
     assert "Effect: Allow" in policy
     assert "lambda:Get*" in policy
     assert "dynamodb:Describe*" in policy
+    assert "rds:DescribeDBInstances" in policy
+    assert "rds:DescribeDBClusters" in policy
+    assert "rds:ListTagsForResource" in policy
     assert "s3:ListBucket" in policy
     assert "s3:GetObject" not in policy
     assert "dynamodb:GetItem" not in policy
     assert "lambda:InvokeFunction" not in policy
     assert "iam:PassRole" not in policy
+    assert "rds:ModifyDBInstance" not in policy
+    assert "rds:DeleteDBCluster" not in policy
+    assert "rds:RestoreDBInstanceFromDBSnapshot" not in policy
+    assert "rds:StartExportTask" not in policy
+    assert "rds:DownloadDBLogFilePortion" not in policy
+    assert "rds-data:ExecuteStatement" not in policy
+    assert "secretsmanager:GetSecretValue" not in policy
     template_actions = set(
         re.findall(r"^\s+- ([a-z0-9*]+:[A-Za-z0-9*]+)$", policy, re.MULTILINE)
     )
