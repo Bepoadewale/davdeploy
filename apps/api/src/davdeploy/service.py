@@ -41,6 +41,7 @@ from davdeploy.domain import (
     EnvironmentName,
     InfrastructurePlanDecision,
     InfrastructurePlanState,
+    IntentScope,
     LifecycleState,
     PlanAction,
     PolicyResult,
@@ -83,7 +84,11 @@ from davdeploy.integrations import (
     configured_github_connection,
     verify_github_webhook_signature,
 )
-from davdeploy.intent import IntentProvider, configured_intent_provider
+from davdeploy.intent import (
+    IntentOutOfScopeError,
+    IntentProvider,
+    configured_intent_provider,
+)
 from davdeploy.invitation_email import (
     InvitationDeliveryUnavailable,
     InvitationEmailSender,
@@ -10061,7 +10066,14 @@ class ProductService:
         )
         interpretation = self.intent_provider.interpret(prompt, selected_repository, tenant)
         self._record_model_usage(principal, interpretation.model_metadata)
+        if interpretation.request_scope == IntentScope.OUT_OF_SCOPE:
+            # Keep model usage evidence even when scope validation rejects the
+            # request; no workload intent or plan is stored in this path.
+            self.db.commit()
+            raise IntentOutOfScopeError()
         spec = interpretation.spec
+        if spec is None:
+            raise ModelGatewayUnavailable("intent provider returned no workload specification")
         repository_analysis = self.latest_repository_analysis(principal, project.id)
         spec_payload = spec.model_dump(mode="json")
         if repository_analysis:

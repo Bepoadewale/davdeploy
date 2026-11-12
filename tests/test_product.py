@@ -11,12 +11,14 @@ from davdeploy.db import make_engine, run_migrations
 from davdeploy.domain import (
     CloudInventorySnapshot,
     EnvironmentName,
+    IntentInterpretation,
+    IntentScope,
     LifecycleState,
     PolicyResult,
     WorkloadSpec,
 )
 from davdeploy.executor import ExecutionObservation
-from davdeploy.intent import DeterministicIntentProvider
+from davdeploy.intent import DeterministicIntentProvider, IntentOutOfScopeError
 from davdeploy.invitation_email import (
     DisabledInvitationEmailSender,
     InvitationDeliveryUnavailable,
@@ -27,6 +29,7 @@ from davdeploy.models import (
     Recommendation,
     RepositoryConnection,
     UsageRecord,
+    WorkloadIntent,
     WorkspaceInvitation,
 )
 from davdeploy.planner import AwsV1Planner
@@ -1291,6 +1294,36 @@ def test_idempotency_replays_only_the_same_intent():
         assert "idempotency" in str(error)
     else:
         raise AssertionError("different request reused an idempotency key")
+
+
+def test_out_of_scope_intent_is_not_persisted_or_plannable():
+    class OutOfScopeProvider:
+        def interpret(self, prompt, source_repository, tenant):
+            del prompt, source_repository, tenant
+            return IntentInterpretation(
+                spec=None,
+                model_metadata={
+                    "provider": "bedrock",
+                    "model": "us.amazon.nova-2-lite-v1:0",
+                    "request_id": "synthetic-out-of-scope-request",
+                    "prompt_version": "intent-nova2-v2",
+                    "usage": {"input_tokens": 120, "output_tokens": 35},
+                },
+                request_scope=IntentScope.OUT_OF_SCOPE,
+            )
+
+    service, db = make_service(intent_provider=OutOfScopeProvider())
+    project = service.create_project(founder(), "finance-advice", "https://github.com/example/app")
+
+    with pytest.raises(IntentOutOfScopeError):
+        service.create_intent(
+            founder(), project.id, "Should I buy this stock?", None, None, "idem-out-of-scope"
+        )
+
+    assert db.scalar(select(WorkloadIntent)) is None
+    usage = db.scalars(select(UsageRecord).where(UsageRecord.metric == "model_calls")).all()
+    assert len(usage) == 1
+    assert usage[0].detail["request_id"] == "synthetic-out-of-scope-request"
 
 
 def test_prompt_injection_does_not_bypass_policy_or_become_executor_authority():
