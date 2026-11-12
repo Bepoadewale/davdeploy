@@ -43,19 +43,21 @@ not been deployed or installed, and no customer role or workload was changed.
       source and not deployed/effective customer-role evidence.
 - [x] All product claims and capability scope remain intact.
 - [x] Documentation conventions and diff checks pass.
-- [ ] Final-head CI and review
-      pass.
+- [x] Final-head CI and manual review pass; no deployment or runtime evidence
+      is claimed.
 
 ## Acceptance status
 
-- [ ] Documentation reconciliation and local validation complete; final-head
-      CI remains pending.
+- [x] Documentation reconciliation, local validation, manual review, and PR CI
+      complete; no deployment or runtime evidence is claimed.
 
 ## Tests / validation performed
 
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head CI and review remain pending.
+- PR CI run `43251043501` passed all seven required jobs on head `fc99258`.
+- Manual final-diff review confirmed the source/deployment distinction and
+  that all product claims remain present.
 
 ## Evidence files produced
 

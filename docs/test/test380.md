@@ -18,6 +18,8 @@ installed, and no effective customer-role permission check has been completed.
 
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- GitHub Actions run [43251043501](https://github.com/Bepoadewale/davdeploy/actions/runs/43251043501)
+  — all seven required checks passed for documentation head `fc99258`.
 - No AWS, Nova, Terraform, customer API, or workload commands were run.
 
 ## Resources created
