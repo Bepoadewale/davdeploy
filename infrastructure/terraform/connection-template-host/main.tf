@@ -66,7 +66,7 @@ resource "aws_s3_bucket_policy" "templates" {
 
 # Each newly published content-hash object needs a fresh Terraform address.
 # The former address is moved into the immutable retained-object map below.
-resource "aws_s3_object" "published_customer_discovery_role" {
+resource "aws_s3_object" "current_customer_discovery_role" {
   bucket       = aws_s3_bucket.templates.id
   key          = local.template_key
   source       = local.template_source
@@ -100,6 +100,13 @@ resource "aws_s3_object" "retained_customer_templates" {
 moved {
   from = aws_s3_object.active_customer_discovery_role
   to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]
+}
+
+# Keep the most recently published URL available to customer setup links while
+# publishing the next content-hash object.
+moved {
+  from = aws_s3_object.published_customer_discovery_role
+  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]
 }
 
 # Preserve the original object address from the first published template.

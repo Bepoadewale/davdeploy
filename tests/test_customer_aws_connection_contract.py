@@ -127,7 +127,7 @@ def test_public_template_host_allows_only_versioned_template_reads_and_is_confir
     assert 'actions   = ["s3:GetObject"]' in configuration
     assert 'resources = ["${aws_s3_bucket.templates.arn}/cloudformation/*"]' in configuration
     assert "s3:ListBucket" not in configuration
-    assert 'resource "aws_s3_object" "published_customer_discovery_role"' in configuration
+    assert 'resource "aws_s3_object" "current_customer_discovery_role"' in configuration
     assert 'resource "aws_s3_object" "retained_customer_templates"' in configuration
     assert "from = aws_s3_object.active_customer_discovery_role" in configuration
     assert "aws_s3_object.active_customer_discovery_role" not in (
@@ -144,14 +144,24 @@ def test_public_template_host_allows_only_versioned_template_reads_and_is_confir
         f'to   = aws_s3_object.retained_customer_templates["{current_live_key}"]'
         in configuration
     )
+    previously_published_key = (
+        "cloudformation/customer-discovery-role-"
+        "f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"
+    )
+    assert previously_published_key in variables
+    assert (
+        "  from = aws_s3_object.published_customer_discovery_role\n"
+        f'  to   = aws_s3_object.retained_customer_templates["{previously_published_key}"]'
+        in configuration
+    )
     assert (
         "from = aws_s3_object.active_customer_discovery_role\n"
         in configuration
     )
-    assert 'resource "aws_s3_object" "current_customer_discovery_role"' not in configuration
+    assert 'resource "aws_s3_object" "published_customer_discovery_role"' not in configuration
     assert "customer-discovery-role-0e3209bff02286acf582ec3ed73858266261b294ae0c7e0d30ae37550a8926b2.yaml" not in variables
     outputs = Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
-    assert "aws_s3_object.published_customer_discovery_role.key" in outputs
+    assert "aws_s3_object.current_customer_discovery_role.key" in outputs
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
 

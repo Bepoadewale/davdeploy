@@ -16,6 +16,7 @@ variable "retained_template_keys" {
   default = [
     "cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml",
     "cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml",
+    "cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml",
   ]
   description = "Immutable public template keys retained for existing CloudFormation stacks and setup links."
 
