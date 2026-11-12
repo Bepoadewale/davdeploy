@@ -20,7 +20,7 @@ This does not add RDS to the Nova plan-access allowlist, retrieve a secret, gran
 - `make verify`: 1,019 tests passed; Actions configuration, Ruff, OpenAPI snapshot, and Compose config passed. One existing Starlette/httpx deprecation warning remains.
 - Actual pinned provider schema check: Terraform initialized `hashicorp/aws` 5.100.0 from `apps/api/src/davdeploy/terraform-provider.lock.hcl`; an RDS-managed secret ARN flowing into a Lambda `_SECRET_ARN` environment variable passed schema validation. The compiled value was only the Terraform expression.
 - Full clean-room cycle: passed in detached worktree `/private/tmp/davdeploy-pr367-cleanroom-20261112` at implementation commit `ab90d6c66393d521560f00221857b8dfe619b710`. Sequence covered clean, bootstrap, smoke, API contract, customer-plan E2E, seed data, simple/complex/degraded/Day-2/policy/readiness-failure demos, trace check, verify, and final clean.
-- Required GitHub CI: pending.
+- Required GitHub CI run [43136191166](https://github.com/Bepoadewale/davdeploy/actions/runs/43136191166) passed all seven jobs on final PR head `99215713dff1d859e3d235adeddf4456c05cc028`.
 
 ## Observed result
 
