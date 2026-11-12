@@ -1,6 +1,6 @@
 # ticket375 — reconcile Nova source and hosted release status
 
-PR: draft to be opened immediately after the bootstrap commit  
+PR: [#375](https://github.com/Bepoadewale/davdeploy/pull/375) (draft)
 Branch: `docs/reconcile-nova-release-375`
 
 ## Problem / goal
@@ -14,8 +14,9 @@ deny is source only until a protected release includes it.
 
 - Backend main is at PR #374 merge commit `fa2213b`.
 - Merged-main CI run `43162411486` passed all seven jobs.
-- The deployed backend remains at PR #369's verified protected release; PR
-  #374 did not run Terraform or change AWS resources.
+- The deployed backend remains at PR #369's verified protected release,
+  backend source `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`; PR #374 did not
+  run Terraform or change AWS resources.
 - Nova hosted customer planning remains disabled and has no customer workload
   evidence.
 
@@ -34,30 +35,39 @@ deny is source only until a protected release includes it.
   review boundary and the fact runtime secret reads remain unavailable.
 - Preserve the last verified deployed package, all disabled Nova gates, and
   outstanding pricing, customer planning, apply, operation and teardown gates.
+- Reconcile the current-source sections in the product matrix, implementation
+  status, project status, and backlog without rewriting dated historical rows.
 
 ## Acceptance criteria
 
-- [ ] Current source commit and merged-main CI are exact.
-- [ ] Deployed source and feature gates reflect verified release evidence.
-- [ ] PR #374 is described as merged source, not deployed; no AWS mutation or
+- [x] Current source commit and merged-main CI are exact.
+- [x] Deployed source and feature gates reflect verified release evidence.
+- [x] PR #374 is described as merged source, not deployed; no AWS mutation or
   customer workload is claimed.
-- [ ] Full capability scope and existing product claims are preserved.
-- [ ] Documentation conventions and diff checks pass.
-- [ ] Final-head CI passes and review finds no blocker.
+- [x] Full capability scope and existing product claims are preserved.
+- [x] Documentation conventions and diff checks pass.
+- [x] Manual final-diff review found no blocker.
+- [ ] Final-head CI passes all required jobs.
+- [x] No deployment or customer workload is part of this documentation PR.
 
 ## Acceptance status
 
-- [ ] Status reconciliation, local documentation checks, final review and CI
-  complete.
-- [ ] No deployment or customer workload is part of this documentation PR.
+- [x] Status reconciliation is complete and local documentation checks pass;
+  manual review found no blocker and final-head CI is pending.
+- [x] No deployment or customer workload is part of this documentation PR.
 
 ## Tests / validation performed
 
-To be recorded after the status edits and checks.
+No runtime tests were required. `python scripts/check_doc_conventions.py` and
+`git diff --check` passed. Manual final-diff review found no blocker. No AWS or
+customer workload activity was performed.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket375.md`
+- `docs/product/EXECUTION_READINESS_MATRIX.md`
+- `docs/IMPLEMENTATION_STATUS.md`
+- `PROJECT_STATUS.md`
 
 ## Boundaries
 

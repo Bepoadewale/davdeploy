@@ -2,18 +2,21 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-12, after PR #372
+## Current backend source — 2026-11-12, after PR #374
 
-Backend `main` is merge commit `c4d8bba4e7d328481293ec222ae26123b8843457`;
-merged-main CI run
-[43156487303](https://github.com/Bepoadewale/davdeploy/actions/runs/43156487303)
+Backend `main` is merge commit
+`fa2213b6a38e9ec1d28e630f84f0eac123bbabfb`; merged-main CI run
+[43162411486](https://github.com/Bepoadewale/davdeploy/actions/runs/43162411486)
 passed all seven jobs. PR #365 rejects common literal credential and secret
 values; PR #367 adds a bounded, provider-validated RDS-managed secret ARN
-reference path. PR #371 adds exact RDS DB/cluster metadata reads, and PR #372
-adds exact subnet-group metadata reads. PRs #371 and #372 are merged source,
-not deployed. Their profile remains limited to read metadata and does not
-enable hosted planning. The #367 secret contract only emits a Terraform
-reference; it does not retrieve secret values or grant runtime secret reads.
+reference path. PRs #371 and #372 add exact RDS DB/cluster/instance and
+subnet-group metadata reads. PR #374 denies actual-plan IAM secret value-read
+actions and matching wildcards until the application permission is bound to a
+verified typed secret reference. PRs #371, #372, and #374 are merged source,
+not deployed; none enables hosted planning. RDS planner access remains
+metadata-only. The #367 secret contract only emits a Terraform reference; it
+does not retrieve secret values or grant runtime secret reads. Attachments to
+managed policies whose contents are unavailable remain review-required.
 Frontend PR #102's paginated plan history and latest-run UI remains
 draft/local-fixture work without an authenticated production customer journey.
 No Nova-generated customer plan or workload has been applied, operated,
@@ -22,8 +25,8 @@ health-checked, recovered, or destroyed.
 ## Current hosted release — 2026-11-12, plan-role verification gate
 
 The latest hosted release remains backend commit
-`0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`; later merged source PRs #371 and
-#372 are not deployed.
+`0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`; later merged source PRs #371,
+#372, and #374 are not deployed.
 Protected plan [43144381303](https://github.com/Bepoadewale/davdeploy/actions/runs/43144381303)
 and exact saved-plan apply
 [43145180803](https://github.com/Bepoadewale/davdeploy/actions/runs/43145180803)
