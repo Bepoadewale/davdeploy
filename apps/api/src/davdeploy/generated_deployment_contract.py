@@ -9,6 +9,10 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+GENERATED_OUTPUT_PATH_PATTERN = (
+    r"^[a-z][a-z0-9_]{0,62}(?:\[0\])?(?:\.[a-z][a-z0-9_]{0,62}(?:\[0\])?)*$"
+)
+
 
 class StrictContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -17,12 +21,12 @@ class StrictContract(BaseModel):
 class ResourceReference(StrictContract):
     kind: str = Field(pattern=r"^resource_reference$")
     resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
-    output_name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    output_name: str = Field(pattern=GENERATED_OUTPUT_PATH_PATTERN)
     value_type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
 
 
 class GeneratedOutput(StrictContract):
-    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    name: str = Field(pattern=GENERATED_OUTPUT_PATH_PATTERN)
     value_type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     sensitive: bool = False
 
@@ -41,6 +45,13 @@ class GeneratedResource(StrictContract):
         names = [output.name for output in self.outputs]
         if len(names) != len(set(names)):
             raise ValueError("generated output names must be unique")
+        for output in self.outputs:
+            if output.value_type == "secret_reference" and not _is_supported_secret_output(
+                self, output.name
+            ):
+                raise ValueError(
+                    "secret_reference outputs must identify an RDS-managed master secret ARN"
+                )
         forbidden = {
             "provider", "provisioner", "connection", "access_key",
             "secret_key", "session_token", "private_key", "password",
@@ -206,6 +217,18 @@ class GeneratedDeploymentProposal(StrictContract):
             if resource.resource_id in dependencies or not dependencies.issubset(by_id):
                 raise ValueError("dependencies must reference other declared resources")
             graph[resource.resource_id] = dependencies
+            for path, _reference in _secret_reference_paths(resource.arguments):
+                allowed_lambda_secret_arn = (
+                    resource.resource_type == "aws_lambda_function"
+                    and len(path) == 4
+                    and path[0:3] == ("environment", 0, "variables")
+                    and isinstance(path[3], str)
+                    and path[3].endswith("_SECRET_ARN")
+                )
+                if not allowed_lambda_secret_arn:
+                    raise ValueError(
+                        "secret_reference values may only populate a Lambda secret ARN environment variable"
+                    )
             for ref in _references(resource.arguments):
                 target = by_id.get(ref.resource_id)
                 if target is None:
@@ -244,6 +267,36 @@ def _references(value: Any) -> list[ResourceReference]:
     if isinstance(value, (list, tuple)):
         return [ref for child in value for ref in _references(child)]
     return []
+
+
+def _secret_reference_paths(
+    value: Any, path: tuple[str | int, ...] = ()
+) -> list[tuple[tuple[str | int, ...], ResourceReference]]:
+    if isinstance(value, dict):
+        if value.get("kind") == "resource_reference":
+            reference = ResourceReference.model_validate(value)
+            return [(path, reference)] if reference.value_type == "secret_reference" else []
+        return [
+            item
+            for key, child in value.items()
+            for item in _secret_reference_paths(child, (*path, key))
+        ]
+    if isinstance(value, (list, tuple)):
+        return [
+            item
+            for index, child in enumerate(value)
+            for item in _secret_reference_paths(child, (*path, index))
+        ]
+    return []
+
+
+def _is_supported_secret_output(resource: GeneratedResource, path: str) -> bool:
+    """Allow only known RDS-managed master secret ARN outputs, never values."""
+    return (
+        resource.resource_type in {"aws_db_instance", "aws_rds_cluster"}
+        and path == "master_user_secret[0].secret_arn"
+        and resource.arguments.get("manage_master_user_password") is True
+    )
 
 
 def terraform_resource_blocks(

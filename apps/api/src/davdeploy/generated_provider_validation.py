@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from davdeploy.generated_deployment_contract import (
+    GENERATED_OUTPUT_PATH_PATTERN,
     GeneratedDeploymentProposal,
     ResourceReference,
 )
@@ -25,6 +27,46 @@ def _schema_value_type(value: Any) -> str:
         if value[0] == "object":
             return "object"
     return "object"
+
+
+_OUTPUT_PATH_PATTERN = re.compile(GENERATED_OUTPUT_PATH_PATTERN)
+
+
+def _computed_output(block: dict[str, Any], path: str) -> tuple[Any, bool, bool] | None:
+    """Resolve a direct or fixed-index nested computed attribute path."""
+    if not isinstance(path, str) or not _OUTPUT_PATH_PATTERN.fullmatch(path):
+        return None
+    tokens = re.findall(r"[a-z][a-z0-9_]{0,62}|\[0\]", path)
+    attributes = block.get("attributes", {})
+    if not tokens or not isinstance(attributes, dict):
+        return None
+    attribute = attributes.get(tokens[0])
+    if not isinstance(attribute, dict):
+        return None
+    computed = attribute.get("computed") is True
+    sensitive = attribute.get("sensitive") is True
+    current_type = attribute.get("type")
+    for token in tokens[1:]:
+        if token == "[0]":
+            if (
+                not isinstance(current_type, list)
+                or len(current_type) != 2
+                or current_type[0] not in {"list", "tuple"}
+            ):
+                return None
+            current_type = current_type[1]
+        else:
+            if (
+                not isinstance(current_type, list)
+                or len(current_type) != 2
+                or current_type[0] != "object"
+                or not isinstance(current_type[1], dict)
+            ):
+                return None
+            current_type = current_type[1].get(token)
+            if current_type is None:
+                return None
+    return current_type, computed, sensitive
 
 
 def _reference(value: Any) -> ResourceReference | None:
@@ -175,24 +217,34 @@ def validate_generated_proposal(
             f"{resource.resource_type}.{resource.name}",
         )
         block = schema.get("block", {})
-        attributes = block.get("attributes", {})
         for output in resource.outputs:
-            attribute = attributes.get(output.name)
-            if attribute is None or not attribute.get("computed"):
+            resolved = _computed_output(block, output.name)
+            if resolved is None or not resolved[1]:
                 raise GeneratedProviderSchemaError(
                     f"{resource.resource_type}.{resource.name}.{output.name} is not a provider output"
                 )
-            if bool(attribute.get("sensitive")) != output.sensitive:
+            if resolved[2] != output.sensitive:
                 raise GeneratedProviderSchemaError(
                     f"{resource.resource_type}.{resource.name}.{output.name} has incorrect sensitivity"
+                )
+            if (
+                _schema_value_type(resolved[0]) != output.value_type
+                and not (
+                    _schema_value_type(resolved[0]) == "string"
+                    and output.value_type
+                    in {"resource_name", "aws_arn", "https_url", "aws_queue_url", "secret_reference"}
+                )
+            ):
+                raise GeneratedProviderSchemaError(
+                    f"{resource.resource_type}.{resource.name}.{output.name} has incorrect value type"
                 )
     for resource in proposal.resources:
         for ref in _references(resource.arguments):
             target = by_id[ref.resource_id]
             target_schema = resource_schemas[target.resource_type]
-            target_attributes = target_schema.get("block", {}).get("attributes", {})
-            target_attribute = target_attributes.get(ref.output_name)
-            if target_attribute is None or not target_attribute.get("computed"):
+            target_block = target_schema.get("block", {})
+            target_output = _computed_output(target_block, ref.output_name)
+            if target_output is None or not target_output[1]:
                 raise GeneratedProviderSchemaError(
                     f"reference {ref.resource_id}.{ref.output_name} is not a provider output"
                 )
@@ -202,14 +254,14 @@ def validate_generated_proposal(
                 raise GeneratedProviderSchemaError(
                     f"reference {ref.resource_id}.{ref.output_name} is undeclared"
                 )
-            if bool(target_attribute.get("sensitive")) != output.sensitive:
+            if target_output[2] != output.sensitive:
                 raise GeneratedProviderSchemaError(
                     f"reference {ref.resource_id}.{ref.output_name} has incorrect sensitivity"
                 )
             if (
-                _schema_value_type(target_attribute.get("type")) != ref.value_type
+                _schema_value_type(target_output[0]) != ref.value_type
                 and not (
-                    _schema_value_type(target_attribute.get("type")) == "string"
+                    _schema_value_type(target_output[0]) == "string"
                     and ref.value_type
                     in {"resource_name", "aws_arn", "https_url", "aws_queue_url", "secret_reference"}
                 )

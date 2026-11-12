@@ -19,13 +19,14 @@ def resource(
     resource_id: str,
     name: str,
     *,
+    resource_type: str = "aws_s3_bucket",
     arguments: dict[str, object] | None = None,
     depends_on: tuple[str, ...] = (),
     outputs: tuple[dict[str, object], ...] = (),
 ) -> dict[str, object]:
     return {
         "resource_id": resource_id,
-        "resource_type": "aws_s3_bucket",
+        "resource_type": resource_type,
         "name": name,
         "arguments": arguments or {},
         "depends_on": depends_on,
@@ -153,22 +154,29 @@ def test_contract_accepts_typed_secret_reference_without_secret_material() -> No
                 resource(
                     "credentials",
                     "credentials",
+                    resource_type="aws_db_instance",
+                    arguments={"manage_master_user_password": True},
                     outputs=(
-                        {"name": "secret_arn", "value_type": "secret_reference"},
+                        {
+                            "name": "master_user_secret[0].secret_arn",
+                            "value_type": "secret_reference",
+                        },
                     ),
                 ),
                 resource(
                     "api",
                     "api",
+                    resource_type="aws_lambda_function",
                     arguments={
                         "environment": [
                             {
-                                "name": "API_TOKEN",
-                                "value": {
-                                    "kind": "resource_reference",
-                                    "resource_id": "credentials",
-                                    "output_name": "secret_arn",
-                                    "value_type": "secret_reference",
+                                "variables": {
+                                    "API_TOKEN_SECRET_ARN": {
+                                        "kind": "resource_reference",
+                                        "resource_id": "credentials",
+                                        "output_name": "master_user_secret[0].secret_arn",
+                                        "value_type": "secret_reference",
+                                    }
                                 },
                             }
                         ]
@@ -179,6 +187,96 @@ def test_contract_accepts_typed_secret_reference_without_secret_material() -> No
     )
 
     assert len(result.resources) == 2
+
+
+def test_contract_rejects_secret_arn_reference_as_a_password_value() -> None:
+    with pytest.raises(ValidationError, match="Lambda secret ARN environment variable"):
+        GeneratedDeploymentProposal.model_validate(
+            proposal(
+                [
+                    resource(
+                        "credentials",
+                        "credentials",
+                        resource_type="aws_db_instance",
+                        arguments={"manage_master_user_password": True},
+                        outputs=(
+                            {
+                                "name": "master_user_secret[0].secret_arn",
+                                "value_type": "secret_reference",
+                            },
+                        ),
+                    ),
+                    resource(
+                        "application",
+                        "application",
+                        resource_type="aws_lambda_function",
+                        arguments={
+                            "environment": [
+                                {
+                                    "variables": {
+                                        "DATABASE_PASSWORD": {
+                                            "kind": "resource_reference",
+                                            "resource_id": "credentials",
+                                            "output_name": "master_user_secret[0].secret_arn",
+                                            "value_type": "secret_reference",
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                    ),
+                ]
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    "resource_type,arguments,output_name",
+    [
+        ("aws_lambda_function", {}, "arn"),
+        ("aws_db_instance", {"manage_master_user_password": False}, "master_user_secret[0].secret_arn"),
+        ("aws_rds_cluster", {}, "master_user_secret[0].secret_status"),
+    ],
+)
+def test_contract_rejects_forged_or_unmanaged_secret_reference_outputs(
+    resource_type: str, arguments: dict[str, object], output_name: str
+) -> None:
+    with pytest.raises(ValidationError, match="RDS-managed master secret ARN"):
+        GeneratedDeploymentProposal.model_validate(
+            proposal(
+                [
+                    resource(
+                        "credentials",
+                        "credentials",
+                        resource_type=resource_type,
+                        arguments=arguments,
+                        outputs=({"name": output_name, "value_type": "secret_reference"},),
+                    )
+                ]
+            )
+        )
+
+
+def test_contract_rejects_non_literal_zero_output_indices() -> None:
+    with pytest.raises(ValidationError):
+        GeneratedDeploymentProposal.model_validate(
+            proposal(
+                [
+                    resource(
+                        "credentials",
+                        "credentials",
+                        resource_type="aws_db_instance",
+                        arguments={"manage_master_user_password": True},
+                        outputs=(
+                            {
+                                "name": "master_user_secret[1].secret_arn",
+                                "value_type": "secret_reference",
+                            },
+                        ),
+                    )
+                ]
+            )
+        )
 
 
 @pytest.mark.parametrize(
@@ -273,3 +371,50 @@ def test_resource_blocks_compile_references_only_after_contract_validation() -> 
     assert blocks["aws_s3_bucket"]["api"]["depends_on"] == [
         "aws_s3_bucket.uploads"
     ]
+
+
+def test_resource_blocks_compile_nested_secret_arn_reference() -> None:
+    from davdeploy.generated_deployment_contract import terraform_resource_blocks
+
+    generated = GeneratedDeploymentProposal.model_validate(
+        proposal(
+            [
+                resource(
+                    "database",
+                    "database",
+                    resource_type="aws_db_instance",
+                    arguments={"manage_master_user_password": True},
+                    outputs=(
+                        {
+                            "name": "master_user_secret[0].secret_arn",
+                            "value_type": "secret_reference",
+                        },
+                    ),
+                ),
+                resource(
+                    "application",
+                    "application",
+                    resource_type="aws_lambda_function",
+                    arguments={
+                        "environment": [
+                            {
+                                "variables": {
+                                    "DATABASE_SECRET_ARN": {
+                                        "kind": "resource_reference",
+                                        "resource_id": "database",
+                                        "output_name": "master_user_secret[0].secret_arn",
+                                        "value_type": "secret_reference",
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                ),
+            ]
+        )
+    )
+
+    blocks = terraform_resource_blocks(generated)
+    assert blocks["aws_lambda_function"]["application"]["environment"][0]["variables"][
+        "DATABASE_SECRET_ARN"
+    ] == "${aws_db_instance.database.master_user_secret[0].secret_arn}"
