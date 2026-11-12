@@ -1,0 +1,64 @@
+# ticket367
+
+PR: #367
+Branch: security/nova-secret-output-path-367
+
+## Problem / goal
+
+Make Nova's typed `secret_reference` meaningful and provider-validated. Today the proposal can declare any computed string output as a secret reference, and the contract only supports a flat output name. Support a bounded RDS-managed Secrets Manager ARN output path without exposing secret values.
+
+## Current repo state
+
+- PR #365 rejects common literal credential and secret values in generated arguments unless represented as a typed `resource_reference` with `value_type=secret_reference`.
+- `GeneratedOutput` and `ResourceReference` only accept flat attribute names; provider validation resolves only direct computed attributes.
+- Nova's contract currently accepts a secret reference from any model-declared computed output; the plan policy/plan access profile remains separately gated.
+- AWS provider lockfile pins `hashicorp/aws` 5.100.0.
+
+## Research / references used
+
+- `docs/tickets/ticket365.md` and `docs/test/test365.md`
+- `apps/api/src/davdeploy/generated_deployment_contract.py`
+- `apps/api/src/davdeploy/generated_provider_validation.py`
+- `apps/api/src/davdeploy/terraform-provider.lock.hcl`
+- AWS RDS-managed master password documentation: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html
+- AWS `MasterUserSecret` API: https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_MasterUserSecret.html
+- AWS provider 5.87 `aws_db_instance` schema documentation: https://registry.terraform.io/providers/hashicorp/aws/5.87.0/docs/resources/db_instance
+
+## Work planned for the PR
+
+- Add a strict, bounded grammar for provider output paths with literal zero index support for single-item nested output blocks.
+- Resolve output paths through the pinned provider schema and require the leaf to be a computed output.
+- Permit `secret_reference` declarations only for RDS-managed master-user secret ARN paths on RDS instance/cluster resources with `manage_master_user_password=true`.
+- Reject secret-reference type forgery from unrelated computed fields and reject unsupported path syntax.
+- Keep secret values out of proposals and Terraform configuration; generated references compile only to Terraform resource-output expressions.
+
+## Acceptance criteria
+
+- [ ] Direct output references continue to validate and compile unchanged.
+- [ ] Only the supported RDS-managed secret ARN paths can be declared as `secret_reference` outputs.
+- [ ] Provider schema validation proves each nested path exists and ends at a computed string attribute.
+- [ ] Unknown resource paths, indices, malformed paths, unrelated output types, and unmanaged RDS passwords fail closed.
+- [ ] Focused tests, `make verify`, full local clean-room cycle, and required CI pass.
+- [ ] Docs explain that plan-role support, runtime `GetSecretValue` authorization, external customer secret registration, and hosted execution remain follow-up work.
+
+## Acceptance status
+
+- [ ] Implementation and validations pending.
+
+## Tests / validation performed
+
+- Bootstrap commit only; implementation validation pending.
+- No AWS, Bedrock, customer plan/apply, or infrastructure changes occurred.
+
+## Evidence files produced
+
+- `docs/tickets/ticket367.md`
+- A PR-numbered source-only security test evidence file will be added before review-ready status.
+
+## Boundaries
+
+This PR must not enable Nova planning/apply, grant customer secret-read permissions, expose secret values, change the customer plan role, or claim end-to-end secret-backed workload support.
+
+## Follow-up work
+
+Implement exact-ARN scoped runtime access for an approved execution identity, tenant-scoped secret registration/reference binding, plan-role resource support where needed, and hosted customer evidence before enabling secret-backed deployments.
