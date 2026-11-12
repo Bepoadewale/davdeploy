@@ -1222,6 +1222,51 @@ def test_scoped_read_only_iam_policy_remains_eligible():
     assert result.findings == ()
 
 
+@pytest.mark.parametrize(
+    "action,resource_arn",
+    [
+        (
+            "secretsmanager:GetSecretValue",
+            "arn:aws:secretsmanager:us-east-1:654654474502:secret:application-password-AbCdEf",
+        ),
+        ("secretsmanager:BatchGetSecretValue", "*"),
+        ("secretsmanager:Get*", "arn:aws:secretsmanager:us-east-1:654654474502:secret:app-*"),
+        ("secretsmanager:*", "*"),
+        ("SecretsManager:GETSECRETVALUE", "arn:aws:secretsmanager:us-east-1:654654474502:secret:app-AbCdEf"),
+    ],
+)
+def test_unbound_secrets_manager_value_reads_are_denied(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.DENY
+    finding = next(
+        item for item in result.findings if item.code == "iam_secret_value_read_unbound"
+    )
+    assert resource_arn not in finding.message
+    assert "SecretValue" not in finding.message
+
+
+def test_secrets_manager_metadata_read_remains_eligible():
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": "secretsmanager:DescribeSecret",
+                "Resource": "arn:aws:secretsmanager:us-east-1:654654474502:secret:app-AbCdEf",
+            }
+        }
+    )
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.findings == ()
+
+
 def test_specific_same_account_assume_role_requires_human_review():
     result = evaluate_application_policy(
         {
