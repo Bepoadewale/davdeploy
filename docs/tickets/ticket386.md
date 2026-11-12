@@ -22,6 +22,8 @@ source. It must never expose plan values or arbitrary names.
   runner image's preinstalled `python3.12`; the image no longer provided that
   command. This PR pins Python 3.12 through the existing setup-python action
   before building the package.
+- Corrected implementation head `ae9f2f507f5d5071e21d159bc1330196b0df65b8`
+  passed all seven required checks in run `43288891088`.
 - Customer cloud execution and hosted certification remain disabled.
 - Implementation commit `a9338a1` passed all seven required checks in run
   `43286995660`.
@@ -54,15 +56,15 @@ source. It must never expose plan values or arbitrary names.
 - [x] Supply-chain CI explicitly provisions the Python version required by the
   Lambda package build script.
 - [x] Documentation conventions, diff checks, and all seven required CI checks
-  pass on implementation commit `a9338a1` (run `43286995660`).
+  pass on corrected implementation head `ae9f2f5` (run `43288891088`).
 - [ ] A fresh protected plan explains its structural omission without exposing
   raw JSON; no apply is dispatched.
 
 ## Acceptance status
 
 - [x] Bounded shape diagnostics are implemented and locally verified.
-- [x] Local verification, documentation checks, and implementation-head CI
-  are complete. GitHub remains authoritative for current-head merge checks.
+- [x] Local verification, documentation checks, and corrected implementation
+  CI are complete. GitHub remains authoritative for current-head merge checks.
 
 ## Tests / validation performed
 
@@ -75,6 +77,7 @@ source. It must never expose plan values or arbitrary names.
   `git diff --check` passed.
 - Implementation commit `a9338a1` passed all seven CI checks in run
   `43286995660`.
+- Corrected head `ae9f2f5` passed all seven checks in run `43288891088`.
 
 ## Evidence files produced
 
