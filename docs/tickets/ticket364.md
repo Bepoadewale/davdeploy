@@ -29,16 +29,17 @@ Backend `main` is `4d5997c45c2858c4d5f5b9151ebf793d685f5353`; merged-main CI `43
 - [x] Frontend #102 is described as draft/unmerged and not deployed, with plan-history/run-status API integration marked implemented only in that branch.
 - [x] No pricing, hosted approval/apply, health, recovery, teardown or composed certification capability is overstated.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] All seven required GitHub checks pass and current-head review finds no blocker.
+- [x] Final-head CI run `43124219314` passed all seven required jobs; current-head Codex review found no blocker.
 
 ## Acceptance status
 
-- Implementation and local documentation validation are complete; final-head CI/review remain pending.
+- All acceptance criteria pass for implementation/evidence head `cb6f26d`; the follow-up commit records final-head CI/review evidence.
 
 ## Tests / validation performed
 
 - `.venv/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Final-head CI run `43124219314` passed all seven jobs; current-head Codex review found no blocker.
 
 ## Evidence files produced
 
