@@ -1,10 +1,15 @@
 # test374 — deny unbound Secrets Manager value reads
 
-Date: 2026-11-12  
-Execution type: Local policy verification; no AWS execution  
-Customer repository: `Bepoadewale/davdeploy`  
-Commit: Pending implementation commit  
-AWS account: Not accessed  
+Date: 2026-11-12
+
+Execution type: Local policy verification; no AWS execution
+
+Customer repository: `Bepoadewale/davdeploy`
+
+Commit: `0514ac1ba45096a29c620785f27e813e1dde447f`
+
+AWS account: Not accessed
+
 AWS region: Not accessed
 
 ## Resources created
@@ -23,7 +28,7 @@ AWS region: Not accessed
 - `uv run ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py`
   — passed.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed
-  before the final evidence update.
+  on implementation head `0514ac1`.
 
 ## Observed result
 
