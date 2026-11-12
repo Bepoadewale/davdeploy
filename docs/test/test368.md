@@ -1,11 +1,11 @@
 # test368 — Nova source and hosted release reconciliation
 
-Date: 2026-11-12  
-Execution type: Protected control-plane Terraform plan/apply and read-only post-release verification  
-Customer repository: N/A; no customer repository or workload was used  
-Backend source: `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` (PR #367 merge)  
-Commit: `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`  
-AWS account: `654654474502`  
+Date: 2026-11-12
+Execution type: Protected control-plane Terraform plan/apply and read-only post-release verification
+Customer repository: N/A; no customer repository or workload was used
+Backend source: `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` (PR #367 merge)
+Commit: `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`
+AWS account: `654654474502`
 AWS region: `us-east-1`
 
 ## Resources created

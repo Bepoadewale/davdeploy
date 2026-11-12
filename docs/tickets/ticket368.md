@@ -1,6 +1,6 @@
 # ticket368 — reconcile Nova source and deployed release after PR #367
 
-PR: #368  
+PR: #368
 Branch: `docs/reconcile-nova-release-368`
 
 ## Problem / goal
