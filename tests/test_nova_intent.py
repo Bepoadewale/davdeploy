@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from davdeploy.contracts import ModelResponse, ModelUsage, TenantScope
-from davdeploy.intent import NovaIntentProvider
+from davdeploy.intent import IntentOutOfScopeError, NovaIntentProvider
 from davdeploy.main import translate
 from davdeploy.model_gateway import NOVA_2_LITE_MODEL_ID, ModelGatewayUnavailable
 from fastapi import HTTPException
@@ -21,6 +21,7 @@ def scope() -> TenantScope:
 
 def proposal(**updates: Any) -> dict[str, Any]:
     base = {
+        "request_scope": "INFRASTRUCTURE",
         "workload_type": "ai_api",
         "data_classification": "restricted",
         "average_rps": 20,
@@ -97,7 +98,7 @@ def test_nova_intent_is_typed_tenant_scoped_and_non_authoritative():
     assert request.tenant.organization_id == "org-demo"
     assert request.provider == "bedrock"
     assert request.model == NOVA_2_LITE_MODEL_ID
-    assert request.prompt_version == "intent-nova2-v1"
+    assert request.prompt_version == "intent-nova2-v2"
     assert document["selected_repository"] == "example/support-rag-api"
     assert "use false when the capability is not explicitly required" in document["task"]
     assert output_schema["additionalProperties"] is False
@@ -106,6 +107,27 @@ def test_nova_intent_is_typed_tenant_scoped_and_non_authoritative():
     assert result.spec.requires_kubernetes is False
     assert result.model_metadata["provider"] == "bedrock"
     assert "approval" not in result.spec.model_dump()
+
+
+def test_nova_intent_rejects_unrelated_requests_before_creating_a_workload_spec():
+    intent_provider, gateway = provider(proposal(request_scope="OUT_OF_SCOPE"))
+
+    with pytest.raises(IntentOutOfScopeError, match="cannot answer general questions"):
+        intent_provider.interpret("Should I buy a particular stock?", None, scope())
+
+    assert len(gateway.calls) == 1
+    _, document, _ = gateway.calls[0]
+    assert "investment picks and financial advice are OUT_OF_SCOPE" in document["task"]
+
+
+def test_model_scope_classification_keeps_deploying_financial_software_in_scope():
+    intent_provider, _ = provider(proposal(workload_type="stockbroker_application"))
+
+    result = intent_provider.interpret(
+        "Deploy my stockbroking application to AWS.", "example/broker", scope()
+    )
+
+    assert result.spec.workload_type == "stockbroker_application"
 
 
 def test_nova_intent_keeps_only_allow_listed_customer_capabilities():
@@ -172,3 +194,10 @@ def test_model_gateway_failure_translates_to_bounded_service_unavailable():
     with pytest.raises(HTTPException) as raised:
         translate(ModelGatewayUnavailable("model response failed validation"))
     assert raised.value.status_code == 503
+
+
+def test_out_of_scope_request_translates_to_actionable_client_error():
+    with pytest.raises(HTTPException) as raised:
+        translate(IntentOutOfScopeError())
+    assert raised.value.status_code == 422
+    assert "cannot answer general questions" in raised.value.detail

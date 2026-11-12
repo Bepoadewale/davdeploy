@@ -67,6 +67,7 @@ from davdeploy.domain import (
 )
 from davdeploy.edge_origin import edge_origin_is_authorized
 from davdeploy.generated_plan_artifacts import canonical_json_digest
+from davdeploy.intent import IntentOutOfScopeError
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
@@ -900,6 +901,8 @@ async def unlock_terraform_state(
 
 
 def translate(error: Exception) -> None:
+    if isinstance(error, IntentOutOfScopeError):
+        raise HTTPException(422, str(error)) from error
     if isinstance(error, PermissionError):
         raise HTTPException(403, str(error)) from error
     if isinstance(error, (ValueError, KeyError)):
@@ -1862,7 +1865,13 @@ def create_intent(
             request.cloud_connection_id,
             request.idempotency_key,
         )
-    except (PermissionError, ValueError, KeyError, ModelGatewayUnavailable) as error:
+    except (
+        PermissionError,
+        ValueError,
+        KeyError,
+        ModelGatewayUnavailable,
+        IntentOutOfScopeError,
+    ) as error:
         translate(error)
     return {"id": intent.id, "state": intent.state, "spec": intent.spec}
 

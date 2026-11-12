@@ -16,7 +16,7 @@ from davdeploy.domain import (
     WorkloadSpec,
 )
 from davdeploy.executor import ExecutionObservation
-from davdeploy.intent import DeterministicIntentProvider
+from davdeploy.intent import DeterministicIntentProvider, IntentOutOfScopeError
 from davdeploy.invitation_email import (
     DisabledInvitationEmailSender,
     InvitationDeliveryUnavailable,
@@ -27,6 +27,7 @@ from davdeploy.models import (
     Recommendation,
     RepositoryConnection,
     UsageRecord,
+    WorkloadIntent,
     WorkspaceInvitation,
 )
 from davdeploy.planner import AwsV1Planner
@@ -1291,6 +1292,23 @@ def test_idempotency_replays_only_the_same_intent():
         assert "idempotency" in str(error)
     else:
         raise AssertionError("different request reused an idempotency key")
+
+
+def test_out_of_scope_intent_is_not_persisted_or_plannable():
+    class OutOfScopeProvider:
+        def interpret(self, prompt, source_repository, tenant):
+            del prompt, source_repository, tenant
+            raise IntentOutOfScopeError()
+
+    service, db = make_service(intent_provider=OutOfScopeProvider())
+    project = service.create_project(founder(), "finance-advice", "https://github.com/example/app")
+
+    with pytest.raises(IntentOutOfScopeError):
+        service.create_intent(
+            founder(), project.id, "Should I buy this stock?", None, None, "idem-out-of-scope"
+        )
+
+    assert db.scalar(select(WorkloadIntent)) is None
 
 
 def test_prompt_injection_does_not_bypass_policy_or_become_executor_authority():
