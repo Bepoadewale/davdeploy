@@ -1,6 +1,6 @@
 # ticket385 — read runtime feature gates from Terraform plan changes
 
-PR: [#385](https://github.com/Bepoadewale/davdeploy/pull/385) (draft)
+PR: [#385](https://github.com/Bepoadewale/davdeploy/pull/385) (draft; final ticket evidence added)
 Branch: `fix/read-runtime-gates-from-plan-changes-385`
 
 ## Problem / goal
@@ -19,6 +19,8 @@ plan summary found all expected Lambda feature gates missing from
 - Customer cloud execution and hosted certification remain disabled in the
   protected plan environment; exact feature values must be reviewed before
   any apply.
+- Implementation commit `eeae564` passed all seven required CI checks in run
+  `43283005098`.
 - Protected untracked `--only-show-errors` remains untouched.
 
 ## Research / references used
@@ -46,7 +48,8 @@ plan summary found all expected Lambda feature gates missing from
   typed `change.after` values.
 - [x] Missing, malformed, or conflicting gate values fail closed.
 - [x] Focused tests (17) and full verification (1,055 tests) pass.
-- [ ] Docs conventions, diff checks, and required CI pass.
+- [x] Documentation conventions and diff checks pass; implementation commit
+  `eeae564` passed all seven required CI checks in run `43283005098`.
 - [ ] Fresh protected plan yields a safe exact-action summary; no apply unless
   the saved plan is inspected and remains within authorized gates.
 
@@ -62,7 +65,10 @@ plan summary found all expected Lambda feature gates missing from
 - `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 17 passed.
 - `make verify`: 1,055 passed; Ruff, OpenAPI, Actions configuration, and Docker
   Compose checks passed. One existing Starlette/httpx deprecation warning.
-- Required GitHub CI and documentation checks are pending.
+- `GITHUB_PR_NUMBER=385 .venv/bin/python scripts/check_doc_conventions.py` and
+  `git diff --check` passed.
+- Implementation commit `eeae564` passed all seven required checks in CI run
+  `43283005098`; the updated PR head remains subject to GitHub's merge checks.
 
 ## Evidence files produced
 
