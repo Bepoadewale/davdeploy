@@ -28,7 +28,7 @@ AWS region: Not accessed
 - `uv run ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py`
   — passed.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed
-  on final evidence head `c25fa79`.
+  on final evidence head `4e43cbb`.
 - Full isolated clean-room proof passed from worktree
   `/private/tmp/davdeploy-pr374-cleanroom-20261112` at `58bd8d4` with unique
   Compose project `davdeploy-pr374-cleanroom-20261112`. It included clean,
@@ -68,8 +68,8 @@ approval, apply, health, recovery and teardown remain separate acceptance gates.
 
 ## Pull request verification
 
-PR #374 head `c25fa79` passed all seven required GitHub Actions checks in run
-`43160678296`. Manual review confirmed that the secret action matcher denies
+PR #374 head `4e43cbb` passed all seven required GitHub Actions checks in run
+`43161277559`. Manual review confirmed that the secret action matcher denies
 exact actions and wildcards case-insensitively, while the policy's separate
 `NotAction` and broad IAM checks remain in force. No AWS role, plan, approval,
 apply, or customer workload was changed.

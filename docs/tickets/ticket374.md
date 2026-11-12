@@ -51,7 +51,7 @@ secret-read grant until that binding is deterministic and verified.
 - [x] No policy values, secret values, or raw plan payloads enter findings.
 - [x] Focused tests and full `make verify` pass.
 - [x] Isolated clean-room proof passes.
-- [ ] Documentation conventions, current-head review and final-head CI pass.
+- [x] Documentation conventions, current-head review and final-head CI pass.
 - [x] No AWS role, customer plan, approval, apply, or workload is changed.
 
 ## Acceptance status
@@ -69,8 +69,8 @@ clean-room proof passed from `58bd8d4`; all project containers are stopped.
 The external virtual environment, worktree, bind-mounted Postgres data, network
 and images are retained. No named volume or AWS resources were created.
 Documentation conventions and `git diff --check` pass. Implementation head
-`c25fa79` passed all seven required checks in GitHub Actions run `43160678296`;
-review found no blocker. Final evidence-head checks remain pending.
+`4e43cbb` passed all seven required checks in GitHub Actions run `43161277559`;
+manual review found no blocker. The final evidence update records that run.
 
 ## Evidence files produced
 
