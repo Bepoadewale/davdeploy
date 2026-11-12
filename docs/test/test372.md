@@ -3,7 +3,7 @@
 Date: 2026-11-12  
 Execution type: Local policy verification; no AWS execution  
 Customer repository: `Bepoadewale/davdeploy`  
-Commit: Pending implementation commit  
+Commit: `757799c5ed4db5a36516395b69506b84351f458c`
 AWS account: Not accessed  
 AWS region: Not accessed
 
@@ -11,9 +11,15 @@ AWS region: Not accessed
 
 - No AWS resources, customer role, plan, approval, or workload have been
   created or changed by PR #372.
-- Clean-room worktree and local service-resource details will be recorded
-  after verification. No cleanup will be performed on retained local files or
-  volumes without authorization.
+- Clean-room worktree: `/private/tmp/davdeploy-pr372-cleanroom-20261112`,
+  checked out at the commit above.
+- Isolated Compose project: `davdeploy-pr372-cleanroom-20261112`.
+- The clean-room `make local-proof` completed successfully (1,038 tests and
+  the local bootstrap, smoke, API contract, fixture customer-plan E2E, fixture
+  seed, trace, OpenAPI and Compose checks). This used local fixtures only.
+- All containers in that Compose project are stopped. Its Postgres volume,
+  network, images, worktree and virtual environment are retained. No retained
+  data or files were deleted.
 
 ## Commands executed
 
@@ -26,7 +32,13 @@ AWS region: Not accessed
 - `uv run ruff check apps/api/src/davdeploy/nova_plan_access.py tests/test_nova_plan_access.py tests/test_customer_aws_connection_contract.py`
   — passed.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed
-  before the pending final evidence update.
+- `COMPOSE_PROJECT_NAME=davdeploy-pr372-cleanroom-20261112 make local-proof`
+  from the clean-room worktree — passed; containers are stopped and artifacts
+  listed above are retained.
+- Required CI run `43154578894` passed all seven jobs on the implementation
+  commit. The evidence-only update below still requires final-head CI.
+- `python scripts/check_doc_conventions.py` and `git diff --check` — passed
+  after the evidence update.
 
 ## Observed result
 
@@ -43,8 +55,8 @@ AWS region: Not accessed
 
 ## Teardown
 
-No AWS cleanup is needed. Record local Compose-container status and retained
-test artifacts after clean-room verification.
+No AWS cleanup is needed. Clean-room Compose containers are stopped; the
+project volume, network, images, worktree and virtual environment are retained.
 
 ## Final boundary
 

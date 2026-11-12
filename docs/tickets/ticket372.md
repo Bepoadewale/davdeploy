@@ -45,7 +45,8 @@ Do not add VPC-wide or EC2 discovery in this PR.
 - [x] The customer role template and session-policy action list match.
 - [x] Existing DB/cluster/S3/SQS/DynamoDB/API/IAM profiles retain their tested behavior.
 - [x] PR #371 status is reconciled as source merged but not deployed; no customer role or hosted plan is claimed.
-- [ ] Focused tests, full `make verify`, clean-room proof, docs checks, current-head review and required final-head CI pass.
+- [x] Focused tests, full `make verify`, clean-room proof, and docs checks pass.
+- [ ] Current-head review and required final-head CI pass.
 - [x] No feature flag, customer role, plan, approval, apply or customer workload is enabled or executed by this PR.
 
 ## Acceptance status
@@ -58,8 +59,11 @@ Do not add VPC-wide or EC2 discovery in this PR.
 ## Tests / validation performed
 
 Focused tests (37), `make verify` (1,038), Ruff, documentation conventions,
-and diff checks pass locally. Clean-room proof and final-head CI remain
-outstanding. See `docs/test/test372.md` and update it as those gates complete.
+and diff checks pass locally. Clean-room `make local-proof` passed from a fresh
+worktree at `757799c`; all project containers are stopped and the volume,
+network, images, worktree and virtual environment are retained. Implementation
+head CI run `43154578894` passed all seven jobs. Review and final-head CI remain
+outstanding. See `docs/test/test372.md`.
 
 ## Evidence files produced
 
