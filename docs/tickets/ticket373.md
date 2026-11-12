@@ -50,7 +50,8 @@ scope and all existing customer-facing product claims.
 - [x] No customer role, plan, approval, apply, health or teardown is claimed.
 - [x] Existing catalogue counts, product claims and scope are preserved.
 - [ ] Documentation conventions and diff checks pass.
-- [ ] Current-head review and required final-head CI pass.
+- [x] Final-diff review found no issue; implementation head `611d580` passed
+  all seven required CI jobs in run `43157461130`.
 
 ## Acceptance status
 
@@ -59,17 +60,22 @@ scope and all existing customer-facing product claims.
 - [x] #371 and #372 are accurately described as merged source, not deployed.
 - [x] No customer workload or runtime capability is claimed.
 - [x] Documentation conventions and diff checks pass.
-- [ ] Current-head review and required final-head CI pass.
+- [x] Final-diff review found no issue; implementation head `611d580` passed
+  all seven required CI jobs in run `43157461130`.
 
 ## Tests / validation performed
 
 `python scripts/check_doc_conventions.py` and `git diff --check` pass. Final
-head GitHub CI and final-diff review remain pending. This documentation-only
-PR makes no AWS changes and requires no runtime-workload proof.
+diff review found no issue, and all seven checks passed in run `43157461130` on
+implementation head `611d580`. This documentation-only PR makes no AWS changes
+and requires no runtime-workload proof.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket373.md`
+- `docs/IMPLEMENTATION_STATUS.md`
+- `docs/product/EXECUTION_READINESS_MATRIX.md`
+- `CODEX_BACKLOG.md`
 
 ## Boundaries
 
