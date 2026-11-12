@@ -3,7 +3,7 @@
 - Date: 2026-11-12
 - Execution type: Local unit, repository, Terraform validation, and local-stack proof
 - Customer repository: N/A; synthetic proposals only
-- Commit: implementation head pending
+- Commit: `bc2d957` (policy implementation exercised by the recorded local runs)
 - Pull request: [#379](https://github.com/Bepoadewale/davdeploy/pull/379) (draft)
 - AWS account: N/A; no AWS API calls made
 - AWS region: N/A; no AWS API calls made
