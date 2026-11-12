@@ -1,12 +1,13 @@
 # test381 — preserve the currently published customer role template
 
 - Date: 2026-11-12
-- Execution type: Local tests and read-only Terraform plan/state inspection
+- Execution type: Local tests, read-only Terraform plan/state inspection, and
+  post-merge template/control-plane deployment evidence (see `test382.md`)
 - Repository: `Bepoadewale/davdeploy`
 - Customer repository: N/A; this is the DavDeploy customer-template host root.
-- Commit: pending final PR head
-- Pull request: [#381](https://github.com/Bepoadewale/davdeploy/pull/381) (draft)
-- AWS account: `654654474502` (read-only plan and state inspection only)
+- Commit: merged as `a12205972cc124d08d85845f30c9b574f7cf87fd`
+- Pull request: [#381](https://github.com/Bepoadewale/davdeploy/pull/381) (merged)
+- AWS account: `654654474502` (template and control-plane deployment; no customer workload)
 - AWS region: `us-east-1`
 
 ## Purpose
@@ -74,6 +75,17 @@ stack and its volume were left running and untouched.
 
 ## Final boundary
 
-This evidence proves only the source configuration and read-only plan for the
-template-host root. It does not prove publication, customer role setup,
-effective permissions, hosted Nova planning, or any customer workload.
+This file preserves the original pre-merge test record. Its read-only plan
+statements describe only the PR review stage. Post-merge publication and
+control-plane release are documented in [`test382.md`](test382.md). Neither
+record proves customer role installation/effective permissions, hosted Nova
+planning, or any customer workload.
+
+## Post-merge status
+
+PR #381 merged after all seven required final-head checks passed. The reviewed
+template-host plan was applied and the new public template and old retained
+URL were verified. The hosted control plane was then deployed from the exact
+merged source using a fresh protected plan and its exact saved-plan apply.
+See [`test382.md`](test382.md) for run IDs and read-only verification. No
+customer IAM role, CloudFormation stack, Nova plan, or workload was created.

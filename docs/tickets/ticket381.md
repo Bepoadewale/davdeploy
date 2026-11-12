@@ -1,6 +1,6 @@
 # ticket381 — retain the currently published CloudFormation template
 
-PR: [#381](https://github.com/Bepoadewale/davdeploy/pull/381) (draft)
+PR: [#381](https://github.com/Bepoadewale/davdeploy/pull/381) (merged)
 Branch: `fix/retain-current-customer-template-381`
 
 ## Problem / goal
@@ -91,9 +91,20 @@ approval, apply, health, recovery, and teardown remain gated independently.
 
 ## Follow-up work
 
-- Merge only after all review and CI gates pass.
-- Run a new template-host plan on merged `main`, preserve the existing URL, and
-  apply only its exact reviewed saved plan.
-- Update `AWS_CONNECTION_TEMPLATE_URL` to the verified new immutable URL and
-  create a fresh protected serverless-control-plane plan; do not apply the
-  older run `43254329556` with its previous URL.
+- Completed after merge: the template-host root published the new immutable
+  object with 1 add and 0 changes/destroys; the existing `f3d9…` URL was
+  retained. The hosted `AWS_CONNECTION_TEMPLATE_URL` was updated to the
+  verified `8c5d…` URL.
+- Completed after merge: fresh protected plan `43260003885` and exact saved-plan
+  apply `43261766144` deployed PR #381 source. See `docs/test/test382.md` for
+  exact publication, release, and post-deployment evidence.
+- Customer role installation/effective permission verification and hosted
+  Nova customer execution remain incomplete.
+
+## Post-merge deployment reconciliation — 2026-11-12
+
+The acceptance items above describe the state before merge and remain
+historical. PR #381 merged as `a12205972cc124d08d85845f30c9b574f7cf87fd` after
+the final-head checks passed. The template-host apply and subsequent protected
+control-plane plan/apply completed successfully; full evidence is in
+[`test382.md`](../test/test382.md). No customer role or workload was created.

@@ -8,7 +8,7 @@
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
 | Nova intent scope boundary | PR #377 adds typed infrastructure/out-of-scope classification. Unrelated requests receive a fixed HTTP 422 explanation before a workload intent is stored; deploying financial-domain software remains in scope. The code is deployed with backend `40439ab6b493a40c522102fa88de1c48043b4177` via protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048). Two bounded synthetic model checks passed for stock advice and a stockbroking-app deployment, but this is not broad classification-quality evidence and no authenticated customer API journey was exercised. |
-| Nova proposal policy and execution boundary | PR #321 adds fail-closed EBS encryption policy. PR #322 blocks approval while complete region-bound pricing is unavailable. PRs #324–#334 add the disabled-by-default plan worker, state API/client, and tenant-scoped plan history; #340 adds proposal-scoped customer plan access; #353–#363 add actual-plan security and retention checks. PR #365 rejects common literal secrets, and #367 restricts secret references to validated RDS-managed secret ARNs and Lambda `_SECRET_ARN` variables. PRs #371–#372 add exact RDS metadata reads; #374 denies unbound Secrets Manager value-read actions and matching wildcards. PR #379 adds a fixed, region-bounded EC2 metadata profile for proposed VPCs, subnets, and security groups. Source through PR #377 is deployed by plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048), deployment `7733504560`; merged-main CI [43190545115](https://github.com/Bepoadewale/davdeploy/actions/runs/43190545115) passed all seven jobs. PR #379 is merged source after that release; it does not deploy the customer role template, install a customer role, or attest effective permissions. Only plan-role trust/account verification is enabled. Runner, broker, state API, plan review, and hosted certification remain disabled; no customer role is installed or verified. PR #367 does not resolve customer-owned secrets or grant runtime secret reads. Tenant-scoped remote state is not active. Pricing remains unavailable and exact-plan approval remains blocked; pricing PR #318 stays held pending account-owner direction. No Nova-generated customer plan has been applied. See `docs/test/test380.md`. |
+| Nova proposal policy and execution boundary | PR #321 adds fail-closed EBS encryption policy. PR #322 blocks approval while complete region-bound pricing is unavailable. PRs #324–#334 add the disabled-by-default plan worker, state API/client, and tenant-scoped plan history; #340 adds proposal-scoped customer plan access; #353–#363 add actual-plan security and retention checks. PR #365 rejects common literal secrets, and #367 restricts secret references to validated RDS-managed secret ARNs and Lambda `_SECRET_ARN` variables. PRs #371–#372 add exact RDS metadata reads; #374 denies unbound Secrets Manager value-read actions and matching wildcards; #379 adds bounded regional EC2 reads for proposed VPCs, subnets, and security groups. The template and control-plane source through #381 are deployed via protected plan [43260003885](https://github.com/Bepoadewale/davdeploy/actions/runs/43260003885) and exact saved-plan apply [43261766144](https://github.com/Bepoadewale/davdeploy/actions/runs/43261766144), deployment `7743511328`; merged-main CI [43257709757](https://github.com/Bepoadewale/davdeploy/actions/runs/43257709757) passed all seven jobs. The new immutable customer plan-role template is published and the prior URL is retained, but no customer role is installed and effective permissions are not verified. Only plan-role trust/account verification is enabled. Runner, broker, state API, plan review, and hosted certification remain disabled; no Nova customer plan has been applied. PR #367 does not resolve customer-owned secrets or grant runtime secret reads. Tenant-scoped remote state is not active. Pricing remains unavailable and exact-plan approval remains blocked; pricing PR #318 stays held pending account-owner direction. See `docs/test/test382.md`. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -65,37 +65,37 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current merged backend source — 2026-11-12, after PR #379
+# Current merged backend source — 2026-11-12, after PR #381
 
-Backend `main` is merge commit `c3046f37f0d09fb0b1a26c26cab4be9ffe7d881c`;
+Backend `main` is merge commit `a12205972cc124d08d85845f30c9b574f7cf87fd`;
 merged-main CI run
-[43249113529](https://github.com/Bepoadewale/davdeploy/actions/runs/43249113529)
-passed all seven jobs. Current source includes PR #379's fixed, region-bounded
-EC2 metadata reads for proposed VPCs, subnets, and security groups. It is merged
-source only; the customer role template is not deployed or installed, and
-effective role permissions are not verified. PR #102 remains draft/local-fixture
-work, without authenticated production history or lifecycle evidence.
+[43257709757](https://github.com/Bepoadewale/davdeploy/actions/runs/43257709757)
+passed all seven jobs. PR #379's bounded EC2 metadata reads are in the deployed
+control-plane package. PR #381's immutable customer plan-role template is
+published at the verified `8c5d…` URL; the prior `f3d9…` URL remains available.
+No customer role is installed and effective role permissions are not verified.
+PR #102 remains draft/local-fixture work, without authenticated production
+history or lifecycle evidence.
 
-# Latest hosted execution status — 2026-11-12, PR #377 source
+# Latest hosted execution status — 2026-11-12, PR #381 source
 
-Backend source `40439ab6b493a40c522102fa88de1c48043b4177` was deployed through
-protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865)
+Backend source `a12205972cc124d08d85845f30c9b574f7cf87fd` was deployed through
+protected plan [43260003885](https://github.com/Bepoadewale/davdeploy/actions/runs/43260003885)
 and exact saved-plan apply
-[43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048),
-deployment `7733504560`. The exact plan reported 0 additions, 6 in-place
-Lambda package updates, 0 destroys/replacements, 0 drift, and 8 output changes.
-Saved-plan verification and database migrations passed. All six Lambdas are
+[43261766144](https://github.com/Bepoadewale/davdeploy/actions/runs/43261766144),
+deployment `7743511328`. The exact plan reported 0 additions, 6 in-place
+Lambda package updates, 0 destroys/replacements, and 0 drift. Saved-plan
+verification and database migrations passed. All six Lambdas are
 Active/Successful with common
-`CodeSha256=/q4CbzB47savx6EUbTIWj4ASIao3eCdNDKSbfbkkBEg=`; `/healthz` returned
+`CodeSha256=6B3DVTL6dXaQ6K5leePzfmckPO+2/3BTKenPHpBOoqQ=`; `/healthz` returned
 HTTP 200 in account `654654474502`, region `us-east-1`.
 
 Only plan-role trust/account verification is enabled. The API's narrowly
 conditioned role assumption does not attest effective permissions or enable
 customer planning. The plan runner, credential broker, plan reviews, Terraform
 state API, and hosted certification remain disabled; no customer role or Nova
-plan/workload has been used. PR #379 was merged after this release and does not
-deploy the customer role template. Release evidence is in
-[`test378.md`](test/test378.md).
+plan/workload has been used. Release evidence is in
+[`test382.md`](test/test382.md).
 
 # Historical hosted execution status — 2026-11-12, after PR #367 rollout
 
