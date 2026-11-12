@@ -46,6 +46,10 @@ SAFE_FAILURE_CODES = {
 class PlanSummaryError(ValueError):
     """Raised when a plan cannot be summarized without making assumptions."""
 
+    def __init__(self, message: str, *, missing_gates: tuple[str, ...] = ()):
+        super().__init__(message)
+        self.missing_gates = missing_gates
+
 
 def _safe_address(value: Any) -> str:
     if isinstance(value, str) and SAFE_ADDRESS.fullmatch(value):
@@ -126,7 +130,11 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
             flags[name].add(value)
     missing = sorted(set(FLAG_NAMES) - set(flags))
     if missing:
-        raise PlanSummaryError("required runtime feature gates are missing")
+        safe_missing = tuple(name for name in FLAG_NAMES if name in missing)
+        raise PlanSummaryError(
+            "required runtime feature gates are missing",
+            missing_gates=safe_missing,
+        )
     if any(len(values) != 1 for values in flags.values()):
         raise PlanSummaryError("runtime feature gates disagree across functions")
     return flags
@@ -233,9 +241,19 @@ def main() -> int:
             reason = "invalid_plan_encoding"
         else:
             reason = "plan_json_too_deep"
+        missing_gates = ()
+        if isinstance(error, PlanSummaryError) and reason == "runtime_gates_missing":
+            candidates = error.missing_gates
+            if (
+                isinstance(candidates, tuple)
+                and candidates
+                and all(name in FLAG_NAMES for name in candidates)
+            ):
+                missing_gates = candidates
+        detail = f" missing_gates={','.join(missing_gates)}" if missing_gates else ""
         print(
             "Terraform plan summary failed closed; "
-            f"reason={reason}; raw plan output was suppressed.",
+            f"reason={reason};{detail} raw plan output was suppressed.",
             file=sys.stderr,
         )
         return 2
