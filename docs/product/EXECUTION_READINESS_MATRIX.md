@@ -16,7 +16,31 @@ history and latest-run UI remains draft/local-fixture work without an
 authenticated production customer journey. No Nova-generated customer plan
 or workload has been applied, operated, health-checked, recovered, or destroyed.
 
-## Current hosted release — 2026-11-12, PR #367
+## Current hosted release — 2026-11-12, plan-role verification gate
+
+Backend source remains commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`.
+Protected plan [43144381303](https://github.com/Bepoadewale/davdeploy/actions/runs/43144381303)
+and exact saved-plan apply
+[43145180803](https://github.com/Bepoadewale/davdeploy/actions/runs/43145180803)
+completed successfully as deployment `7727105514`. The plan reported 0
+additions, 7 in-place updates (six Lambda packages and the API role policy),
+0 destroys/replacements, 0 drift, and 8 output changes. Its saved-plan digest
+`dd705e3003d9dc771d961665681068bc429f5b0e066f8b28aed3e30780efe6d3` matched
+the encrypted S3 object. Migration verification passed. All six Lambdas are
+Active/Successful with common
+`CodeSha256=IbVtk5DgEOPl6OZu9qOsmh5bTHf1qz+y8sFekwGkDkE=`; `/healthz` returned
+`{"status":"ok","product":"davdeploy"}` in account `654654474502`, region
+`us-east-1`.
+
+Only `DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED` is now `true`. The API may
+assume only `davdeployPlan-*` roles with a nonempty external ID and a
+`davdeploy-plan-verify-*` session name, to verify role trust and account
+identity. This does not prove effective permissions or enable the plan
+worker. The runner, credential broker, plan reviews, state API, and hosted
+certification remain false; no customer role or Nova plan/workload has been
+used. Legacy cloud plan/apply flags are separate. See [`test369.md`](../test/test369.md).
+
+## Historical hosted release — 2026-11-12, PR #367
 
 Backend main commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` (PR #367) was
 applied by protected Terraform plan
