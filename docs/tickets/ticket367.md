@@ -42,21 +42,21 @@ Make Nova's typed `secret_reference` meaningful and provider-validated. Today th
 - [x] Unrelated computed outputs, unmanaged RDS passwords, and nonzero/unsupported indices fail closed.
 - [x] Focused tests (50), Ruff, and `make verify` pass after the final consumer restriction.
 - [x] Full local clean-room cycle passes.
-- [x] Final-head required CI run `43136191166` passed all seven jobs.
+- [x] Final-head required CI run `43136828000` passed all seven jobs.
 - [x] Docs explain that plan-role support, runtime `GetSecretValue` authorization, external customer secret registration, and hosted execution remain follow-up work.
 
 ## Acceptance status
 
 - [x] Implementation complete; focused tests (50), `make verify` (1,019 tests), Ruff, and pinned AWS provider 5.100.0 schema check pass.
 - [x] Full clean-room cycle passed at code commit `ab90d6c66393d521560f00221857b8dfe619b710`.
-- [x] Final-head required CI run `43136191166` passed all seven jobs for head `99215713dff1d859e3d235adeddf4456c05cc028`.
+- [x] Final-head required CI run `43136828000` passed all seven jobs for head `1e2361ff42fd0b4784b3af49f3d3081354d99fbf`.
 
 ## Tests / validation performed
 
 - `PYTHONPATH=apps/api/src .venv/bin/python -m pytest -q tests/test_nova_plan_access.py tests/test_generated_deployment_contract.py tests/test_generated_provider_validation.py` — 50 passed.
 - `make lint` — passed.
 - `make verify` — 1,019 tests passed; Actions configuration, Ruff, OpenAPI snapshot, and `docker compose config --quiet` passed. One existing Starlette/httpx deprecation warning remains.
-- Final-head GitHub CI run [43136191166](https://github.com/Bepoadewale/davdeploy/actions/runs/43136191166) passed all seven required jobs for head `99215713dff1d859e3d235adeddf4456c05cc028`.
+- Final-head GitHub CI run [43136828000](https://github.com/Bepoadewale/davdeploy/actions/runs/43136828000) passed all seven required jobs for head `1e2361ff42fd0b4784b3af49f3d3081354d99fbf`.
 - Pinned schema check: initialized Terraform provider `hashicorp/aws` 5.100.0 from the repository lockfile and validated an RDS-managed secret ARN flowing into a Lambda `_SECRET_ARN` environment variable. Compiled value is only a Terraform reference expression.
 - Full clean-room cycle passed in detached worktree `/private/tmp/davdeploy-pr367-cleanroom-20261112` at code commit `ab90d6c66393d521560f00221857b8dfe619b710`, with isolated Compose project `davdeploy-pr367-cleanroom-20261112` and a tmpfs Postgres override.
 - Clean-room sequence: `clean-local`, `bootstrap-local`, `smoke`, `api-contract`, `customer-plan-e2e`, `seed-demo-data`, simple/complex/degraded/Day-2/policy-failure/readiness-failure demos, `trace-check`, `verify`, and final `clean-local`.
