@@ -28,7 +28,7 @@ AWS region: Not accessed
 - `uv run ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py`
   — passed.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed
-  on implementation head `0514ac1`.
+  on final evidence head `c25fa79`.
 - Full isolated clean-room proof passed from worktree
   `/private/tmp/davdeploy-pr374-cleanroom-20261112` at `58bd8d4` with unique
   Compose project `davdeploy-pr374-cleanroom-20261112`. It included clean,
@@ -44,6 +44,9 @@ AWS region: Not accessed
 - The check is case-insensitive, reports a fixed safe finding, and does not
   include policy resources or secret values in the finding message.
 - `DescribeSecret` metadata-only permission remains eligible for human review.
+- Managed-policy attachments remain explicitly review-required when their
+  policy contents are not available in the plan; they are not treated as
+  verified secret-read permissions by this check.
 - This guard does not yet bind an application permission to a typed RDS secret
   reference; runtime secret value access remains unavailable.
 - After proof, all project containers were stopped. No named volume was
@@ -62,3 +65,11 @@ local artifacts listed above are retained.
 This is local actual-plan policy verification, not a hosted plan, approval,
 apply, secret retrieval, or customer workload. Hosted planning, exact costed
 approval, apply, health, recovery and teardown remain separate acceptance gates.
+
+## Pull request verification
+
+PR #374 head `c25fa79` passed all seven required GitHub Actions checks in run
+`43160678296`. Manual review confirmed that the secret action matcher denies
+exact actions and wildcards case-insensitively, while the policy's separate
+`NotAction` and broad IAM checks remain in force. No AWS role, plan, approval,
+apply, or customer workload was changed.

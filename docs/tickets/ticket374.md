@@ -68,7 +68,9 @@ Actions configuration, OpenAPI snapshot and Compose config). Full isolated
 clean-room proof passed from `58bd8d4`; all project containers are stopped.
 The external virtual environment, worktree, bind-mounted Postgres data, network
 and images are retained. No named volume or AWS resources were created.
-Documentation checks pass; final-head review and CI remain pending.
+Documentation conventions and `git diff --check` pass. Implementation head
+`c25fa79` passed all seven required checks in GitHub Actions run `43160678296`;
+review found no blocker. Final evidence-head checks remain pending.
 
 ## Evidence files produced
 
@@ -81,6 +83,9 @@ This intentionally leaves runtime secret retrieval unavailable until a future
 change binds each generated application permission to a trusted, exact secret
 reference and its owner. It does not change the proposal contract, plan
 approval, Nova execution flags, role templates, or AWS resources.
+Managed-policy attachments whose contents are absent from the plan remain
+explicitly review-required under the existing policy; this change does not
+claim to inspect their external contents.
 
 ## Follow-up work
 
