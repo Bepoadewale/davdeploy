@@ -79,7 +79,28 @@ Frontend PR #102 also remains a draft; it contains local-fixture implementation
 of paginated plan history and latest Nova plan-run status, but is not merged,
 deployed, or verified with an authenticated production customer.
 
-# Latest hosted execution status — 2026-11-12, after PR #367 rollout
+# Latest hosted execution status — 2026-11-12, plan-role verification gate
+
+Backend source commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` remains the
+latest code release. Its plan-role trust/account verification gate was enabled
+by protected Terraform plan [43144381303](https://github.com/Bepoadewale/davdeploy/actions/runs/43144381303)
+and exact saved-plan apply [43145180803](https://github.com/Bepoadewale/davdeploy/actions/runs/43145180803),
+deployment `7727105514`. The exact plan had 0 additions, 7 in-place updates,
+0 destroys/replacements, 0 drift, and 8 output changes. Migration verification
+passed; all six Lambdas are Active/Successful with common
+`CodeSha256=IbVtk5DgEOPl6OZu9qOsmh5bTHf1qz+y8sFekwGkDkE=`; `/healthz` returned
+`{"status":"ok","product":"davdeploy"}` in account `654654474502`, region
+`us-east-1`.
+
+Only plan-role trust/account verification is enabled. The API's
+`sts:AssumeRole` permission is limited to `davdeployPlan-*` roles with a
+nonempty external ID and a `davdeploy-plan-verify-*` session name. It does not
+attest effective role permissions or enable customer planning. The runner,
+credential broker, plan reviews, Terraform state API, and hosted certification
+remain disabled; no customer role or Nova plan/workload has been used. Release
+evidence is in [`test369.md`](test/test369.md).
+
+# Historical hosted execution status — 2026-11-12, after PR #367 rollout
 
 Backend main commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` (PR #367) was
 applied by protected Terraform plan
