@@ -20,20 +20,20 @@ The generated deployment contract rejects a short list of exact argument keys an
 ## Work planned for the PR
 
 - Harden the proposal contract against common credential and secret literal field names, including nested and case/separator variants.
-- Permit secret-named arguments only when they contain a typed `resource_reference` declared as `secret_reference`.
+- Permit secret-valued arguments only when they contain a typed `resource_reference` declared as `secret_reference`, while preserving boolean configuration controls.
 - Add regression tests for denied literals, accepted typed references, and ordinary values.
 - Preserve existing plan-only and feature-gate boundaries; this PR does not enable a customer secret lookup or Nova apply path.
 
 ## Acceptance criteria
 
-- Obvious credential or secret literals fail at contract validation before Terraform configuration is generated.
+- Obvious credential or secret literals fail at contract validation before Terraform configuration is generated; boolean controls such as secret-management toggles remain representable.
 - Typed references declared as `secret_reference` remain representable without embedding secret material.
 - Existing provider-schema sensitivity checks remain authoritative for other sensitive fields.
 - No secret value is added to logs, model feedback, plans shown to customers, or evidence.
 
 ## Acceptance status
 
-- Implemented and locally verified. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
+- Implemented and locally verified; awaiting CI and review of the compatibility correction. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
 
 ## Tests / validation performed
 
@@ -42,6 +42,8 @@ The generated deployment contract rejects a short list of exact argument keys an
 - `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365 make local-proof`: passed, including API contract, customer-plan E2E, traces and the full verification suite.
 - `git diff --check` and `python3 scripts/check_doc_conventions.py`: passed.
 - Initial hosted CI run `43127441913` passed all seven required jobs on implementation commit `7002969588443df4baa38c637db8544cf643c76a`.
+- Codex review identified boolean secret-management controls as a false positive; the validator now permits boolean controls and adds explicit regressions for `manage_master_user_password`, `generate_secret`, and `enable_token_revocation`.
+- After that correction, focused contract tests passed (21), `make verify` passed (1,007 tests), and `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365b make local-proof` passed. Both local Compose projects' containers are stopped; their project networks and Postgres volumes remain.
 
 ## Evidence files produced
 

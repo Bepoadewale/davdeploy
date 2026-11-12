@@ -181,6 +181,22 @@ def test_contract_accepts_typed_secret_reference_without_secret_material() -> No
     assert len(result.resources) == 2
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("manage_master_user_password", True),
+        ("generate_secret", False),
+        ("enable_token_revocation", True),
+    ],
+)
+def test_contract_accepts_boolean_secret_related_configuration(field: str, value: bool) -> None:
+    result = GeneratedDeploymentProposal.model_validate(
+        proposal([resource("api", "api", arguments={field: value})])
+    )
+
+    assert result.resources[0].arguments[field] is value
+
+
 def test_contract_emits_a_json_schema_for_nova_structured_generation() -> None:
     schema = GeneratedDeploymentProposal.model_json_schema()
 

@@ -86,7 +86,11 @@ class GeneratedResource(StrictContract):
                 for key, child in value.items():
                     if not isinstance(key, str) or key.casefold() in forbidden:
                         raise ValueError("generated arguments contain a forbidden field")
-                    if is_secret_field(key) and not is_secret_reference(child):
+                    if (
+                        is_secret_field(key)
+                        and type(child) is not bool
+                        and not is_secret_reference(child)
+                    ):
                         raise ValueError(
                             "credential and secret fields must use a typed secret_reference"
                         )
@@ -102,6 +106,7 @@ class GeneratedResource(StrictContract):
                     isinstance(variable_name, str)
                     and is_secret_field(variable_name)
                     and "value" in value
+                    and type(value["value"]) is not bool
                     and not is_secret_reference(value["value"])
                 ):
                     raise ValueError(
