@@ -25,8 +25,9 @@ template.
 - A separate protected serverless-control-plane plan `43254329556` was
   dispatched for exact current `main` and completed with 0 adds, 6 Lambda in-place
   updates, 0 destroys, and Nova runner/broker/plan-review/state-API flags
-  still false. It does not publish the template-host root and will not be
-  applied with its old template URL.
+  still false. It wrote versioned release-package and saved-plan artifacts to
+  dedicated S3 buckets but applied no infrastructure. It does not publish the
+  template-host root and will not be applied with its old template URL.
 
 ## Research / references used
 

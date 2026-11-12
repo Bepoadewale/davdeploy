@@ -40,21 +40,32 @@ saved Quick Create links may still reference that URL.
   read-only plan proposed one new object, zero changes, and zero destroys. It
   moved the existing `published_…` state address to the retained map at the
   exact `f3d9…` key. No apply was run.
+- Protected serverless-control-plane plan run `43254329556` completed for
+  source `fab68c8`. Its sanitized summary was 0 adds, 6 Lambda in-place
+  updates, 0 destroys, no drift; Nova runner, broker, plan reviews, and state
+  API remained disabled. The plan workflow wrote versioned release-package and
+  saved-plan artifacts to their dedicated S3 buckets. Its environment still
+  points at the old `f3d9…` template URL, so this saved plan will not be applied.
 - A fresh clean-room `make local-proof` was not run locally because the
   existing DavDeploy Compose stack occupies its fixed host ports and must be
   preserved. The PR's required CI clean integration proof remains the gate.
 
 ## Resources created
 
-None. The new template object was only present in a Terraform plan; it was not
-created. No customer AWS role or stack was created.
+No customer AWS role, CloudFormation stack, or workload was created. The
+protected control-plane plan wrote only its versioned release-package and
+saved-plan artifacts to the dedicated S3 buckets; it did not apply
+infrastructure. The template-host plan itself created no object.
 
 ## Observed result
 
-The current URL remains configured as an immutable retained object with
-`prevent_destroy` and `ignore_changes = all`. The new template is only planned;
-no S3 object, bucket, IAM role, CloudFormation stack, or customer resource was
-created, changed, or deleted. Terraform state was read and released normally.
+The current template URL remains configured as an immutable retained object
+with `prevent_destroy` and `ignore_changes = all`. The template-host plan
+proposes the next content-hash object without deleting or replacing prior
+template objects. The control-plane run only published deployment artifacts
+and saved plan; it did not change infrastructure. No customer IAM role,
+CloudFormation stack, or workload was created, changed, or deleted. Terraform
+state locks were released normally.
 
 ## Teardown
 
