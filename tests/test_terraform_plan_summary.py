@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -155,6 +156,7 @@ def test_malformed_json_error_does_not_echo_raw_input(
     result, output = _run_main(monkeypatch, capsys, b"sensitive-plan-value")
 
     assert result == 2
+    assert "reason=invalid_plan_json" in output.err
     assert "raw plan output was suppressed" in output.err
     assert "sensitive-plan-value" not in output.err
 
@@ -166,5 +168,38 @@ def test_oversized_plan_fails_without_echoing_input(
     result, output = _run_main(monkeypatch, capsys, b"sensitive-plan-value")
 
     assert result == 2
+    assert "reason=plan_json_too_large" in output.err
     assert "raw plan output was suppressed" in output.err
     assert "sensitive-plan-value" not in output.err
+
+
+def test_invalid_plan_reports_only_a_fixed_safe_reason_code(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["applyable"] = False
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "reason=plan_not_applyable" in output.err
+    assert "PRIVATE_TOKEN" not in output.err
+    assert "old-secret" not in output.err
+
+
+def test_missing_runtime_gate_reports_fixed_code_without_plan_values(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    del plan["planned_values"]["root_module"]["resources"][0]["values"]["environment"][
+        "variables"
+    ]["DAVDEPLOY_NOVA_PLAN_RUNNER_READY"]
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "reason=runtime_gates_missing" in output.err
+    assert "sensitive-description-value" not in output.err
+    assert "private-variable-value" not in output.err

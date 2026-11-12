@@ -27,6 +27,20 @@ FLAG_NAMES = (
     "ALLOW_CLOUD_PLAN",
     "ALLOW_CLOUD_APPLY",
 )
+SAFE_FAILURE_CODES = {
+    "plan JSON exceeds the configured size limit": "plan_json_too_large",
+    "plan JSON root is not an object": "invalid_plan_root",
+    "plan is incomplete, not applyable, or has errors": "plan_not_applyable",
+    "resource changes are missing": "resource_changes_missing",
+    "invalid resource change entry": "invalid_resource_change_entry",
+    "invalid resource change metadata": "invalid_resource_change_metadata",
+    "invalid resource action metadata": "invalid_resource_actions",
+    "resource drift metadata is invalid": "invalid_resource_drift",
+    "output change metadata is invalid": "invalid_output_changes",
+    "runtime feature gate is not a literal boolean": "runtime_gate_not_boolean",
+    "required runtime feature gates are missing": "runtime_gates_missing",
+    "runtime feature gates disagree across functions": "runtime_gate_disagreement",
+}
 
 
 class PlanSummaryError(ValueError):
@@ -210,9 +224,19 @@ def main() -> int:
             raise PlanSummaryError("plan JSON exceeds the configured size limit")
         plan = json.loads(raw)
         lines = summarize_plan(plan)
-    except (json.JSONDecodeError, PlanSummaryError, UnicodeDecodeError, RecursionError):
+    except (json.JSONDecodeError, PlanSummaryError, UnicodeDecodeError, RecursionError) as error:
+        if isinstance(error, PlanSummaryError):
+            reason = SAFE_FAILURE_CODES.get(str(error), "plan_validation_failed")
+        elif isinstance(error, json.JSONDecodeError):
+            reason = "invalid_plan_json"
+        elif isinstance(error, UnicodeDecodeError):
+            reason = "invalid_plan_encoding"
+        else:
+            reason = "plan_json_too_deep"
         print(
-            "Terraform plan summary failed closed; raw plan output was suppressed.", file=sys.stderr
+            "Terraform plan summary failed closed; "
+            f"reason={reason}; raw plan output was suppressed.",
+            file=sys.stderr,
         )
         return 2
     for line in lines:
