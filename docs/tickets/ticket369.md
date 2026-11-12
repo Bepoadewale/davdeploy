@@ -55,21 +55,31 @@ claiming customer planning or execution is available.
   does not prove effective permissions.
 - [x] Pricing PR #318 remains held; no customer execution readiness is
   overstated.
-- [ ] All required GitHub checks pass on the final PR head before merge.
+- [x] All seven required GitHub checks passed on final documented head
+  `2a92fc963b95ef41a058ed875c607360aa2bdde7` in run `43146534499`. The ticket
+  records this evidence; this resulting head must itself pass required CI.
 
 ## Acceptance status
 
 - [x] Exact plan/apply and post-deployment runtime evidence recorded.
 - [x] Readiness documentation preserves the role-verification boundary.
-- [ ] Current PR-head CI and review pass before merge.
+- [x] All seven checks passed in run `43146534499` on head
+  `2a92fc963b95ef41a058ed875c607360aa2bdde7`; this ticket update is subject
+  to the required final-head CI run.
 
 ## Tests / validation performed
 
 - Read-only post-apply Lambda configuration and API health checks passed.
 - Exact apply workflow run `43145180803` passed; migration verification
   succeeded.
-- Documentation convention, whitespace, and required GitHub checks are to be
-  recorded against the final PR head.
+- `python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- GitHub Actions run
+  [43146534499](https://github.com/Bepoadewale/davdeploy/actions/runs/43146534499)
+  passed all seven required jobs on head
+  `2a92fc963b95ef41a058ed875c607360aa2bdde7`.
+- The evidence update must pass all seven checks on its final PR head before
+  merge.
 
 ## Evidence files produced
 
