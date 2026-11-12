@@ -47,20 +47,21 @@ deny is source only until a protected release includes it.
 - [x] Full capability scope and existing product claims are preserved.
 - [x] Documentation conventions and diff checks pass.
 - [x] Manual final-diff review found no blocker.
-- [ ] Final-head CI passes all required jobs.
+- [x] Final-head CI passes all required jobs.
 - [x] No deployment or customer workload is part of this documentation PR.
 
 ## Acceptance status
 
 - [x] Status reconciliation is complete and local documentation checks pass;
-  manual review found no blocker and final-head CI is pending.
+  manual review found no blocker and final-head CI passes.
 - [x] No deployment or customer workload is part of this documentation PR.
 
 ## Tests / validation performed
 
 No runtime tests were required. `python scripts/check_doc_conventions.py` and
 `git diff --check` passed. Manual final-diff review found no blocker. No AWS or
-customer workload activity was performed.
+customer workload activity was performed. All seven required checks passed on
+implementation head `3d11b8b` in GitHub Actions run `43163438795`.
 
 ## Evidence files produced
 
