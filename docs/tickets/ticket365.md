@@ -33,7 +33,7 @@ The generated deployment contract rejects a short list of exact argument keys an
 
 ## Acceptance status
 
-- Implemented and locally verified; awaiting final CI and review after preserving credential policy/lifetime controls. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
+- Implemented and locally verified, including the full clean-room cycle required for Terraform validation changes. Awaiting final CI and review. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
 
 ## Tests / validation performed
 
@@ -46,6 +46,7 @@ The generated deployment contract rejects a short list of exact argument keys an
 - After that correction, focused contract tests passed (21), `make verify` passed (1,007 tests), and `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365b make local-proof` passed. Both local Compose projects' containers are stopped; their project networks and Postgres volumes remain.
 - Follow-up review identified valid policy/configuration objects and token lifetime settings in the existing Cognito Terraform root. Detection now exempts the typed policy/configuration blocks and numeric token validity fields while continuing to check secret-valued nested members; dedicated regressions cover those patterns.
 - After the policy/lifetime correction, `make verify` passed (1,011 tests) and `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365c make local-proof` passed. Its containers were stopped; the network and PostgreSQL volume remain.
+- Full clean-room cycle passed from detached worktree `/private/tmp/davdeploy-pr365-cleanroom-20261112` at code commit `a3a5d6d0e70e0dcaaf4c6fa85e3296a7d116cf0b`, using Compose project `davdeploy-pr365-cleanroom`, temporary tmpfs Postgres override, and external venv `/private/tmp/davdeploy-pr365-venv`. Required demos, trace check, and `verify` passed; final clean and absence checks removed only this PR's containers/network, `.local`, and external venv. No named volume was created. The worktree and override are retained.
 
 ## Evidence files produced
 
