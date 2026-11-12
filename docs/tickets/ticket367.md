@@ -41,13 +41,15 @@ Make Nova's typed `secret_reference` meaningful and provider-validated. Today th
 - [x] Provider schema validation proves the nested path exists, is computed, and ends at a string attribute.
 - [x] Unrelated computed outputs, unmanaged RDS passwords, and nonzero/unsupported indices fail closed.
 - [x] Focused tests (50), Ruff, and `make verify` pass after the final consumer restriction.
-- [ ] Full local clean-room cycle and required CI are pending.
+- [x] Full local clean-room cycle passes.
+- [ ] Required CI is pending.
 - [x] Docs explain that plan-role support, runtime `GetSecretValue` authorization, external customer secret registration, and hosted execution remain follow-up work.
 
 ## Acceptance status
 
 - [x] Implementation complete; focused tests (50), `make verify` (1,019 tests), Ruff, and pinned AWS provider 5.100.0 schema check pass.
-- [ ] Full clean-room cycle and required CI are pending.
+- [x] Full clean-room cycle passed at code commit `ab90d6c66393d521560f00221857b8dfe619b710`.
+- [ ] Required CI is pending.
 
 ## Tests / validation performed
 
@@ -55,12 +57,15 @@ Make Nova's typed `secret_reference` meaningful and provider-validated. Today th
 - `make lint` — passed.
 - `make verify` — 1,019 tests passed; Actions configuration, Ruff, OpenAPI snapshot, and `docker compose config --quiet` passed. One existing Starlette/httpx deprecation warning remains.
 - Pinned schema check: initialized Terraform provider `hashicorp/aws` 5.100.0 from the repository lockfile and validated an RDS-managed secret ARN flowing into a Lambda `_SECRET_ARN` environment variable. Compiled value is only a Terraform reference expression.
+- Full clean-room cycle passed in detached worktree `/private/tmp/davdeploy-pr367-cleanroom-20261112` at code commit `ab90d6c66393d521560f00221857b8dfe619b710`, with isolated Compose project `davdeploy-pr367-cleanroom-20261112` and a tmpfs Postgres override.
+- Clean-room sequence: `clean-local`, `bootstrap-local`, `smoke`, `api-contract`, `customer-plan-e2e`, `seed-demo-data`, simple/complex/degraded/Day-2/policy-failure/readiness-failure demos, `trace-check`, `verify`, and final `clean-local`.
+- Final absence checks confirmed no project containers, network, named volume, `.venv`, or `.local` remained. The worktree, override, and images remain retained.
 - No AWS, Bedrock, customer plan/apply, or infrastructure changes occurred.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket367.md`
-- A PR-numbered source-only security test evidence file will be added before review-ready status.
+- `docs/test/test367.md`
 
 ## Boundaries
 

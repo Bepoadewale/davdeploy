@@ -3,7 +3,7 @@
 Date: 2026-11-12
 Execution type: Static contract tests, pinned provider-schema validation, and isolated local clean-room proof
 Customer repository: `Bepoadewale/davdeploy`
-Commit: Pending implementation commit
+Commit: `ab90d6c66393d521560f00221857b8dfe619b710` (implementation)
 AWS account: Not accessed
 AWS region: Not accessed
 
@@ -19,7 +19,7 @@ This does not add RDS to the Nova plan-access allowlist, retrieve a secret, gran
 - `make lint`: passed.
 - `make verify`: 1,019 tests passed; Actions configuration, Ruff, OpenAPI snapshot, and Compose config passed. One existing Starlette/httpx deprecation warning remains.
 - Actual pinned provider schema check: Terraform initialized `hashicorp/aws` 5.100.0 from `apps/api/src/davdeploy/terraform-provider.lock.hcl`; an RDS-managed secret ARN flowing into a Lambda `_SECRET_ARN` environment variable passed schema validation. The compiled value was only the Terraform expression.
-- Full clean-room cycle: pending.
+- Full clean-room cycle: passed in detached worktree `/private/tmp/davdeploy-pr367-cleanroom-20261112` at implementation commit `ab90d6c66393d521560f00221857b8dfe619b710`. Sequence covered clean, bootstrap, smoke, API contract, customer-plan E2E, seed data, simple/complex/degraded/Day-2/policy/readiness-failure demos, trace check, verify, and final clean.
 - Required GitHub CI: pending.
 
 ## Observed result
@@ -34,6 +34,7 @@ No AWS, Bedrock, customer plan/apply, or infrastructure mutation was performed. 
 
 - No AWS resources or customer workload resources were created or changed.
 - Terraform downloaded the locked AWS provider 5.100.0 and wrote its schema JSON under a PR-specific `/private/tmp/davdeploy-rds-schema367.*` directory. The directory is retained for reproducibility.
+- The clean-room cycle used a separate, fresh Git worktree and a Compose override that mounted PostgreSQL data as tmpfs; no named volume was created.
 
 ## Commands executed
 
@@ -42,14 +43,15 @@ No AWS, Bedrock, customer plan/apply, or infrastructure mutation was performed. 
 - `make verify`
 - `terraform init -backend=false -input=false -lockfile=readonly -no-color` in a temporary schema workspace using `apps/api/src/davdeploy/terraform-provider.lock.hcl`
 - `terraform providers schema -json` and a local validation of RDS managed secret ARN output flowing into a Lambda `_SECRET_ARN` environment variable
-- Full clean-room cycle: pending
+- Full clean-room cycle ran `clean-local`, `bootstrap-local`, `smoke`, `api-contract`, `customer-plan-e2e`, `seed-demo-data`, `demo-simple`, `demo-complex`, `demo-degraded`, `demo-day2`, `demo-failure`, `demo-readiness-failure`, `trace-check`, `verify`, and final `clean-local`.
 - `python scripts/check_doc_conventions.py`
 - `git diff --check`
 
 ## Teardown
 
 - No cloud resources were created, so no cloud teardown was needed.
-- The temporary provider schema directory and provider cache remain retained; no local files or Docker resources were deleted.
+- The temporary provider schema directory and provider cache remain retained. Only the exact clean-room project's containers and network were removed; no other project data was deleted.
+- The clean-room project's containers and network were stopped and removed by its final scoped `clean-local`; its tmpfs database left no volume. Absence checks found no project containers/network/volume, worktree `.venv`, or `.local`.
 
 ## Limitations
 
