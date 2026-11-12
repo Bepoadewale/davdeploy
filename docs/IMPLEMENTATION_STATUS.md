@@ -64,15 +64,18 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current merged backend source — 2026-11-12, after PR #363
+# Current merged backend source — 2026-11-12, after PR #365
 
-Backend `main` is commit `4d5997c45c2858c4d5f5b9151ebf793d685f5353` (PR #363);
+Backend `main` is commit `def21021a44c5ec39ddafc295c4c8c6b5ee7b896` (PR #365);
 merged-main CI run
-[43123201873](https://github.com/Bepoadewale/davdeploy/actions/runs/43123201873)
+[43132143239](https://github.com/Bepoadewale/davdeploy/actions/runs/43132143239)
 passed all seven jobs. PR #363 adds actual-plan DynamoDB point-in-time recovery
-unknown checks and requires enabled recovery when the proposal contract says
-backups are required. This is merged source, not deployed control-plane or
-customer-plan evidence. The latest hosted deployment remains PR #361 below.
+checks and enforces proposal-declared backup requirements. PR #365 rejects
+common literal credential and secret values unless represented by a typed
+secret reference. These are merged source changes, not deployed control-plane
+or customer-plan evidence. PR #365 does not resolve customer-owned secret
+references or enable runtime secret lookup. The latest hosted deployment
+remains PR #361 below.
 Frontend PR #102 also remains a draft; it contains local-fixture implementation
 of paginated plan history and latest Nova plan-run status, but is not merged,
 deployed, or verified with an authenticated production customer.
