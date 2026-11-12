@@ -1,0 +1,104 @@
+# ticket379 — support bounded VPC metadata reads during Nova planning
+
+PR: [#379](https://github.com/Bepoadewale/davdeploy/pull/379) (draft)
+Branch: `feat/nova-network-plan-read-profile-379`
+
+## Problem / goal
+
+Nova's fixed customer plan-role profile does not include EC2 network metadata
+reads. Terraform cannot safely plan a composed private application graph that
+uses VPCs, subnets, or security groups until the plan role can inspect the
+required network metadata. Add only the fixed read-only EC2 API actions needed
+by those resource types, restricted to the trusted plan region in each run.
+Do not add mutation actions or general EC2 read access. Route tables, internet
+gateways, NAT, and VPC endpoints remain unsupported in this slice.
+
+## Current repo state
+
+Backend `main` is `09bdb471a995d77f7eac95d9ca4d6f6899b95d04` after PR #378.
+The implementation now permits VPC, subnet, and security-group proposals.
+Route tables, internet gateways, NAT, and VPC endpoints remain rejected. EC2
+Describe APIs do not support resource-level permissions, so their session
+policy uses a trusted-region condition and an explicit deny for region
+mismatches. The per-run action list is narrowed to service families present in
+the proposal so a composed profile can stay within STS's 2,048-character
+session-policy limit.
+
+## Research / references used
+
+- AWS Service Authorization Reference, Amazon EC2:
+  https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html
+- Official HashiCorp AWS provider documentation for VPC, subnet, and security
+  group resources:
+  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc
+  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet
+  https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
+
+## Work planned for the PR
+
+- Define the smallest verified fixed EC2 Describe action list needed for the
+  initial private-network resource set.
+- Add supported resource types and a region-bound session-policy statement;
+  preserve explicit denies for writes and other services, including attempts
+  to use the allowed network read actions outside the trusted region.
+- Keep the customer role template and action contract synchronized.
+- Add negative and positive tests for region scoping, proposal gating, and
+  prohibited EC2 mutations.
+- Record exact local verification and limitations; keep role deployment and
+  hosted execution gates disabled.
+
+## Acceptance criteria
+
+- [x] Only verified EC2 metadata-read actions are enabled; no EC2 mutations,
+      wildcard service patterns, or general `Describe*` permission are added.
+- [x] Session access is granted only for supported network proposals and the
+      trusted region, with an explicit deny outside it.
+- [x] Existing S3, RDS, IAM, Lambda, API Gateway, DynamoDB, and SQS scope tests
+      remain passing and policy size stays within AWS limits.
+- [x] Focused tests, `make verify`, Terraform validation, documentation
+      conventions, and clean-room proof pass.
+- [x] All limitations and the fact that no AWS/customer role was changed are
+      documented.
+- [x] Manual final-diff security review and required CI pass. The IAM policy
+      simulator confirms the trusted-region allow, out-of-region explicit deny,
+      and mutation deny; no separate reviewer approval is recorded.
+
+## Acceptance status
+
+- [x] Implementation, local verification, manual security review, and PR CI
+      complete; no customer-role deployment or hosted execution is claimed.
+
+## Tests / validation performed
+
+- Focused policy and customer-role contract checks pass locally (39 tests).
+- `make verify` passed with 1,050 tests; Ruff, OpenAPI, Actions configuration,
+  and Docker Compose checks passed.
+- `make terraform-validate`, documentation conventions, and `git diff --check`
+  passed.
+- `make local-proof` passed using a dedicated Docker subnet after the default
+  address pools were exhausted. The exact commands and boundary are recorded
+  in `docs/test/test379.md`.
+- Final diff reviewed manually: the mixed-proposal resource-scope deny includes
+  EC2 actions under the region mismatch condition; its simulator outcomes are
+  recorded in `docs/test/test379.md`. Required CI run `43247069777` passed all
+  seven jobs on head `78740fa`. No separate reviewer approval is recorded.
+
+## Evidence files produced
+
+- `docs/tickets/ticket379.md`
+- `docs/test/test379.md` (required for this executable/IAM-profile change)
+
+## Boundaries
+
+- This changes source policy construction only. It does not deploy the plan
+  role, enable hosted planning, create customer resources, or permit EC2
+  mutations.
+- EC2 Describe calls without resource-level authorization can expose regional
+  network metadata; the ticket must document the exact action and condition
+  boundary that the implementation enforces.
+
+## Follow-up work
+
+- Install and verify the customer plan-only role, prove effective permissions,
+  and run the isolated hosted saved-plan flow only after the separate state,
+  pricing, and approval dependencies are met.
