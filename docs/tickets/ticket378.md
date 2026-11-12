@@ -53,6 +53,8 @@ planning gates.
 - `git diff --check` — passed.
 - Required GitHub CI run `43200068425` — all seven checks passed for head
   `d9ab36d`.
+- Final-head run `43200776989` passed all seven required checks on
+  `642dc18c0f2722ed6decc8339d58465287ee812c`; manual review found no blocker.
 
 ## Evidence files produced
 
