@@ -42,14 +42,18 @@ allowlisted reason codes that never include plan values or raw parser errors.
 - [x] No raw JSON, plan values, provider messages, or untrusted input is emitted.
 - [x] The control-plane plan sanitizer regression suite passes (14 tests).
 - [x] Documentation conventions, diff checks, and full verification pass.
-- [ ] Final-head review and required CI pass.
+- [x] Reconciliation implementation head `2d8bfcaff966e8ae51a9fcc0fcff1538ece116c3`
+  passed all seven required CI jobs in run `43270562515`; manual code and test
+  review found no blocker.
+- [ ] PR is merged.
 - [ ] The protected plan is re-run only after this diagnostic change is merged;
   any resulting plan must be reviewed before apply.
 
 ## Acceptance status
 
 - [x] Implementation and local verification are complete.
-- [ ] Final-head CI and review remain pending.
+- [x] CI and review passed for implementation head `2d8bfcaff966e8ae51a9fcc0fcff1538ece116c3`.
+- [ ] Merge remains pending.
 
 ## Tests / validation performed
 
@@ -57,8 +61,10 @@ allowlisted reason codes that never include plan values or raw parser errors.
 `git diff --check` passed. `.venv/bin/pytest tests/test_terraform_plan_summary.py
 -q` passed (14 tests). `make verify` passed (1,052 tests; Ruff, OpenAPI
 snapshot, and Docker Compose checks passed; one existing Starlette/httpx
-deprecation warning). The failed plan run ended before a saved plan was
-published; no AWS resources were applied or changed.
+deprecation warning). CI run `43270562515` passed all seven required jobs for
+implementation head `2d8bfcaff966e8ae51a9fcc0fcff1538ece116c3`; manual code and
+test review found no blocker. The failed plan run ended before a saved plan
+was published; no AWS resources were applied or changed.
 
 ## Evidence files produced
 
