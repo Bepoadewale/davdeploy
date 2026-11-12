@@ -22,32 +22,39 @@ Make Nova's typed `secret_reference` meaningful and provider-validated. Today th
 - `apps/api/src/davdeploy/terraform-provider.lock.hcl`
 - AWS RDS-managed master password documentation: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html
 - AWS `MasterUserSecret` API: https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_MasterUserSecret.html
-- AWS provider 5.87 `aws_db_instance` schema documentation: https://registry.terraform.io/providers/hashicorp/aws/5.87.0/docs/resources/db_instance
+- AWS provider 5.100 `aws_db_instance` schema documentation: https://registry.terraform.io/providers/hashicorp/aws/5.100.0/docs/resources/db_instance
 
 ## Work planned for the PR
 
 - Add a strict, bounded grammar for provider output paths with literal zero index support for single-item nested output blocks.
 - Resolve output paths through the pinned provider schema and require the leaf to be a computed output.
 - Permit `secret_reference` declarations only for RDS-managed master-user secret ARN paths on RDS instance/cluster resources with `manage_master_user_password=true`.
+- Permit secret ARNs only as values of Lambda environment variables whose names end in `_SECRET_ARN`.
 - Reject secret-reference type forgery from unrelated computed fields and reject unsupported path syntax.
 - Keep secret values out of proposals and Terraform configuration; generated references compile only to Terraform resource-output expressions.
 
 ## Acceptance criteria
 
-- [ ] Direct output references continue to validate and compile unchanged.
-- [ ] Only the supported RDS-managed secret ARN paths can be declared as `secret_reference` outputs.
-- [ ] Provider schema validation proves each nested path exists and ends at a computed string attribute.
-- [ ] Unknown resource paths, indices, malformed paths, unrelated output types, and unmanaged RDS passwords fail closed.
-- [ ] Focused tests, `make verify`, full local clean-room cycle, and required CI pass.
-- [ ] Docs explain that plan-role support, runtime `GetSecretValue` authorization, external customer secret registration, and hosted execution remain follow-up work.
+- [x] Direct output references continue to validate and compile unchanged.
+- [x] Only `aws_db_instance` and `aws_rds_cluster` RDS-managed `master_user_secret[0].secret_arn` paths can be declared as `secret_reference` outputs, and only when `manage_master_user_password=true`.
+- [x] Secret ARNs can only be consumed by Lambda environment variables named with the `_SECRET_ARN` suffix.
+- [x] Provider schema validation proves the nested path exists, is computed, and ends at a string attribute.
+- [x] Unrelated computed outputs, unmanaged RDS passwords, and nonzero/unsupported indices fail closed.
+- [x] Focused tests (50), Ruff, and `make verify` pass after the final consumer restriction.
+- [ ] Full local clean-room cycle and required CI are pending.
+- [x] Docs explain that plan-role support, runtime `GetSecretValue` authorization, external customer secret registration, and hosted execution remain follow-up work.
 
 ## Acceptance status
 
-- [ ] Implementation and validations pending.
+- [x] Implementation complete; focused tests (50), `make verify` (1,019 tests), Ruff, and pinned AWS provider 5.100.0 schema check pass.
+- [ ] Full clean-room cycle and required CI are pending.
 
 ## Tests / validation performed
 
-- Bootstrap commit only; implementation validation pending.
+- `PYTHONPATH=apps/api/src .venv/bin/python -m pytest -q tests/test_nova_plan_access.py tests/test_generated_deployment_contract.py tests/test_generated_provider_validation.py` — 50 passed.
+- `make lint` — passed.
+- `make verify` — 1,019 tests passed; Actions configuration, Ruff, OpenAPI snapshot, and `docker compose config --quiet` passed. One existing Starlette/httpx deprecation warning remains.
+- Pinned schema check: initialized Terraform provider `hashicorp/aws` 5.100.0 from the repository lockfile and validated an RDS-managed secret ARN flowing into a Lambda `_SECRET_ARN` environment variable. Compiled value is only a Terraform reference expression.
 - No AWS, Bedrock, customer plan/apply, or infrastructure changes occurred.
 
 ## Evidence files produced

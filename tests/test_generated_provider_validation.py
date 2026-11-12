@@ -37,7 +37,48 @@ def schema():
                             },
                             "block_types": {},
                         }
-                    }
+                    },
+                    "aws_db_instance": {
+                        "block": {
+                            "attributes": {
+                                "manage_master_user_password": {
+                                    "type": "bool",
+                                    "optional": True,
+                                },
+                                "master_user_secret": {
+                                    "type": [
+                                        "list",
+                                        ["object", {"secret_arn": "string", "secret_status": "string"}],
+                                    ],
+                                    "computed": True,
+                                    "sensitive": False,
+                                },
+                            },
+                            "block_types": {},
+                        }
+                    },
+                    "aws_lambda_function": {
+                        "block": {
+                            "attributes": {
+                                "function_name": {"type": "string", "required": True},
+                            },
+                            "block_types": {
+                                "environment": {
+                                    "nesting_mode": "list",
+                                    "max_items": 1,
+                                    "block": {
+                                        "attributes": {
+                                            "variables": {
+                                                "type": ["map", "string"],
+                                                "optional": True,
+                                            }
+                                        },
+                                        "block_types": {},
+                                    },
+                                }
+                            },
+                        }
+                    },
                 },
             }
         }
@@ -156,3 +197,89 @@ def test_schema_validation_accepts_typed_resource_output_reference():
     )
 
     validate_generated_proposal(generated, document)
+
+
+def test_schema_validation_accepts_rds_managed_nested_secret_arn_reference():
+    document = schema()
+    document["provider_schemas"][PROVIDER]["resource_schemas"][
+        "aws_test_resource"
+    ]["block"]["attributes"]["input"] = {"type": "string", "optional": True}
+    generated = GeneratedDeploymentProposal.model_validate(
+        {
+            "contract_version": "1.0",
+            "source_revision": "revision",
+            "context_digest": "a" * 64,
+            "requirements": {"region": "us-east-1"},
+            "resources": [
+                {
+                    "resource_id": "database",
+                    "resource_type": "aws_db_instance",
+                    "name": "database",
+                    "arguments": {"manage_master_user_password": True},
+                    "outputs": [
+                        {
+                            "name": "master_user_secret[0].secret_arn",
+                            "value_type": "secret_reference",
+                        }
+                    ],
+                    "rationale": "Uses an RDS-managed master password.",
+                },
+                {
+                    "resource_id": "application",
+                    "resource_type": "aws_lambda_function",
+                    "name": "application",
+                    "arguments": {
+                        "function_name": "application",
+                        "environment": [
+                            {
+                                "variables": {
+                                    "DATABASE_SECRET_ARN": {
+                                        "kind": "resource_reference",
+                                        "resource_id": "database",
+                                        "output_name": "master_user_secret[0].secret_arn",
+                                        "value_type": "secret_reference",
+                                    }
+                                }
+                            }
+                        ],
+                    },
+                    "rationale": "Receives only the secret ARN reference.",
+                },
+            ],
+        }
+    )
+
+    validate_generated_proposal(generated, document)
+
+
+def test_schema_validation_rejects_nested_reference_path_missing_from_provider():
+    document = schema()
+    document["provider_schemas"][PROVIDER]["resource_schemas"]["aws_db_instance"][
+        "block"
+    ]["attributes"].pop("master_user_secret")
+    generated = GeneratedDeploymentProposal.model_validate(
+        {
+            "contract_version": "1.0",
+            "source_revision": "revision",
+            "context_digest": "a" * 64,
+            "requirements": {"region": "us-east-1"},
+            "resources": [
+                {
+                    "resource_id": "database",
+                    "resource_type": "aws_db_instance",
+                    "name": "database",
+                    "arguments": {"manage_master_user_password": True},
+                    "outputs": [
+                        {
+                            "name": "master_user_secret[0].secret_arn",
+                            "value_type": "secret_reference",
+                        }
+                    ],
+                    "rationale": "Uses an RDS-managed master password.",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(GeneratedProviderSchemaError, match="not a provider output"):
+        validate_generated_proposal(generated, document)

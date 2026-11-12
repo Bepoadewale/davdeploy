@@ -282,11 +282,16 @@ def test_composed_api_storage_database_async_profile_fits_sts_policy_limit():
 
 
 def test_unsupported_resource_type_fails_before_policy_creation():
-    source = resource(
-        "secret",
-        "aws_secretsmanager_secret",
-        {},
+    # Bypass the contract to isolate the plan-access allowlist. The contract
+    # rejects this forged secret-reference output before a runner can use it.
+    source = GeneratedResource.model_construct(
+        resource_id="secret",
+        resource_type="aws_secretsmanager_secret",
+        name="secret",
+        arguments={},
+        depends_on=(),
         outputs=(GeneratedOutput(name="arn", value_type="secret_reference"),),
+        rationale="Unsupported provider resource regression fixture.",
     )
     unsupported = resource(
         "secret-version",
@@ -302,7 +307,15 @@ def test_unsupported_resource_type_fails_before_policy_creation():
     )
     with pytest.raises(NovaPlanAccessError, match="unsupported plan resource types"):
         build_nova_plan_access_policy(
-            proposal(source, unsupported), account_id=ACCOUNT_ID, region=REGION
+            GeneratedDeploymentProposal.model_construct(
+                contract_version="1.0",
+                source_revision="revision-1",
+                context_digest="a" * 64,
+                resources=(source, unsupported),
+                requirements=WorkloadRequirements(region=REGION),
+            ),
+            account_id=ACCOUNT_ID,
+            region=REGION,
         )
 
 
