@@ -45,7 +45,7 @@ planning gates.
 ## Acceptance status
 
 - [x] Deployment evidence and status reconciliation are complete.
-- [x] Final-head CI passed for source/evidence head `d9ab36d` in run `43200068425`; final-diff review found no blocker.
+- [x] Final-head CI passed for `1d3a8e3c6d210424f1dd2c1a6764bba28df6d3dd` in run `43201578281`; final-diff review found no blocker.
 
 ## Tests / validation performed
 
@@ -55,6 +55,8 @@ planning gates.
   `d9ab36d`.
 - Final-head run `43200776989` passed all seven required checks on
   `642dc18c0f2722ed6decc8339d58465287ee812c`; manual review found no blocker.
+- Final-head run `43201578281` passed all seven required checks on
+  `1d3a8e3c6d210424f1dd2c1a6764bba28df6d3dd`.
 
 ## Evidence files produced
 
