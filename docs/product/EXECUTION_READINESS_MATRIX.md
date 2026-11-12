@@ -2,18 +2,19 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-12, after PR #379
+## Current backend source — 2026-11-12, after PR #381
 
 Backend `main` is merge commit
-`c3046f37f0d09fb0b1a26c26cab4be9ffe7d881c`; merged-main CI run
-[43249113529](https://github.com/Bepoadewale/davdeploy/actions/runs/43249113529)
+`a12205972cc124d08d85845f30c9b574f7cf87fd`; merged-main CI run
+[43257709757](https://github.com/Bepoadewale/davdeploy/actions/runs/43257709757)
 passed all seven jobs. Current source includes the Nova intent scope guard
 (PR #377), RDS planner metadata access (#371–#372), actual-plan denial of
 unbound Secrets Manager value-read permissions (#374), and PR #379's bounded
 regional EC2 metadata reads for proposed VPCs, subnets, and security groups.
-The #379 code and setup template are merged source only; the customer role
-template is not deployed or installed, and effective customer-role permissions
-have not been verified. Out-of-scope intent
+The PR #379 code and PR #381 customer plan-role template are deployed/published.
+The immutable `8c5d…` template URL is verified, and the previous `f3d9…` URL
+remains available. No customer role is installed, and effective customer-role
+permissions have not been verified. Out-of-scope intent
 requests receive a fixed HTTP 422 explanation and are not stored as workload
 intents; DavDeploy is not a general-purpose question-answering assistant. Two
 bounded synthetic Bedrock checks distinguished stock advice from a
@@ -25,26 +26,26 @@ PR #102 remains draft/local-fixture work without an authenticated production
 customer journey. No Nova-generated customer plan or workload has been
 applied, operated, health-checked, recovered, or destroyed.
 
-## Current hosted release — 2026-11-12, PR #377 source
+## Current hosted release — 2026-11-12, PR #381 source
 
-Backend commit `40439ab6b493a40c522102fa88de1c48043b4177` was deployed through
-protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865)
+Backend commit `a12205972cc124d08d85845f30c9b574f7cf87fd` was deployed through
+protected plan [43260003885](https://github.com/Bepoadewale/davdeploy/actions/runs/43260003885)
 and exact saved-plan apply
-[43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048),
-GitHub deployment `7733504560`. The plan was complete/applyable with no errors:
-0 additions, 6 in-place Lambda package updates, 0 destroys/replacements, 0
-drift, and 8 output changes. It updated all six control-plane Lambda packages.
-The apply verified the saved-plan manifest and digest, changed 0 resources
-through addition or deletion, and completed database migrations successfully.
+[43261766144](https://github.com/Bepoadewale/davdeploy/actions/runs/43261766144),
+GitHub deployment `7743511328`. The plan was complete/applyable with no errors:
+0 additions, 6 in-place Lambda package updates, 0 destroys/replacements, and
+0 drift. The apply verified its saved-plan manifest and digest and completed
+database migrations successfully.
 
 All six control-plane Lambdas are Active/Successful with common
-`CodeSha256=/q4CbzB47savx6EUbTIWj4ASIao3eCdNDKSbfbkkBEg=`; `/healthz` returned
+`CodeSha256=6B3DVTL6dXaQ6K5leePzfmckPO+2/3BTKenPHpBOoqQ=`; `/healthz` returned
 HTTP 200 in AWS account `654654474502`, region `us-east-1`. The API runtime
 reports the Nova plan runner, credential broker, plan reviews, Terraform state
 API, and hosted certification disabled; only plan-role trust/account
-verification is enabled. PR #377's scope guard is now in the deployed API
-package, but no authenticated customer intent request or customer workload
-journey was executed by this release. See [`test378.md`](../test/test378.md).
+verification is enabled. The published customer template has not been installed
+in a customer account, and no authenticated customer intent request or customer
+workload journey was executed by this release. See
+[`test382.md`](../test/test382.md).
 
 ## Historical hosted release — 2026-11-12, PR #375 source
 
