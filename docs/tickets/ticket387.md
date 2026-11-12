@@ -1,6 +1,6 @@
 # ticket387 — summarize runtime gates from protected plan inputs
 
-PR: pending
+PR: [#387](https://github.com/Bepoadewale/davdeploy/pull/387) (draft)
 Branch: `fix/summary-runtime-gates-from-inputs-387`
 
 ## Problem / goal
@@ -42,23 +42,27 @@ missing, malformed, or conflicting values.
 
 ## Acceptance criteria
 
-- [ ] Runtime gate values can be summarized from their typed Terraform input
+- [x] Runtime gate values can be summarized from their typed Terraform input
   variables when nested resource values are omitted.
-- [ ] Resource values and input variables that disagree fail closed.
-- [ ] Missing or malformed gate inputs fail closed; no sensitive or unrelated
+- [x] Resource values and input variables that disagree fail closed.
+- [x] Missing or malformed gate inputs fail closed; no sensitive or unrelated
   plan values are exposed.
-- [ ] Focused tests, full verification, documentation checks, and required CI
-  pass.
+- [x] Focused tests (22) and full verification (1,060 tests) pass.
+- [ ] Documentation checks and required CI pass.
 - [ ] A fresh protected plan produces a safe exact-action summary and saved
   plan; no apply is dispatched by this change.
 
 ## Acceptance status
 
-- [ ] Implementation and local verification pending.
+- [x] Implementation and local verification complete.
+- [ ] Documentation checks and final-head CI pending.
 
 ## Tests / validation performed
 
-- None yet.
+- `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 22 passed.
+- `make verify`: 1,060 passed; Ruff, Actions configuration, OpenAPI, and Docker
+  Compose checks passed. One existing Starlette/httpx deprecation warning.
+- Documentation conventions and `git diff --check` pending final review.
 
 ## Evidence files produced
 

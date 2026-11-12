@@ -27,6 +27,17 @@ FLAG_NAMES = (
     "ALLOW_CLOUD_PLAN",
     "ALLOW_CLOUD_APPLY",
 )
+RUNTIME_GATE_VARIABLES = {
+    "DAVDEPLOY_NOVA_PLAN_RUNNER_READY": "enable_nova_plan_only_runner",
+    "DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED": "enable_nova_plan_role_verification",
+    "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED": "enable_nova_plan_credential_broker",
+    "DAVDEPLOY_NOVA_PLAN_REVIEWS_ENABLED": "enable_nova_plan_reviews",
+    "DAVDEPLOY_TERRAFORM_STATE_ENABLED": "enable_nova_terraform_state_api",
+    "DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION": "enable_serverless_api_hosted_certification",
+    "DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED": "enable_customer_cloud_execution",
+    "ALLOW_CLOUD_PLAN": "enable_customer_cloud_execution",
+    "ALLOW_CLOUD_APPLY": "enable_customer_cloud_execution",
+}
 SAFE_FAILURE_CODES = {
     "plan JSON exceeds the configured size limit": "plan_json_too_large",
     "plan JSON root is not an object": "invalid_plan_root",
@@ -109,7 +120,7 @@ def _module_resources(module: Any):
             stack.extend(children)
 
 
-def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
+def _runtime_flags(plan: dict[str, Any]) -> tuple[dict[str, set[bool]], bool]:
     flags: dict[str, set[bool]] = defaultdict(set)
     gate_presence = {"planned": set(), "change": set()}
     shape = {
@@ -168,6 +179,29 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
         if isinstance(change, dict):
             add_runtime_flags(change.get("after"), source="change")
 
+    # The control-plane Terraform configuration maps these exact input
+    # variables to the fixed Lambda environment gates above. Provider plans can
+    # omit a partially unknown environment map, so use the typed plan inputs
+    # only for values absent from both resource representations. Any present
+    # resource value is still compared against its corresponding input.
+    plan_variables = plan.get("variables")
+    plan_variables = plan_variables if isinstance(plan_variables, dict) else {}
+    used_plan_inputs = False
+    for gate_name, variable_name in RUNTIME_GATE_VARIABLES.items():
+        if variable_name not in plan_variables:
+            continue
+        variable = plan_variables[variable_name]
+        raw_value = variable.get("value") if isinstance(variable, dict) else None
+        if isinstance(raw_value, bool):
+            value = raw_value
+        elif isinstance(raw_value, str) and raw_value.lower() in {"true", "false"}:
+            value = raw_value.lower() == "true"
+        else:
+            raise PlanSummaryError("runtime feature gate is not a literal boolean")
+        if not flags[gate_name]:
+            used_plan_inputs = True
+        flags[gate_name].add(value)
+
     missing = sorted(set(FLAG_NAMES) - set(flags))
     if missing:
         safe_missing = tuple(name for name in FLAG_NAMES if name in missing)
@@ -196,7 +230,7 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
         )
     if any(len(values) != 1 for values in flags.values()):
         raise PlanSummaryError("runtime feature gates disagree across functions")
-    return flags
+    return flags, used_plan_inputs
 
 
 def summarize_plan(plan: Any) -> list[str]:
@@ -256,7 +290,7 @@ def summarize_plan(plan: Any) -> list[str]:
                 )
             )
 
-    flags = _runtime_flags(plan)
+    flags, used_plan_inputs = _runtime_flags(plan)
     version = plan.get("terraform_version")
     if not isinstance(version, str) or not SAFE_TERRAFORM_VERSION.fullmatch(version):
         version = "unknown"
@@ -281,6 +315,8 @@ def summarize_plan(plan: Any) -> list[str]:
         lines.append("resource_details=truncated")
     for name in FLAG_NAMES:
         lines.append(f"runtime_flag {name}={next(iter(flags[name]))}")
+    if used_plan_inputs:
+        lines.append("runtime_flag_source=terraform_plan_input_variables")
     return lines
 
 

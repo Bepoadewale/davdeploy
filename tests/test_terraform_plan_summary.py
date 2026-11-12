@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ assert SPEC is not None and SPEC.loader is not None
 terraform_plan_summary = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(terraform_plan_summary)
 FLAG_NAMES = terraform_plan_summary.FLAG_NAMES
+RUNTIME_GATE_VARIABLES = terraform_plan_summary.RUNTIME_GATE_VARIABLES
 PlanSummaryError = terraform_plan_summary.PlanSummaryError
 summarize_plan = terraform_plan_summary.summarize_plan
 
@@ -129,6 +131,82 @@ def test_runtime_gate_disagreement_between_plan_representations_fails_closed(
     assert "reason=runtime_gate_disagreement" in output.err
     assert "sensitive-description-value" not in output.err
     assert "private-variable-value" not in output.err
+
+
+def test_runtime_gate_inputs_fill_values_omitted_from_lambda_resources():
+    plan = _plan()
+    for resource in plan["planned_values"]["root_module"]["resources"]:
+        resource["values"]["environment"]["variables"] = {"PRIVATE_TOKEN": "hidden"}
+    for resource in plan["resource_changes"]:
+        if resource["type"] == "aws_lambda_function":
+            resource["change"]["after"]["environment"] = {
+                "variables": {"PRIVATE_TOKEN": "hidden"}
+            }
+    plan["variables"].update(
+        {
+            "enable_nova_plan_only_runner": {"value": True},
+            "enable_nova_plan_role_verification": {"value": True},
+            "enable_nova_plan_credential_broker": {"value": True},
+            "enable_nova_plan_reviews": {"value": True},
+            "enable_nova_terraform_state_api": {"value": True},
+            "enable_serverless_api_hosted_certification": {"value": False},
+            "enable_customer_cloud_execution": {"value": False},
+        }
+    )
+
+    summary = "\n".join(summarize_plan(plan))
+
+    assert "runtime_flag DAVDEPLOY_NOVA_PLAN_RUNNER_READY=True" in summary
+    assert "runtime_flag DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION=False" in summary
+    assert "runtime_flag ALLOW_CLOUD_APPLY=False" in summary
+    assert "runtime_flag_source=terraform_plan_input_variables" in summary
+    assert "hidden" not in summary
+    assert "PRIVATE_TOKEN" not in summary
+
+
+def test_runtime_gate_plan_inputs_must_match_present_resource_values(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["variables"]["enable_customer_cloud_execution"] = {"value": False}
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "reason=runtime_gate_disagreement" in output.err
+    assert "private-variable-value" not in output.err
+
+
+def test_runtime_gate_plan_inputs_reject_non_boolean_values_without_echoing_them(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["variables"]["enable_customer_cloud_execution"] = {
+        "value": "secret-runtime-value"
+    }
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "reason=runtime_gate_not_boolean" in output.err
+    assert "secret-runtime-value" not in output.err
+
+
+def test_runtime_gate_variable_map_matches_control_plane_terraform():
+    terraform = (
+        Path(__file__).resolve().parents[1]
+        / "infrastructure/terraform/serverless-control-plane/main.tf"
+    ).read_text(encoding="utf-8")
+
+    for gate_name, variable_name in RUNTIME_GATE_VARIABLES.items():
+        assert re.search(
+            rf"^\s*{re.escape(gate_name)}\s*=\s*tostring\(var\.{re.escape(variable_name)}\)\s*$",
+            terraform,
+            re.MULTILINE,
+        )
+    assert terraform.count("variables = local.runtime_environment") == 3
 
 
 def test_summary_reports_drift_and_output_counts_without_values():
