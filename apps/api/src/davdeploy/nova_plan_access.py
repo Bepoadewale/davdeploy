@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 
-PLAN_ROLE_ACCESS_POLICY_VERSION = "nova-plan-read-v1.2"
+PLAN_ROLE_ACCESS_POLICY_VERSION = "nova-plan-read-v1.3"
 
 # Role-level action patterns bound the possible reads. The worker session gets
 # an exact provider-version action list and exact resource ARNs. The patterns
@@ -30,6 +30,7 @@ PLAN_ROLE_READ_ACTIONS = (
     "lambda:List*",
     "rds:DescribeDBClusters",
     "rds:DescribeDBInstances",
+    "rds:DescribeDBSubnetGroups",
     "rds:ListTagsForResource",
     "s3:GetAccelerateConfiguration",
     "s3:GetBucket*",
@@ -85,6 +86,10 @@ PLAN_SCOPED_READ_ACTIONS: dict[str, tuple[str, ...]] = {
     "iam-policy": ("iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"),
     "rds-cluster": ("rds:DescribeDBClusters", "rds:ListTagsForResource"),
     "rds-instance": ("rds:DescribeDBInstances", "rds:ListTagsForResource"),
+    "rds-subnet-group": (
+        "rds:DescribeDBSubnetGroups",
+        "rds:ListTagsForResource",
+    ),
 }
 
 SUPPORTED_PLAN_RESOURCE_TYPES = frozenset(
@@ -106,6 +111,7 @@ SUPPORTED_PLAN_RESOURCE_TYPES = frozenset(
         "aws_lambda_function",
         "aws_lambda_permission",
         "aws_db_instance",
+        "aws_db_subnet_group",
         "aws_rds_cluster",
         "aws_rds_cluster_instance",
         "aws_s3_bucket",
@@ -223,11 +229,45 @@ def build_nova_plan_access_policy(
         "iam-policy": set(),
         "rds-cluster": set(),
         "rds-instance": set(),
+        "rds-subnet-group": set(),
     }
     resources_by_service["lambda-event-source-mapping"] = set()
     for resource in proposal.resources:
         kind = resource.resource_type
-        if kind in {"aws_db_instance", "aws_rds_cluster", "aws_rds_cluster_instance"}:
+        if kind == "aws_db_subnet_group":
+            name_value = resource.arguments.get("name")
+
+            def exact_subnet_group_name(candidate: object) -> str | None:
+                if (
+                    isinstance(candidate, str)
+                    and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,254}", candidate)
+                    and candidate.casefold() != "default"
+                ):
+                    return candidate.lower()
+                return None
+
+            subnet_group_name = exact_subnet_group_name(name_value)
+            if isinstance(name_value, dict) and name_value.get("kind") == "resource_reference":
+                target = by_id.get(name_value.get("resource_id"))
+                declared_outputs = (
+                    {output.name: output.value_type for output in target.outputs}
+                    if target is not None
+                    else {}
+                )
+                if (
+                    target is not None
+                    and target.resource_type == "aws_db_subnet_group"
+                    and name_value.get("output_name") in {"name", "id"}
+                    and declared_outputs.get(name_value.get("output_name")) == "resource_name"
+                    and name_value.get("value_type") == "resource_name"
+                ):
+                    subnet_group_name = exact_subnet_group_name(target.arguments.get("name"))
+            if subnet_group_name is None:
+                raise NovaPlanAccessError("RDS subnet-group name cannot be safely scoped")
+            resources_by_service["rds-subnet-group"].add(
+                f"arn:{partition}:rds:{region}:{account_id}:subgrp:{subnet_group_name}"
+            )
+        elif kind in {"aws_db_instance", "aws_rds_cluster", "aws_rds_cluster_instance"}:
             field = "cluster_identifier" if kind == "aws_rds_cluster" else "identifier"
             value = resource.arguments.get(field)
 

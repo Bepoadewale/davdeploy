@@ -121,6 +121,7 @@ Resources:
                   - lambda:List*
                   - rds:DescribeDBClusters
                   - rds:DescribeDBInstances
+                  - rds:DescribeDBSubnetGroups
                   - rds:ListTagsForResource
                   - s3:GetAccelerateConfiguration
                   - s3:GetBucket*
@@ -147,6 +148,7 @@ Resources:
                   - lambda:List*
                   - rds:DescribeDBClusters
                   - rds:DescribeDBInstances
+                  - rds:DescribeDBSubnetGroups
                   - rds:ListTagsForResource
                   - s3:GetAccelerateConfiguration
                   - s3:GetBucket*

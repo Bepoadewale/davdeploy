@@ -52,14 +52,37 @@ def test_session_policy_is_read_only_proposal_scoped_and_bounded():
     cluster_instance = resource(
         "cluster-instance", "aws_rds_cluster_instance", {"identifier": "app-cluster-db"}
     )
+    subnet_group = resource(
+        "database-subnets", "aws_db_subnet_group", {"name": "App-Db-Subnets"}
+    )
 
     first = build_nova_plan_access_policy(
-        proposal(bucket, table, queue, function, api, db_instance, cluster, cluster_instance),
+        proposal(
+            bucket,
+            table,
+            queue,
+            function,
+            api,
+            db_instance,
+            cluster,
+            cluster_instance,
+            subnet_group,
+        ),
         account_id=ACCOUNT_ID,
         region=REGION,
     )
     second = build_nova_plan_access_policy(
-        proposal(bucket, table, queue, function, api, db_instance, cluster, cluster_instance),
+        proposal(
+            bucket,
+            table,
+            queue,
+            function,
+            api,
+            db_instance,
+            cluster,
+            cluster_instance,
+            subnet_group,
+        ),
         account_id=ACCOUNT_ID,
         region=REGION,
     )
@@ -106,6 +129,7 @@ def test_session_policy_is_read_only_proposal_scoped_and_bounded():
     assert "arn:aws:rds:us-east-1:123456789012:db:app-db" in allow["Resource"]
     assert "arn:aws:rds:us-east-1:123456789012:cluster:app-cluster" in allow["Resource"]
     assert "arn:aws:rds:us-east-1:123456789012:db:app-cluster-db" in allow["Resource"]
+    assert "arn:aws:rds:us-east-1:123456789012:subgrp:app-db-subnets" in allow["Resource"]
 
 
 def test_fixed_role_action_patterns_cover_provider_reads_without_data_actions():
@@ -125,6 +149,9 @@ def test_fixed_role_action_patterns_cover_provider_reads_without_data_actions():
         "rds:RestoreDBInstanceFromDBSnapshot",
         "rds:StartExportTask",
         "rds:AddTagsToResource",
+        "rds:CreateDBSubnetGroup",
+        "rds:ModifyDBSubnetGroup",
+        "rds:DeleteDBSubnetGroup",
         "rds:DownloadDBLogFilePortion",
         "rds-data:ExecuteStatement",
         "secretsmanager:GetSecretValue",
@@ -391,6 +418,100 @@ def test_rds_identifier_reference_is_bound_to_declared_typed_output():
         if item["Effect"] == "Allow" and "rds:DescribeDBInstances" in item["Action"]
     )
     assert allow["Resource"].count("arn:aws:rds:us-east-1:123456789012:db:app-db") == 1
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {},
+        {"name_prefix": "private-subnets-"},
+        {"name": "default"},
+        {"name": "1-private-subnets"},
+        {"name": "private:subnets"},
+        {"name": "private subnet group"},
+        {"name": "private-subnets*"},
+    ],
+)
+def test_rds_subnet_group_name_must_be_known_and_arn_safe(arguments):
+    group = resource("database-subnets", "aws_db_subnet_group", arguments)
+    with pytest.raises(NovaPlanAccessError, match="subnet-group name"):
+        build_nova_plan_access_policy(proposal(group), account_id=ACCOUNT_ID, region=REGION)
+
+
+def test_rds_subnet_group_name_rejects_model_expression_at_plan_access_boundary():
+    group = GeneratedResource.model_construct(
+        resource_id="database-subnets",
+        resource_type="aws_db_subnet_group",
+        name="database_subnets",
+        arguments={"name": "${var.subnet_group_name}"},
+        depends_on=(),
+        outputs=(),
+        rationale="Malformed subnet-group access regression fixture.",
+    )
+    candidate = GeneratedDeploymentProposal.model_construct(
+        contract_version="1.0",
+        source_revision="revision-1",
+        context_digest="a" * 64,
+        resources=(group,),
+        requirements=WorkloadRequirements(region=REGION),
+    )
+    with pytest.raises(NovaPlanAccessError, match="subnet-group name"):
+        build_nova_plan_access_policy(candidate, account_id=ACCOUNT_ID, region=REGION)
+
+
+def test_rds_subnet_group_reference_requires_same_family_declared_name_output():
+    group = resource(
+        "database-subnets",
+        "aws_db_subnet_group",
+        {"name": "private-subnets"},
+        outputs=(GeneratedOutput(name="name", value_type="resource_name"),),
+    )
+    consumer = resource(
+        "database-subnets-alias",
+        "aws_db_subnet_group",
+        {
+            "name": {
+                "kind": "resource_reference",
+                "resource_id": "database-subnets",
+                "output_name": "name",
+                "value_type": "resource_name",
+            }
+        },
+    )
+    policy = build_nova_plan_access_policy(
+        proposal(group, consumer), account_id=ACCOUNT_ID, region=REGION
+    )
+    allow = next(
+        item
+        for item in policy.document["Statement"]
+        if item["Effect"] == "Allow" and "rds:DescribeDBSubnetGroups" in item["Action"]
+    )
+    assert allow["Resource"].count("arn:aws:rds:us-east-1:123456789012:subgrp:private-subnets") == 1
+
+
+def test_rds_subnet_group_reference_rejects_wrong_resource_family():
+    instance = resource(
+        "database",
+        "aws_db_instance",
+        {"identifier": "app-db"},
+        outputs=(GeneratedOutput(name="id", value_type="resource_name"),),
+    )
+    group = resource(
+        "database-subnets",
+        "aws_db_subnet_group",
+        {
+            "name": {
+                "kind": "resource_reference",
+                "resource_id": "database",
+                "output_name": "id",
+                "value_type": "resource_name",
+            }
+        },
+    )
+    with pytest.raises(NovaPlanAccessError, match="subnet-group name"):
+        build_nova_plan_access_policy(
+            proposal(instance, group), account_id=ACCOUNT_ID, region=REGION
+        )
 
 
 def test_unsupported_resource_type_fails_before_policy_creation():
