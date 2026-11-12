@@ -2,6 +2,18 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
+## Current backend source — 2026-11-12, PR #363
+
+Backend `main` is merge commit `4d5997c45c2858c4d5f5b9151ebf793d685f5353`;
+merged-main CI run
+[43123201873](https://github.com/Bepoadewale/davdeploy/actions/runs/43123201873)
+passed all seven jobs. PR #363 adds actual-plan DynamoDB point-in-time
+recovery checks, but has not been deployed; the hosted control plane remains at
+PR #361 below. Frontend PR #102 locally implements paginated plan history and
+latest run status, but remains a draft, is not deployed, and has no authenticated
+production customer journey. No Nova-generated customer plan or workload has
+been applied, operated, health-checked, recovered, or destroyed.
+
 ## Current hosted release — 2026-11-11, PR #361
 
 Backend `main` commit `5775d766584f31f8a31b6b22e8e523b4e8a3f257` (PR #361) was
@@ -111,7 +123,7 @@ certification gate disabled and its workspace allowlist empty.
 | Layer | Current evidence | State |
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
-| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access plus actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization and RDS backup retention/final snapshots (#314, #324–#334, #340, #353, #355–#356, #358–#359, #361) | #361's control-plane policy is deployed. Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
+| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access plus actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization, RDS retention/final snapshots and DynamoDB point-in-time recovery (#314, #324–#334, #340, #353–#356, #358–#359, #361, #363) | #361's control-plane policy is deployed; #363 is merged source only. Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api`, `aws-file-storage` and `aws-nosql-data` disabled | One customer renderer enabled; S3 and DynamoDB renderer routes remain gated; PR #303's allowlist correction is included in the November 10 backend release |
 | CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling; #299 adds the gated S3 dispatch mapping; #300 adds a validated S3 bucket input for Lambda; #301 adds the gated DynamoDB dispatch route; #302 adds its `table_name` input; #303 corrects the source allowlist for that input. | #303 is deployed with renderer gates still disabled; live composed lifecycle remains unproven |
@@ -121,7 +133,7 @@ certification gate disabled and its workspace allowlist empty.
 | Lambda + HTTP API | Isolated AWS HTTP 200 and teardown in `docs/test/test268.md`; PR #284 adds an allowlisted typed hosted-certification lifecycle | Hosted code path in progress; feature is off by default; no hosted AWS lifecycle evidence yet |
 | Lambda project isolation | PR #275; local clean-room evidence in `docs/test/test275.md` | State, saved plans, artifact/result keys, names and tags now include connection/project scope; hosted execution remains disabled |
 | Multi-module composition | Typed graph validation, operation-aware dispatch-wave selection, per-module outcomes, typed references, exact CodeBuild callback identity, safe renderer output mapping, durable one-ready-node scheduling, gated S3/DynamoDB renderers, and S3/DynamoDB inputs to Lambda are merged | PRs through #303 are deployed; repeated renderer state isolation and composed AWS workload evidence remain absent |
-| Browser, CLI and MCP lifecycle parity | shared APIs exist, but frontend uses App Runner-specific modes and confirmation | Partial |
+| Browser, CLI and MCP lifecycle parity | Shared plan/history APIs exist. Frontend PR #102 locally presents paginated plan history and latest Nova run status, but remains draft/unmerged/unreleased and does not provide authenticated production or lifecycle completion evidence. | Partial; CLI/MCP parity, hosted customer plan status and apply/health/recovery/destroy journey remain unproven |
 | Eight certification scenarios | Scenario catalogue, plan-only Terraform runner and selected isolated AWS service tests | None proves the Nova hosted customer lifecycle. Real composed application create/invoke/observe/update/failure recovery/destroy/independent absence remains outstanding |
 
 ## Architecture catalogue (26)

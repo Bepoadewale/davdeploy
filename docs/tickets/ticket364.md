@@ -25,19 +25,20 @@ Backend `main` is `4d5997c45c2858c4d5f5b9151ebf793d685f5353`; merged-main CI `43
 
 ## Acceptance criteria
 
-- [ ] Backend status documents identify #363 as merged source and not deployed.
-- [ ] Frontend #102 is described as draft/unmerged and not deployed, with plan-history/run-status API integration marked implemented only in that branch.
-- [ ] No pricing, hosted approval/apply, health, recovery, teardown or composed certification capability is overstated.
-- [ ] Documentation conventions and `git diff --check` pass.
+- [x] Backend status documents identify #363 as merged source and not deployed.
+- [x] Frontend #102 is described as draft/unmerged and not deployed, with plan-history/run-status API integration marked implemented only in that branch.
+- [x] No pricing, hosted approval/apply, health, recovery, teardown or composed certification capability is overstated.
+- [x] Documentation conventions and `git diff --check` pass.
 - [ ] All seven required GitHub checks pass and current-head review finds no blocker.
 
 ## Acceptance status
 
-- Pending implementation.
+- Implementation and local documentation validation are complete; final-head CI/review remain pending.
 
 ## Tests / validation performed
 
-- Pending documentation convention and diff checks.
+- `.venv/bin/python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
 
 ## Evidence files produced
 
