@@ -1,6 +1,6 @@
 # ticket386 — diagnose missing runtime gate values safely
 
-PR: pending
+PR: [#386](https://github.com/Bepoadewale/davdeploy/pull/386) (draft)
 Branch: `fix/diagnose-missing-runtime-gate-values-386`
 
 ## Problem / goal
@@ -13,8 +13,10 @@ source. It must never expose plan values or arbitrary names.
 
 ## Current repo state
 
-- Backend `main`: PR #385 merge pending.
-- Run `43285350771` failed before saved-plan publication. No control-plane
+- Backend `main`: `96cb7b51c841f795d5a2d1ce9f3cfd4b55d12dcb` (PR #385 merge).
+- Run `43285350771` failed before saved-plan publication. The summary reported
+  all nine fixed gates missing from both `planned_values` and change after
+  values. No control-plane
   infrastructure apply occurred; the workflow published its immutable Lambda
   package before planning.
 - Customer cloud execution and hosted certification remain disabled.
@@ -39,20 +41,25 @@ source. It must never expose plan values or arbitrary names.
 
 ## Acceptance criteria
 
-- [ ] Diagnostic counts are bounded integers and report only allowlisted
+- [x] Diagnostic counts are bounded integers and report only allowlisted
   environment/gate names.
-- [ ] Raw plan values and arbitrary variable names remain suppressed.
-- [ ] Focused tests, full verification, docs checks, and required CI pass.
+- [x] Raw plan values and arbitrary variable names remain suppressed.
+- [x] Focused tests (18) and full verification (1,056 tests) pass.
+- [ ] Docs checks and required CI pass.
 - [ ] A fresh protected plan explains its structural omission without exposing
   raw JSON; no apply is dispatched.
 
 ## Acceptance status
 
-- [ ] Implementation and local verification pending.
+- [x] Bounded shape diagnostics are implemented and locally verified.
+- [ ] Docs checks and final-head CI remain pending.
 
 ## Tests / validation performed
 
-- None yet.
+- `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 18 passed.
+- `make verify`: 1,056 passed; Ruff, Actions configuration, OpenAPI, and Docker
+  Compose checks passed. One existing Starlette/httpx deprecation warning.
+- Documentation conventions and `git diff --check` pending final review.
 
 ## Evidence files produced
 

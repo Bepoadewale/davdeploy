@@ -46,9 +46,18 @@ SAFE_FAILURE_CODES = {
 class PlanSummaryError(ValueError):
     """Raised when a plan cannot be summarized without making assumptions."""
 
-    def __init__(self, message: str, *, missing_gates: tuple[str, ...] = ()):
+    def __init__(
+        self,
+        message: str,
+        *,
+        missing_gates: tuple[str, ...] = (),
+        gate_shape: tuple[tuple[str, int], ...] = (),
+        gate_names: tuple[tuple[str, tuple[str, ...]], ...] = (),
+    ):
         super().__init__(message)
         self.missing_gates = missing_gates
+        self.gate_shape = gate_shape
+        self.gate_names = gate_names
 
 
 def _safe_address(value: Any) -> str:
@@ -102,8 +111,17 @@ def _module_resources(module: Any):
 
 def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
     flags: dict[str, set[bool]] = defaultdict(set)
+    gate_presence = {"planned": set(), "change": set()}
+    shape = {
+        "planned_lambdas": 0,
+        "planned_environments": 0,
+        "planned_variable_maps": 0,
+        "change_lambdas": 0,
+        "change_environments": 0,
+        "change_variable_maps": 0,
+    }
 
-    def add_runtime_flags(values: Any) -> None:
+    def add_runtime_flags(values: Any, *, source: str) -> None:
         if not isinstance(values, dict):
             return
         environment = values.get("environment") or {}
@@ -111,12 +129,15 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
             environment = environment[0] if environment else {}
         if not isinstance(environment, dict):
             return
+        shape[f"{source}_environments"] += 1
         variables = environment.get("variables")
         if not isinstance(variables, dict):
             return
+        shape[f"{source}_variable_maps"] += 1
         for name in FLAG_NAMES:
             if name not in variables:
                 continue
+            gate_presence[source].add(name)
             raw_value = variables[name]
             if isinstance(raw_value, bool):
                 value = raw_value
@@ -131,7 +152,8 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
     for resource in _module_resources(root):
         if resource.get("type") != "aws_lambda_function":
             continue
-        add_runtime_flags(resource.get("values"))
+        shape["planned_lambdas"] += 1
+        add_runtime_flags(resource.get("values"), source="planned")
 
     # Terraform plan JSON provides planned_values and resource_changes as
     # separate representations. Collect only fixed runtime-gate names from
@@ -141,9 +163,10 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
             continue
         if resource_change.get("type") != "aws_lambda_function":
             continue
+        shape["change_lambdas"] += 1
         change = resource_change.get("change")
         if isinstance(change, dict):
-            add_runtime_flags(change.get("after"))
+            add_runtime_flags(change.get("after"), source="change")
 
     missing = sorted(set(FLAG_NAMES) - set(flags))
     if missing:
@@ -151,6 +174,25 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
         raise PlanSummaryError(
             "required runtime feature gates are missing",
             missing_gates=safe_missing,
+            gate_shape=tuple(
+                (name, count)
+                for name, count in shape.items()
+                if name in {
+                    "planned_lambdas",
+                    "planned_environments",
+                    "planned_variable_maps",
+                    "change_lambdas",
+                    "change_environments",
+                    "change_variable_maps",
+                }
+            ),
+            gate_names=tuple(
+                (
+                    source,
+                    tuple(name for name in FLAG_NAMES if name in gate_presence[source]),
+                )
+                for source in ("planned", "change")
+            ),
         )
     if any(len(values) != 1 for values in flags.values()):
         raise PlanSummaryError("runtime feature gates disagree across functions")
@@ -259,6 +301,8 @@ def main() -> int:
         else:
             reason = "plan_json_too_deep"
         missing_gates = ()
+        gate_shape = ()
+        gate_names = ()
         if isinstance(error, PlanSummaryError) and reason == "runtime_gates_missing":
             candidates = error.missing_gates
             if (
@@ -267,7 +311,47 @@ def main() -> int:
                 and all(name in FLAG_NAMES for name in candidates)
             ):
                 missing_gates = candidates
+            allowed_shape_names = {
+                "planned_lambdas",
+                "planned_environments",
+                "planned_variable_maps",
+                "change_lambdas",
+                "change_environments",
+                "change_variable_maps",
+            }
+            shape_candidates = error.gate_shape
+            if (
+                isinstance(shape_candidates, tuple)
+                and all(
+                    isinstance(item, tuple)
+                    and len(item) == 2
+                    and item[0] in allowed_shape_names
+                    and type(item[1]) is int
+                    and item[1] >= 0
+                    for item in shape_candidates
+                )
+            ):
+                gate_shape = shape_candidates
+            name_candidates = error.gate_names
+            if (
+                isinstance(name_candidates, tuple)
+                and all(
+                    isinstance(item, tuple)
+                    and len(item) == 2
+                    and item[0] in {"planned", "change"}
+                    and isinstance(item[1], tuple)
+                    and all(name in FLAG_NAMES for name in item[1])
+                    for item in name_candidates
+                )
+            ):
+                gate_names = name_candidates
         detail = f" missing_gates={','.join(missing_gates)}" if missing_gates else ""
+        if gate_shape:
+            detail += " gate_shape=" + ",".join(f"{name}:{count}" for name, count in gate_shape)
+        if gate_names:
+            detail += " gate_names=" + ";".join(
+                f"{source}:{','.join(names) if names else 'none'}" for source, names in gate_names
+            )
         print(
             "Terraform plan summary failed closed; "
             f"reason={reason};{detail} raw plan output was suppressed.",
