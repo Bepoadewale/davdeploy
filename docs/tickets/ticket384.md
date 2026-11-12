@@ -1,6 +1,6 @@
 # ticket384 — identify missing protected plan feature gates safely
 
-PR: [#384](https://github.com/Bepoadewale/davdeploy/pull/384) (draft)
+PR: [#384](https://github.com/Bepoadewale/davdeploy/pull/384) (draft; final ticket-head CI pending)
 Branch: `fix/identify-missing-plan-runtime-gates-384`
 
 ## Problem / goal
@@ -14,6 +14,8 @@ the next diagnosis actionable without exposing Terraform plan values.
 ## Current repo state
 
 - Backend `main`: `449cf52ed1a04ee9e35b772fe33f44e839c81b9a` (PR #383 merge).
+- Implementation head `abb68c6395b331b85ae73803e62e83bdf5ff8af4` passed all
+  seven required checks in run `43274565256`.
 - Plan run `43273176464` is terminal failure at the summary step. No saved plan
   was uploaded; no AWS apply was dispatched.
 - Plan-only/state/review environment variables are enabled for a future
@@ -43,14 +45,17 @@ the next diagnosis actionable without exposing Terraform plan values.
 - [x] Missing gate diagnostics list only expected names from `FLAG_NAMES`.
 - [x] No raw Terraform JSON, values, or untrusted names are logged.
 - [x] Focused sanitizer suite (15 tests) and full verification pass (1,053 tests).
-- [ ] Final-head review and required CI pass.
+- [x] Implementation diff reviewed; implementation-head required CI passed
+  (run `43274565256`, all seven checks).
+- [ ] Updated ticket head passes required CI.
 - [ ] Re-run the protected plan after merge; apply only after reviewing the
   exact saved plan and keeping customer apply/certification gates closed.
 
 ## Acceptance status
 
 - [x] Implementation and local verification are complete.
-- [ ] Final-head CI and review remain pending.
+- [x] Implementation-head CI and manual diff review are complete.
+- [ ] Final ticket-head CI remains pending.
 
 ## Tests / validation performed
 
@@ -59,7 +64,9 @@ infrastructure was applied or changed. `.venv/bin/pytest
 tests/test_terraform_plan_summary.py -q` passed (15 tests); `make verify` passed
 (1,053 tests; Ruff, OpenAPI snapshot, and Docker Compose checks passed; one
 existing Starlette/httpx deprecation warning). Documentation conventions and
-`git diff --check` passed locally.
+`git diff --check` passed locally. Implementation head CI run
+`43274565256` passed all seven required checks; the ticket evidence update will
+receive its own final-head CI before merge.
 
 ## Evidence files produced
 
