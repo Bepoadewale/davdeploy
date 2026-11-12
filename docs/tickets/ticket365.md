@@ -33,7 +33,7 @@ The generated deployment contract rejects a short list of exact argument keys an
 
 ## Acceptance status
 
-- Implemented and locally verified; awaiting CI and review of the compatibility correction. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
+- Implemented and locally verified; awaiting final CI and review after preserving credential policy/lifetime controls. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
 
 ## Tests / validation performed
 
@@ -44,6 +44,8 @@ The generated deployment contract rejects a short list of exact argument keys an
 - Initial hosted CI run `43127441913` passed all seven required jobs on implementation commit `7002969588443df4baa38c637db8544cf643c76a`.
 - Codex review identified boolean secret-management controls as a false positive; the validator now permits boolean controls and adds explicit regressions for `manage_master_user_password`, `generate_secret`, and `enable_token_revocation`.
 - After that correction, focused contract tests passed (21), `make verify` passed (1,007 tests), and `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365b make local-proof` passed. Both local Compose projects' containers are stopped; their project networks and Postgres volumes remain.
+- Follow-up review identified valid policy/configuration objects and token lifetime settings in the existing Cognito Terraform root. Detection now exempts the typed policy/configuration blocks and numeric token validity fields while continuing to check secret-valued nested members; dedicated regressions cover those patterns.
+- After the policy/lifetime correction, `make verify` passed (1,011 tests) and `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365c make local-proof` passed. Its containers were stopped; the network and PostgreSQL volume remain.
 
 ## Evidence files produced
 

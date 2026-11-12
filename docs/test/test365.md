@@ -13,19 +13,19 @@ The Nova proposal contract now rejects common literal credential and secret valu
 
 ## Verification
 
-- Focused contract tests after review correction: `uv run pytest tests/test_generated_deployment_contract.py -q` — 21 passed, including sensitive-value rejection, typed-reference acceptance, and boolean-control compatibility.
-- Full checks after review correction: `make verify` — 1,007 tests passed, Ruff passed, OpenAPI snapshot matched, and Docker Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
-- Isolated Compose proof: `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365b make local-proof` — passed API readiness, worker/executor readiness, API/CORS contract, customer-plan local E2E, trace check, and the full verification suite.
+- Focused contract tests after review corrections: `uv run pytest tests/test_generated_deployment_contract.py -q` — 25 passed, including sensitive-value rejection, typed-reference acceptance, boolean-control compatibility, and policy/lifetime configuration.
+- Full checks after review corrections: `make verify` — 1,011 tests passed; Ruff, OpenAPI snapshot, and Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
+- Isolated Compose proof after review corrections: `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365c make local-proof` — passed API/worker/executor readiness, API/CORS contract, customer-plan local E2E, traces, and full verification.
 - Repository checks: `git diff --check` and `python3 scripts/check_doc_conventions.py` — passed.
-- Hosted CI run `43127441913` passed all seven required jobs on the earlier implementation head. The review correction is awaiting its final-head run.
+- Hosted CI run `43127441913` passed all seven required jobs on the earlier implementation head. Follow-up compatibility corrections are awaiting final-head verification.
 
 ## Observed result
 
-Sensitive-looking proposal fields fail validation unless their value is a typed secret reference or a boolean configuration control. Existing ordinary values and graph references continue to validate. Full verification and isolated local proof pass after the review correction.
+Sensitive-valued proposal fields fail validation unless their value is a typed secret reference. Boolean controls, declared Cognito policy/configuration blocks, and numeric token validity values remain representable. Full verification and isolated local proof pass after the review corrections.
 
 ## Runtime boundary
 
-The isolated local proofs used `davdeploy_nova_secret365` and `davdeploy_nova_secret365b`; they did not use AWS, Bedrock, or create customer infrastructure. Both projects' containers were stopped after proof. Their project-specific Docker networks and PostgreSQL volumes remain, preserving test data; no volume or unrelated resource was deleted. No Nova-generated AWS plan or apply was run.
+The isolated local proofs used `davdeploy_nova_secret365`, `davdeploy_nova_secret365b`, and `davdeploy_nova_secret365c`; they did not use AWS, Bedrock, or create customer infrastructure. All three projects' containers were stopped after proof. Their project-specific Docker networks and PostgreSQL volumes remain, preserving test data; no volume or unrelated resource was deleted. No Nova-generated AWS plan or apply was run.
 
 ## Resources created
 
@@ -37,13 +37,14 @@ The isolated local proofs used `davdeploy_nova_secret365` and `davdeploy_nova_se
 - `uv run pytest tests/test_generated_deployment_contract.py -q`
 - `make verify`
 - `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365 make local-proof` (initial implementation)
-- `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365b make local-proof` (review correction)
+- `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365b make local-proof` (boolean-control correction)
+- `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365c make local-proof` (policy/lifetime correction)
 - `git diff --check`
 - `python3 scripts/check_doc_conventions.py`
 
 ## Teardown
 
-- Stopped containers for `davdeploy_nova_secret365` and `davdeploy_nova_secret365b` after local proof.
+- Stopped containers for `davdeploy_nova_secret365`, `davdeploy_nova_secret365b`, and `davdeploy_nova_secret365c` after local proof.
 - Retained their project-scoped networks and PostgreSQL volumes; no deletion was requested or performed.
 
 ## Limitation

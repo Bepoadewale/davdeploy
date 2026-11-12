@@ -47,9 +47,34 @@ class GeneratedResource(StrictContract):
             "user_data", "backend", "required_providers",
         }
 
-        def is_secret_field(key: str) -> bool:
-            """Recognize common credential field spellings conservatively."""
+        def is_secret_value_field(
+            key: str, value: Any, *, parent_key: str | None = None
+        ) -> bool:
+            """Recognize credential values without mistaking policy controls for them."""
             normalized = "".join(character for character in key.casefold() if character.isalnum())
+            normalized_parent = (
+                "".join(character for character in parent_key.casefold() if character.isalnum())
+                if parent_key is not None
+                else None
+            )
+            if type(value) is bool:
+                return False
+            if normalized in {
+                "passwordpolicy",
+                "softwaretokenmfaconfiguration",
+                "tokenvalidityunits",
+            }:
+                return False
+            if normalized_parent == "tokenvalidityunits" and normalized in {
+                "accesstoken",
+                "idtoken",
+                "refreshtoken",
+            }:
+                return False
+            if isinstance(value, (int, float)) and normalized.endswith(
+                ("validity", "validitydays", "validityminutes", "validityseconds")
+            ):
+                return False
             return any(
                 marker in normalized
                 for marker in (
@@ -76,7 +101,7 @@ class GeneratedResource(StrictContract):
             reference = ResourceReference.model_validate(value)
             return reference.value_type == "secret_reference"
 
-        def visit(value: Any) -> None:
+        def visit(value: Any, *, parent_key: str | None = None) -> None:
             if isinstance(value, str) and any(
                 marker in value.lower()
                 for marker in (chr(36) + "{", "%{", "file(", "templatefile(")
@@ -86,17 +111,13 @@ class GeneratedResource(StrictContract):
                 for key, child in value.items():
                     if not isinstance(key, str) or key.casefold() in forbidden:
                         raise ValueError("generated arguments contain a forbidden field")
-                    if (
-                        is_secret_field(key)
-                        and type(child) is not bool
-                        and not is_secret_reference(child)
-                    ):
+                    if is_secret_value_field(key, child, parent_key=parent_key) and not is_secret_reference(child):
                         raise ValueError(
                             "credential and secret fields must use a typed secret_reference"
                         )
                     if isinstance(child, dict) and child.get("kind") == "resource_reference":
                         ResourceReference.model_validate(child)
-                    visit(child)
+                    visit(child, parent_key=key)
 
                 # Terraform commonly represents environment variables as
                 # {name: "API_TOKEN", value: ...}. Their generic `value` key
@@ -104,9 +125,10 @@ class GeneratedResource(StrictContract):
                 variable_name = value.get("name")
                 if (
                     isinstance(variable_name, str)
-                    and is_secret_field(variable_name)
                     and "value" in value
-                    and type(value["value"]) is not bool
+                    and is_secret_value_field(
+                        variable_name, value["value"], parent_key=parent_key
+                    )
                     and not is_secret_reference(value["value"])
                 ):
                     raise ValueError(
@@ -114,7 +136,7 @@ class GeneratedResource(StrictContract):
                     )
             elif isinstance(value, (list, tuple)):
                 for child in value:
-                    visit(child)
+                    visit(child, parent_key=parent_key)
         visit(self.arguments)
         proposed_tags = self.arguments.get("tags")
         if isinstance(proposed_tags, dict) and any(

@@ -197,6 +197,37 @@ def test_contract_accepts_boolean_secret_related_configuration(field: str, value
     assert result.resources[0].arguments[field] is value
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"access_token_validity": 15, "id_token_validity": 15},
+        {
+            "password_policy": {
+                "minimum_length": 12,
+                "require_numbers": True,
+                "temporary_password_validity_days": 7,
+            }
+        },
+        {"software_token_mfa_configuration": {"enabled": True}},
+        {
+            "token_validity_units": {
+                "access_token": "minutes",
+                "id_token": "minutes",
+                "refresh_token": "days",
+            }
+        },
+    ],
+)
+def test_contract_accepts_secret_related_policy_and_lifetime_configuration(
+    arguments: dict[str, object],
+) -> None:
+    result = GeneratedDeploymentProposal.model_validate(
+        proposal([resource("identity", "identity", arguments=arguments)])
+    )
+
+    assert result.resources[0].arguments == arguments
+
+
 def test_contract_emits_a_json_schema_for_nova_structured_generation() -> None:
     schema = GeneratedDeploymentProposal.model_json_schema()
 
