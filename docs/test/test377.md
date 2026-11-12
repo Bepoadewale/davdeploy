@@ -23,6 +23,8 @@ schema and policy evaluation.
 - Isolated clean-room `make local-proof` passed on `2d0997d` in
   `/private/tmp/davdeploy-pr377-final-cleanroom-20261112`: stack health, API/CORS
   contract, customer-plan E2E, trace checks, and all 1,048 tests passed.
+- GitHub Actions run `43188867780` passed all seven required checks on
+  evidence commit `69224568d7f3dd0058160e3b5ea8892d046256f1`.
 - A bounded live Nova 2 Lite synthetic check used prompt version
   `intent-nova2-v2` and the US inference profile. After the schema correction:
   - stock-advice request → `OUT_OF_SCOPE`, 873 input and 167 output tokens;
@@ -52,8 +54,8 @@ The final schema correction passed focused, full, and clean-room checks and was
 exercised by the two bounded live synthetic classification calls above. The
 API/provider behavior rejects typed `OUT_OF_SCOPE` with a fixed HTTP 422 response
 before intent persistence while retaining usage evidence for successful
-classification; a stockbroking deployment intent remains supported. Hosted
-review and CI are pending.
+classification; a stockbroking deployment intent remains supported. Hosted CI
+passed on the implementation/evidence head; deployment has not occurred.
 
 ## Final boundary
 

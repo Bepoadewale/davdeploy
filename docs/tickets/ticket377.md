@@ -49,14 +49,15 @@ A request to deploy software in a financial domain remains in scope.
 - [x] No generated plan or executor is invoked for an out-of-scope request.
 - [x] Focused tests pass.
 - [x] `make verify` and isolated clean-room proof pass on final implementation commit `2d0997d`.
-- [ ] Documentation conventions, current-head review, and final-head CI pass.
+- [x] Documentation conventions and final-diff review pass; all seven required
+  checks passed on evidence commit `6922456` in CI run `43188867780`.
 - [x] No AWS infrastructure or customer workload mutations occur; bounded
   Bedrock inference calls were used for synthetic classification checks.
 
 ## Acceptance status
 
 - [x] Implementation and focused tests complete.
-- [x] Full verification and clean-room proof pass on `2d0997d`; PR review and final-head CI remain outstanding.
+- [x] Full verification and clean-room proof pass on `2d0997d`; final-diff review and seven required checks pass on `6922456`.
 - [x] No runtime/AWS/customer workload mutation is in scope or performed.
 
 ## Tests / validation performed
@@ -69,6 +70,8 @@ A request to deploy software in a financial domain remains in scope.
   stack health, API/CORS contract, customer-plan E2E and trace checks passed.
   The project's containers are stopped; its external network, named volume,
   images, worktree, virtual environment and seed database remain retained.
+- Hosted PR checks: run `43188867780` passed all seven required jobs on
+  evidence commit `69224568d7f3dd0058160e3b5ea8892d046256f1`.
 
 ## Evidence files produced
 
