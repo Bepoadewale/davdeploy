@@ -26,7 +26,7 @@ AWS region: `us-east-1`
 - Protected Terraform plan [43138701232](https://github.com/Bepoadewale/davdeploy/actions/runs/43138701232) completed successfully for that exact commit and Terraform root `infrastructure/terraform/serverless-control-plane`.
 - Exact saved-plan apply [43139500663](https://github.com/Bepoadewale/davdeploy/actions/runs/43139500663) succeeded as deployment `7726355215`. The workflow verified the plan run, commit, immutable manifest and saved-plan digest before applying. Migration verification succeeded.
 - Manifest SHA-256: `724071565858a91b690b747553ababe317be73e76b108c457e3aa5dcdfeb64b3`; a streamed SHA-256 of the encrypted S3 saved-plan object matched. Raw Terraform plan content was not written to the local filesystem.
-- PR #368's pre-evidence-update CI run [43141504865](https://github.com/Bepoadewale/davdeploy/actions/runs/43141504865) passed all seven jobs on head `ee610424267771288cc98258f463eb1b54e78c48`. The final ticket-update head must also pass its merge-gate checks.
+- PR #368 run [43142051311](https://github.com/Bepoadewale/davdeploy/actions/runs/43142051311) passed all seven jobs on head `0e43e31a5c689bc1e7e8a6626160a97a6500f916`. The final ticket-update head must also pass its live merge-gate checks.
 
 ## Sanitized plan summary
 

@@ -46,23 +46,24 @@ workflow.
   runtime secret reads, and that the plan role, remote state, pricing, approval,
   apply, health, recovery, teardown, and composed certification remain gated.
 - [x] Pricing PR #318 remains held pending account-owner direction.
-- [x] All seven required CI jobs passed on pre-evidence-update head
-  `ee610424267771288cc98258f463eb1b54e78c48` in run `43141504865`. Verify the
-  live GitHub checks for the final ticket-update head before merge.
+- [x] All seven required CI jobs passed on PR head
+  `0e43e31a5c689bc1e7e8a6626160a97a6500f916` in run `43142051311`. The final
+  ticket-update head must also pass its live GitHub merge-gate checks.
 
 ## Acceptance status
 
 - [x] Local release evidence was reconciled against the protected workflow,
   AWS Lambda configuration, and API health response.
 - [x] Required docs conventions and whitespace checks pass.
-- [x] Pre-evidence-update CI run `43141504865` passed all seven required jobs.
-- [ ] Final ticket-update head's required checks and final review are pending.
+- [x] PR run `43142051311` passed all seven required jobs for head
+  `0e43e31a5c689bc1e7e8a6626160a97a6500f916`.
+- [ ] Final ticket-update head's required checks must pass before merge.
 
 ## Tests / validation performed
 
 - `python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- GitHub Actions run [43141504865](https://github.com/Bepoadewale/davdeploy/actions/runs/43141504865) passed all seven jobs on the pre-evidence-update head.
+- GitHub Actions run [43142051311](https://github.com/Bepoadewale/davdeploy/actions/runs/43142051311) passed all seven jobs on head `0e43e31a5c689bc1e7e8a6626160a97a6500f916`.
 - Runtime plan/apply and post-release evidence are recorded in
   `docs/test/test368.md`.
 
