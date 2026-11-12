@@ -59,21 +59,23 @@ and data-content operations.
 - [x] Existing S3/SQS/DynamoDB/API/IAM profiles retain their exact behavior.
 - [ ] Focused tests, `make verify`, clean-room proof, docs checks, and required
   GitHub CI pass.
-- [ ] No feature flag, AWS role, customer plan, approval, apply, or workload is
+- [x] No feature flag, AWS role, customer plan, approval, apply, or workload is
   enabled or executed by this PR.
 
 ## Acceptance status
 
-- [ ] Implementation and security review complete.
-- [ ] Focused and full verification pass.
+- [x] Implementation and local security review complete; the explicit planner actions, trusted account/region ARN construction, same-family typed references, and explicit write/data denial were reviewed with no blocker found.
+- [x] Focused tests and full local verification pass.
 - [ ] Required CI and clean-room gates pass on the final PR head.
-- [ ] No runtime or customer-resource mutation occurs.
+- [x] No runtime or customer-resource mutation occurred.
 
 ## Tests / validation performed
 
 Focused tests (27) and `make verify` (1,028 tests), Ruff, docs conventions, and
-diff checks pass locally. Clean-room proof, final-head CI and review remain
-outstanding. See `docs/test/test371.md` and update it as those gates complete.
+diff checks pass locally. The clean-room proof passed. All seven checks passed
+in CI run `43151728230` for implementation commit `4cda75b`; the final evidence
+commit still needs its own CI run. See `docs/test/test371.md` and update it as
+that gate completes.
 
 ## Evidence files produced
 
