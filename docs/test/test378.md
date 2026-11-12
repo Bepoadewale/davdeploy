@@ -21,6 +21,9 @@ financial-domain application remains in scope.
 
 - Merged-main CI [43190545115](https://github.com/Bepoadewale/davdeploy/actions/runs/43190545115)
   passed all seven jobs for source commit `40439ab6b493a40c522102fa88de1c48043b4177`.
+- Documentation/status reconciliation PR #378 passed all seven required checks
+  in run [43200068425](https://github.com/Bepoadewale/davdeploy/actions/runs/43200068425)
+  on evidence head `d9ab36d`.
 - Protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865)
   completed successfully for that exact source and AWS account.
 - The sanitized plan summary was complete/applyable with no errors: 0

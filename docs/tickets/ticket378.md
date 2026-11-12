@@ -40,18 +40,19 @@ planning gates.
 - [x] Source/deployed status reflects PR #377 and keeps Nova planning gates accurately labelled.
 - [x] No customer-authenticated intent journey or customer workload is claimed.
 - [x] Documentation conventions and diff checks pass.
-- [ ] Final-head CI and review pass.
+- [x] Final-head CI and review pass.
 
 ## Acceptance status
 
 - [x] Deployment evidence and status reconciliation are complete.
-- [ ] Final-head CI remains.
+- [x] Final-head CI passed for source/evidence head `d9ab36d` in run `43200068425`; final-diff review found no blocker.
 
 ## Tests / validation performed
 
 - `python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Required GitHub CI — pending.
+- Required GitHub CI run `43200068425` — all seven checks passed for head
+  `d9ab36d`.
 
 ## Evidence files produced
 
