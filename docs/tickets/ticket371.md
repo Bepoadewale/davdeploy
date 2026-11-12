@@ -57,7 +57,7 @@ and data-content operations.
 - [x] The customer role template's RDS read profile and explicit `NotAction`
   deny remain consistent with the session policy.
 - [x] Existing S3/SQS/DynamoDB/API/IAM profiles retain their exact behavior.
-- [ ] Focused tests, `make verify`, clean-room proof, docs checks, and required
+- [x] Focused tests, `make verify`, clean-room proof, docs checks, and required
   GitHub CI pass.
 - [x] No feature flag, AWS role, customer plan, approval, apply, or workload is
   enabled or executed by this PR.
@@ -66,16 +66,17 @@ and data-content operations.
 
 - [x] Implementation and local security review complete; the explicit planner actions, trusted account/region ARN construction, same-family typed references, and explicit write/data denial were reviewed with no blocker found.
 - [x] Focused tests and full local verification pass.
-- [ ] Required CI and clean-room gates pass on the final PR head.
+- [x] Required CI and clean-room gates passed on evidence head `974798e`; rerun CI after this documentation-only reconciliation before merging.
 - [x] No runtime or customer-resource mutation occurred.
 
 ## Tests / validation performed
 
 Focused tests (27) and `make verify` (1,028 tests), Ruff, docs conventions, and
 diff checks pass locally. The clean-room proof passed. All seven checks passed
-in CI run `43151728230` for implementation commit `4cda75b`; the final evidence
-commit still needs its own CI run. See `docs/test/test371.md` and update it as
-that gate completes.
+in CI run `43151728230` for implementation commit `4cda75b`; all seven checks
+also passed for evidence head `974798e` in run `43152444149`. This docs-only
+reconciliation requires a fresh final-head CI run before merge. See
+`docs/test/test371.md`.
 
 ## Evidence files produced
 

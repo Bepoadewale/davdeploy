@@ -29,6 +29,7 @@ AWS region: Not accessed
   seed, trace check, `make verify` (1,028 tests), OpenAPI and Compose checks.
 - `uv run ruff check apps/api/src/davdeploy/nova_plan_access.py tests/test_nova_plan_access.py tests/test_customer_aws_connection_contract.py` — passed.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed before this evidence update; rerun before committing.
+- All seven GitHub CI checks passed for evidence commit `974798e07d4ed2f76eacc451ff5e775e6c340205` in run `43152444149`. That was the final implementation/evidence head before this documentation reconciliation.
 
 ## Observed result
 
@@ -65,5 +66,6 @@ This change does not enable hosted planning or apply, install a customer role,
 provide complete VPC/subnet-group planning permissions, add database
 provisioning renderers, integrate pricing, or certify application behavior,
 recovery, or teardown. Pricing PR #318 remains held. Implementation commit
-`4cda75b` passed all seven GitHub CI jobs in run `43151728230`; the final
-evidence commit must still pass CI before merge.
+`4cda75b` passed all seven GitHub CI jobs in run `43151728230`; evidence head
+`974798e` passed all seven in run `43152444149`. Re-run checks after this
+documentation reconciliation before merging.
