@@ -75,12 +75,16 @@ def test_quick_create_plan_role_is_separate_and_has_bounded_read_only_actions():
     assert "rds:DescribeDBInstances" in policy
     assert "rds:DescribeDBClusters" in policy
     assert "rds:ListTagsForResource" in policy
+    assert "rds:DescribeDBSubnetGroups" in policy
     assert "s3:ListBucket" in policy
     assert "s3:GetObject" not in policy
     assert "dynamodb:GetItem" not in policy
     assert "lambda:InvokeFunction" not in policy
     assert "iam:PassRole" not in policy
     assert "rds:ModifyDBInstance" not in policy
+    assert "rds:CreateDBSubnetGroup" not in policy
+    assert "rds:ModifyDBSubnetGroup" not in policy
+    assert "rds:DeleteDBSubnetGroup" not in policy
     assert "rds:DeleteDBCluster" not in policy
     assert "rds:RestoreDBInstanceFromDBSnapshot" not in policy
     assert "rds:StartExportTask" not in policy
