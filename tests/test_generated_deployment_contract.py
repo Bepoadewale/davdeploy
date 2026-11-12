@@ -126,6 +126,108 @@ def test_contract_rejects_unsafe_or_invalid_graphs(
         GeneratedDeploymentProposal.model_validate(proposal(resources))
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("api_key", "literal-api-key"),
+        ("clientSecret", "literal-client-secret"),
+        ("AUTH-TOKEN", "literal-auth-token"),
+        ("nested", {"session_token": "literal-session-token"}),
+        (
+            "environment",
+            [{"name": "API_TOKEN", "value": "literal-env-token"}],
+        ),
+    ],
+)
+def test_contract_rejects_literal_secret_fields(field: str, value: object) -> None:
+    with pytest.raises(ValidationError, match="typed secret_reference|forbidden"):
+        GeneratedDeploymentProposal.model_validate(
+            proposal([resource("api", "api", arguments={field: value})])
+        )
+
+
+def test_contract_accepts_typed_secret_reference_without_secret_material() -> None:
+    result = GeneratedDeploymentProposal.model_validate(
+        proposal(
+            [
+                resource(
+                    "credentials",
+                    "credentials",
+                    outputs=(
+                        {"name": "secret_arn", "value_type": "secret_reference"},
+                    ),
+                ),
+                resource(
+                    "api",
+                    "api",
+                    arguments={
+                        "environment": [
+                            {
+                                "name": "API_TOKEN",
+                                "value": {
+                                    "kind": "resource_reference",
+                                    "resource_id": "credentials",
+                                    "output_name": "secret_arn",
+                                    "value_type": "secret_reference",
+                                },
+                            }
+                        ]
+                    },
+                ),
+            ]
+        )
+    )
+
+    assert len(result.resources) == 2
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("manage_master_user_password", True),
+        ("generate_secret", False),
+        ("enable_token_revocation", True),
+    ],
+)
+def test_contract_accepts_boolean_secret_related_configuration(field: str, value: bool) -> None:
+    result = GeneratedDeploymentProposal.model_validate(
+        proposal([resource("api", "api", arguments={field: value})])
+    )
+
+    assert result.resources[0].arguments[field] is value
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"access_token_validity": 15, "id_token_validity": 15},
+        {
+            "password_policy": {
+                "minimum_length": 12,
+                "require_numbers": True,
+                "temporary_password_validity_days": 7,
+            }
+        },
+        {"software_token_mfa_configuration": {"enabled": True}},
+        {
+            "token_validity_units": {
+                "access_token": "minutes",
+                "id_token": "minutes",
+                "refresh_token": "days",
+            }
+        },
+    ],
+)
+def test_contract_accepts_secret_related_policy_and_lifetime_configuration(
+    arguments: dict[str, object],
+) -> None:
+    result = GeneratedDeploymentProposal.model_validate(
+        proposal([resource("identity", "identity", arguments=arguments)])
+    )
+
+    assert result.resources[0].arguments == arguments
+
+
 def test_contract_emits_a_json_schema_for_nova_structured_generation() -> None:
     schema = GeneratedDeploymentProposal.model_json_schema()
 

@@ -282,11 +282,28 @@ def test_composed_api_storage_database_async_profile_fits_sts_policy_limit():
 
 
 def test_unsupported_resource_type_fails_before_policy_creation():
+    source = resource(
+        "secret",
+        "aws_secretsmanager_secret",
+        {},
+        outputs=(GeneratedOutput(name="arn", value_type="secret_reference"),),
+    )
     unsupported = resource(
-        "secret", "aws_secretsmanager_secret_version", {"secret_id": "customer-secret"}
+        "secret-version",
+        "aws_secretsmanager_secret_version",
+        {
+            "secret_id": {
+                "kind": "resource_reference",
+                "resource_id": "secret",
+                "output_name": "arn",
+                "value_type": "secret_reference",
+            }
+        },
     )
     with pytest.raises(NovaPlanAccessError, match="unsupported plan resource types"):
-        build_nova_plan_access_policy(proposal(unsupported), account_id=ACCOUNT_ID, region=REGION)
+        build_nova_plan_access_policy(
+            proposal(source, unsupported), account_id=ACCOUNT_ID, region=REGION
+        )
 
 
 def test_name_prefix_without_exact_resource_name_fails_closed():
