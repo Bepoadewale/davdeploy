@@ -15,7 +15,25 @@ from dataclasses import dataclass
 
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 
-PLAN_ROLE_ACCESS_POLICY_VERSION = "nova-plan-read-v1.3"
+PLAN_ROLE_ACCESS_POLICY_VERSION = "nova-plan-read-v1.4"
+
+# EC2's Describe APIs in this set do not support resource-level authorization.
+# Keep them separate from the ordinary ARN-scoped profile and allow them only
+# for a proposal that actually contains the supported private-network types.
+# The per-run session policy constrains these reads to the trusted region.
+PLAN_NETWORK_METADATA_ACTIONS = (
+    "ec2:DescribeSecurityGroups",
+    "ec2:DescribeSubnets",
+    "ec2:DescribeVpcAttribute",
+    "ec2:DescribeVpcs",
+)
+SUPPORTED_PLAN_NETWORK_RESOURCE_TYPES = frozenset(
+    {
+        "aws_vpc",
+        "aws_subnet",
+        "aws_security_group",
+    }
+)
 
 # Role-level action patterns bound the possible reads. The worker session gets
 # an exact provider-version action list and exact resource ARNs. The patterns
@@ -24,6 +42,7 @@ PLAN_ROLE_READ_ACTIONS = (
     "apigateway:GET",
     "dynamodb:Describe*",
     "dynamodb:ListTagsOfResource",
+    *PLAN_NETWORK_METADATA_ACTIONS,
     "iam:Get*",
     "iam:List*",
     "lambda:Get*",
@@ -125,6 +144,7 @@ SUPPORTED_PLAN_RESOURCE_TYPES = frozenset(
         "aws_s3_bucket_versioning",
         "aws_sqs_queue",
         "aws_sqs_queue_policy",
+        *SUPPORTED_PLAN_NETWORK_RESOURCE_TYPES,
     }
 )
 
@@ -180,6 +200,11 @@ def build_nova_plan_access_policy(
     )
     if unsupported:
         raise NovaPlanAccessError("proposal contains unsupported plan resource types")
+
+    has_network_resources = any(
+        resource.resource_type in SUPPORTED_PLAN_NETWORK_RESOURCE_TYPES
+        for resource in proposal.resources
+    )
 
     by_id = {resource.resource_id: resource for resource in proposal.resources}
     partition = _aws_partition(region)
@@ -460,36 +485,105 @@ def build_nova_plan_access_policy(
             else set()
         )
     )
-    if not scoped_resources:
+    if not scoped_resources and not has_network_resources:
         raise NovaPlanAccessError("proposal has no supported customer plan resources")
-    statements.append(
-        {
-            "Effect": "Allow",
-            # Exact resource ARNs constrain the fixed role-level read patterns;
-            # the explicit deny below also blocks direct grants outside them.
-            "Action": sorted(PLAN_ROLE_READ_ACTIONS),
-            "Resource": scoped_resources,
-        }
-    )
+    proposal_families = {
+        service
+        for service in resources_by_service
+        if resources_by_service[service]
+    }
+    if any(
+        resource.resource_type.startswith("aws_apigatewayv2_")
+        for resource in proposal.resources
+    ):
+        proposal_families.add("apigateway")
+    if any(
+        resource.resource_type in {"aws_dynamodb_table"}
+        for resource in proposal.resources
+    ):
+        proposal_families.add("dynamodb")
+    if any(resource.resource_type.startswith("aws_iam_") for resource in proposal.resources):
+        proposal_families.update({"iam-role", "iam-policy"})
+    if any(resource.resource_type.startswith("aws_lambda_") for resource in proposal.resources):
+        proposal_families.update({"lambda", "lambda-event-source-mapping"})
+    if any(
+        resource.resource_type in {"aws_db_instance", "aws_rds_cluster", "aws_rds_cluster_instance"}
+        for resource in proposal.resources
+    ):
+        proposal_families.update({"rds-cluster", "rds-instance"})
+    proposal_scoped_actions = {
+        action
+        for action in PLAN_ROLE_READ_ACTIONS
+        if (action.startswith("apigateway:") and "apigateway" in proposal_families)
+        or (action.startswith("dynamodb:") and "dynamodb" in proposal_families)
+        or (action.startswith("iam:") and bool(proposal_families & {"iam-role", "iam-policy"}))
+        or (action.startswith("lambda:") and bool(proposal_families & {"lambda", "lambda-event-source-mapping"}))
+        or (action.startswith("rds:") and bool(proposal_families & {"rds-cluster", "rds-instance", "rds-subnet-group"}))
+        or (action.startswith("s3:") and "s3" in proposal_families)
+        or (action.startswith("sqs:") and "sqs" in proposal_families)
+    }
+    if not scoped_resources:
+        proposal_scoped_actions.clear()
+    session_read_actions = set(proposal_scoped_actions)
+    if has_network_resources:
+        session_read_actions.update(PLAN_NETWORK_METADATA_ACTIONS)
+
+    if scoped_resources:
+        statements.append(
+            {
+                "Effect": "Allow",
+                # Exact resource ARNs constrain the fixed role-level read patterns;
+                # the explicit deny below also blocks direct grants outside them.
+                "Action": sorted(proposal_scoped_actions),
+                "Resource": scoped_resources,
+            }
+        )
+    if has_network_resources:
+        statements.append(
+            {
+                "Effect": "Allow",
+                "Action": sorted(PLAN_NETWORK_METADATA_ACTIONS),
+                "Resource": "*",
+                "Condition": {"StringEquals": {"ec2:Region": region}},
+            }
+        )
     # This explicit deny keeps the session read-only even if a customer edits
     # the role's identity policy or adds a resource-based grant.
     statements.append(
         {
             "Effect": "Deny",
-            "NotAction": sorted(set(PLAN_ROLE_READ_ACTIONS) | {"sts:GetCallerIdentity"}),
+            "NotAction": sorted(session_read_actions | {"sts:GetCallerIdentity"}),
             "Resource": "*",
         }
     )
     # The action deny above prevents writes and out-of-profile APIs. This
     # resource deny also blocks direct resource-policy grants to the assumed
     # role session from escaping the proposal's resource scope.
-    statements.append(
-        {
-            "Effect": "Deny",
-            "NotAction": ["sts:GetCallerIdentity"],
-            "NotResource": scoped_resources,
-        }
-    )
+    if scoped_resources:
+        statements.append(
+            {
+                "Effect": "Deny",
+                "NotAction": sorted(
+                    {"sts:GetCallerIdentity"}
+                    | (set(PLAN_NETWORK_METADATA_ACTIONS) if has_network_resources else set())
+                ),
+                "NotResource": scoped_resources,
+                **(
+                    {"Condition": {"StringNotEquals": {"ec2:Region": region}}}
+                    if has_network_resources
+                    else {}
+                ),
+            }
+        )
+    elif has_network_resources:
+        statements.append(
+            {
+                "Effect": "Deny",
+                "Action": sorted(PLAN_NETWORK_METADATA_ACTIONS),
+                "Resource": "*",
+                "Condition": {"StringNotEquals": {"ec2:Region": region}},
+            }
+        )
     if resources_by_service["s3"]:
         statements.append(
             {
@@ -507,7 +601,9 @@ def build_nova_plan_access_policy(
     }
     encoded = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
     if len(encoded) > 2048:
-        raise NovaPlanAccessError("fixed plan role session policy exceeds the AWS limit")
+        raise NovaPlanAccessError(
+            f"fixed plan role session policy exceeds the AWS limit ({len(encoded)} bytes)"
+        )
     return NovaPlanAccessPolicy(
         version=PLAN_ROLE_ACCESS_POLICY_VERSION,
         document=document,

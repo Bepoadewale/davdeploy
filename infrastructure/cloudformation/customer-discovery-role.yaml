@@ -115,6 +115,10 @@ Resources:
                   - apigateway:GET
                   - dynamodb:Describe*
                   - dynamodb:ListTagsOfResource
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcAttribute
+                  - ec2:DescribeVpcs
                   - iam:Get*
                   - iam:List*
                   - lambda:Get*
@@ -142,6 +146,10 @@ Resources:
                   - apigateway:GET
                   - dynamodb:Describe*
                   - dynamodb:ListTagsOfResource
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcAttribute
+                  - ec2:DescribeVpcs
                   - iam:Get*
                   - iam:List*
                   - lambda:Get*

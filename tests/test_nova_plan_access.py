@@ -9,6 +9,7 @@ from davdeploy.generated_deployment_contract import (
     WorkloadRequirements,
 )
 from davdeploy.nova_plan_access import (
+    PLAN_NETWORK_METADATA_ACTIONS,
     PLAN_ROLE_ACCESS_POLICY_VERSION,
     PLAN_ROLE_READ_ACTIONS,
     PLAN_SCOPED_READ_ACTIONS,
@@ -122,6 +123,7 @@ def test_session_policy_is_read_only_proposal_scoped_and_bounded():
     assert "s3:GetBucket*" in allow["Action"]
     assert "dynamodb:Describe*" in allow["Action"]
     assert "lambda:Get*" in allow["Action"]
+    assert not any(action.startswith("ec2:") for action in allow["Action"])
     assert "arn:aws:s3:::private-data-123" in allow["Resource"]
     assert "arn:aws:dynamodb:us-east-1:123456789012:table/app-records" in allow["Resource"]
     assert "arn:aws:sqs:us-east-1:123456789012:app-jobs" in allow["Resource"]
@@ -133,6 +135,7 @@ def test_session_policy_is_read_only_proposal_scoped_and_bounded():
 
 
 def test_fixed_role_action_patterns_cover_provider_reads_without_data_actions():
+    assert all(action in PLAN_ROLE_READ_ACTIONS for action in PLAN_NETWORK_METADATA_ACTIONS)
     for actions in PLAN_SCOPED_READ_ACTIONS.values():
         for action in actions:
             assert any(fnmatchcase(action, pattern) for pattern in PLAN_ROLE_READ_ACTIONS)
@@ -155,6 +158,11 @@ def test_fixed_role_action_patterns_cover_provider_reads_without_data_actions():
         "rds:DownloadDBLogFilePortion",
         "rds-data:ExecuteStatement",
         "secretsmanager:GetSecretValue",
+        "ec2:RunInstances",
+        "ec2:CreateVpc",
+        "ec2:CreateSubnet",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteVpc",
     ):
         assert not any(fnmatchcase(forbidden, pattern) for pattern in PLAN_ROLE_READ_ACTIONS)
 
@@ -308,9 +316,29 @@ def test_composed_api_storage_database_async_profile_fits_sts_policy_limit():
         },
     )
     api = resource("api", "aws_apigatewayv2_api", {"name": "app-api"})
+    vpc = resource("network", "aws_vpc", {"cidr_block": "10.42.0.0/16"})
+    subnet = resource(
+        "private-subnet", "aws_subnet", {"cidr_block": "10.42.1.0/24", "vpc_id": "vpc-new"}
+    )
+    security_group = resource(
+        "database-access", "aws_security_group", {"name": "database-access"}
+    )
 
     policy = build_nova_plan_access_policy(
-        proposal(bucket, bucket_policy, table, queue, role, role_policy, function, mapping, api),
+        proposal(
+            bucket,
+            bucket_policy,
+            table,
+            queue,
+            role,
+            role_policy,
+            function,
+            mapping,
+            api,
+            vpc,
+            subnet,
+            security_group,
+        ),
         account_id=ACCOUNT_ID,
         region=REGION,
     )
@@ -318,11 +346,23 @@ def test_composed_api_storage_database_async_profile_fits_sts_policy_limit():
     encoded = json.dumps(policy.document, sort_keys=True, separators=(",", ":"))
     assert len(encoded) <= 2048
     allow = next(item for item in policy.document["Statement"] if item["Effect"] == "Allow")
+    assert not any(action.startswith("rds:") for action in allow["Action"])
     assert "arn:aws:s3:::app-private-storage" in allow["Resource"]
     assert "arn:aws:dynamodb:us-east-1:123456789012:table/app-records" in allow["Resource"]
     assert "arn:aws:sqs:us-east-1:123456789012:app-jobs" in allow["Resource"]
     assert "arn:aws:lambda:us-east-1:123456789012:event-source-mapping:*" in allow["Resource"]
     assert "arn:aws:apigateway:us-east-1::/apis/*" in allow["Resource"]
+    network_allow = next(
+        item for item in policy.document["Statement"] if item.get("Resource") == "*" and item.get("Effect") == "Allow"
+    )
+    assert network_allow["Action"] == sorted(PLAN_NETWORK_METADATA_ACTIONS)
+    assert network_allow["Condition"] == {"StringEquals": {"ec2:Region": REGION}}
+    scope_deny = next(
+        item
+        for item in policy.document["Statement"]
+        if item["Effect"] == "Deny" and "NotResource" in item
+    )
+    assert scope_deny["Condition"] == {"StringNotEquals": {"ec2:Region": REGION}}
 
 
 @pytest.mark.parametrize(
@@ -564,3 +604,69 @@ def test_policy_rejects_wrong_trusted_region():
     item = resource("storage", "aws_s3_bucket", {"bucket": "private-data-123"})
     with pytest.raises(NovaPlanAccessError, match="trusted region"):
         build_nova_plan_access_policy(proposal(item), account_id=ACCOUNT_ID, region="us-west-2")
+
+
+def test_private_network_metadata_reads_are_proposal_and_region_scoped():
+    vpc = resource("network", "aws_vpc", {"cidr_block": "10.42.0.0/16"})
+    subnet = resource(
+        "private-subnet", "aws_subnet", {"cidr_block": "10.42.1.0/24", "vpc_id": "vpc-new"}
+    )
+    group = resource("database-access", "aws_security_group", {"name": "db-access"})
+    built = build_nova_plan_access_policy(
+        proposal(vpc, subnet, group), account_id=ACCOUNT_ID, region=REGION
+    )
+    statements = built.document["Statement"]
+    network_allow = next(
+        item
+        for item in statements
+        if item["Effect"] == "Allow" and item.get("Action") == sorted(PLAN_NETWORK_METADATA_ACTIONS)
+    )
+    assert network_allow == {
+        "Effect": "Allow",
+        "Action": sorted(PLAN_NETWORK_METADATA_ACTIONS),
+        "Resource": "*",
+        "Condition": {"StringEquals": {"ec2:Region": REGION}},
+    }
+    region_deny = next(
+        item
+        for item in statements
+        if item["Effect"] == "Deny" and item.get("Action") == sorted(PLAN_NETWORK_METADATA_ACTIONS)
+    )
+    assert region_deny["Condition"] == {"StringNotEquals": {"ec2:Region": REGION}}
+    # A network-only proposal has no empty NotResource list and denies other
+    # direct grants to the role session.
+    assert not any(item.get("NotResource") == [] for item in statements)
+    direct_grant_deny = next(
+        item
+        for item in statements
+        if item["Effect"] == "Deny"
+        and item.get("NotAction") == sorted(
+            set(PLAN_NETWORK_METADATA_ACTIONS) | {"sts:GetCallerIdentity"}
+        )
+    )
+    assert direct_grant_deny["Resource"] == "*"
+    for mutation in (
+        "ec2:RunInstances",
+        "ec2:CreateVpc",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteVpc",
+    ):
+        assert not any(
+            item["Effect"] == "Allow"
+            and any(fnmatchcase(mutation, pattern) for pattern in item["Action"])
+            for item in statements
+        )
+
+
+def test_non_network_proposal_does_not_receive_ec2_metadata_access():
+    item = resource("storage", "aws_s3_bucket", {"bucket": "private-data-123"})
+    built = build_nova_plan_access_policy(proposal(item), account_id=ACCOUNT_ID, region=REGION)
+    statements = built.document["Statement"]
+    assert not any(
+        statement["Effect"] == "Allow"
+        and any(action in PLAN_NETWORK_METADATA_ACTIONS for action in statement.get("Action", []))
+        for statement in statements
+    )
+    scope_deny = next(statement for statement in statements if "NotResource" in statement)
+    assert scope_deny["NotAction"] == ["sts:GetCallerIdentity"]
+    assert "arn:aws:s3:::private-data-123" in scope_deny["NotResource"]

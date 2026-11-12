@@ -1,25 +1,28 @@
 # ticket379 — support bounded VPC metadata reads during Nova planning
 
-PR: draft pending bootstrap
+PR: [#379](https://github.com/Bepoadewale/davdeploy/pull/379) (draft)
 Branch: `feat/nova-network-plan-read-profile-379`
 
 ## Problem / goal
 
 Nova's fixed customer plan-role profile does not include EC2 network metadata
 reads. Terraform cannot safely plan a composed private application graph that
-uses VPCs, subnets, routes, or security groups until the plan role can inspect
-the required network metadata. Add only the fixed read-only EC2 API actions
-needed by the supported network resource types, restricted to the trusted plan
-region in each run. Do not add mutation actions or general EC2 read access.
+uses VPCs, subnets, or security groups until the plan role can inspect the
+required network metadata. Add only the fixed read-only EC2 API actions needed
+by those resource types, restricted to the trusted plan region in each run.
+Do not add mutation actions or general EC2 read access. Route tables, internet
+gateways, NAT, and VPC endpoints remain unsupported in this slice.
 
 ## Current repo state
 
 Backend `main` is `09bdb471a995d77f7eac95d9ca4d6f6899b95d04` after PR #378.
-`nova_plan_access.py` rejects VPC, subnet, route, NAT, and security-group
-resource types. Its session policy scopes existing supported service reads to
-proposal-derived resource ARNs. EC2 Describe APIs do not support resource-level
-permissions, so their session-policy boundary must use the AWS-supported
-regional condition keys and an explicit deny for region mismatches.
+The implementation now permits VPC, subnet, and security-group proposals.
+Route tables, internet gateways, NAT, and VPC endpoints remain rejected. EC2
+Describe APIs do not support resource-level permissions, so their session
+policy uses a trusted-region condition and an explicit deny for region
+mismatches. The per-run action list is narrowed to service families present in
+the proposal so a composed profile can stay within STS's 2,048-character
+session-policy limit.
 
 ## Research / references used
 
@@ -46,24 +49,33 @@ regional condition keys and an explicit deny for region mismatches.
 
 ## Acceptance criteria
 
-- [ ] Only verified EC2 metadata-read actions are enabled; no EC2 mutations,
+- [x] Only verified EC2 metadata-read actions are enabled; no EC2 mutations,
       wildcard service patterns, or general `Describe*` permission are added.
-- [ ] Session access is granted only for supported network proposals and the
+- [x] Session access is granted only for supported network proposals and the
       trusted region, with an explicit deny outside it.
-- [ ] Existing S3, RDS, IAM, Lambda, API Gateway, DynamoDB, and SQS scope tests
+- [x] Existing S3, RDS, IAM, Lambda, API Gateway, DynamoDB, and SQS scope tests
       remain passing and policy size stays within AWS limits.
-- [ ] Focused tests, `make verify`, Terraform validation, documentation
+- [x] Focused tests, `make verify`, Terraform validation, documentation
       conventions, and clean-room proof pass.
-- [ ] All limitations and the fact that no AWS/customer role was changed are
+- [x] All limitations and the fact that no AWS/customer role was changed are
       documented; required final-head CI and review pass.
 
 ## Acceptance status
 
-- [ ] Implementation and validation complete.
+- [ ] Implementation and local validation complete; awaiting independent
+      review and final-head CI.
 
 ## Tests / validation performed
 
-- Bootstrap only; implementation validation will be added before review-ready.
+- Focused policy and customer-role contract checks pass locally (39 tests).
+- `make verify` passed with 1,050 tests; Ruff, OpenAPI, Actions configuration,
+  and Docker Compose checks passed.
+- `make terraform-validate`, documentation conventions, and `git diff --check`
+  passed.
+- `make local-proof` passed using a dedicated Docker subnet after the default
+  address pools were exhausted. The exact commands and boundary are recorded
+  in `docs/test/test379.md`.
+- Final-head GitHub CI and independent review are pending.
 
 ## Evidence files produced
 
