@@ -42,6 +42,11 @@ class PlanAction(StrEnum):
     DESTROY = "DESTROY"
 
 
+class IntentScope(StrEnum):
+    INFRASTRUCTURE = "INFRASTRUCTURE"
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"
+
+
 class InfrastructurePlanState(StrEnum):
     """Customer-facing planning lifecycle. Approval never means deployment."""
 
@@ -132,6 +137,7 @@ class IntentInterpretation(BaseModel):
     spec: WorkloadSpec
     questions: list[MaterialQuestion] = Field(default_factory=list)
     model_metadata: dict[str, Any] | None = None
+    request_scope: IntentScope = IntentScope.INFRASTRUCTURE
 
 
 class ArchitectureComponent(BaseModel):

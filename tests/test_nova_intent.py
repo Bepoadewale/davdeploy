@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from davdeploy.contracts import ModelResponse, ModelUsage, TenantScope
+from davdeploy.domain import IntentScope
 from davdeploy.intent import IntentOutOfScopeError, NovaIntentProvider
 from davdeploy.main import translate
 from davdeploy.model_gateway import NOVA_2_LITE_MODEL_ID, ModelGatewayUnavailable
@@ -112,10 +113,10 @@ def test_nova_intent_is_typed_tenant_scoped_and_non_authoritative():
 def test_nova_intent_rejects_unrelated_requests_before_creating_a_workload_spec():
     intent_provider, gateway = provider(proposal(request_scope="OUT_OF_SCOPE"))
 
-    with pytest.raises(IntentOutOfScopeError, match="cannot answer general questions"):
-        intent_provider.interpret("Should I buy a particular stock?", None, scope())
+    result = intent_provider.interpret("Should I buy a particular stock?", None, scope())
 
     assert len(gateway.calls) == 1
+    assert result.request_scope == IntentScope.OUT_OF_SCOPE
     _, document, _ = gateway.calls[0]
     assert "investment picks and financial advice are OUT_OF_SCOPE" in document["task"]
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from functools import lru_cache
-from typing import Literal, Protocol
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -17,6 +17,7 @@ from davdeploy.contracts import (
 from davdeploy.domain import (
     EnvironmentName,
     IntentInterpretation,
+    IntentScope,
     MaterialQuestion,
     WorkloadSpec,
 )
@@ -62,7 +63,7 @@ class NovaIntentProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    request_scope: Literal["INFRASTRUCTURE", "OUT_OF_SCOPE"]
+    request_scope: IntentScope
     workload_type: str
     data_classification: str
     average_rps: int | None
@@ -185,8 +186,6 @@ class NovaIntentProvider:
                     "Nova response violated the intent schema after one repair attempt"
                 ) from error
             response = _combine_model_responses(response, repair_response)
-        if proposal.request_scope == "OUT_OF_SCOPE":
-            raise IntentOutOfScopeError()
         unknowns = _material_unknowns(proposal, source_repository)
         field_status = {
             field: "UNKNOWN" if field in unknowns else "MODEL_INFERRED" for field in MATERIAL_FIELDS
@@ -228,6 +227,7 @@ class NovaIntentProvider:
             spec=spec,
             questions=[_material_question(field) for field in unknowns],
             model_metadata=_model_metadata(response),
+            request_scope=proposal.request_scope,
         )
 
     def _request(self, document: dict[str, object], tenant: TenantScope) -> ModelRequest:
