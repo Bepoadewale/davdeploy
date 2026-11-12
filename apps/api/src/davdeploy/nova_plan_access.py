@@ -563,10 +563,10 @@ def build_nova_plan_access_policy(
         statements.append(
             {
                 "Effect": "Deny",
-                "NotAction": sorted(
-                    {"sts:GetCallerIdentity"}
-                    | (set(PLAN_NETWORK_METADATA_ACTIONS) if has_network_resources else set())
-                ),
+                # With network resources, the region condition deliberately
+                # applies to EC2 actions too: in-region reads pass this deny,
+                # while out-of-region reads are explicitly denied.
+                "NotAction": ["sts:GetCallerIdentity"],
                 "NotResource": scoped_resources,
                 **(
                     {"Condition": {"StringNotEquals": {"ec2:Region": region}}}

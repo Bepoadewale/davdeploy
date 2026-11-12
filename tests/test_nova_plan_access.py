@@ -362,6 +362,7 @@ def test_composed_api_storage_database_async_profile_fits_sts_policy_limit():
         for item in policy.document["Statement"]
         if item["Effect"] == "Deny" and "NotResource" in item
     )
+    assert scope_deny["NotAction"] == ["sts:GetCallerIdentity"]
     assert scope_deny["Condition"] == {"StringNotEquals": {"ec2:Region": REGION}}
 
 
