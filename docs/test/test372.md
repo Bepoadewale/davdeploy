@@ -35,10 +35,15 @@ AWS region: Not accessed
 - `COMPOSE_PROJECT_NAME=davdeploy-pr372-cleanroom-20261112 make local-proof`
   from the clean-room worktree — passed; containers are stopped and artifacts
   listed above are retained.
-- Required CI run `43154578894` passed all seven jobs on the implementation
-  commit. The evidence-only update below still requires final-head CI.
+- Required CI run `43154578894` passed all seven jobs on implementation
+  commit `757799c`. Final evidence head `01cb9c6` also passed all seven jobs in
+  run `43155307470`.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed
   after the evidence update.
+- Final-diff review found no blocker in the explicit action allowlist, exact
+  trusted account/region/subnet-group ARN construction, concrete-name checks,
+  typed-reference restrictions, or tests proving write/data/secret access
+  remains outside this policy.
 
 ## Observed result
 
