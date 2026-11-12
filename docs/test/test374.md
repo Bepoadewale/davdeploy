@@ -29,6 +29,12 @@ AWS region: Not accessed
   — passed.
 - `python scripts/check_doc_conventions.py` and `git diff --check` — passed
   on implementation head `0514ac1`.
+- Full isolated clean-room proof passed from worktree
+  `/private/tmp/davdeploy-pr374-cleanroom-20261112` at `58bd8d4` with unique
+  Compose project `davdeploy-pr374-cleanroom-20261112`. It included clean,
+  bootstrap, smoke, API contract, simple/complex/degraded/Day-2/failure/
+  readiness-failure demos, customer-plan E2E, fixture seed, post-restart
+  persistence, trace check and `make verify` (1,044 tests).
 
 ## Observed result
 
@@ -40,11 +46,16 @@ AWS region: Not accessed
 - `DescribeSecret` metadata-only permission remains eligible for human review.
 - This guard does not yet bind an application permission to a typed RDS secret
   reference; runtime secret value access remains unavailable.
+- After proof, all project containers were stopped. No named volume was
+  created; the external virtual environment, worktree, bind-mounted Postgres
+  data, Compose network and images are retained. No files, volumes, networks or
+  images were deleted. The pre-existing `davdeploy-nova-cleanroom-20261105a`
+  container was not touched.
 
 ## Teardown
 
-No AWS cleanup is needed. Clean-room container and retained-artifact status
-will be recorded after verification.
+No AWS cleanup is needed. All PR-specific project containers are stopped;
+local artifacts listed above are retained.
 
 ## Final boundary
 

@@ -50,22 +50,25 @@ secret-read grant until that binding is deterministic and verified.
 - [x] Metadata-only `DescribeSecret` remains eligible for human review.
 - [x] No policy values, secret values, or raw plan payloads enter findings.
 - [x] Focused tests and full `make verify` pass.
-- [ ] Isolated clean-room proof passes.
+- [x] Isolated clean-room proof passes.
 - [ ] Documentation conventions, current-head review and final-head CI pass.
-- [ ] No AWS role, customer plan, approval, apply, or workload is changed.
+- [x] No AWS role, customer plan, approval, apply, or workload is changed.
 
 ## Acceptance status
 
 - [x] Implementation and focused/full tests complete.
-- [ ] Clean-room proof passes.
+- [x] Clean-room proof passes.
 - [ ] Documentation, review and final-head CI pass.
 - [x] No runtime/AWS/customer workload mutation is in scope or performed.
 
 ## Tests / validation performed
 
 Focused policy tests passed (149). `make verify` passed (1,044 tests, Ruff,
-Actions configuration, OpenAPI snapshot and Compose config). Exact clean-room
-and final CI results will be recorded after those gates finish.
+Actions configuration, OpenAPI snapshot and Compose config). Full isolated
+clean-room proof passed from `58bd8d4`; all project containers are stopped.
+The external virtual environment, worktree, bind-mounted Postgres data, network
+and images are retained. No named volume or AWS resources were created.
+Documentation checks pass; final-head review and CI remain pending.
 
 ## Evidence files produced
 
