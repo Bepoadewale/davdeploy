@@ -17,6 +17,7 @@ The Nova proposal contract now rejects common literal credential and secret fiel
 - Full checks: `make verify` — 1,004 tests passed, Ruff passed, OpenAPI snapshot matched, and Docker Compose configuration passed. One existing Starlette/httpx deprecation warning remains.
 - Isolated Compose proof: `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365 make local-proof` — passed API readiness, worker/executor readiness, API/CORS contract, customer-plan local E2E, trace check, and the full verification suite.
 - Repository checks: `git diff --check` and `python3 scripts/check_doc_conventions.py` — passed.
+- Initial hosted CI run `43127441913` passed all seven required jobs on implementation commit `7002969588443df4baa38c637db8544cf643c76a`.
 
 ## Observed result
 

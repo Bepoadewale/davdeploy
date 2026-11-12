@@ -41,6 +41,7 @@ The generated deployment contract rejects a short list of exact argument keys an
 - `make verify`: 1,004 tests passed; lint, OpenAPI snapshot and Docker Compose configuration checks passed.
 - `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365 make local-proof`: passed, including API contract, customer-plan E2E, traces and the full verification suite.
 - `git diff --check` and `python3 scripts/check_doc_conventions.py`: passed.
+- Initial hosted CI run `43127441913` passed all seven required jobs on implementation commit `7002969588443df4baa38c637db8544cf643c76a`.
 
 ## Evidence files produced
 
