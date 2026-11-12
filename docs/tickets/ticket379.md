@@ -58,12 +58,13 @@ session-policy limit.
 - [x] Focused tests, `make verify`, Terraform validation, documentation
       conventions, and clean-room proof pass.
 - [x] All limitations and the fact that no AWS/customer role was changed are
-      documented; required final-head CI and review pass.
+      documented.
+- [ ] Required final-head CI and independent review pass.
 
 ## Acceptance status
 
 - [ ] Implementation and local validation complete; awaiting independent
-      review and final-head CI.
+      review and final-head CI for the latest evidence commit.
 
 ## Tests / validation performed
 

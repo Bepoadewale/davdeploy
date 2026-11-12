@@ -1,12 +1,12 @@
 # test379 — region-bounded Nova network plan profile
 
 - Date: 2026-11-12
-- Execution type: Local unit, repository, Terraform validation, and local-stack proof
+- Execution type: Local verification, local-stack proof, and read-only IAM policy simulation
 - Customer repository: N/A; synthetic proposals only
 - Commit: `4a292d0` (policy implementation exercised by the recorded local runs)
 - Pull request: [#379](https://github.com/Bepoadewale/davdeploy/pull/379) (draft)
-- AWS account: N/A; no AWS API calls made
-- AWS region: N/A; no AWS API calls made
+- AWS account: `654654474502` (policy simulation only)
+- AWS region: `us-east-1` (simulation context only)
 
 ## Purpose
 
@@ -29,6 +29,11 @@ routes, internet gateways, NAT, and VPC endpoints.
   — passed, including local API/worker/executor readiness, API/CORS contract,
   customer-plan E2E, seeded local data, trace verification, and a second full
   verification run (1,050 tests).
+- Verified the AWS caller identity was account `654654474502`, then used
+  read-only AWS IAM `SimulateCustomPolicy` with a generated mixed
+  S3/VPC/subnet/security-group profile — `ec2:DescribeVpcs` was allowed in `us-east-1`,
+  explicitly denied in `us-west-2`, and `ec2:RunInstances` was explicitly
+  denied in `us-east-1`.
 
 The default Docker network allocation initially failed because the host had
 used all predefined address pools. The local proof was rerun with an explicit
@@ -50,22 +55,26 @@ deleted. The DavDeploy local Compose stack remains running.
 ## Resources created
 
 This proof used synthetic local data and project-related Docker containers.
-It did not assume a customer role, deploy the updated CloudFormation template,
-call AWS, create customer resources, or enable hosted Nova planning. The local
-stack is left running; no Docker cleanup was performed.
+AWS calls were limited to caller identity verification and the read-only IAM
+policy simulation above. It did not assume a customer role, deploy the updated
+CloudFormation template, create customer resources, or enable hosted Nova
+planning. The local stack is left running; no Docker cleanup was performed.
 
 ## Observed result
 
 The focused policy tests, full verification, Terraform validation, documentation
-checks, and local proof all passed. Hosted planning remains disabled.
+checks, local proof, and IAM policy simulation all passed. Hosted planning
+remains disabled.
 
 ## Teardown
 
 No AWS teardown applies. The local Compose stack remains running; it was not
-stopped or deleted. No Docker volumes or networks were deleted.
+stopped or deleted. No Docker volumes or networks were deleted. IAM simulation
+created no role or other AWS resource.
 
 ## Final boundary
 
-Passing local tests establishes the session-policy contract only. It does not
-prove effective customer-role permissions or hosted Terraform planning. Those
-remain follow-up acceptance work after this PR's independent review and CI.
+Policy simulation verifies this generated policy's action decisions for the
+three tested contexts. It does not prove effective customer-role permissions
+or hosted Terraform planning. Those remain follow-up acceptance work after
+this PR's independent review and CI.
