@@ -45,8 +45,8 @@ planning, approval, apply, or workload execution.
   `{"status":"ok","product":"davdeploy"}`.
 - `DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED=true`; the plan runner, credential
   broker, plan reviews, and Terraform state API remain `false`.
-- No customer plan role was installed or verified. No customer plan,
-  workload, or AWS resource was created or changed.
+- No customer plan role was installed or verified. No customer plan, customer
+  workload, or customer AWS resource was created or changed.
 
 ## Commands executed
 
