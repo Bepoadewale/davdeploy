@@ -134,7 +134,7 @@ class MaterialQuestion(BaseModel):
 
 
 class IntentInterpretation(BaseModel):
-    spec: WorkloadSpec
+    spec: WorkloadSpec | None
     questions: list[MaterialQuestion] = Field(default_factory=list)
     model_metadata: dict[str, Any] | None = None
     request_scope: IntentScope = IntentScope.INFRASTRUCTURE

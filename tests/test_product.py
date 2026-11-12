@@ -1301,7 +1301,7 @@ def test_out_of_scope_intent_is_not_persisted_or_plannable():
         def interpret(self, prompt, source_repository, tenant):
             del prompt, source_repository, tenant
             return IntentInterpretation(
-                spec=WorkloadSpec(workload_type="unknown", confidence=0.4),
+                spec=None,
                 model_metadata={
                     "provider": "bedrock",
                     "model": "us.amazon.nova-2-lite-v1:0",

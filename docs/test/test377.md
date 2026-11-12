@@ -1,13 +1,13 @@
 # test377 — reject Nova intent requests outside infrastructure planning
 
 - Date: 2026-11-12
-- Execution type: Local API/provider tests; no AWS execution
+- Execution type: Local API/provider tests plus two bounded synthetic Bedrock inference calls; no AWS infrastructure execution
 - Customer repository: N/A; no customer repository or workload was used
-- Backend source: `6f15aaf23b4184d0ec46835f6e3e1237cf83250e` plus this PR's scoped request classification
-- Commit: pending implementation commit
+- Backend source: this PR final implementation commit (recorded after commit)
+- Commit: pending final implementation commit
 - Terraform root: N/A
-- AWS account: N/A
-- AWS region: N/A
+- AWS account: `654654474502` (identity confirmed with STS; inference only)
+- AWS region: `us-east-1`
 
 ## Purpose
 
@@ -18,29 +18,40 @@ schema and policy evaluation.
 
 ## Commands executed
 
-- `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed.
-- `make verify` — 1,048 tests passed, Ruff passed, GitHub Actions configuration
-  passed, OpenAPI snapshot matched, and `docker compose config --quiet` passed.
-- Isolated clean-room `make local-proof` is pending.
+- `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed before the final schema correction; rerun pending.
+- `make verify` — 1,048 tests passed before the final schema correction; rerun pending.
+- Isolated final-head `make local-proof` is pending.
+- A bounded live Nova 2 Lite synthetic check used prompt version
+  `intent-nova2-v2` and the US inference profile. After the schema correction:
+  - stock-advice request → `OUT_OF_SCOPE`, 873 input and 167 output tokens;
+  - stockbroking-app deployment request → `INFRASTRUCTURE`, 881 input and 202 output tokens.
+  Total for those two successful classification calls: 1,754 input and 369 output tokens.
+- The first live stock-advice attempt classified correctly but failed schema
+  validation because workload-only fields were null; its one repair also failed.
+  The error path did not return usage details, so that failed attempt is
+  excluded from the token total and remains a model-usage-evidence gap.
 
 ## Resources created
 
-No AWS resources or customer infrastructure were created or changed. A unique
-local Compose project may be used for clean-room validation; its containers
-will be stopped after validation and non-container test artifacts retained.
+No AWS infrastructure resources or customer infrastructure were created or changed. Two bounded Bedrock inference calls were made for synthetic classification checks. The
+isolated Compose project containers were stopped after validation. Its external
+network, named Postgres volume, images, worktree, virtual environment, and local
+seed database were retained; nothing was deleted.
 
 ## Teardown
 
-No AWS teardown applies. Clean-room containers will be stopped after the local
-proof; any generated local volumes/artifacts will be retained under the
-repository deletion instructions.
+No AWS teardown applies. The project containers are stopped; network, volume,
+images, worktree, virtual environment, and local seed data remain retained under
+the repository deletion instructions.
 
 ## Observed result
 
-Focused and full local tests pass. The API/provider behavior rejects the typed
-`OUT_OF_SCOPE` result with a fixed HTTP 422 response before intent persistence;
-a stockbroking deployment intent remains supported. Clean-room and hosted CI
-results are pending.
+The final schema correction passed focused tests and was exercised by the two
+bounded live synthetic classification calls above. The API/provider behavior
+rejects typed `OUT_OF_SCOPE` with a fixed HTTP 422 response before intent
+persistence while retaining usage evidence for successful classification; a
+stockbroking deployment intent remains supported. Full and clean-room checks
+for the final schema correction are pending.
 
 ## Final boundary
 

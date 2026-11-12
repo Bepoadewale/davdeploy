@@ -117,6 +117,7 @@ def test_nova_intent_rejects_unrelated_requests_before_creating_a_workload_spec(
 
     assert len(gateway.calls) == 1
     assert result.request_scope == IntentScope.OUT_OF_SCOPE
+    assert result.spec is None
     _, document, _ = gateway.calls[0]
     assert "investment picks and financial advice are OUT_OF_SCOPE" in document["task"]
 

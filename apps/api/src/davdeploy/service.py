@@ -10072,6 +10072,8 @@ class ProductService:
             self.db.commit()
             raise IntentOutOfScopeError()
         spec = interpretation.spec
+        if spec is None:
+            raise ModelGatewayUnavailable("intent provider returned no workload specification")
         repository_analysis = self.latest_repository_analysis(principal, project.id)
         spec_payload = spec.model_dump(mode="json")
         if repository_analysis:

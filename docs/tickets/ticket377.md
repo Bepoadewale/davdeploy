@@ -14,12 +14,12 @@ A request to deploy software in a financial domain remains in scope.
 ## Current repo state
 
 - Backend `main` is PR #376 merge commit `6f15aaf23b4184d0ec46835f6e3e1237cf83250e`.
-- Merged-main CI run `43184018244` is pending under one watcher while this PR
-  is developed; it is unrelated to this change.
+- Merged-main CI run `43184018244` passed all seven jobs.
 - The Nova intent provider is schema constrained but previously had no
   explicit out-of-scope classification or user-facing refusal.
-- Nova-generated proposals remain non-authoritative; no AWS or customer
-  workload activity is part of this PR.
+- Nova-generated proposals remain non-authoritative; this PR makes no AWS
+  infrastructure or customer workload changes. Two bounded synthetic Bedrock
+  inference calls are recorded in `docs/test/test377.md`.
 
 ## Research / references used
 
@@ -47,15 +47,16 @@ A request to deploy software in a financial domain remains in scope.
 - [x] Out-of-scope requests produce a fixed client error and are not persisted.
 - [x] Deploying a software workload in a financial domain remains in scope.
 - [x] No generated plan or executor is invoked for an out-of-scope request.
-- [x] Focused tests and `make verify` pass.
-- [ ] Isolated clean-room `make local-proof` passes.
+- [x] Focused tests pass.
+- [ ] `make verify` and isolated clean-room proof must be rerun after the final schema correction.
 - [ ] Documentation conventions, current-head review, and final-head CI pass.
-- [x] No AWS calls or customer workload mutations occur.
+- [x] No AWS infrastructure or customer workload mutations occur; bounded
+  Bedrock inference calls were used for synthetic classification checks.
 
 ## Acceptance status
 
-- [x] Implementation and focused/full local verification complete.
-- [ ] Clean-room proof, PR review, and final-head CI remain outstanding.
+- [x] Implementation and focused tests complete.
+- [ ] Full verification and clean-room proof are pending on the final schema correction; PR review and final-head CI also remain outstanding.
 - [x] No runtime/AWS/customer workload mutation is in scope or performed.
 
 ## Tests / validation performed
@@ -63,7 +64,8 @@ A request to deploy software in a financial domain remains in scope.
 - Focused: `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed.
 - Full: `make verify` — 1,048 tests passed; Ruff, Actions configuration,
   OpenAPI snapshot and Compose config checks passed.
-- Isolated clean-room proof remains pending.
+- Isolated `make local-proof` passed at `4d28a71`; project containers are stopped
+  and local validation artifacts are retained.
 
 ## Evidence files produced
 
