@@ -3,8 +3,8 @@
 - Date: 2026-11-12
 - Execution type: Local API/provider tests plus two bounded synthetic Bedrock inference calls; no AWS infrastructure execution
 - Customer repository: N/A; no customer repository or workload was used
-- Backend source: this PR final implementation commit (recorded after commit)
-- Commit: pending final implementation commit
+- Backend source: `2d0997d01eb11a2a1dc35610bb8acdd583242ea1` plus this evidence-only update
+- Commit: implementation `2d0997d01eb11a2a1dc35610bb8acdd583242ea1`
 - Terraform root: N/A
 - AWS account: `654654474502` (identity confirmed with STS; inference only)
 - AWS region: `us-east-1`
@@ -18,9 +18,11 @@ schema and policy evaluation.
 
 ## Commands executed
 
-- `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed before the final schema correction; rerun pending.
-- `make verify` — 1,048 tests passed before the final schema correction; rerun pending.
-- Isolated final-head `make local-proof` is pending.
+- `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed on the final implementation code.
+- `make verify` — 1,048 tests passed on `2d0997d`; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed.
+- Isolated clean-room `make local-proof` passed on `2d0997d` in
+  `/private/tmp/davdeploy-pr377-final-cleanroom-20261112`: stack health, API/CORS
+  contract, customer-plan E2E, trace checks, and all 1,048 tests passed.
 - A bounded live Nova 2 Lite synthetic check used prompt version
   `intent-nova2-v2` and the US inference profile. After the schema correction:
   - stock-advice request → `OUT_OF_SCOPE`, 873 input and 167 output tokens;
@@ -46,12 +48,12 @@ the repository deletion instructions.
 
 ## Observed result
 
-The final schema correction passed focused tests and was exercised by the two
-bounded live synthetic classification calls above. The API/provider behavior
-rejects typed `OUT_OF_SCOPE` with a fixed HTTP 422 response before intent
-persistence while retaining usage evidence for successful classification; a
-stockbroking deployment intent remains supported. Full and clean-room checks
-for the final schema correction are pending.
+The final schema correction passed focused, full, and clean-room checks and was
+exercised by the two bounded live synthetic classification calls above. The
+API/provider behavior rejects typed `OUT_OF_SCOPE` with a fixed HTTP 422 response
+before intent persistence while retaining usage evidence for successful
+classification; a stockbroking deployment intent remains supported. Hosted
+review and CI are pending.
 
 ## Final boundary
 

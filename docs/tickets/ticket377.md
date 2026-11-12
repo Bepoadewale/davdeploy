@@ -48,7 +48,7 @@ A request to deploy software in a financial domain remains in scope.
 - [x] Deploying a software workload in a financial domain remains in scope.
 - [x] No generated plan or executor is invoked for an out-of-scope request.
 - [x] Focused tests pass.
-- [ ] `make verify` and isolated clean-room proof must be rerun after the final schema correction.
+- [x] `make verify` and isolated clean-room proof pass on final implementation commit `2d0997d`.
 - [ ] Documentation conventions, current-head review, and final-head CI pass.
 - [x] No AWS infrastructure or customer workload mutations occur; bounded
   Bedrock inference calls were used for synthetic classification checks.
@@ -56,16 +56,19 @@ A request to deploy software in a financial domain remains in scope.
 ## Acceptance status
 
 - [x] Implementation and focused tests complete.
-- [ ] Full verification and clean-room proof are pending on the final schema correction; PR review and final-head CI also remain outstanding.
+- [x] Full verification and clean-room proof pass on `2d0997d`; PR review and final-head CI remain outstanding.
 - [x] No runtime/AWS/customer workload mutation is in scope or performed.
 
 ## Tests / validation performed
 
-- Focused: `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed.
-- Full: `make verify` — 1,048 tests passed; Ruff, Actions configuration,
+- Focused: `.venv/bin/python -m pytest -q tests/test_nova_intent.py tests/test_product.py` — 61 passed on final implementation code.
+- Full: `make verify` — 1,048 tests passed on `2d0997d`; Ruff, Actions configuration,
   OpenAPI snapshot and Compose config checks passed.
-- Isolated `make local-proof` passed at `4d28a71`; project containers are stopped
-  and local validation artifacts are retained.
+- Isolated clean-room `make local-proof` passed at `2d0997d` in
+  `/private/tmp/davdeploy-pr377-final-cleanroom-20261112`: all 1,048 tests,
+  stack health, API/CORS contract, customer-plan E2E and trace checks passed.
+  The project's containers are stopped; its external network, named volume,
+  images, worktree, virtual environment and seed database remain retained.
 
 ## Evidence files produced
 
