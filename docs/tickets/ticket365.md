@@ -1,4 +1,7 @@
-# PR 365: Reject literal credentials in Nova proposal arguments
+# ticket365 — reject literal credentials in Nova proposal arguments
+
+PR: [#365](https://github.com/Bepoadewale/davdeploy/pull/365) (draft)
+Branch: `security/nova-secret-reference-contract`
 
 ## Problem / goal
 
@@ -30,15 +33,18 @@ The generated deployment contract rejects a short list of exact argument keys an
 
 ## Acceptance status
 
-- In progress; implementation and validation pending.
+- Implemented and locally verified. Hosted Nova execution remains gated; end-to-end secret lookup is follow-up work.
 
 ## Tests / validation performed
 
-- Pending.
+- `uv run pytest tests/test_generated_deployment_contract.py -q`: 18 passed.
+- `make verify`: 1,004 tests passed; lint, OpenAPI snapshot and Docker Compose configuration checks passed.
+- `COMPOSE_PROJECT_NAME=davdeploy_nova_secret365 make local-proof`: passed, including API contract, customer-plan E2E, traces and the full verification suite.
+- `git diff --check` and `python3 scripts/check_doc_conventions.py`: passed.
 
 ## Evidence files produced
 
-- Pending `docs/test/test365.md`.
+- [`docs/test/test365.md`](../test/test365.md)
 
 ## Boundaries
 

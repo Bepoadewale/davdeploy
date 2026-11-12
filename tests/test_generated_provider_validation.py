@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_deployment_contract import (
+    GeneratedDeploymentProposal,
+    GeneratedResource,
+)
 from davdeploy.generated_provider_validation import (
     GeneratedProviderSchemaError,
     validate_generated_proposal,
@@ -77,7 +80,6 @@ def test_schema_validation_accepts_known_fields_and_pinned_provider():
     [
         (proposal({"name": "demo", "made_up": True}), "unsupported arguments"),
         (proposal({"enabled": True}), "missing required argument"),
-        (proposal({"name": "demo", "secret": "plaintext"}), "must use a declared reference"),
         (proposal(outputs=[{"name": "missing", "value_type": "string"}]), "not a provider output"),
         (proposal(resource_type="aws_unknown_resource"), "absent from the pinned AWS provider"),
     ],
@@ -92,6 +94,25 @@ def test_schema_validation_rejects_wrong_provider_schema_format_version():
         validate_generated_proposal(
             proposal(), schema(), expected_provider_schema_version=1
         )
+
+
+def test_provider_schema_still_rejects_sensitive_literal_after_contract_bypass():
+    # Defense in depth: a corrupted or legacy proposal cannot bypass provider
+    # sensitivity checks even if it did not pass current contract validation.
+    generated = GeneratedDeploymentProposal.model_construct(
+        resources=(
+            GeneratedResource.model_construct(
+                resource_id="primary",
+                resource_type="aws_test_resource",
+                name="primary",
+                arguments={"name": "demo", "secret": "plaintext"},
+                outputs=(),
+            ),
+        )
+    )
+
+    with pytest.raises(GeneratedProviderSchemaError, match="must use a declared reference"):
+        validate_generated_proposal(generated, schema())
 
 
 def test_schema_validation_accepts_typed_resource_output_reference():

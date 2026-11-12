@@ -126,6 +126,61 @@ def test_contract_rejects_unsafe_or_invalid_graphs(
         GeneratedDeploymentProposal.model_validate(proposal(resources))
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("api_key", "literal-api-key"),
+        ("clientSecret", "literal-client-secret"),
+        ("AUTH-TOKEN", "literal-auth-token"),
+        ("nested", {"session_token": "literal-session-token"}),
+        (
+            "environment",
+            [{"name": "API_TOKEN", "value": "literal-env-token"}],
+        ),
+    ],
+)
+def test_contract_rejects_literal_secret_fields(field: str, value: object) -> None:
+    with pytest.raises(ValidationError, match="typed secret_reference|forbidden"):
+        GeneratedDeploymentProposal.model_validate(
+            proposal([resource("api", "api", arguments={field: value})])
+        )
+
+
+def test_contract_accepts_typed_secret_reference_without_secret_material() -> None:
+    result = GeneratedDeploymentProposal.model_validate(
+        proposal(
+            [
+                resource(
+                    "credentials",
+                    "credentials",
+                    outputs=(
+                        {"name": "secret_arn", "value_type": "secret_reference"},
+                    ),
+                ),
+                resource(
+                    "api",
+                    "api",
+                    arguments={
+                        "environment": [
+                            {
+                                "name": "API_TOKEN",
+                                "value": {
+                                    "kind": "resource_reference",
+                                    "resource_id": "credentials",
+                                    "output_name": "secret_arn",
+                                    "value_type": "secret_reference",
+                                },
+                            }
+                        ]
+                    },
+                ),
+            ]
+        )
+    )
+
+    assert len(result.resources) == 2
+
+
 def test_contract_emits_a_json_schema_for_nova_structured_generation() -> None:
     schema = GeneratedDeploymentProposal.model_json_schema()
 
