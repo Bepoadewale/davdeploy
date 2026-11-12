@@ -51,18 +51,24 @@ customer role, hosted Nova plan, or workload was installed or executed.
 - [x] Pricing and exact cost-bound approval remain unavailable; customer
   apply/lifecycle and composed certification remain incomplete.
 - [x] Documentation conventions and diff checks pass locally on this change.
-- [ ] Final-head required CI and review pass; PR is merged.
+- [x] Reconciliation head `5cd8d3b5b2f411013ed0cf6b278764b136546f7c` passed
+  all seven required CI jobs in run `43265887734`; manual final-diff review
+  found no blocker.
+- [ ] PR is merged.
 
 ## Acceptance status
 
 - [x] Source and hosted deployment evidence have been reconciled.
-- [ ] Final-head CI, review, and merge remain pending.
+- [x] CI and review passed for the reconciliation head.
+- [ ] Merge remains pending.
 
 ## Tests / validation performed
 
 The release evidence is recorded in `docs/test/test382.md`.
 `GITHUB_PR_NUMBER=382 .venv/bin/python scripts/check_doc_conventions.py` and
-`git diff --check` passed locally. Final-head CI and review remain required.
+`git diff --check` passed locally. CI run `43265887734` passed all seven jobs
+for commit `5cd8d3b5b2f411013ed0cf6b278764b136546f7c`; manual final-diff review
+found no blocker.
 
 ## Evidence files produced
 
