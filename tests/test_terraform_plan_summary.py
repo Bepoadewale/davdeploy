@@ -240,8 +240,33 @@ def test_missing_runtime_gate_reports_fixed_code_without_plan_values(
     assert result == 2
     assert "reason=runtime_gates_missing" in output.err
     assert "missing_gates=DAVDEPLOY_NOVA_PLAN_RUNNER_READY" in output.err
+    assert "gate_shape=planned_lambdas:1,planned_environments:1" in output.err
+    assert "gate_names=planned:DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED" in output.err
     assert "sensitive-description-value" not in output.err
     assert "private-variable-value" not in output.err
+
+
+def test_runtime_gate_shape_diagnostic_exposes_only_bounded_counts_and_allowlist(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["planned_values"]["root_module"]["resources"][0]["values"]["environment"] = {
+        "variables": {"PRIVATE_TOKEN": "private-plan-value"}
+    }
+    plan["resource_changes"][0]["change"]["after"]["environment"] = {
+        "variables": {"UNTRUSTED_GATE": "private-change-value"}
+    }
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "gate_shape=planned_lambdas:1,planned_environments:1" in output.err
+    assert "gate_names=planned:none;change:none" in output.err
+    assert "PRIVATE_TOKEN" not in output.err
+    assert "UNTRUSTED_GATE" not in output.err
+    assert "private-plan-value" not in output.err
+    assert "private-change-value" not in output.err
 
 
 def test_missing_gate_detail_does_not_echo_unexpected_environment_names(
