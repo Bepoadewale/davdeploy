@@ -52,13 +52,17 @@ preserving dated release snapshots as historical evidence.
 - [x] Dated prior deployment records remain intact and are labeled historical.
 - [x] No private goal, credential guidance, or customer data is copied into the
   repository.
-- [ ] All seven required GitHub checks pass on the final PR head before merge.
+- [x] All seven required GitHub checks passed on implementation head
+  `3c3a11130358684026b728d451ce57f12bb1d63e` in run `43148509141`; the final
+  ticket-update head must also pass before merge.
 
 ## Acceptance status
 
 - [x] Documentation updates and exact-state review complete.
 - [x] Documentation convention and whitespace checks pass.
-- [ ] Current PR-head CI passes all required jobs.
+- [x] CI run `43148509141` passed all seven jobs on head
+  `3c3a11130358684026b728d451ce57f12bb1d63e`; the final ticket-update head
+  remains subject to fresh CI.
 - [ ] PR reviewed and merged only after final-head checks pass.
 
 ## Tests / validation performed
@@ -68,7 +72,12 @@ of this PR.
 
 - `python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final PR-head GitHub checks must pass before merge.
+- GitHub Actions run
+  [43148509141](https://github.com/Bepoadewale/davdeploy/actions/runs/43148509141)
+  passed all seven required jobs on head
+  `3c3a11130358684026b728d451ce57f12bb1d63e`.
+- The ticket evidence update must pass all required checks on its final PR
+  head before merge.
 
 ## Evidence files produced
 
