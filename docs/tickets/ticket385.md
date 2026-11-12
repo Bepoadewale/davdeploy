@@ -1,6 +1,6 @@
 # ticket385 — read runtime feature gates from Terraform plan changes
 
-PR: pending
+PR: [#385](https://github.com/Bepoadewale/davdeploy/pull/385) (draft)
 Branch: `fix/read-runtime-gates-from-plan-changes-385`
 
 ## Problem / goal
@@ -27,9 +27,13 @@ plan summary found all expected Lambda feature gates missing from
 - `tests/test_terraform_plan_summary.py`
 - HashiCorp Terraform JSON plan format:
   https://developer.hashicorp.com/terraform/internals/json-format
+- HashiCorp documents `planned_values` and resource changes as separate plan
+  representations. `terraform show -json` can contain sensitive values, so the
+  implementation reads only the fixed boolean allowlist and never prints raw
+  plan values.
 - Protected plan run `43281070996`, value-free failure detail.
 
-## Work planned
+## Work planned for the PR
 
 - Read runtime flag values from `resource_changes[].change.after` only for
   `aws_lambda_function` resources and names in `FLAG_NAMES`.
@@ -38,22 +42,41 @@ plan summary found all expected Lambda feature gates missing from
 
 ## Acceptance criteria
 
-- [ ] Terraform plan summaries handle omitted `planned_values` gates using
+- [x] Terraform plan summaries handle omitted `planned_values` gates using
   typed `change.after` values.
-- [ ] Missing, malformed, or conflicting gate values fail closed.
-- [ ] Focused tests, full verification, docs conventions, and required CI pass.
+- [x] Missing, malformed, or conflicting gate values fail closed.
+- [x] Focused tests (17) and full verification (1,055 tests) pass.
+- [ ] Docs conventions, diff checks, and required CI pass.
 - [ ] Fresh protected plan yields a safe exact-action summary; no apply unless
   the saved plan is inspected and remains within authorized gates.
 
-## Validation performed
+## Acceptance status
 
-- Not started.
+- [x] Bounded fallback and regression coverage are implemented and locally
+  verified.
+- [ ] Documentation checks and final-head CI remain pending.
+- [ ] A fresh protected plan must confirm the parser now yields a safe summary.
 
-## Evidence files
+## Tests / validation performed
+
+- `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 17 passed.
+- `make verify`: 1,055 passed; Ruff, OpenAPI, Actions configuration, and Docker
+  Compose checks passed. One existing Starlette/httpx deprecation warning.
+- Required GitHub CI and documentation checks are pending.
+
+## Evidence files produced
 
 - `docs/tickets/ticket385.md`
+- `scripts/summarize_terraform_plan.py`
+- `tests/test_terraform_plan_summary.py`
 
-## Boundaries and follow-up
+## Boundaries
 
 Do not log or persist raw `terraform show -json` output. This change does not
 enable customer apply, hosted certification, or regional pricing approval.
+
+## Follow-up work
+
+After merge, dispatch one fresh protected plan, inspect its exact summarized
+actions and runtime gate values, and keep apply closed until the saved plan is
+reviewed.

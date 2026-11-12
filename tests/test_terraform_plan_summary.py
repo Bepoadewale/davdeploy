@@ -93,6 +93,44 @@ def test_summary_contains_actions_changed_field_names_and_boolean_flags_only():
         assert sensitive_value not in summary
 
 
+def test_runtime_gates_fall_back_to_change_after_without_exposing_other_values():
+    plan = _plan()
+    planned_variables = plan["planned_values"]["root_module"]["resources"][0]["values"][
+        "environment"
+    ]["variables"]
+    gate_values = {name: planned_variables[name] for name in FLAG_NAMES}
+    plan["planned_values"]["root_module"]["resources"][0]["values"]["environment"] = {
+        "variables": {"PRIVATE_TOKEN": "sensitive-planned-value"}
+    }
+    plan["resource_changes"][0]["change"]["after"]["environment"] = {
+        "variables": {**gate_values, "PRIVATE_TOKEN": "sensitive-change-value"}
+    }
+
+    summary = "\n".join(summarize_plan(plan))
+
+    assert "runtime_flag ALLOW_CLOUD_APPLY=True" in summary
+    assert "runtime_flag DAVDEPLOY_NOVA_PLAN_RUNNER_READY=False" in summary
+    assert "sensitive-planned-value" not in summary
+    assert "sensitive-change-value" not in summary
+
+
+def test_runtime_gate_disagreement_between_plan_representations_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["resource_changes"][0]["change"]["after"]["environment"] = {
+        "variables": {"DAVDEPLOY_NOVA_PLAN_RUNNER_READY": "true"}
+    }
+    raw = json.dumps(plan).encode()
+
+    result, output = _run_main(monkeypatch, capsys, raw)
+
+    assert result == 2
+    assert "reason=runtime_gate_disagreement" in output.err
+    assert "sensitive-description-value" not in output.err
+    assert "private-variable-value" not in output.err
+
+
 def test_summary_reports_drift_and_output_counts_without_values():
     plan = _plan()
     plan["resource_drift"] = [

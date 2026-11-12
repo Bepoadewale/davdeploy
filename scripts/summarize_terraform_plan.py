@@ -102,21 +102,18 @@ def _module_resources(module: Any):
 
 def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
     flags: dict[str, set[bool]] = defaultdict(set)
-    planned_values = plan.get("planned_values")
-    root = planned_values.get("root_module") if isinstance(planned_values, dict) else None
-    for resource in _module_resources(root):
-        if resource.get("type") != "aws_lambda_function":
-            continue
-        values = resource.get("values")
-        values = values if isinstance(values, dict) else {}
+
+    def add_runtime_flags(values: Any) -> None:
+        if not isinstance(values, dict):
+            return
         environment = values.get("environment") or {}
         if isinstance(environment, list):
             environment = environment[0] if environment else {}
         if not isinstance(environment, dict):
-            continue
+            return
         variables = environment.get("variables")
         if not isinstance(variables, dict):
-            continue
+            return
         for name in FLAG_NAMES:
             if name not in variables:
                 continue
@@ -128,6 +125,26 @@ def _runtime_flags(plan: dict[str, Any]) -> dict[str, set[bool]]:
             else:
                 raise PlanSummaryError("runtime feature gate is not a literal boolean")
             flags[name].add(value)
+
+    planned_values = plan.get("planned_values")
+    root = planned_values.get("root_module") if isinstance(planned_values, dict) else None
+    for resource in _module_resources(root):
+        if resource.get("type") != "aws_lambda_function":
+            continue
+        add_runtime_flags(resource.get("values"))
+
+    # Terraform plan JSON provides planned_values and resource_changes as
+    # separate representations. Collect only fixed runtime-gate names from
+    # both, and require agreement whenever both include a value.
+    for resource_change in plan.get("resource_changes", []):
+        if not isinstance(resource_change, dict):
+            continue
+        if resource_change.get("type") != "aws_lambda_function":
+            continue
+        change = resource_change.get("change")
+        if isinstance(change, dict):
+            add_runtime_flags(change.get("after"))
+
     missing = sorted(set(FLAG_NAMES) - set(flags))
     if missing:
         safe_missing = tuple(name for name in FLAG_NAMES if name in missing)
