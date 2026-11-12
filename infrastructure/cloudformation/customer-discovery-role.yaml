@@ -119,6 +119,9 @@ Resources:
                   - iam:List*
                   - lambda:Get*
                   - lambda:List*
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBInstances
+                  - rds:ListTagsForResource
                   - s3:GetAccelerateConfiguration
                   - s3:GetBucket*
                   - s3:Get*Configuration
@@ -142,6 +145,9 @@ Resources:
                   - iam:List*
                   - lambda:Get*
                   - lambda:List*
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBInstances
+                  - rds:ListTagsForResource
                   - s3:GetAccelerateConfiguration
                   - s3:GetBucket*
                   - s3:Get*Configuration

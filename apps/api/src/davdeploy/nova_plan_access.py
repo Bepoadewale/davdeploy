@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 
-PLAN_ROLE_ACCESS_POLICY_VERSION = "nova-plan-read-v1.1"
+PLAN_ROLE_ACCESS_POLICY_VERSION = "nova-plan-read-v1.2"
 
 # Role-level action patterns bound the possible reads. The worker session gets
 # an exact provider-version action list and exact resource ARNs. The patterns
@@ -28,6 +28,9 @@ PLAN_ROLE_READ_ACTIONS = (
     "iam:List*",
     "lambda:Get*",
     "lambda:List*",
+    "rds:DescribeDBClusters",
+    "rds:DescribeDBInstances",
+    "rds:ListTagsForResource",
     "s3:GetAccelerateConfiguration",
     "s3:GetBucket*",
     "s3:Get*Configuration",
@@ -80,6 +83,8 @@ PLAN_SCOPED_READ_ACTIONS: dict[str, tuple[str, ...]] = {
         "iam:ListRoleTags",
     ),
     "iam-policy": ("iam:GetPolicy", "iam:GetPolicyVersion", "iam:ListPolicyVersions"),
+    "rds-cluster": ("rds:DescribeDBClusters", "rds:ListTagsForResource"),
+    "rds-instance": ("rds:DescribeDBInstances", "rds:ListTagsForResource"),
 }
 
 SUPPORTED_PLAN_RESOURCE_TYPES = frozenset(
@@ -100,6 +105,9 @@ SUPPORTED_PLAN_RESOURCE_TYPES = frozenset(
         "aws_lambda_event_source_mapping",
         "aws_lambda_function",
         "aws_lambda_permission",
+        "aws_db_instance",
+        "aws_rds_cluster",
+        "aws_rds_cluster_instance",
         "aws_s3_bucket",
         "aws_s3_bucket_acl",
         "aws_s3_bucket_cors_configuration",
@@ -213,11 +221,52 @@ def build_nova_plan_access_policy(
         "lambda": set(),
         "iam-role": set(),
         "iam-policy": set(),
+        "rds-cluster": set(),
+        "rds-instance": set(),
     }
     resources_by_service["lambda-event-source-mapping"] = set()
     for resource in proposal.resources:
         kind = resource.resource_type
-        if kind.startswith("aws_s3_bucket"):
+        if kind in {"aws_db_instance", "aws_rds_cluster", "aws_rds_cluster_instance"}:
+            field = "cluster_identifier" if kind == "aws_rds_cluster" else "identifier"
+            value = resource.arguments.get(field)
+
+            def exact_rds_identifier(candidate: object) -> str | None:
+                if (
+                    isinstance(candidate, str)
+                    and re.fullmatch(r"[A-Za-z][A-Za-z0-9-]{0,62}", candidate)
+                    and not candidate.endswith("-")
+                    and "--" not in candidate
+                ):
+                    return candidate
+                return None
+
+            identifier = exact_rds_identifier(value)
+            if isinstance(value, dict) and value.get("kind") == "resource_reference":
+                target = by_id.get(value.get("resource_id"))
+                expected_type = kind
+                target_field = field
+                declared_outputs = (
+                    {output.name: output.value_type for output in target.outputs}
+                    if target is not None
+                    else {}
+                )
+                if (
+                    target is not None
+                    and target.resource_type == expected_type
+                    and value.get("output_name") in {target_field, "id"}
+                    and declared_outputs.get(value.get("output_name")) == "resource_name"
+                    and value.get("value_type") == "resource_name"
+                ):
+                    identifier = exact_rds_identifier(target.arguments.get(target_field))
+            if identifier is None:
+                raise NovaPlanAccessError("RDS identifier cannot be safely scoped")
+            resource_type = "cluster" if kind == "aws_rds_cluster" else "db"
+            profile = "rds-cluster" if kind == "aws_rds_cluster" else "rds-instance"
+            resources_by_service[profile].add(
+                f"arn:{partition}:rds:{region}:{account_id}:{resource_type}:{identifier}"
+            )
+        elif kind.startswith("aws_s3_bucket"):
             bucket = known_name(
                 resource,
                 "bucket",

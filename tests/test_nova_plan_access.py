@@ -47,14 +47,19 @@ def test_session_policy_is_read_only_proposal_scoped_and_bounded():
     queue = resource("jobs", "aws_sqs_queue", {"name": "app-jobs"})
     function = resource("api", "aws_lambda_function", {"function_name": "app-api"})
     api = resource("gateway", "aws_apigatewayv2_api", {"name": "app-gateway"})
+    db_instance = resource("db-instance", "aws_db_instance", {"identifier": "app-db"})
+    cluster = resource("cluster", "aws_rds_cluster", {"cluster_identifier": "app-cluster"})
+    cluster_instance = resource(
+        "cluster-instance", "aws_rds_cluster_instance", {"identifier": "app-cluster-db"}
+    )
 
     first = build_nova_plan_access_policy(
-        proposal(bucket, table, queue, function, api),
+        proposal(bucket, table, queue, function, api, db_instance, cluster, cluster_instance),
         account_id=ACCOUNT_ID,
         region=REGION,
     )
     second = build_nova_plan_access_policy(
-        proposal(bucket, table, queue, function, api),
+        proposal(bucket, table, queue, function, api, db_instance, cluster, cluster_instance),
         account_id=ACCOUNT_ID,
         region=REGION,
     )
@@ -98,6 +103,9 @@ def test_session_policy_is_read_only_proposal_scoped_and_bounded():
     assert "arn:aws:dynamodb:us-east-1:123456789012:table/app-records" in allow["Resource"]
     assert "arn:aws:sqs:us-east-1:123456789012:app-jobs" in allow["Resource"]
     assert "arn:aws:lambda:us-east-1:123456789012:function:app-api" in allow["Resource"]
+    assert "arn:aws:rds:us-east-1:123456789012:db:app-db" in allow["Resource"]
+    assert "arn:aws:rds:us-east-1:123456789012:cluster:app-cluster" in allow["Resource"]
+    assert "arn:aws:rds:us-east-1:123456789012:db:app-cluster-db" in allow["Resource"]
 
 
 def test_fixed_role_action_patterns_cover_provider_reads_without_data_actions():
@@ -111,6 +119,15 @@ def test_fixed_role_action_patterns_cover_provider_reads_without_data_actions():
         "lambda:InvokeFunction",
         "iam:PassRole",
         "iam:PutRolePolicy",
+        "rds:ModifyDBInstance",
+        "rds:ModifyDBCluster",
+        "rds:DeleteDBCluster",
+        "rds:RestoreDBInstanceFromDBSnapshot",
+        "rds:StartExportTask",
+        "rds:AddTagsToResource",
+        "rds:DownloadDBLogFilePortion",
+        "rds-data:ExecuteStatement",
+        "secretsmanager:GetSecretValue",
     ):
         assert not any(fnmatchcase(forbidden, pattern) for pattern in PLAN_ROLE_READ_ACTIONS)
 
@@ -279,6 +296,101 @@ def test_composed_api_storage_database_async_profile_fits_sts_policy_limit():
     assert "arn:aws:sqs:us-east-1:123456789012:app-jobs" in allow["Resource"]
     assert "arn:aws:lambda:us-east-1:123456789012:event-source-mapping:*" in allow["Resource"]
     assert "arn:aws:apigateway:us-east-1::/apis/*" in allow["Resource"]
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "arguments"),
+    [
+        ("aws_db_instance", {}),
+        ("aws_db_instance", {"identifier": "${var.db_id}"}),
+        ("aws_db_instance", {"identifier": "app-db*"}),
+        ("aws_db_instance", {"identifier": "app--db"}),
+        ("aws_db_instance", {"identifier": "app-db-"}),
+        ("aws_rds_cluster", {"cluster_identifier": ""}),
+        ("aws_rds_cluster", {"cluster_identifier": "db:other-account"}),
+    ],
+)
+def test_rds_identifiers_must_be_concrete_and_arn_safe(resource_type, arguments):
+    if any(isinstance(value, str) and "${" in value for value in arguments.values()):
+        # Isolate the plan-access boundary from the earlier contract validator,
+        # which already rejects model-authored Terraform expressions.
+        item = GeneratedResource.model_construct(
+            resource_id="database",
+            resource_type=resource_type,
+            name="database",
+            arguments=arguments,
+            depends_on=(),
+            outputs=(),
+            rationale="Malformed plan-access regression fixture.",
+        )
+    else:
+        item = resource("database", resource_type, arguments)
+    candidate = (
+        GeneratedDeploymentProposal.model_construct(
+            contract_version="1.0",
+            source_revision="revision-1",
+            context_digest="a" * 64,
+            resources=(item,),
+            requirements=WorkloadRequirements(region=REGION),
+        )
+        if any(isinstance(value, str) and "${" in value for value in arguments.values())
+        else proposal(item)
+    )
+    with pytest.raises(NovaPlanAccessError, match="RDS identifier"):
+        build_nova_plan_access_policy(candidate, account_id=ACCOUNT_ID, region=REGION)
+
+
+def test_rds_identifier_reference_must_target_same_declared_resource_family():
+    instance = resource(
+        "database", "aws_db_instance", {"identifier": "app-db"},
+        outputs=(GeneratedOutput(name="identifier", value_type="resource_name"),),
+    )
+    cluster = resource(
+        "cluster",
+        "aws_rds_cluster",
+        {
+            "cluster_identifier": {
+                "kind": "resource_reference",
+                "resource_id": "database",
+                "output_name": "identifier",
+                "value_type": "resource_name",
+            }
+        },
+    )
+    with pytest.raises(NovaPlanAccessError, match="RDS identifier"):
+        build_nova_plan_access_policy(
+            proposal(instance, cluster), account_id=ACCOUNT_ID, region=REGION
+        )
+
+
+def test_rds_identifier_reference_is_bound_to_declared_typed_output():
+    source = resource(
+        "primary-db",
+        "aws_db_instance",
+        {"identifier": "app-db"},
+        outputs=(GeneratedOutput(name="identifier", value_type="resource_name"),),
+    )
+    replica = resource(
+        "replica-db",
+        "aws_db_instance",
+        {
+            "identifier": {
+                "kind": "resource_reference",
+                "resource_id": "primary-db",
+                "output_name": "identifier",
+                "value_type": "resource_name",
+            }
+        },
+    )
+    policy = build_nova_plan_access_policy(
+        proposal(source, replica), account_id=ACCOUNT_ID, region=REGION
+    )
+    allow = next(
+        item
+        for item in policy.document["Statement"]
+        if item["Effect"] == "Allow" and "rds:DescribeDBInstances" in item["Action"]
+    )
+    assert allow["Resource"].count("arn:aws:rds:us-east-1:123456789012:db:app-db") == 1
 
 
 def test_unsupported_resource_type_fails_before_policy_creation():
