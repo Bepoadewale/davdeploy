@@ -32,7 +32,7 @@ scope and all existing customer-facing product claims.
 - `CODEX_BACKLOG.md`
 - PR #371 and PR #372 source, tickets and evidence files.
 
-## Work to be done
+## Work planned for the PR
 
 - Update the current-source snapshot with backend `main` at `c4d8bba` and
   merged-main CI `43156487303`.
@@ -45,20 +45,39 @@ scope and all existing customer-facing product claims.
 
 ## Acceptance criteria
 
-- [ ] Current source and merged-main CI evidence are exact and verified.
-- [ ] PR #371/#372 are described as merged source, not deployed.
-- [ ] No customer role, plan, approval, apply, health or teardown is claimed.
-- [ ] Existing catalogue counts, product claims and scope are preserved.
+- [x] Current source and merged-main CI evidence are exact and verified.
+- [x] PR #371/#372 are described as merged source, not deployed.
+- [x] No customer role, plan, approval, apply, health or teardown is claimed.
+- [x] Existing catalogue counts, product claims and scope are preserved.
 - [ ] Documentation conventions and diff checks pass.
 - [ ] Current-head review and required final-head CI pass.
 
-## Validation
+## Acceptance status
 
-Documentation conventions, diff checks and final-head GitHub CI will be
-recorded after the documentation update. This documentation-only PR makes no
-AWS changes and requires no runtime-workload proof.
+- [x] Status documents reconcile backend `main` at `c4d8bba` and merged-main
+  CI run `43156487303`.
+- [x] #371 and #372 are accurately described as merged source, not deployed.
+- [x] No customer workload or runtime capability is claimed.
+- [x] Documentation conventions and diff checks pass.
+- [ ] Current-head review and required final-head CI pass.
 
-## Boundaries and follow-up
+## Tests / validation performed
+
+`python scripts/check_doc_conventions.py` and `git diff --check` pass. Final
+head GitHub CI and final-diff review remain pending. This documentation-only
+PR makes no AWS changes and requires no runtime-workload proof.
+
+## Evidence files produced
+
+- `docs/tickets/ticket373.md`
+
+## Boundaries
+
+This reconciliation does not grant any new runtime capability. It only
+corrects the source-versus-deployed evidence and preserves the existing
+acceptance gaps.
+
+## Follow-up work
 
 This PR changes documentation only. It does not enable the plan runner, install
 a customer role, attest effective customer permissions, resolve regional
