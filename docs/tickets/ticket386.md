@@ -20,6 +20,8 @@ source. It must never expose plan values or arbitrary names.
   infrastructure apply occurred; the workflow published its immutable Lambda
   package before planning.
 - Customer cloud execution and hosted certification remain disabled.
+- Implementation commit `a9338a1` passed all seven required checks in run
+  `43286995660`.
 - Protected untracked `--only-show-errors` remains untouched.
 
 ## Research / references used
@@ -45,21 +47,26 @@ source. It must never expose plan values or arbitrary names.
   environment/gate names.
 - [x] Raw plan values and arbitrary variable names remain suppressed.
 - [x] Focused tests (18) and full verification (1,056 tests) pass.
-- [ ] Docs checks and required CI pass.
+- [x] Documentation conventions, diff checks, and all seven required CI checks
+  pass on implementation commit `a9338a1` (run `43286995660`).
 - [ ] A fresh protected plan explains its structural omission without exposing
   raw JSON; no apply is dispatched.
 
 ## Acceptance status
 
 - [x] Bounded shape diagnostics are implemented and locally verified.
-- [ ] Docs checks and final-head CI remain pending.
+- [x] Local verification, documentation checks, and implementation-head CI
+  are complete. GitHub remains authoritative for current-head merge checks.
 
 ## Tests / validation performed
 
 - `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 18 passed.
 - `make verify`: 1,056 passed; Ruff, Actions configuration, OpenAPI, and Docker
   Compose checks passed. One existing Starlette/httpx deprecation warning.
-- Documentation conventions and `git diff --check` pending final review.
+- `GITHUB_PR_NUMBER=386 .venv/bin/python scripts/check_doc_conventions.py` and
+  `git diff --check` passed.
+- Implementation commit `a9338a1` passed all seven CI checks in run
+  `43286995660`.
 
 ## Evidence files produced
 
