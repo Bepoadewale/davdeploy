@@ -1,6 +1,6 @@
 # ticket387 — summarize runtime gates from protected plan inputs
 
-PR: [#387](https://github.com/Bepoadewale/davdeploy/pull/387) (draft)
+PR: [#387](https://github.com/Bepoadewale/davdeploy/pull/387)
 Branch: `fix/summary-runtime-gates-from-inputs-387`
 
 ## Problem / goal
@@ -21,6 +21,8 @@ missing, malformed, or conflicting values.
   immutable Lambda package was published first; no Terraform apply or
   control-plane infrastructure mutation occurred.
 - Customer cloud execution and hosted certification remain disabled.
+- Implementation head `e25e2b5` passed all seven required CI checks in run
+  `43297628446`.
 - Protected untracked `--only-show-errors` remains untouched.
 
 ## Research / references used
@@ -48,21 +50,26 @@ missing, malformed, or conflicting values.
 - [x] Missing or malformed gate inputs fail closed; no sensitive or unrelated
   plan values are exposed.
 - [x] Focused tests (22) and full verification (1,060 tests) pass.
-- [ ] Documentation checks and required CI pass.
+- [x] Documentation conventions, diff checks, and all seven required CI checks
+  pass on implementation head `e25e2b5` (run `43297628446`).
 - [ ] A fresh protected plan produces a safe exact-action summary and saved
   plan; no apply is dispatched by this change.
 
 ## Acceptance status
 
 - [x] Implementation and local verification complete.
-- [ ] Documentation checks and final-head CI pending.
+- [x] Documentation checks and implementation-head CI are complete; GitHub
+  remains authoritative for current-head merge checks.
 
 ## Tests / validation performed
 
 - `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 22 passed.
 - `make verify`: 1,060 passed; Ruff, Actions configuration, OpenAPI, and Docker
   Compose checks passed. One existing Starlette/httpx deprecation warning.
-- Documentation conventions and `git diff --check` pending final review.
+- `GITHUB_PR_NUMBER=387 .venv/bin/python scripts/check_doc_conventions.py` and
+  `git diff --check` passed.
+- Implementation head `e25e2b5` passed all seven required checks in run
+  `43297628446`.
 
 ## Evidence files produced
 
