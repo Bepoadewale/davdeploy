@@ -2,22 +2,41 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-12, PR #365
+## Current backend source — 2026-11-12, PR #367
 
-Backend `main` is merge commit `def21021a44c5ec39ddafc295c4c8c6b5ee7b896`;
+Backend `main` is merge commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`;
 merged-main CI run
-[43132143239](https://github.com/Bepoadewale/davdeploy/actions/runs/43132143239)
+[43137760056](https://github.com/Bepoadewale/davdeploy/actions/runs/43137760056)
 passed all seven jobs. PR #365 rejects common literal credential and secret
-values in generated arguments unless represented by a typed secret reference.
-This is input validation only: it does not resolve a customer-owned secret,
-provide a runtime secret lookup path, or enable hosted generation. PRs #363 and
-#365 are merged source but are not deployed; the hosted control plane remains
-at PR #361 below. Frontend PR #102 locally implements paginated plan history
-and latest run status, but remains a draft, is not deployed, and has no
+values; PR #367 adds a bounded, provider-validated RDS-managed secret ARN
+reference path. That contract only emits a Terraform reference and does not
+retrieve secret values, grant runtime secret reads, enable RDS in the plan
+access profile, or enable hosted generation. Frontend PR #102's paginated plan
+history and latest-run UI remains draft/local-fixture work without an
 authenticated production customer journey. No Nova-generated customer plan
 or workload has been applied, operated, health-checked, recovered, or destroyed.
 
-## Current hosted release — 2026-11-11, PR #361
+## Current hosted release — 2026-11-12, PR #367
+
+Backend main commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` (PR #367) was
+applied by protected Terraform plan
+[43138701232](https://github.com/Bepoadewale/davdeploy/actions/runs/43138701232)
+and exact saved-plan apply
+[43139500663](https://github.com/Bepoadewale/davdeploy/actions/runs/43139500663),
+deployment `7726355215`. The plan reported 0 additions, 6 in-place Lambda
+package updates, 0 destroys/replacements, 0 drift, and 8 output changes. The
+saved-plan manifest SHA-256 was
+`724071565858a91b690b747553ababe317be73e76b108c457e3aa5dcdfeb64b3`; a streamed
+hash of the stored saved plan matched. Migration verification passed. All six
+Lambdas are Active/Successful with common
+`CodeSha256=3TnyyXXSTrbTMpuDmE/4P302+IMHdJIX+dW86M9WbPc=`; `/healthz` returned
+`{"status":"ok","product":"davdeploy"}` in account `654654474502`, region
+`us-east-1`. Nova runner, role verification, credential broker, plan reviews,
+state API, and hosted certification flags remain false. Legacy cloud plan/apply
+remain true and are not Nova gates. This deployed code still does not run a Nova
+customer plan or workload. Release evidence: [`test368.md`](../test/test368.md).
+
+## Historical hosted release — 2026-11-11, PR #361
 
 Backend `main` commit `5775d766584f31f8a31b6b22e8e523b4e8a3f257` (PR #361) was
 applied by protected Terraform plan
@@ -102,7 +121,7 @@ and apply [43056460175](https://github.com/Bepoadewale/davdeploy/actions/runs/43
 
 Earlier the same day, backend commit `a533d131b50add04b9a9d3501ebba07d76ffbd52` (PR #348) was applied by protected Terraform plan [43033942614](https://github.com/Bepoadewale/davdeploy/actions/runs/43033942614) and apply [43034517260](https://github.com/Bepoadewale/davdeploy/actions/runs/43034517260). The plan reported 2 additions, 7 in-place changes, and 0 deletions. Apply used that exact saved plan and verified database migrations. All six Lambda functions were Active with successful updates and shared deployed `CodeSha256` `JfulBnszTNX+JkZ2iUZG31R9QYwlYbu+0Gl0jxRq8YA=`, matching the versioned control-plane artifact from that commit (S3 version `HxTxhux_5PFgg4SriG5okf4dh85FAcmY`). `/healthz` returned HTTP 200. The credential route and integration were deployed, but live flags for the broker, plan runner, plan-role verification, state API and plan reviews were all `false`. PR #349 later merged a workflow variable mapping with a `false` default; it did not change the deployed Lambda package. The dedicated versioned SSE-KMS state bucket remains provisioned, and the API Lambda has no access to Terraform state objects. PRs #333/#334 plan-history APIs, #340's bounded plan-role metadata-read/session-policy contract, and #346's paginated customer revision-history API are deployed in control-plane code. PR #344 published the versioned f3d9e1 customer plan-role template and retained the previous 7e setup URL; the protected control-plane URL points to f3d9e1. The template has not been installed for a customer, and effective customer permissions are not attested. The new #346 API was not called with an authenticated customer identity; the customer history UI has not integrated it. No Nova customer plan or workload has been applied, operated, or certified.
 
-Current Nova source also includes the isolated CodeBuild plan boundary (#324), durable plan requests (#325), customer plan-role contract (#326), pinned initial planner (#328), remote state API and isolated-state wiring (#331–#332), tenant-scoped run history (#333–#334), the fixed customer plan-access profile (#340), paginated customer revision history (#346), the run-scoped credential broker (#348), actual-plan hardening for IAM, SQS, Lambda invocation, API Gateway routes, RDS retention and DynamoDB recovery (#353, #355–#356, #358–#359, #361, #363), and generated-input rejection for common literal secrets (#365). PR #359's exact ownership record for untaggable API Gateway routes is deployed; #361's RDS policy is deployed. PRs #363 and #365 are merged source but not deployed. PR #365 does not implement tenant-scoped secret resolution or runtime secret retrieval. The bounded protected plan-log summary is deployed (#354). The broker API code is deployed but disabled; PR #349 exposes its protected workflow flag with a default of `false`. The state bucket is provisioned, but the state API, plan worker, role verification, credential broker and plan reviews remain disabled. The customer plan-role template allows bounded metadata reads; the control plane applies an explicit-deny session policy scoped to declared proposal resources before returning short-lived credentials to the exact active CodeBuild run. Customer role installation and effective account permissions remain unverified. Tenant-specific remote-state path isolation is not active. The initial runner remains non-approvable because complete regional pricing and exact cost-bound approval are unavailable. No Nova-generated customer plan or workload has been run, applied, health-checked, recovered, or destroyed. PR #313 closed unmerged and is superseded by #314; PR #318 pricing work remains held after being closed by the account owner.
+Current Nova source includes the isolated CodeBuild plan boundary (#324), durable plan requests (#325), customer plan-role contract (#326), pinned initial planner (#328), remote-state API and isolated-state wiring (#331–#332), tenant-scoped run history (#333–#334), the fixed customer plan-access profile (#340), paginated customer revision history (#346), the run-scoped credential broker (#348), and actual-plan hardening for IAM, SQS, Lambda invocation, API Gateway routes, RDS retention and DynamoDB recovery (#353, #355–#356, #358–#359, #361, #363). PRs #363, #365 and #367 are now deployed in the control plane. PR #365 rejects common literal secrets; #367 supports only a bounded RDS-managed secret ARN reference contract. Neither provides tenant-scoped customer secret lookup or runtime secret retrieval. The bounded protected plan-log summary is deployed (#354). The broker and plan worker code are deployed but disabled; state storage is provisioned, while the state API, role verification, credential broker, plan reviews and hosted certification remain disabled. Customer role installation/effective permissions are unverified. Tenant-specific remote-state path isolation is not active. The runner remains non-approvable because complete regional pricing and exact cost-bound approval are unavailable. No Nova-generated customer plan or workload has been run, applied, health-checked, recovered, or destroyed. PR #313 closed unmerged and is superseded by #314; PR #318 pricing work remains held pending account-owner direction.
 
 ## Hosted deployment evidence
 
@@ -126,7 +145,7 @@ certification gate disabled and its workspace allowlist empty.
 | Layer | Current evidence | State |
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
-| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access; actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization, RDS retention/final snapshots and DynamoDB recovery (#314, #324–#334, #340, #353–#356, #358–#359, #361, #363); rejection of common literal secrets (#365) | #361's control-plane policy is deployed; #363 and #365 are merged source only. #365 does not resolve customer secret references. Hosted generation remains disabled. The current runner is non-approvable; the state API, worker, role verification and plan review are off. Customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
+| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access; actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization, RDS retention/final snapshots and DynamoDB recovery (#314, #324–#334, #340, #353–#356, #358–#359, #361, #363); typed secret input/output constraints (#365, #367) | PR #367 is the current deployed control-plane release, but all Nova execution gates remain off. The bounded secret ARN contract does not resolve customer secret values or grant runtime access. The state API, worker, role verification and plan review remain disabled; customer role installation/effective permissions are unverified. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api`, `aws-file-storage` and `aws-nosql-data` disabled | One customer renderer enabled; S3 and DynamoDB renderer routes remain gated; PR #303's allowlist correction is included in the November 10 backend release |
 | CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling; #299 adds the gated S3 dispatch mapping; #300 adds a validated S3 bucket input for Lambda; #301 adds the gated DynamoDB dispatch route; #302 adds its `table_name` input; #303 corrects the source allowlist for that input. | #303 is deployed with renderer gates still disabled; live composed lifecycle remains unproven |

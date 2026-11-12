@@ -7,7 +7,7 @@
 | Capability | Evidence |
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
-| Nova proposal policy and execution boundary | PR #321 adds fail-closed policy for generated EBS volumes unless encryption is known to be enabled. Merged PR #322 marks regional pricing unavailable and blocks approval until complete region-bound cost evidence is present. PR #328 adds a disabled-by-default initial plan runner; PRs #331–#332 add gated state API and isolated-state wiring, while #333–#334 add tenant-scoped plan request history. PR #340 adds a bounded customer metadata-read role profile, proposal-scoped explicit-deny STS session policy, and manifest binding. PR #351 adds the connection API's fail-closed `plan_role_setup_available` hint. PR #353 adds fail-closed IAM escalation checks to actual generated-plan policy. PR #354 adds bounded sanitized summaries to protected control-plane plan logs. PR #355 adds actual-plan checks for public SQS policies. PR #356 adds fail-closed unknown checks and denial/review for unscoped/scoped wildcard Lambda invocation. PR #358 adds actual-plan API Gateway route authorization policy; PR #359 adds exact state-backed ownership for untaggable API Gateway routes; PR #361 adds fail-closed RDS backup-retention checks and explicit review/denial for final-snapshot behavior; PR #363 adds fail-closed DynamoDB point-in-time recovery checks and proposal-bound backup requirements. PR #361 is the latest deployed release, by protected plan [43111051028](https://github.com/Bepoadewale/davdeploy/actions/runs/43111051028) and exact saved-plan apply [43112125588](https://github.com/Bepoadewale/davdeploy/actions/runs/43112125588); #363 is merged source only. The plan-role setup hint does not attest role permissions. PR #344 publishes the current versioned customer role template; it has not been installed in a customer account. The dedicated encrypted/versioned state bucket is provisioned, but the state API, runner, plan review and role verification remain disabled. Customer role installation/effective permissions are unverified. The runner cannot yet produce an approvable plan because complete regional pricing and exact cost-bound approval are unavailable. PR #318 is closed and its pricing approach remains held for account-owner direction. No Nova-generated AWS plan has been applied. |
+| Nova proposal policy and execution boundary | PR #321 adds fail-closed EBS encryption policy. PR #322 blocks approval while complete region-bound pricing is unavailable. PRs #324–#334 add the disabled-by-default plan worker, state API/client, and tenant-scoped plan history; #340 adds proposal-scoped customer plan access; #353–#363 add actual-plan security and retention checks. PR #365 rejects common literal secrets, and #367 restricts secret references to validated RDS-managed secret ARNs and Lambda `_SECRET_ARN` variables. Source main `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` is deployed by plan [43138701232](https://github.com/Bepoadewale/davdeploy/actions/runs/43138701232) and exact saved-plan apply [43139500663](https://github.com/Bepoadewale/davdeploy/actions/runs/43139500663), deployment `7726355215`. The plan had 0 additions, 6 in-place Lambda updates, 0 destroys and 0 drift; migration verification and API health passed. All Nova execution gates remain disabled. PR #367 does not resolve customer-owned secrets or grant runtime secret reads. The plan-role setup hint does not attest effective permissions; the role template remains uninstalled in a customer account. The state bucket is provisioned, but the state API, runner, plan review and role verification remain disabled. Tenant-scoped remote state is not active. Pricing remains unavailable and exact-plan approval remains blocked; pricing PR #318 stays held pending account-owner direction. No Nova-generated customer plan has been applied. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -64,23 +64,41 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current merged backend source — 2026-11-12, after PR #365
+# Current merged backend source — 2026-11-12, after PR #367
 
-Backend `main` is commit `def21021a44c5ec39ddafc295c4c8c6b5ee7b896` (PR #365);
+Backend `main` is merge commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb`;
 merged-main CI run
-[43132143239](https://github.com/Bepoadewale/davdeploy/actions/runs/43132143239)
-passed all seven jobs. PR #363 adds actual-plan DynamoDB point-in-time recovery
-checks and enforces proposal-declared backup requirements. PR #365 rejects
-common literal credential and secret values unless represented by a typed
-secret reference. These are merged source changes, not deployed control-plane
-or customer-plan evidence. PR #365 does not resolve customer-owned secret
-references or enable runtime secret lookup. The latest hosted deployment
-remains PR #361 below.
+[43137760056](https://github.com/Bepoadewale/davdeploy/actions/runs/43137760056)
+passed all seven jobs. PR #363 adds fail-closed DynamoDB recovery policy; #365
+rejects common literal secrets; #367 adds a bounded provider-validated RDS
+secret ARN reference to a Lambda `_SECRET_ARN` environment value. This does not
+resolve customer-owned secret references, grant runtime secret reads, or
+enable hosted Nova generation. All three changes are now included in the
+deployed control plane; release evidence is in `docs/test/test368.md`.
 Frontend PR #102 also remains a draft; it contains local-fixture implementation
 of paginated plan history and latest Nova plan-run status, but is not merged,
 deployed, or verified with an authenticated production customer.
 
-# Latest hosted execution status — 2026-11-11, after PR #361 rollout
+# Latest hosted execution status — 2026-11-12, after PR #367 rollout
+
+Backend main commit `0481696d8a9aa1c73d789b2076a23f9c07ccc1fb` (PR #367) was
+applied by protected Terraform plan
+[43138701232](https://github.com/Bepoadewale/davdeploy/actions/runs/43138701232)
+and exact saved-plan apply
+[43139500663](https://github.com/Bepoadewale/davdeploy/actions/runs/43139500663),
+deployment `7726355215`. The exact saved plan had 0 additions, 6 in-place Lambda
+updates, 0 destroys/replacements, 0 drift, and 8 output changes; its manifest
+digest matched the streamed saved-plan object. Migrations passed. All six
+Lambdas are Active/Successful with common
+`CodeSha256=3TnyyXXSTrbTMpuDmE/4P302+IMHdJIX+dW86M9WbPc=`; `/healthz` returned
+`{"status":"ok","product":"davdeploy"}` in AWS account `654654474502`,
+region `us-east-1`. The Nova runner, role verification, credential broker,
+state API, plan reviews and hosted certification remain false. Existing legacy
+cloud plan/apply flags remain true and do not enable Nova. No Nova customer
+plan or workload was run or applied. Exact evidence is in
+[`test368.md`](test/test368.md).
+
+# Historical hosted execution status — 2026-11-11, after PR #361 rollout
 
 Backend `main` commit `5775d766584f31f8a31b6b22e8e523b4e8a3f257` (PR #361)
 was applied by protected Terraform plan
