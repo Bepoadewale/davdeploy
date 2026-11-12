@@ -16,9 +16,12 @@ source. It must never expose plan values or arbitrary names.
 - Backend `main`: `96cb7b51c841f795d5a2d1ce9f3cfd4b55d12dcb` (PR #385 merge).
 - Run `43285350771` failed before saved-plan publication. The summary reported
   all nine fixed gates missing from both `planned_values` and change after
-  values. No control-plane
-  infrastructure apply occurred; the workflow published its immutable Lambda
-  package before planning.
+  values. No control-plane infrastructure apply occurred; the workflow
+  published its immutable Lambda package before planning.
+- Initial CI run `43287781330` exposed the supply-chain job's dependency on the
+  runner image's preinstalled `python3.12`; the image no longer provided that
+  command. This PR pins Python 3.12 through the existing setup-python action
+  before building the package.
 - Customer cloud execution and hosted certification remain disabled.
 - Implementation commit `a9338a1` passed all seven required checks in run
   `43286995660`.
@@ -40,6 +43,7 @@ source. It must never expose plan values or arbitrary names.
   malformed.
 - Test counts and presence fields with private values and untrusted variable
   names excluded from output.
+- Pin Python 3.12 in the supply-chain job before building the Lambda package.
 
 ## Acceptance criteria
 
@@ -47,6 +51,8 @@ source. It must never expose plan values or arbitrary names.
   environment/gate names.
 - [x] Raw plan values and arbitrary variable names remain suppressed.
 - [x] Focused tests (18) and full verification (1,056 tests) pass.
+- [x] Supply-chain CI explicitly provisions the Python version required by the
+  Lambda package build script.
 - [x] Documentation conventions, diff checks, and all seven required CI checks
   pass on implementation commit `a9338a1` (run `43286995660`).
 - [ ] A fresh protected plan explains its structural omission without exposing
@@ -63,6 +69,8 @@ source. It must never expose plan values or arbitrary names.
 - `.venv/bin/pytest tests/test_terraform_plan_summary.py -q`: 18 passed.
 - `make verify`: 1,056 passed; Ruff, Actions configuration, OpenAPI, and Docker
   Compose checks passed. One existing Starlette/httpx deprecation warning.
+- Initial CI run `43287781330` failed only in the supply-chain package build
+  because `python3.12` was unavailable on the runner; explicit setup is added.
 - `GITHUB_PR_NUMBER=386 .venv/bin/python scripts/check_doc_conventions.py` and
   `git diff --check` passed.
 - Implementation commit `a9338a1` passed all seven CI checks in run
