@@ -1,6 +1,6 @@
 # ticket380 — reconcile Nova network profile source status
 
-PR: draft pending bootstrap
+PR: [#380](https://github.com/Bepoadewale/davdeploy/pull/380) (draft)
 Branch: `docs/reconcile-nova-network-profile-380`
 
 ## Problem / goal
@@ -37,22 +37,25 @@ not been deployed or installed, and no customer role or workload was changed.
 
 ## Acceptance criteria
 
-- [ ] Current source, deployed source, and hosted feature gates are accurately
+- [x] Current source, deployed source, and hosted feature gates are accurately
       distinguished.
-- [ ] VPC/subnet/security-group plan metadata reads are described as merged
+- [x] VPC/subnet/security-group plan metadata reads are described as merged
       source and not deployed/effective customer-role evidence.
-- [ ] All product claims and capability scope remain intact.
-- [ ] Documentation conventions and diff checks pass; final-head CI and review
+- [x] All product claims and capability scope remain intact.
+- [x] Documentation conventions and diff checks pass.
+- [ ] Final-head CI and review
       pass.
 
 ## Acceptance status
 
-- [ ] Documentation reconciliation and validation complete.
+- [ ] Documentation reconciliation and local validation complete; final-head
+      CI remains pending.
 
 ## Tests / validation performed
 
-- Bootstrap only; documentation changes and validation results will be added
-  before review-ready.
+- `python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI and review remain pending.
 
 ## Evidence files produced
 
