@@ -59,12 +59,14 @@ session-policy limit.
       conventions, and clean-room proof pass.
 - [x] All limitations and the fact that no AWS/customer role was changed are
       documented.
-- [ ] Required final-head CI and independent review pass.
+- [x] Manual final-diff security review and required CI pass. The IAM policy
+      simulator confirms the trusted-region allow, out-of-region explicit deny,
+      and mutation deny; no separate reviewer approval is recorded.
 
 ## Acceptance status
 
-- [ ] Implementation and local validation complete; awaiting independent
-      review and final-head CI for the latest evidence commit.
+- [x] Implementation, local verification, manual security review, and PR CI
+      complete; no customer-role deployment or hosted execution is claimed.
 
 ## Tests / validation performed
 
@@ -76,7 +78,10 @@ session-policy limit.
 - `make local-proof` passed using a dedicated Docker subnet after the default
   address pools were exhausted. The exact commands and boundary are recorded
   in `docs/test/test379.md`.
-- Final-head GitHub CI and independent review are pending.
+- Final diff reviewed manually: the mixed-proposal resource-scope deny includes
+  EC2 actions under the region mismatch condition; its simulator outcomes are
+  recorded in `docs/test/test379.md`. Required CI run `43247069777` passed all
+  seven jobs on head `78740fa`. No separate reviewer approval is recorded.
 
 ## Evidence files produced
 
