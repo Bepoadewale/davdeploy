@@ -7,6 +7,7 @@ import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
+from fnmatch import fnmatchcase
 from typing import Any
 
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
@@ -47,8 +48,12 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-12.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-12.2"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
+SECRET_VALUE_READ_ACTIONS = (
+    "secretsmanager:GetSecretValue",
+    "secretsmanager:BatchGetSecretValue",
+)
 RISKY_PUBLIC_PORTS = frozenset(
     {
         20, 21, 22, 23, 135, 389, 445, 1433, 1434, 2375, 2376, 3000,
@@ -1230,6 +1235,17 @@ def _check_iam_permissions(
         actions = _string_list(statement.get("Action"))
         resources = _string_list(statement.get("Resource"))
         normalized_actions = {item.lower() for item in actions}
+        if any(
+            fnmatchcase(secret_action.lower(), action.lower())
+            for action in actions
+            for secret_action in SECRET_VALUE_READ_ACTIONS
+        ):
+            _deny(
+                findings,
+                "iam_secret_value_read_unbound",
+                address,
+                "The plan grants secret value reads that are not bound to a verified secret reference.",
+            )
         wildcard_resource = any("*" in item or "?" in item for item in resources)
         pass_role = "iam:passrole" in normalized_actions
         if "*" in actions or "iam:*" in normalized_actions:

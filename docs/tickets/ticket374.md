@@ -45,30 +45,32 @@ secret-read grant until that binding is deterministic and verified.
 
 ## Acceptance criteria
 
-- [ ] Secret value read actions and wildcard patterns that include them are
+- [x] Secret value read actions and wildcard patterns that include them are
   denied by actual-plan policy.
-- [ ] Metadata-only `DescribeSecret` remains eligible for human review.
-- [ ] No policy values, secret values, or raw plan payloads enter findings.
-- [ ] Focused tests, full `make verify`, and isolated clean-room proof pass.
+- [x] Metadata-only `DescribeSecret` remains eligible for human review.
+- [x] No policy values, secret values, or raw plan payloads enter findings.
+- [x] Focused tests and full `make verify` pass.
+- [ ] Isolated clean-room proof passes.
 - [ ] Documentation conventions, current-head review and final-head CI pass.
 - [ ] No AWS role, customer plan, approval, apply, or workload is changed.
 
 ## Acceptance status
 
-- [ ] Implementation and tests complete.
-- [ ] Focused/full verification and clean-room proof pass.
+- [x] Implementation and focused/full tests complete.
+- [ ] Clean-room proof passes.
 - [ ] Documentation, review and final-head CI pass.
 - [x] No runtime/AWS/customer workload mutation is in scope or performed.
 
 ## Tests / validation performed
 
-Validation commands and exact results will be recorded after implementation.
-The clean-room proof must use an isolated project and retain non-container
-artifacts; no AWS calls are required.
+Focused policy tests passed (149). `make verify` passed (1,044 tests, Ruff,
+Actions configuration, OpenAPI snapshot and Compose config). Exact clean-room
+and final CI results will be recorded after those gates finish.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket374.md`
+- `docs/test/test374.md`
 
 ## Boundaries
 
