@@ -49,6 +49,8 @@ workflow.
 - [x] All seven required CI jobs passed on PR head
   `0e43e31a5c689bc1e7e8a6626160a97a6500f916` in run `43142051311`. The final
   ticket-update head must also pass its live GitHub merge-gate checks.
+- The current PR head must have all required checks green before merge; verify
+  the live GitHub checks against the exact head at merge time.
 
 ## Acceptance status
 
@@ -57,7 +59,8 @@ workflow.
 - [x] Required docs conventions and whitespace checks pass.
 - [x] PR run `43142051311` passed all seven required jobs for head
   `0e43e31a5c689bc1e7e8a6626160a97a6500f916`.
-- [ ] Final ticket-update head's required checks must pass before merge.
+- Current-head GitHub required checks are the merge gate; confirm they are all
+  green on the latest PR head before merge.
 
 ## Tests / validation performed
 
