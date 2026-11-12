@@ -54,15 +54,14 @@ preserving dated release snapshots as historical evidence.
   repository.
 - [x] All seven required GitHub checks passed on implementation head
   `3c3a11130358684026b728d451ce57f12bb1d63e` in run `43148509141`; the final
-  ticket-update head must also pass before merge.
+  evidence head's checks are recorded below.
 
 ## Acceptance status
 
 - [x] Documentation updates and exact-state review complete.
 - [x] Documentation convention and whitespace checks pass.
-- [x] CI run `43148509141` passed all seven jobs on head
-  `3c3a11130358684026b728d451ce57f12bb1d63e`; the final ticket-update head
-  remains subject to fresh CI.
+- [x] CI run `43148983714` passed all seven jobs on head
+  `b7efe7906c4f23c700ca14a6b30e3a34caef8c6b`.
 - [ ] PR reviewed and merged only after final-head checks pass.
 
 ## Tests / validation performed
@@ -76,8 +75,11 @@ of this PR.
   [43148509141](https://github.com/Bepoadewale/davdeploy/actions/runs/43148509141)
   passed all seven required jobs on head
   `3c3a11130358684026b728d451ce57f12bb1d63e`.
-- The ticket evidence update must pass all required checks on its final PR
-  head before merge.
+- GitHub Actions run
+  [43148983714](https://github.com/Bepoadewale/davdeploy/actions/runs/43148983714)
+  passed all seven required jobs on head
+  `b7efe7906c4f23c700ca14a6b30e3a34caef8c6b`. The ticket update must pass
+  CI on the resulting final head before merge.
 
 ## Evidence files produced
 
