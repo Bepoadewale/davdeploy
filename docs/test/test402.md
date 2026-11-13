@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: pending final PR commit
+Commit: `53ab621` (implementation revision covered by local tests)
 AWS account: none; no AWS credentials used
 AWS region: none
 
