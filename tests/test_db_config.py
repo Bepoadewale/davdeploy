@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 34
+            == 35
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -94,7 +94,35 @@ def test_terraform_state_migration_adds_only_state_tables_to_v32_database():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 34
+    assert version == 35
+    engine.dispose()
+
+
+def test_exact_plan_apply_state_migration_adds_apply_run_binding_to_existing_credentials():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (34)"))
+        connection.execute(
+            text(
+                "CREATE TABLE terraform_state_credentials ("
+                "id VARCHAR(36) PRIMARY KEY, username VARCHAR(64), "
+                "password_sha256 VARCHAR(64), state_id VARCHAR(36), "
+                "run_id VARCHAR(36), codebuild_build_id VARCHAR(255), "
+                "expires_at TIMESTAMP, revoked_at TIMESTAMP, created_at TIMESTAMP)"
+            )
+        )
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    columns = {
+        column["name"] for column in inspect(engine).get_columns("terraform_state_credentials")
+    }
+    assert "apply_run_id" in columns
+    assert inspect(engine).has_table("generated_plan_apply_runs")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 35
     engine.dispose()
 
 
@@ -119,7 +147,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 34
+            == 35
         )
     engine.dispose()
 
@@ -165,7 +193,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 34
+            == 35
         )
         connection.execute(
             text(
@@ -297,7 +325,7 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 34
+            == 35
         )
     engine.dispose()
 
@@ -344,7 +372,7 @@ def test_plan_role_migration_upgrades_version_31_with_only_plan_role_columns():
                 "plan_role_arn, plan_role_setup_state FROM cloud_connections WHERE id = 'connection-1'"
             )
         ).one()
-    assert version == 34
+    assert version == 35
     assert existing == (
         "123456789012",
         "arn:discovery",

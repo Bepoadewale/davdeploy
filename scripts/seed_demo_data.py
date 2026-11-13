@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import uuid
 from typing import Any
 
 import httpx
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("DAVDEPLOY_API_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
 PROMPT = (
     "Deploy this small FastAPI AI application in AWS. It receives about 2 requests per "
     "second and may peak at 10. Keep it private where practical. Keep infrastructure "

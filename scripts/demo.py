@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import uuid
 
 import httpx
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("DAVDEPLOY_API_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
 
 
 def token(client: httpx.Client, username: str) -> str:

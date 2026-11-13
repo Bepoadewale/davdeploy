@@ -55,6 +55,11 @@ file must remain untouched.
 - [x] A strict request contract binds the build/run identity, tenant, target,
   source plan run, administrator approval, pricing status, and exact versioned
   plan/workspace object digests and ownership keys.
+- [x] Terraform state bootstrap recognizes an apply build only when a durable
+  apply-run record binds the exact project, role, build ID/ARN, run ID, active
+  status, current workspace administrators, verified AWS target, remote-state
+  scope, saved-plan manifest, approval, and complete-pricing marker. Schema
+  version 35 adds the apply-run record and credential binding.
 - [ ] A plan without complete trusted regional pricing and a persisted approval
   bound to its exact immutable manifest cannot reach a credentialed apply step.
 - [ ] Apply verifies and uses the exact saved-plan and workspace versions and
@@ -82,10 +87,17 @@ file must remain untouched.
   broker, CodeBuild callback consumer, or Terraform execution exists yet.
   The role also has project/build-scoped permission and trusted project
   settings for remote-state credential bootstrap, which exact-plan apply needs;
-  the existing state API still has to bind and validate an apply run.
-  Terraform validate passed for both affected roots, and focused apply
+  The state API now has an apply-run authorization path, but no apply-request
+  API or caller creates those records yet. Terraform validate passed for both affected roots, and focused apply
   contract/workspace/infrastructure tests passed (19 tests). These checks do
   not prove AWS IAM behavior or hosted apply.
+- The state-credential path rechecks the immutable approval/artifact,
+  pricing-complete marker, current administrator roles, latest revision and
+  expiry, verified customer account, target, and tenant-scoped remote-state
+  digest before issuing or reusing state credentials. Credentials bind both
+  the source plan run and apply run, and become unusable when that exact
+  CodeBuild build is no longer active. Runtime gates remain disabled, and no
+  apply-request API or worker creates these records yet.
 
 ## Tests / validation performed
 
@@ -110,6 +122,11 @@ file must remain untouched.
   The state API apply-run binding remains unimplemented.
 - Full `make verify`: `1,108 passed`; Ruff, Actions config, OpenAPI, and
   Compose checks passed. One existing Starlette/httpx deprecation warning.
+- Schema migration 35, apply-run state-credential authorization, isolated
+  Compose URL support, and related tests pass `make verify` (1,113 tests),
+  Ruff, Actions configuration, OpenAPI, Compose, documentation convention,
+  and `git diff --check`. The local fixture proof is recorded in
+  `docs/test/test399.md`; it is not hosted AWS apply evidence.
 - Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
   contract-only head; they do not cover the workspace restore changes.
 - Hosted PR #399 checks for artifact restoration commit `ea25be2` passed all
@@ -127,8 +144,8 @@ file must remain untouched.
 - The artifact restoration helper and tests are
   `apps/api/src/davdeploy/nova_apply_workspace.py` and
   `tests/test_nova_apply_workspace.py`.
-- `docs/test/test399.md` will record the clean-room/non-AWS boundary evidence
-  when the complete executable boundary is ready for that gate.
+- `docs/test/test399.md` records the isolated local fixture and non-AWS
+  boundary evidence.
 
 ## Boundaries
 

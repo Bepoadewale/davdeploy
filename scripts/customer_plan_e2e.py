@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -17,7 +18,7 @@ from typing import Any
 
 import httpx
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("DAVDEPLOY_API_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
 PROMPT = (
     "Deploy this small containerized FastAPI AI API in AWS. Support 2 requests per second "
     "and peak at 10 requests per second. Keep monthly infrastructure under $300. "
@@ -405,7 +406,10 @@ def verify_persistence(state_file: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--state-file", default=".local/customer-plan-e2e.json")
+    parser.add_argument(
+        "--state-file",
+        default=os.environ.get("DAVDEPLOY_CUSTOMER_PLAN_STATE_FILE", ".local/customer-plan-e2e.json"),
+    )
     parser.add_argument("--verify-persistence", action="store_true")
     args = parser.parse_args()
     state_file = Path(args.state_file)

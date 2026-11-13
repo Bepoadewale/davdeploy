@@ -1498,6 +1498,7 @@ locals {
     DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
     DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                    = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT              = var.enable_nova_exact_plan_apply_runner ? aws_codebuild_project.nova_exact_plan_apply[0].name : ""
+    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN             = var.enable_nova_exact_plan_apply_runner ? aws_iam_role.nova_exact_plan_apply[0].arn : ""
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY         = tostring(var.enable_nova_exact_plan_apply_runner)
     DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)
     DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
