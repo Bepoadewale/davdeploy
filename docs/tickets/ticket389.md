@@ -28,7 +28,7 @@ sensitive values, or output values.
 - Terraform JSON plan resource drift uses a `change` object with before/after
   values; values must remain out of the emitted summary.
 
-## Work planned
+## Work planned for the PR
 
 - Add strict, bounded drift inventory output using only sanitized address,
   type, actions and changed field names.
