@@ -59,7 +59,8 @@ recovery, teardown, and composed execution remain unproven.
   when the binding cannot be proven.
 - [x] Focused tests, full verification, documentation conventions, and diff
   checks pass.
-- [ ] All required final-head CI passes.
+- [x] All seven required checks pass for implementation commit `97a0c75` in
+  [run `43529880000`](https://github.com/Bepoadewale/davdeploy/actions/runs/43529880000).
 - [x] Update the capability evidence matrix to describe the bounded check and
   its limits. No hosted EKS plan or workload is claimed.
 
@@ -86,8 +87,9 @@ and has not been deployed or exercised on a customer plan.
 
 The policy code, focused tests, full local verification, isolated fixture
 proof, documentation convention checks, diff checks, and capability-matrix
-update are implemented. Required final-head GitHub CI is pending. No hosted EKS
-plan or customer workload is claimed.
+update are implemented. All seven required checks pass for implementation
+commit `97a0c75` in run `43529880000`. No hosted EKS plan or customer workload
+is claimed.
 
 ## Tests / validation performed
 
