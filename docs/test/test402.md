@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: working tree based on `1168e17` (expanded revision; final commit/CI to be recorded)
+Commit: `30b00b9` (expanded implementation; evidence refresh follows)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -22,6 +22,8 @@ JSON and local proposal objects.
   commit `53ab621`.
 - GitHub Actions CI run `43503068011` passed all seven jobs for evidence
   revision `d9fa007` (original coverage only).
+- GitHub Actions CI run `43508435135` passed all seven jobs for expanded
+  implementation commit `30b00b9`.
 
 ## Observed result
 
@@ -35,9 +37,9 @@ actual-plan policy.
 
 Full verification passed: 1,111 tests, Ruff, GitHub Actions configuration,
 OpenAPI, and Docker Compose configuration checks. One existing Starlette/httpx
-deprecation warning remains. Documentation convention and diff checks plus
-hosted CI for this expanded revision are pending. No AWS calls or feature-gate
-changes occurred.
+deprecation warning remains. Documentation convention and diff checks passed.
+All seven hosted jobs passed for the expanded implementation revision. No AWS
+calls or feature-gate changes occurred.
 
 ## Teardown
 

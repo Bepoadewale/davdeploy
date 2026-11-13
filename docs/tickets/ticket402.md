@@ -58,23 +58,22 @@ No Nova workload has been applied or certified.
       values are known.
 - [x] Missing, malformed, or policy-critical unknown settings fail closed.
 - [x] Focused tests, full verification, docs convention, and diff checks pass.
-- [ ] Hosted CI passes for the expanded implementation and evidence revision.
+- [x] Hosted CI passed all seven checks for implementation commit `30b00b9`
+      in run [`43508435135`](https://github.com/Bepoadewale/davdeploy/actions/runs/43508435135).
 - [x] No AWS resource is created, updated, or deleted.
 
 ## Acceptance status
 
-The original implementation and evidence revisions are locally and remotely
-verified. The expanded launch-configuration and regional-default coverage
-passes local focused and full verification; hosted CI is pending for this
-revision. The draft stays open.
+The expanded launch-configuration and regional-default coverage is locally
+verified and passed all seven hosted checks on `30b00b9`. The PR remains a
+draft; no Nova execution or AWS workload is enabled.
 
 ## Tests / validation performed
 
 Focused plan-policy and structured-proposal suites passed (222 total). Full
-verification passed with 1,111 tests; documentation conventions and diff
-checks are being refreshed. Hosted CI runs `43502219872` and `43503068011`
-passed all seven jobs for the earlier revision; the expanded revision still
-requires CI. Exact commands are recorded in `docs/test/test402.md`.
+verification passed with 1,111 tests; documentation convention and diff
+checks passed. All seven hosted checks passed for `30b00b9` in run
+`43508435135`. Exact commands are recorded in `docs/test/test402.md`.
 
 ## Evidence files produced
 
