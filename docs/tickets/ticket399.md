@@ -13,8 +13,8 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend main is `bded74a38bea677ed8dc8d9e4dad470892a96a3c` after PR #398;
-merged-main CI run `43460570905` passed all seven jobs. PR #397 persists the
+Backend main is `4bd4c55d1c6343546ca5cc2b70886d15fae36b31` after PR #400;
+merged-main CI run `43473967717` passed all seven jobs. PR #397 persists the
 encrypted/versioned workspace artifact beside the exact saved plan. Generated
 plan approval still fails closed because complete trusted regional pricing is
 unavailable; PR #318 is closed and held for account-owner direction. No Nova
@@ -74,8 +74,15 @@ file must remain untouched.
 
 - In progress on draft PR #399. The pure preflight contract is implemented;
   exact encrypted, version-pinned artifact download and bounded workspace
-  restoration are implemented. No API dispatch, credential broker, CodeBuild
-  apply project, or Terraform execution has been added yet.
+  restoration are implemented. Source now also contains a disabled-by-default
+  separate apply CodeBuild project, isolated service role, restricted artifact
+  paths, an IAM-authenticated credential route permission, fixed run-ID-only
+  dispatch policy, and explicit StartBuild override denies. Its fixed buildspec
+  exits because the worker is not wired; no API dispatcher, apply credential
+  broker, CodeBuild callback consumer, or Terraform execution exists yet.
+  Terraform validate passed for both affected roots, and focused apply
+  contract/workspace/infrastructure tests passed (19 tests). These checks do
+  not prove AWS IAM behavior or hosted apply.
 
 ## Tests / validation performed
 
@@ -84,6 +91,14 @@ file must remain untouched.
   changed files. After adding remote-state scope checks, focused tests pass:
   `16 passed`. The workspace tests use a local fake S3 client and do not
   establish AWS behavior.
+- Focused apply contract, workspace, and infrastructure-boundary tests:
+  `19 passed`; changed test Ruff checks, Terraform fmt, validate for both
+  affected roots, and `git diff --check` passed. The CodeBuild project remains
+  disabled by default and its fixed buildspec deliberately fails closed.
+- Current full `make verify`: `1,111 passed`; Ruff, Actions configuration,
+  OpenAPI, and Compose checks passed. `make terraform-validate` passed across
+  the configured Terraform roots. Documentation conventions passed for PR
+  #399. These are local source checks only.
 - Full `make verify`: `1,108 passed`; Ruff, Actions config, OpenAPI, and
   Compose checks passed. One existing Starlette/httpx deprecation warning.
 - Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
