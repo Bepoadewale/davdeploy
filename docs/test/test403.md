@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: documentation review only
 Customer repository: none
-Commit: `0a03fbb` (final evidence revision; CI passed)
+Commit: `a8bb5eb` (final evidence revision; CI passed)
 AWS account: none
 AWS region: none
 
@@ -25,7 +25,8 @@ fresh-runner local E2E. No application tests were necessary for this
 documentation-only change. Final evidence revision `87002c3` passed all seven
 jobs in run `43519328914`; final revision `567c6fc` passed all seven jobs in
 run `43520296502`; final head `0a03fbb` passed all seven jobs in run
-`43520799569`.
+`43520799569`; final revision `a8bb5eb` passed all seven jobs in run
+`43521689949` (GitHub reports the run completed successfully).
 
 ## Final boundary
 
