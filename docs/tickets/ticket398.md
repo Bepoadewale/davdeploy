@@ -25,7 +25,7 @@ seven jobs; local and isolated clean-room evidence is in `docs/test/test397.md`.
 - `CODEX_BACKLOG.md`
 - `docs/tickets/ticket397.md` and `docs/test/test397.md`
 
-## Work completed in the PR
+## Work planned for the PR
 
 - Reconcile current source and hosted release versions in the readiness,
   implementation, and project status documents.
