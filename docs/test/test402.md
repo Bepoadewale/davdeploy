@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: `53ab621` (implementation revision covered by local tests)
+Commit: working tree based on `1168e17` (expanded revision; final commit/CI to be recorded)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -21,21 +21,23 @@ JSON and local proposal objects.
 - GitHub Actions CI run `43502219872` passed all seven jobs for implementation
   commit `53ab621`.
 - GitHub Actions CI run `43503068011` passed all seven jobs for evidence
-  revision `d9fa007`.
+  revision `d9fa007` (original coverage only).
 
 ## Observed result
 
-The focused plan-policy and structured-proposal suites passed: 216 tests.
-Covered secure IMDSv2-enabled instance and launch-template plans, explicitly
-disabled metadata endpoints, optional token rejection, missing/malformed
-metadata settings, and unknown token values. No AWS calls or feature-gate
-changes occurred.
+The focused plan-policy and structured-proposal suites passed: 222 tests.
+Covered secure IMDSv2-enabled instance, launch-template, and launch-configuration
+plans; explicitly disabled metadata endpoints; optional token rejection;
+missing/malformed metadata settings; unknown token values; and regional
+metadata defaults that do not require IMDSv2. `no_preference` is accepted as a
+typed policy enum only for the regional-default setting and is denied by
+actual-plan policy.
 
-Full verification passed: 1,105 tests, Ruff, GitHub Actions configuration,
+Full verification passed: 1,111 tests, Ruff, GitHub Actions configuration,
 OpenAPI, and Docker Compose configuration checks. One existing Starlette/httpx
-deprecation warning remains. Documentation conventions and diff checks passed.
-Both recorded hosted CI runs passed all seven jobs; no cloud deployment or
-customer workload was involved.
+deprecation warning remains. Documentation convention and diff checks plus
+hosted CI for this expanded revision are pending. No AWS calls or feature-gate
+changes occurred.
 
 ## Teardown
 

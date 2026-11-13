@@ -114,6 +114,11 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("metadata_options", "http_endpoint"),
         ("metadata_options", "http_tokens"),
     ),
+    "aws_launch_configuration": (
+        ("metadata_options", "http_endpoint"),
+        ("metadata_options", "http_tokens"),
+    ),
+    "aws_ec2_instance_metadata_defaults": (("http_tokens",),),
     "aws_kms_key": (("key_usage",), ("deletion_window_in_days",)),
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
@@ -920,7 +925,22 @@ def _check_instance_metadata(
     resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
 ) -> None:
     for item in resources:
-        if item.get("type") not in {"aws_instance", "aws_launch_template"}:
+        kind = item.get("type")
+        if kind == "aws_ec2_instance_metadata_defaults":
+            values = item.get("values")
+            if not isinstance(values, dict) or values.get("http_tokens") != "required":
+                _deny(
+                    findings,
+                    "instance_metadata_defaults_require_v2",
+                    item.get("address"),
+                    "Regional EC2 metadata defaults must require Instance Metadata Service Version 2 tokens.",
+                )
+            continue
+        if kind not in {
+            "aws_instance",
+            "aws_launch_template",
+            "aws_launch_configuration",
+        }:
             continue
         address = item.get("address")
         values = item.get("values")

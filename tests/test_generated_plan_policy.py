@@ -445,6 +445,10 @@ def test_secure_composed_s3_plan_is_eligible_only_for_human_review():
             "aws_launch_template",
             [{"http_endpoint": "enabled", "http_tokens": "required"}],
         ),
+        (
+            "aws_launch_configuration",
+            [{"http_endpoint": "enabled", "http_tokens": "required"}],
+        ),
     ],
 )
 def test_ec2_metadata_access_requires_imdsv2_tokens(kind, options):
@@ -501,6 +505,37 @@ def test_ec2_metadata_endpoint_with_optional_tokens_is_denied(kind):
     assert "instance_metadata_v2_required" in codes(result)
 
 
+def test_regional_ec2_metadata_defaults_must_require_imdsv2():
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        "aws_ec2_instance_metadata_defaults",
+        "regional_defaults",
+        {"region": REGION, "http_tokens": "required"},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "instance_metadata_defaults_require_v2" not in codes(result)
+
+
+@pytest.mark.parametrize("tokens", ["optional", "no_preference"])
+def test_regional_ec2_metadata_defaults_that_do_not_require_imdsv2_are_denied(tokens):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        "aws_ec2_instance_metadata_defaults",
+        "regional_defaults",
+        {"region": REGION, "http_tokens": tokens},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_defaults_require_v2" in codes(result)
+
+
 @pytest.mark.parametrize(
     "options",
     [None, [], [{"http_endpoint": "enabled"}, {"http_endpoint": "disabled"}]],
@@ -520,19 +555,37 @@ def test_malformed_or_missing_ec2_metadata_options_are_denied(options):
     assert "instance_metadata_options_unknown" in codes(result)
 
 
-@pytest.mark.parametrize("kind", ["aws_instance", "aws_launch_template"])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "aws_instance",
+        "aws_launch_template",
+        "aws_launch_configuration",
+        "aws_ec2_instance_metadata_defaults",
+    ],
+)
 def test_unknown_ec2_metadata_token_requirement_is_denied(kind):
     document = plan()
+    options = (
+        {"http_tokens": "required"}
+        if kind == "aws_ec2_instance_metadata_defaults"
+        else {
+            "metadata_options": [
+                {"http_endpoint": "enabled", "http_tokens": "required"}
+            ]
+        }
+    )
+    unknown = (
+        {"http_tokens": True}
+        if kind == "aws_ec2_instance_metadata_defaults"
+        else {"metadata_options": [{"http_tokens": True}]}
+    )
     proposal_value = add_policy_resource(
         document,
         kind,
         "unknown_tokens",
-        {
-            "metadata_options": [
-                {"http_endpoint": "enabled", "http_tokens": "required"}
-            ]
-        },
-        after_unknown={"metadata_options": [{"http_tokens": True}]},
+        options,
+        after_unknown=unknown,
     )
 
     result = evaluate(document, proposal_value)
