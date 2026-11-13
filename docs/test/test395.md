@@ -46,7 +46,9 @@ None.
 
 Focused and full test suites, documentation conventions, and diff checks
 passed. One existing Starlette/httpx test-client deprecation warning remains.
-Hosted CI and independent review are pending.
+All seven required PR checks passed in CI run `43408089171` on implementation
+commit `f88cb62`; a subsequent ticket evidence update will be checked by the
+same required PR workflow before merge.
 
 ## Teardown
 

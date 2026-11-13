@@ -45,20 +45,21 @@ has run health probes.
 - [x] The shared proposal contract advances to 1.1, generation prompt to v4, and manifest versions increment for the changed serialized contract.
 - [x] Proposal evidence remains marked unvalidated and unexecuted.
 - [x] Focused tests, `make verify`, and docs conventions pass.
-- [ ] Required CI passes.
+- [x] All seven required PR checks passed in run `43408089171` for implementation commit `f88cb62`.
 - [x] No cloud calls, probe execution, customer plan, or workload occurs in this PR.
 
 ## Acceptance status
 
 - [x] Typed assertion catalog and bounded per-kind fields implemented; the runner still has no probe executor.
-- [ ] Hosted pull-request CI, independent review and merge pending.
+- [x] Hosted PR CI passed on the implementation commit; final evidence-only ticket update will receive the normal PR checks.
+- [ ] Final PR head checks and merge pending.
 
 ## Tests / validation performed
 
 - Focused: `tests/test_generated_deployment_contract.py tests/test_generated_plan_artifacts.py tests/test_nova_plan_codebuild.py tests/test_nova_plan_runs.py tests/test_terraform_generation.py tests/test_customer_plan_review.py` — 191 passed.
 - `make verify` — 1,086 passed; Ruff, OpenAPI snapshot, Actions configuration, and Docker Compose configuration checks passed. One existing Starlette/httpx deprecation warning remains.
 - `.venv/bin/python scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Required CI — pending.
+- Required CI run `43408089171` — all seven checks passed on implementation commit `f88cb62`; final ticket update will be checked on the next PR head.
 
 ## Evidence files produced
 
