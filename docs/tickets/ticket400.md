@@ -1,6 +1,7 @@
 # ticket400 — reconcile Nova readiness matrix with live gates
 
-PR: draft, to be opened for this branch
+PR: [#400](https://github.com/Bepoadewale/davdeploy/pull/400) (draft)
+Branch: `docs/reconcile-nova-readiness-400`
 
 ## Problem / goal
 
@@ -25,7 +26,7 @@ and include current draft PR #399 without claiming apply exists.
   CodeBuild project.
 - Protected untracked `--only-show-errors` must remain untouched.
 
-## References
+## Research / references used
 
 - `docs/product/EXECUTION_READINESS_MATRIX.md`
 - `docs/IMPLEMENTATION_STATUS.md`
@@ -33,7 +34,7 @@ and include current draft PR #399 without claiming apply exists.
 - `infrastructure/terraform/serverless-control-plane/main.tf`
 - Draft PR #399 and `docs/tickets/ticket399.md`
 
-## Work planned
+## Work planned for the PR
 
 - Correct the stale readiness matrix statements about deployed feature gates.
 - Separate enabled control-plane gates from unproven customer role assumption,
@@ -43,24 +44,37 @@ and include current draft PR #399 without claiming apply exists.
 
 ## Acceptance criteria
 
-- [ ] Current source, current hosted release and runtime gate values are
+- [x] Current source, current hosted release and runtime gate values are
   described separately and agree with the available evidence.
-- [ ] No customer plan/apply/health/recovery/destroy evidence is inferred from
+- [x] No customer plan/apply/health/recovery/destroy evidence is inferred from
   enabled flags, IAM simulations, code, or CI.
-- [ ] PR #399 is identified as draft and not deployed; pricing remains
+- [x] PR #399 is identified as draft and not deployed; pricing remains
   unavailable and approval/apply remain blocked.
 - [ ] Documentation conventions, diff checks and required CI pass.
-- [ ] No infrastructure or customer data changes occur.
+- [x] No infrastructure or customer data changes occur.
 
-## Validation
+## Acceptance status
 
-Planned: `python3 scripts/check_doc_conventions.py`, `git diff --check`, and
-required GitHub CI. This is documentation-only; no `docs/test/test400.md` is
-required.
+In progress. The readiness matrix has been corrected against current source and
+read-only runtime evidence. Documentation convention and diff checks passed;
+required GitHub CI remains pending.
 
-## Boundaries and follow-up
+## Tests / validation performed
+
+`python3 scripts/check_doc_conventions.py` and `git diff --check` passed.
+Required GitHub CI is pending for the updated head. This is documentation-only;
+no `docs/test/test400.md` is required.
+
+## Evidence files produced
+
+- `docs/tickets/ticket400.md`
+- Updated Nova readiness matrix in `docs/product/EXECUTION_READINESS_MATRIX.md`
+
+## Boundaries
 
 This ticket changes readiness documentation only. It does not enable or deploy
 any gate, create a customer role, approve a plan, or add apply behavior. The
-next runtime work remains hosted customer-role verification, trusted regional
+### Follow-up work
+
+The next runtime work remains hosted customer-role verification, trusted regional
 pricing, then exact approved-plan apply and lifecycle evidence.
