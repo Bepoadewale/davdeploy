@@ -208,7 +208,7 @@ def run_migrations(target: Engine | None = None) -> None:
             _install_generated_plan_immutability(connection)
             # create_all uses current model metadata, so new databases already include
             # every column through the latest schema version.
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (34)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (35)"))
             return
         if version < 2:
             connection.execute(
@@ -542,6 +542,15 @@ def run_migrations(target: Engine | None = None) -> None:
                 },
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (34)"))
+            version = 34
+        if version < 35:
+            Base.metadata.create_all(bind=connection)
+            _add_columns_if_missing(
+                connection,
+                "terraform_state_credentials",
+                {"apply_run_id": "VARCHAR(36)"},
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (35)"))
         _install_generated_plan_immutability(connection)
 
 
