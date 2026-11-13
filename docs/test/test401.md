@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: isolated local fixture and synthetic Terraform plan policy tests
 Customer repository: none; backend source worktree
-Commit: pending final PR commit
+Commit: `bbcfe72` (implementation and local-proof revision)
 AWS account: none; no AWS credentials used
 AWS region: none
 
