@@ -62,9 +62,10 @@ still blocks approval; no Nova apply executor exists.
 - [x] Fresh and pre-existing schema migration tests pass.
 - [x] Existing plan-review response remains value-free.
 - [x] No apply dispatch, apply credentials, Terraform apply, AWS workload
-  mutation, customer plan, or health/lifecycle claim occurs.
-- [ ] Focused tests, `make verify`, docs conventions, clean-room local proof,
-  and required CI pass.
+  mutation, or Nova customer workload claim occurs. Existing local customer-plan
+  fixtures ran only in the isolated Compose project.
+- [x] Focused tests, `make verify`, docs conventions, and isolated clean-room
+  local proof pass. Required hosted CI remains the release gate.
 
 ## Acceptance status
 
@@ -77,27 +78,24 @@ still blocks approval; no Nova apply executor exists.
 
 - `uv run ruff check --fix` on the changed Terraform workspace, artifact and
   CodeBuild test files: passed.
-- `uv run pytest tests/test_generated_plan_artifacts.py tests/test_generated_plan_review.py tests/test_nova_plan_codebuild.py tests/test_db_config.py tests/test_generated_terraform_plan.py -q --tb=short`:
-  86 passed before adding safe extraction coverage.
-- `uv run pytest tests/test_generated_terraform_plan.py tests/test_generated_plan_artifacts.py -q --tb=short`:
-  40 passed after adding archive extraction and build-scoped artifact checks.
-- `git diff --check`: passed before the last test addition.
 - Focused artifact, plan review, CodeBuild, migration, Terraform workspace,
   infrastructure-policy, and invitation migration tests: 106 passed on final
   implementation (including the encrypted/versioned workspace object round-trip).
-- `make verify`: 1,091 passed, Ruff, Actions configuration, OpenAPI, and Compose
-  checks passed before the final added workspace-store unit test.
-- Documentation conventions and Terraform formatting checks passed. A fresh
-  full clean-room Docker cycle is pending because the existing `davdeploy`
-  Compose stack is running against its persisted local database; this PR has
-  not interrupted or reseeded that stack. Required hosted CI is pending.
-- No AWS or customer workload execution occurred.
+- `make verify`: 1,092 tests passed; Ruff, Actions configuration, OpenAPI, and
+  Compose checks passed.
+- Isolated clean-room local Compose proof passed as recorded in
+  `docs/test/test397.md`; project containers were stopped, and its volume,
+  network, images, and temporary override were retained.
+- Documentation conventions, Terraform formatting, and `git diff --check`
+  passed. Hosted PR CI and independent review are pending.
+- No AWS, Bedrock, Terraform plan/apply, or hosted Nova customer workload
+  execution occurred.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket397.md`
-- Add `docs/test/test397.md` if any customer workload or AWS execution occurs.
-  This PR is intended to remain local and CI verified only.
+- `docs/test/test397.md` records isolated local fixture proof; no AWS workload
+  execution occurred.
 
 ## Boundaries
 
