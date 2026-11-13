@@ -22,6 +22,7 @@ from davdeploy.generated_plan_artifacts import (
     has_complete_pricing_evidence,
 )
 from davdeploy.generated_terraform_plan import MAX_EXECUTION_WORKSPACE_BYTES
+from davdeploy.terraform_state import terraform_state_scope_digest
 
 MAX_AUTHORIZATION_AGE = timedelta(minutes=5)
 
@@ -171,6 +172,27 @@ def validate_nova_apply_request(
         or target.get("region") != request.region
     ):
         raise NovaApplyContractError("Nova apply target or tenant does not match its manifest")
+    remote_state = manifest.get("remote_state")
+    if not isinstance(remote_state, dict) or set(remote_state) != {"state_id", "scope_sha256"}:
+        raise NovaApplyContractError("Nova apply requires tenant-scoped remote Terraform state")
+    try:
+        state_id = remote_state["state_id"]
+        if str(UUID(state_id)) != state_id.lower():
+            raise ValueError
+        expected_state_scope = terraform_state_scope_digest(
+            organization_id=request.tenant.organization_id,
+            project_id=request.tenant.project_id,
+            environment_id=tenant.get("environment_id"),
+            target_account_id=request.target_account_id,
+            region=request.region,
+        )
+    except (AttributeError, TypeError, ValueError):
+        raise NovaApplyContractError("Nova apply remote state scope is invalid") from None
+    if (
+        not isinstance(remote_state.get("scope_sha256"), str)
+        or remote_state.get("scope_sha256") != expected_state_scope
+    ):
+        raise NovaApplyContractError("Nova apply remote state scope does not match its tenant")
     if not has_complete_pricing_evidence(manifest):
         raise NovaApplyContractError("complete regional pricing evidence is unavailable")
     if boundary.get("approval_allowed") is not True or boundary.get("execution_allowed") is not True:

@@ -67,6 +67,7 @@ class S3ArtifactFixture:
 def _prepared_request(tmp_path: Path):
     request_document = _request_document()
     source_plan_run_id = request_document["tenant"]["source_plan_run_id"]
+    tenant = request_document["tenant"]
     plan_sha = hashlib.sha256(PLAN_BYTES).hexdigest()
     workspace_source = tmp_path / "workspace-source"
     (workspace_source / ".terraform/providers/hashicorp/aws").mkdir(parents=True)
@@ -89,7 +90,11 @@ def _prepared_request(tmp_path: Path):
     plan = {
         "bucket": BUCKET,
         "key": S3GeneratedPlanArtifactStore._key(
-            "org-1", "project-1", "revision-1", source_plan_run_id, plan_sha
+            tenant["organization_id"],
+            tenant["project_id"],
+            tenant["revision_id"],
+            source_plan_run_id,
+            plan_sha,
         ),
         "version_id": "plan-version-exact",
         "size_bytes": len(PLAN_BYTES),
@@ -98,9 +103,9 @@ def _prepared_request(tmp_path: Path):
     workspace = {
         "bucket": BUCKET,
         "key": S3GeneratedPlanArtifactStore._key(
-            "org-1",
-            "project-1",
-            "revision-1",
+            tenant["organization_id"],
+            tenant["project_id"],
+            tenant["revision_id"],
             source_plan_run_id,
             workspace_sha,
             artifact_kind="workspace",
