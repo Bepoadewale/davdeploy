@@ -23,7 +23,7 @@ REGION = "us-east-1"
 
 def proposal(*resources):
     return GeneratedDeploymentProposal(
-        contract_version="1.0",
+        contract_version="1.1",
         source_revision="revision-1",
         context_digest="a" * 64,
         resources=tuple(resources),
@@ -395,7 +395,7 @@ def test_rds_identifiers_must_be_concrete_and_arn_safe(resource_type, arguments)
         item = resource("database", resource_type, arguments)
     candidate = (
         GeneratedDeploymentProposal.model_construct(
-            contract_version="1.0",
+            contract_version="1.1",
             source_revision="revision-1",
             context_digest="a" * 64,
             resources=(item,),
@@ -490,7 +490,7 @@ def test_rds_subnet_group_name_rejects_model_expression_at_plan_access_boundary(
         rationale="Malformed subnet-group access regression fixture.",
     )
     candidate = GeneratedDeploymentProposal.model_construct(
-        contract_version="1.0",
+        contract_version="1.1",
         source_revision="revision-1",
         context_digest="a" * 64,
         resources=(group,),
@@ -582,7 +582,7 @@ def test_unsupported_resource_type_fails_before_policy_creation():
     with pytest.raises(NovaPlanAccessError, match="unsupported plan resource types"):
         build_nova_plan_access_policy(
             GeneratedDeploymentProposal.model_construct(
-                contract_version="1.0",
+                contract_version="1.1",
                 source_revision="revision-1",
                 context_digest="a" * 64,
                 resources=(source, unsupported),

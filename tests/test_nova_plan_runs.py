@@ -54,7 +54,7 @@ class StaticGenerator:
         del tenant
         self.calls += 1
         proposal = GeneratedDeploymentProposal(
-            contract_version="1.0",
+            contract_version="1.1",
             source_revision=source_revision,
             context_digest=generation_context_digest(approved_plan, source_revision),
             resources=(

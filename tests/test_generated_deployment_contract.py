@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import pytest
-from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
+from davdeploy.generated_deployment_contract import (
+    GeneratedDeploymentProposal,
+    HttpResponseAssertion,
+)
 from pydantic import ValidationError
 
 
 def proposal(resources: list[dict[str, object]]) -> dict[str, object]:
     return {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "source_revision": "test-revision",
         "context_digest": "a" * 64,
         "resources": resources,
@@ -96,6 +99,10 @@ def test_proposal_health_recovery_and_cost_evidence_is_bounded() -> None:
     assert parsed.recovery.backup_required is True
     assert parsed.cost_assumptions[0].resource_id == "uploads"
 
+    stale_contract_version = {**base, "contract_version": "1.0"}
+    with pytest.raises(ValidationError):
+        GeneratedDeploymentProposal.model_validate(stale_contract_version)
+
     too_many_health_checks = {**base, "health_assertions": base["health_assertions"] * 65}
     with pytest.raises(ValidationError):
         GeneratedDeploymentProposal.model_validate(too_many_health_checks)
@@ -103,6 +110,185 @@ def test_proposal_health_recovery_and_cost_evidence_is_bounded() -> None:
     overlong_assumption = {**base, "assumptions": ["x" * 501]}
     with pytest.raises(ValidationError, match="bounded text"):
         GeneratedDeploymentProposal.model_validate(overlong_assumption)
+
+
+@pytest.mark.parametrize(
+    "assertion",
+    [
+        {"kind": "http_response", "resource_type": "aws_apprunner_service"},
+        {"kind": "tls_certificate", "resource_type": "aws_apprunner_service"},
+        {"kind": "storage_roundtrip", "resource_type": "aws_s3_bucket"},
+        {"kind": "database_roundtrip", "resource_type": "aws_dynamodb_table"},
+        {"kind": "queue_roundtrip", "resource_type": "aws_sqs_queue"},
+        {
+            "kind": "event_processing",
+            "resource_type": "aws_lambda_function",
+            "source_resource_id": "source",
+        },
+        {"kind": "container_readiness", "resource_type": "aws_ecs_service"},
+        {
+            "kind": "retrieval_groundedness",
+            "resource_type": "aws_bedrock_knowledge_base",
+            "fixture_case_id": "synthetic-rag-smoke-v1",
+        },
+        {
+            "kind": "inference_response",
+            "resource_type": "aws_sagemaker_endpoint",
+            "fixture_case_id": "synthetic-inference-smoke-v1",
+        },
+        {
+            "kind": "network_connectivity",
+            "resource_type": "aws_instance",
+            "port": 443,
+        },
+        {"kind": "dns_resolution", "resource_type": "aws_route53_record"},
+    ],
+)
+def test_health_assertion_catalog_accepts_typed_bounded_checks(
+    assertion: dict[str, object],
+) -> None:
+    target_resource_type = assertion["resource_type"]
+    resources = [resource("app", "app", resource_type=str(target_resource_type))]
+    if assertion.get("kind") == "event_processing":
+        resources = [
+            resource(
+                "app",
+                "app",
+                resource_type="aws_lambda_function",
+                outputs=({"name": "arn", "value_type": "aws_arn"},),
+            ),
+            resource(
+                "source",
+                "source",
+                resource_type="aws_sqs_queue",
+                outputs=({"name": "arn", "value_type": "aws_arn"},),
+            ),
+            resource(
+                "binding",
+                "binding",
+                resource_type="aws_lambda_event_source_mapping",
+                arguments={
+                    "event_source_arn": {
+                        "kind": "resource_reference",
+                        "resource_id": "source",
+                        "output_name": "arn",
+                        "value_type": "aws_arn",
+                    },
+                    "function_name": {
+                        "kind": "resource_reference",
+                        "resource_id": "app",
+                        "output_name": "arn",
+                        "value_type": "aws_arn",
+                    },
+                },
+            ),
+        ]
+    health_assertion = {
+        key: value for key, value in assertion.items() if key != "resource_type"
+    }
+    document = proposal(resources)
+    document["health_assertions"] = [
+        {
+            **health_assertion,
+            "target_resource_id": "app",
+            "description": "Validate the declared application requirement.",
+        }
+    ]
+
+    parsed = GeneratedDeploymentProposal.model_validate(document)
+
+    assert parsed.health_assertions[0].kind == assertion["kind"]
+    assert parsed.health_assertions[0].target_resource_id == "app"
+
+
+@pytest.mark.parametrize(
+    "assertion",
+    [
+        {"kind": "custom_shell"},
+        {"kind": "http_response", "path": "https://attacker.example/"},
+        {"kind": "http_response", "path": "//attacker.example/"},
+        {"kind": "http_response", "path": "/../../etc/passwd"},
+        {"kind": "kubernetes_readiness", "timeout_seconds": 901},
+        {"kind": "storage_roundtrip", "cleanup_required": False},
+        {
+            "kind": "retrieval_groundedness",
+            "fixture_case_id": "customer-controlled-input",
+        },
+    ],
+)
+def test_health_assertion_catalog_rejects_unsupported_or_unsafe_values(
+    assertion: dict[str, object],
+) -> None:
+    document = proposal([resource("app", "app")])
+    document["health_assertions"] = [
+        {
+            **assertion,
+            "target_resource_id": "app",
+            "description": "Validate the declared application requirement.",
+        }
+    ]
+
+    with pytest.raises(ValidationError):
+        GeneratedDeploymentProposal.model_validate(document)
+
+
+def test_health_assertion_rejects_arbitrary_headers_and_host_fields() -> None:
+    with pytest.raises(ValidationError):
+        HttpResponseAssertion(
+            kind="http_response",
+            target_resource_id="app",
+            description="GET the app readiness endpoint.",
+            headers={"Authorization": "Bearer customer-token"},
+        )
+
+
+def test_health_assertion_targets_must_match_their_resource_kind() -> None:
+    document = proposal([resource("app", "app", resource_type="aws_sqs_queue")])
+    document["health_assertions"] = [
+        {
+            "kind": "storage_roundtrip",
+            "target_resource_id": "app",
+            "description": "Round trip a synthetic object.",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="target resource type is incompatible"):
+        GeneratedDeploymentProposal.model_validate(document)
+
+
+def test_event_processing_assertion_requires_a_declared_sqs_source() -> None:
+    document = proposal([resource("app", "app", resource_type="aws_lambda_function")])
+    document["health_assertions"] = [
+        {
+            "kind": "event_processing",
+            "target_resource_id": "app",
+            "source_resource_id": "missing",
+            "description": "Process a synthetic queued event.",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="declared source queue"):
+        GeneratedDeploymentProposal.model_validate(document)
+
+
+def test_event_processing_assertion_requires_a_bound_sqs_lambda_pair() -> None:
+    document = proposal(
+        [
+            resource("source", "source", resource_type="aws_sqs_queue"),
+            resource("app", "app", resource_type="aws_lambda_function"),
+        ]
+    )
+    document["health_assertions"] = [
+        {
+            "kind": "event_processing",
+            "target_resource_id": "app",
+            "source_resource_id": "source",
+            "description": "Process a synthetic queued event.",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="SQS-to-Lambda event binding"):
+        GeneratedDeploymentProposal.model_validate(document)
 
 
 @pytest.mark.parametrize(

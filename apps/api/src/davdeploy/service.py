@@ -4099,7 +4099,7 @@ class ProductService:
                 {
                     "provider": "bedrock",
                     "model": self.terraform_generator.model_id,
-                    "prompt_version": "terraform-nova2-contract-v3",
+                    "prompt_version": "terraform-nova2-contract-v4",
                     "usage": error.usage.model_dump(mode="json"),
                     "attempt_count": error.attempt_count,
                     "retry_count": error.usage.retry_count,
@@ -4982,9 +4982,9 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            7
+            8
             if untagged_records
-            else 6 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 5
+            else 7 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 6
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
@@ -7039,7 +7039,7 @@ class ProductService:
                     "request_id": None,
                     "provider": "bedrock",
                     "model": self.terraform_generator.model_id,
-                    "prompt_version": "terraform-nova2-contract-v3",
+                    "prompt_version": "terraform-nova2-contract-v4",
                     "usage": error.usage.model_dump(mode="json"),
                     "attempt_count": error.attempt_count,
                     "retry_count": error.usage.retry_count,

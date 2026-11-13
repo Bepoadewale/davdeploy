@@ -88,7 +88,7 @@ def schema():
 def proposal(arguments=None, outputs=None, resource_type="aws_test_resource"):
     return GeneratedDeploymentProposal.model_validate(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "source_revision": "revision",
             "context_digest": "a" * 64,
             "requirements": {"region": "us-east-1"},
@@ -164,7 +164,7 @@ def test_schema_validation_accepts_typed_resource_output_reference():
     attributes["input"] = {"type": "string", "optional": True}
     generated = GeneratedDeploymentProposal.model_validate(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "source_revision": "revision",
             "context_digest": "a" * 64,
             "requirements": {"region": "us-east-1"},
@@ -206,7 +206,7 @@ def test_schema_validation_accepts_rds_managed_nested_secret_arn_reference():
     ]["block"]["attributes"]["input"] = {"type": "string", "optional": True}
     generated = GeneratedDeploymentProposal.model_validate(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "source_revision": "revision",
             "context_digest": "a" * 64,
             "requirements": {"region": "us-east-1"},
@@ -259,7 +259,7 @@ def test_schema_validation_rejects_nested_reference_path_missing_from_provider()
     ]["attributes"].pop("master_user_secret")
     generated = GeneratedDeploymentProposal.model_validate(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "source_revision": "revision",
             "context_digest": "a" * 64,
             "requirements": {"region": "us-east-1"},

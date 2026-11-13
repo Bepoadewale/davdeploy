@@ -5,7 +5,7 @@ This contract does not authorize Terraform execution.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -167,10 +167,157 @@ class WorkloadRequirements(StrictContract):
     downtime_tolerance: str | None = Field(default=None, max_length=500)
 
 
-class HealthAssertion(StrictContract):
-    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+class HealthAssertionBase(StrictContract):
     target_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
     description: str = Field(min_length=1, max_length=500)
+
+
+class HttpResponseAssertion(HealthAssertionBase):
+    kind: Literal["http_response"]
+    path: str = Field(
+        default="/",
+        min_length=1,
+        max_length=256,
+        pattern=r"^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$",
+    )
+    method: Literal["GET", "HEAD"] = "GET"
+    expected_status_code: int = Field(default=200, ge=200, le=399)
+    max_response_bytes: int = Field(default=4096, ge=0, le=65_536)
+    timeout_seconds: int = Field(default=15, ge=1, le=60)
+
+    @model_validator(mode="after")
+    def validate_safe_path(self) -> HttpResponseAssertion:
+        if "//" in self.path or any(
+            segment in {".", ".."} for segment in self.path.split("/")
+        ):
+            raise ValueError("HTTP probe paths must remain within the selected endpoint")
+        return self
+
+
+class TlsCertificateAssertion(HealthAssertionBase):
+    kind: Literal["tls_certificate"]
+    minimum_validity_days: int = Field(default=14, ge=1, le=365)
+    timeout_seconds: int = Field(default=15, ge=1, le=60)
+    hostname_verification: Literal[True] = True
+    certificate_chain_validation: Literal[True] = True
+
+
+class StorageRoundTripAssertion(HealthAssertionBase):
+    kind: Literal["storage_roundtrip"]
+    payload_size_bytes: int = Field(default=128, ge=1, le=4096)
+    timeout_seconds: int = Field(default=30, ge=1, le=300)
+    cleanup_required: Literal[True] = True
+
+
+class DatabaseRoundTripAssertion(HealthAssertionBase):
+    kind: Literal["database_roundtrip"]
+    operation: Literal["write_read_delete"] = "write_read_delete"
+    timeout_seconds: int = Field(default=60, ge=1, le=300)
+    cleanup_required: Literal[True] = True
+
+
+class QueueRoundTripAssertion(HealthAssertionBase):
+    kind: Literal["queue_roundtrip"]
+    payload_size_bytes: int = Field(default=128, ge=1, le=4096)
+    timeout_seconds: int = Field(default=60, ge=1, le=300)
+    maximum_attempts: int = Field(default=3, ge=1, le=5)
+    cleanup_required: Literal[True] = True
+
+
+class EventProcessingAssertion(HealthAssertionBase):
+    kind: Literal["event_processing"]
+    source_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    minimum_processed_events: int = Field(default=1, ge=1, le=100)
+    timeout_seconds: int = Field(default=120, ge=1, le=900)
+    maximum_attempts: int = Field(default=3, ge=1, le=5)
+    cleanup_required: Literal[True] = True
+
+
+class ContainerReadinessAssertion(HealthAssertionBase):
+    kind: Literal["container_readiness"]
+    minimum_healthy_replicas: int = Field(default=1, ge=1, le=100)
+    timeout_seconds: int = Field(default=300, ge=1, le=900)
+
+
+class RetrievalGroundednessAssertion(HealthAssertionBase):
+    kind: Literal["retrieval_groundedness"]
+    fixture_case_id: Literal["synthetic-rag-smoke-v1"]
+    minimum_grounded_matches: int = Field(default=1, ge=1, le=10)
+    timeout_seconds: int = Field(default=60, ge=1, le=300)
+
+
+class InferenceResponseAssertion(HealthAssertionBase):
+    kind: Literal["inference_response"]
+    fixture_case_id: Literal["synthetic-inference-smoke-v1"]
+    minimum_response_bytes: int = Field(default=1, ge=1, le=4096)
+    timeout_seconds: int = Field(default=60, ge=1, le=300)
+    response_format: Literal["nonempty_json"] = "nonempty_json"
+
+
+class NetworkConnectivityAssertion(HealthAssertionBase):
+    kind: Literal["network_connectivity"]
+    protocol: Literal["tcp"] = "tcp"
+    port: int = Field(ge=1, le=65_535)
+    timeout_seconds: int = Field(default=10, ge=1, le=60)
+
+
+class DnsResolutionAssertion(HealthAssertionBase):
+    kind: Literal["dns_resolution"]
+    record_type: Literal["A", "AAAA", "CNAME"] = "A"
+    minimum_answers: int = Field(default=1, ge=1, le=10)
+    timeout_seconds: int = Field(default=10, ge=1, le=60)
+
+
+HealthAssertion = Annotated[
+    HttpResponseAssertion
+    | TlsCertificateAssertion
+    | StorageRoundTripAssertion
+    | DatabaseRoundTripAssertion
+    | QueueRoundTripAssertion
+    | EventProcessingAssertion
+    | ContainerReadinessAssertion
+    | RetrievalGroundednessAssertion
+    | InferenceResponseAssertion
+    | NetworkConnectivityAssertion
+    | DnsResolutionAssertion,
+    Field(discriminator="kind"),
+]
+
+
+_HEALTH_ASSERTION_TARGET_RESOURCE_TYPES = {
+    "http_response": frozenset(
+        {
+            "aws_apprunner_service",
+            "aws_apigatewayv2_stage",
+            "aws_api_gateway_stage",
+            "aws_lb",
+            "aws_cloudfront_distribution",
+        }
+    ),
+    "tls_certificate": frozenset(
+        {
+            "aws_apprunner_service",
+            "aws_apigatewayv2_stage",
+            "aws_api_gateway_stage",
+            "aws_lb",
+            "aws_cloudfront_distribution",
+            "aws_route53_record",
+        }
+    ),
+    "storage_roundtrip": frozenset({"aws_s3_bucket", "aws_efs_file_system"}),
+    "database_roundtrip": frozenset({"aws_dynamodb_table"}),
+    "queue_roundtrip": frozenset({"aws_sqs_queue"}),
+    "event_processing": frozenset({"aws_lambda_function"}),
+    "container_readiness": frozenset({"aws_apprunner_service", "aws_ecs_service"}),
+    "retrieval_groundedness": frozenset(
+        {"aws_bedrock_knowledge_base", "aws_opensearch_domain"}
+    ),
+    "inference_response": frozenset({"aws_sagemaker_endpoint"}),
+    "network_connectivity": frozenset(
+        {"aws_instance", "aws_lb", "aws_apprunner_service"}
+    ),
+    "dns_resolution": frozenset({"aws_route53_record"}),
+}
 
 
 class RecoveryRequirement(StrictContract):
@@ -188,7 +335,7 @@ class CostAssumption(StrictContract):
 
 
 class GeneratedDeploymentProposal(StrictContract):
-    contract_version: str = Field(pattern=r"^1\.[0-9]+$")
+    contract_version: Literal["1.1"]
     source_revision: str = Field(min_length=1, max_length=160)
     context_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     resources: tuple[GeneratedResource, ...] = Field(min_length=1, max_length=200)
@@ -257,8 +404,30 @@ class GeneratedDeploymentProposal(StrictContract):
         for resource_id in graph:
             visit(resource_id)
         ids = set(by_id)
-        if any(item.target_resource_id not in ids for item in self.health_assertions):
-            raise ValueError("health assertions must target declared resources")
+        for item in self.health_assertions:
+            target = by_id.get(item.target_resource_id)
+            if target is None:
+                raise ValueError("health assertions must target declared resources")
+            allowed_targets = _HEALTH_ASSERTION_TARGET_RESOURCE_TYPES[item.kind]
+            if target.resource_type not in allowed_targets:
+                raise ValueError("health assertion target resource type is incompatible")
+            if isinstance(item, EventProcessingAssertion):
+                source = by_id.get(item.source_resource_id)
+                if source is None:
+                    raise ValueError("event probes must reference a declared source queue")
+                if source.resource_type != "aws_sqs_queue":
+                    raise ValueError("event probe source must be an SQS queue")
+                bound_event_source = any(
+                    resource.resource_type == "aws_lambda_event_source_mapping"
+                    and {source.resource_id, target.resource_id}.issubset(
+                        {reference.resource_id for reference in _references(resource.arguments)}
+                    )
+                    for resource in self.resources
+                )
+                if not bound_event_source:
+                    raise ValueError(
+                        "event probes require a declared SQS-to-Lambda event binding"
+                    )
         if any(item.resource_id not in ids for item in self.cost_assumptions):
             raise ValueError("cost assumptions must target declared resources")
         return self

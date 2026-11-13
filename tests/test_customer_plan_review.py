@@ -49,7 +49,7 @@ class StaticTerraformGateway:
         return ModelResponse(
             request=request,
             output={
-                "contract_version": "1.0",
+                "contract_version": "1.1",
                 "source_revision": document["trusted_generation_context"]["source_revision"],
                 "context_digest": document["trusted_generation_context"]["context_digest"],
                 "resources": [
@@ -610,7 +610,7 @@ def test_failed_nova_generation_persists_only_aggregated_usage_and_safe_evidence
     model_records = [
         record
         for record in records
-        if record.detail.get("prompt_version") == "terraform-nova2-contract-v3"
+        if record.detail.get("prompt_version") == "terraform-nova2-contract-v4"
     ]
     by_metric = {record.metric: record for record in model_records}
     assert by_metric["model_calls"].quantity == 1

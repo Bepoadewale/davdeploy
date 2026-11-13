@@ -40,7 +40,7 @@ def ownership_scope():
 def proposal():
     return GeneratedDeploymentProposal.model_validate(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "source_revision": "test-revision",
             "context_digest": "a" * 64,
             "requirements": {"region": "us-east-1"},

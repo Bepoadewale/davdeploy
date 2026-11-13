@@ -55,7 +55,7 @@ def scope():
 
 def proposal(request, document, *, arguments=None, source_revision="revision-123"):
     return {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "source_revision": source_revision,
         "context_digest": document["trusted_generation_context"]["context_digest"],
         "resources": [
@@ -94,7 +94,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     request, document, schema = instance.gateway.calls[0]
     assert request.purpose.value == "terraform_generation"
     assert request.provider == "bedrock"
-    assert request.prompt_version == "terraform-nova2-contract-v3"
+    assert request.prompt_version == "terraform-nova2-contract-v4"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -104,6 +104,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     )
     assert request.input_digest == model_input_digest(document)
     assert "provider/backend configuration" in document["task"]
+    assert "contract_version to 1.1" in document["task"]
+    assert "not evidence that a check ran" in document["task"]
     assert schema["additionalProperties"] is False
     assert result.proposal.source_revision == "revision-123"
     assert result.proposal.resources[0].resource_type == "aws_ecs_cluster"
@@ -478,7 +480,7 @@ def test_bedrock_gateway_accepts_generator_full_document_digest_and_rejects_tamp
     approved_plan = {"target": {"region": "us-east-1"}}
     trusted_digest = generation_context_digest(approved_plan, "revision-123")
     valid_output = {
-        "contract_version": "1.0",
+        "contract_version": "1.1",
         "source_revision": "revision-123",
         "context_digest": trusted_digest,
         "resources": [
