@@ -37,18 +37,23 @@ sensitive values, or output values.
 
 ## Acceptance criteria
 
-- [ ] Drift summary emits safe bounded field-name details for valid drift.
-- [ ] Malformed data fails closed with a fixed reason and no value leakage.
-- [ ] Focused tests, full verification, and required CI pass.
+- [x] Drift summary emits safe bounded field-name details for valid drift.
+- [x] Malformed data fails closed with a fixed reason and no value leakage.
+- [x] Focused tests and full local verification pass.
+- [ ] Required CI passes.
 - [ ] A fresh plan summary can be reviewed before deciding on apply.
 
 ## Acceptance status
 
-- [ ] Implementation and validation pending.
+- [x] Implementation and local validation complete.
+- [ ] Hosted CI and merge pending.
+- [ ] Fresh plan summary review pending.
 
 ## Tests / validation performed
 
-- None yet.
+- `.venv/bin/python -m pytest tests/test_terraform_plan_summary.py -q` — 24 passed.
+- `make verify` — 1,062 tests passed; Ruff, Actions configuration, OpenAPI and Compose checks passed (one existing Starlette/httpx deprecation warning).
+- `git diff --check` passed.
 
 ## Evidence files produced
 

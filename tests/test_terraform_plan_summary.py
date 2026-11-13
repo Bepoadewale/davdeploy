@@ -214,7 +214,12 @@ def test_summary_reports_drift_and_output_counts_without_values():
     plan["resource_drift"] = [
         {
             "address": "aws_s3_bucket.state",
-            "change": {"before": {"bucket": "old-sensitive-name"}},
+            "type": "aws_s3_bucket",
+            "change": {
+                "actions": ["update"],
+                "before": {"bucket": "old-sensitive-name", "force_destroy": False},
+                "after": {"bucket": "new-sensitive-name", "force_destroy": True},
+            },
         }
     ]
     plan["output_changes"] = {"private_endpoint": {"after": "sensitive-endpoint-value"}}
@@ -222,8 +227,53 @@ def test_summary_reports_drift_and_output_counts_without_values():
     summary = "\n".join(summarize_plan(plan))
 
     assert "drift_count=1 output_change_count=1" in summary
+    assert (
+        "drift address=aws_s3_bucket.state type=aws_s3_bucket "
+        "actions=update changed_fields=bucket,force_destroy" in summary
+    )
     assert "old-sensitive-name" not in summary
+    assert "new-sensitive-name" not in summary
     assert "sensitive-endpoint-value" not in summary
+
+
+def test_invalid_drift_actions_fail_with_fixed_reason_without_echoing_values(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["resource_drift"] = [
+        {
+            "address": "aws_s3_bucket.state",
+            "type": "aws_s3_bucket",
+            "change": {
+                "actions": ["secret-action"],
+                "before": {"bucket": "private-bucket-name"},
+            },
+        }
+    ]
+
+    result, output = _run_main(monkeypatch, capsys, json.dumps(plan).encode())
+
+    assert result == 2
+    assert "reason=invalid_resource_actions" in output.err
+    assert "secret-action" not in output.err
+    assert "private-bucket-name" not in output.err
+
+
+def test_drift_detail_output_is_bounded():
+    plan = _plan()
+    plan["resource_drift"] = [
+        {
+            "address": f"aws_s3_bucket.state_{index}",
+            "type": "aws_s3_bucket",
+            "change": {"actions": ["update"], "before": {}, "after": {}},
+        }
+        for index in range(251)
+    ]
+
+    summary = summarize_plan(plan)
+
+    assert sum(line.startswith("drift address=") for line in summary) == 250
+    assert "drift_details=truncated" in summary
 
 
 @pytest.mark.parametrize(
