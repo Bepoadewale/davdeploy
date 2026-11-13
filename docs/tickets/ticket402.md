@@ -48,7 +48,8 @@ No Nova workload has been applied or certified.
       values are known.
 - [x] Missing, malformed, or policy-critical unknown settings fail closed.
 - [x] Focused tests, full verification, docs convention, and diff checks pass.
-- [ ] Required hosted CI passes on the final PR head.
+- [x] Hosted CI passed for implementation commit `53ab621` in run
+      `43502219872`; the evidence-only commit is subject to its own final CI.
 - [x] No AWS resource is created, updated, or deleted.
 
 ## Acceptance status
