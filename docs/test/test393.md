@@ -5,7 +5,7 @@ Test evidence for PR #393.
 Date: 2026-11-13
 Execution type: Local unit tests and static validation only; no AWS or customer workload
 Customer repository: None; this validates backend manifest serialization.
-Commit: Pending implementation commit.
+Commit: Implementation commit is recorded in the PR history.
 AWS account: None; no AWS calls were made.
 AWS region: None; no AWS calls were made.
 
