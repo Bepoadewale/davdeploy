@@ -309,6 +309,15 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 
 ## Active Nova-led work that remains
 
+The generated actual-plan policy has a narrow, draft-only IMDSv2 check for
+planned `aws_instance`, `aws_launch_template`, and
+`aws_launch_configuration` resources. It also requires planned regional
+`aws_ec2_instance_metadata_defaults.http_tokens = "required"`; this resource
+sets defaults and is not an enforcement control, so launch-specific values
+still require checks. This does not cover EKS nodes, all Auto Scaling behavior,
+or all compute resources. Evidence is tracked under draft PR #402 and is not
+hosted customer-execution evidence.
+
 1. Install and verify the versioned plan-role template in an authorized test/customer account; keep role trust/account verification separate from effective-permission claims. PR #369 enabled the trust/account verification gate, but customer installation and effective-permission evidence are still absent.
 2. Inject tenant-scoped remote state through the isolated state API and plan worker, with locking, verified identity and artifact boundaries; current infrastructure storage exists, but runtime access and worker dispatch remain disabled.
 3. Integrate complete, trusted, region-specific pricing and usage assumptions before exact-plan approval. PR #318 remains held for account-owner direction; do not replace that work without direction.

@@ -358,6 +358,7 @@ def test_contract_rejects_unsafe_or_invalid_graphs(
         ("api_key", "literal-api-key"),
         ("clientSecret", "literal-client-secret"),
         ("AUTH-TOKEN", "literal-auth-token"),
+        ("http_tokens", "literal-secret-token"),
         ("nested", {"session_token": "literal-session-token"}),
         (
             "environment",
@@ -539,6 +540,7 @@ def test_contract_accepts_boolean_secret_related_configuration(field: str, value
                 "refresh_token": "days",
             }
         },
+        {"metadata_options": {"http_endpoint": "enabled", "http_tokens": "required"}},
     ],
 )
 def test_contract_accepts_secret_related_policy_and_lifetime_configuration(
