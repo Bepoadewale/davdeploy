@@ -1,6 +1,6 @@
 # ticket388 — keep the plan runner IAM policy within AWS limits
 
-PR: pending
+PR: https://github.com/Bepoadewale/davdeploy/pull/388
 Branch: `fix/split-plan-runner-iam-policy-388`
 
 ## Problem / goal
@@ -48,10 +48,11 @@ fresh plan against the partially updated remote state.
 
 ## Acceptance criteria
 
-- [ ] API `StartBuild` allow remains limited to the fixed Nova plan project and
+- [x] API `StartBuild` allow remains limited to the fixed Nova plan project and
   trusted run ID environment override.
-- [ ] Every override-presence deny remains attached to the API role.
-- [ ] Managed policy is within its AWS size limit; focused tests and full
+- [x] Every override-presence deny remains attached to the API role through
+  the opt-in managed policy attachment.
+- [x] Managed policy is within its AWS size limit; focused tests and full
   verification pass.
 - [ ] Required CI passes and PR merges.
 - [ ] Fresh protected plan reconciles the partial apply, shows the expected
@@ -60,11 +61,18 @@ fresh plan against the partially updated remote state.
 
 ## Acceptance status
 
-- [ ] Implementation and local verification pending.
+- [x] Implementation and local verification complete.
+- [ ] Hosted CI and merge pending.
+- [ ] Fresh protected plan and apply pending; the stale saved plan remains
+  prohibited.
 
 ## Tests / validation performed
 
-- None yet.
+- `.venv/bin/python -m pytest tests/test_nova_plan_only_infra.py tests/test_nova_plan_artifact_infra.py -q` — 15 passed.
+- `make verify` — 1,060 tests passed; Ruff, Actions configuration, OpenAPI and Compose checks passed (one existing Starlette/httpx deprecation warning).
+- `make terraform-validate` was run across the Terraform roots; the command progressed through root/module initialization and validation. The directly relevant `terraform -chdir=infrastructure/terraform/serverless-control-plane validate` returned success.
+- `terraform fmt -check infrastructure/terraform/serverless-control-plane/main.tf` and `git diff --check` passed.
+- Full local clean-room proof was not run; no local stack or data cleanup was authorized for this change. The PR's required hosted checks remain the integration gate.
 
 ## Evidence files produced
 

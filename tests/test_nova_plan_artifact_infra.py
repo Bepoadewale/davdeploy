@@ -68,11 +68,21 @@ def test_composed_nova_runner_configuration_enables_recovery_and_scoped_start_on
     )[1].split('\nresource "', 1)[0]
     assert "count = var.enable_nova_plan_only_runner ? 1 : 0" in start_policy
     assert start_policy.count(
-        'Effect   = "Allow"\n          Action   = ["codebuild:StartBuild"]'
+        'Effect   = "Allow"\n        Action   = ["codebuild:StartBuild"]'
     ) == 1
     assert 'Action   = ["codebuild:StartBuild"]' in start_policy
     assert "aws_codebuild_project.nova_plan_only[0].arn" in start_policy
     assert '"codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]' in start_policy
+
+    override_policy = terraform.split(
+        'resource "aws_iam_policy" "api_nova_plan_only_start_build_overrides"', 1
+    )[1].split('\nresource "', 1)[0]
+    override_attachment = terraform.split(
+        'resource "aws_iam_role_policy_attachment" "api_nova_plan_only_start_build_overrides"',
+        1,
+    )[1].split('\nresource "', 1)[0]
+    assert "nova_plan_only_blocked_start_build_keys" in override_policy
+    assert "aws_iam_role.api.name" in override_attachment
 
     review_policy = terraform.split('resource "aws_iam_role_policy" "api"', 1)[1].split(
         '\nresource "aws_iam_role_policy" "api_nova_plan_only_codebuild"', 1

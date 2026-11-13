@@ -380,36 +380,57 @@ resource "aws_iam_role_policy" "api_nova_plan_only_codebuild" {
   role = aws_iam_role.api.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat(
-      [
-        {
-          Effect   = "Allow"
-          Action   = ["codebuild:StartBuild"]
-          Resource = aws_codebuild_project.nova_plan_only[0].arn
-          Condition = {
-            Null = {
-              "codebuild:environment.environmentVariables.name"                             = "false"
-              "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "false"
-            }
-            "ForAllValues:StringEquals" = {
-              "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
-            }
-            StringLike = {
-              "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "?*"
-            }
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["codebuild:StartBuild"]
+        Resource = aws_codebuild_project.nova_plan_only[0].arn
+        Condition = {
+          Null = {
+            "codebuild:environment.environmentVariables.name"                             = "false"
+            "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "false"
           }
-        },
-        {
-          Effect   = "Allow"
-          Action   = ["codebuild:BatchGetBuilds"]
-          Resource = aws_codebuild_project.nova_plan_only[0].arn
-        },
-      ],
+          "ForAllValues:StringEquals" = {
+            "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
+          }
+          StringLike = {
+            "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "?*"
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codebuild:BatchGetBuilds"]
+        Resource = aws_codebuild_project.nova_plan_only[0].arn
+      },
+      {
+        Effect   = "Deny"
+        Action   = ["codebuild:StartBuild"]
+        Resource = aws_codebuild_project.nova_plan_only[0].arn
+        Condition = {
+          "ForAnyValue:StringNotEquals" = {
+            "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
+          }
+        }
+      }
+    ]
+  })
+}
+
+# Keep the explicit StartBuild override denies on a separate managed policy.
+# The API role already has several inline policies, whose aggregate AWS limit
+# is 10,240 bytes; the fixed deny list must not be removed to fit that limit.
+resource "aws_iam_policy" "api_nova_plan_only_start_build_overrides" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  name = "nova-plan-only-start-build-overrides"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
       # IAM evaluates different condition keys in one condition block as AND.
-      # Emit one explicit Deny per IAM-exposed override key so any one is enough
-      # to reject StartBuild. AWS has no condition keys for every StartBuild
-      # field (including timeout and debug-session options); the fixed dispatcher
-      # also limits the request arguments it sends.
+      # One explicit Deny per IAM-exposed override key ensures any one override
+      # rejects StartBuild. The fixed dispatcher also limits request arguments
+      # for fields without a corresponding IAM condition key.
       [
         for condition_key in local.nova_plan_only_blocked_start_build_keys : {
           Effect   = "Deny"
@@ -434,6 +455,13 @@ resource "aws_iam_role_policy" "api_nova_plan_only_codebuild" {
       ]
     )
   })
+}
+
+resource "aws_iam_role_policy_attachment" "api_nova_plan_only_start_build_overrides" {
+  count = var.enable_nova_plan_only_runner ? 1 : 0
+
+  role       = aws_iam_role.api.name
+  policy_arn = aws_iam_policy.api_nova_plan_only_start_build_overrides[0].arn
 }
 
 resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
