@@ -1,3 +1,5 @@
+import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,6 +56,81 @@ def test_apply_role_is_limited_to_required_control_plane_services() -> None:
     assert '"apigateway:TagResource", "apigateway:UntagResource"' in source
     assert '"secretsmanager:CreateSecret", "secretsmanager:TagResource"' in source
     assert 'secret:rds!cluster-*' in source
+
+
+def test_nova_override_deny_policy_is_bootstrapped_without_expanding_apply_role() -> None:
+    source = bootstrap_source()
+    policy = source.split(
+        'resource "aws_iam_policy" "nova_plan_only_start_build_overrides"', 1
+    )[1].split('\nresource "', 1)[0]
+    apply_permissions = source.split(
+        'data "aws_iam_policy_document" "apply_backend"', 1
+    )[1]
+    keys_block = source.split("nova_plan_only_blocked_start_build_keys = [", 1)[1].split("]", 1)[0]
+    keys = re.findall(r'"(codebuild:[^"]+)"', keys_block)
+    expected_keys = [
+        "codebuild:autoRetryLimit",
+        "codebuild:source.buildspec",
+        "codebuild:source",
+        "codebuild:source.location",
+        "codebuild:source.auth.resource",
+        "codebuild:source.auth.type",
+        "codebuild:source.insecureSsl",
+        "codebuild:serviceRole",
+        "codebuild:environment.image",
+        "codebuild:environment.type",
+        "codebuild:environment.computeType",
+        "codebuild:environment.privilegedMode",
+        "codebuild:environment.imagePullCredentialsType",
+        "codebuild:environment.registryCredential",
+        "codebuild:environment.certificate",
+        "codebuild:environment.fleet.fleetArn",
+        "codebuild:artifacts",
+        "codebuild:secondaryArtifacts",
+        "codebuild:secondarySources",
+        "codebuild:encryptionKey",
+        "codebuild:cache",
+        "codebuild:logsConfig",
+    ]
+
+    assert 'name        = "nova-plan-only-start-build-overrides"' in policy
+    assert "for condition_key in local.nova_plan_only_blocked_start_build_keys" in policy
+    assert (
+        'project/davdeploy-nova-plan-only"' in policy
+        and '"ForAnyValue:StringNotEquals"' in policy
+        and '"DAVDEPLOY_NOVA_PLAN_RUN_ID"' in policy
+    )
+    assert keys == expected_keys
+    assert "iam:CreatePolicy" not in apply_permissions
+    assert "iam:CreatePolicyVersion" not in apply_permissions
+
+    policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Deny",
+                "Action": ["codebuild:StartBuild"],
+                "Resource": "arn:aws:codebuild:us-east-1:654654474502:project/davdeploy-nova-plan-only",
+                "Condition": {"Null": {key: "false"}},
+            }
+            for key in keys
+        ]
+        + [
+            {
+                "Effect": "Deny",
+                "Action": ["codebuild:StartBuild"],
+                "Resource": "arn:aws:codebuild:us-east-1:654654474502:project/davdeploy-nova-plan-only",
+                "Condition": {
+                    "ForAnyValue:StringNotEquals": {
+                        "codebuild:environment.environmentVariables.name": [
+                            "DAVDEPLOY_NOVA_PLAN_RUN_ID"
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+    assert len(json.dumps(policy_document, separators=(",", ":"))) < 6144
 
 
 def test_apply_role_can_manage_the_nova_plan_project_and_its_exact_log_group() -> None:

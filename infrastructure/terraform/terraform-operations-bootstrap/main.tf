@@ -16,11 +16,71 @@ data "aws_iam_openid_connect_provider" "github" {
 locals {
   plan_bucket_name    = "davdeploy-tfplans-${data.aws_caller_identity.current.account_id}"
   release_bucket_name = "davdeploy-releases-${data.aws_caller_identity.current.account_id}"
+  nova_plan_only_blocked_start_build_keys = [
+    "codebuild:autoRetryLimit",
+    "codebuild:source.buildspec",
+    "codebuild:source",
+    "codebuild:source.location",
+    "codebuild:source.auth.resource",
+    "codebuild:source.auth.type",
+    "codebuild:source.insecureSsl",
+    "codebuild:serviceRole",
+    "codebuild:environment.image",
+    "codebuild:environment.type",
+    "codebuild:environment.computeType",
+    "codebuild:environment.privilegedMode",
+    "codebuild:environment.imagePullCredentialsType",
+    "codebuild:environment.registryCredential",
+    "codebuild:environment.certificate",
+    "codebuild:environment.fleet.fleetArn",
+    "codebuild:artifacts",
+    "codebuild:secondaryArtifacts",
+    "codebuild:secondarySources",
+    "codebuild:encryptionKey",
+    "codebuild:cache",
+    "codebuild:logsConfig",
+  ]
   common_tags = {
     Product   = "davdeploy"
     ManagedBy = "Terraform"
     Scope     = "terraform-operations"
   }
+}
+
+# This fixed managed policy is created by the separately trusted operations
+# bootstrap, not by the GitHub control-plane apply role. That role can attach
+# it to davdeploy-api, but cannot create or rewrite its policy document.
+resource "aws_iam_policy" "nova_plan_only_start_build_overrides" {
+  name        = "nova-plan-only-start-build-overrides"
+  description = "Deny caller overrides on the fixed DavDeploy Nova plan-only CodeBuild project"
+  tags        = merge(local.common_tags, { Purpose = "nova-plan-only-start-build-guard" })
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        for condition_key in local.nova_plan_only_blocked_start_build_keys : {
+          Effect   = "Deny"
+          Action   = ["codebuild:StartBuild"]
+          Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-plan-only"
+          Condition = {
+            Null = { (condition_key) = "false" }
+          }
+        }
+      ],
+      [
+        {
+          Effect   = "Deny"
+          Action   = ["codebuild:StartBuild"]
+          Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-plan-only"
+          Condition = {
+            "ForAnyValue:StringNotEquals" = {
+              "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
+            }
+          }
+        }
+      ]
+    )
+  })
 }
 
 resource "aws_kms_key" "plans" {
