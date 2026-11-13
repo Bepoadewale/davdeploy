@@ -59,7 +59,8 @@ file must remain untouched.
   bound to its exact immutable manifest cannot reach a credentialed apply step.
 - [ ] Apply verifies and uses the exact saved-plan and workspace versions and
   their manifests; changed, stale, cross-tenant, or mismatched artifacts fail
-  closed.
+  closed. Contract and workspace restore checks are implemented; apply dispatch
+  and execution are not.
 - [ ] The worker is idempotent and reports uncertain outcomes for reconciliation
   instead of retrying an apply blindly.
 - [ ] Apply uses a separate CodeBuild project and IAM role with explicit denies
@@ -71,21 +72,28 @@ file must remain untouched.
 ## Acceptance status
 
 - In progress on draft PR #399. The pure preflight contract is implemented;
-  no API dispatch, credential broker, CodeBuild apply project, or Terraform
-  execution has been added yet.
+  exact encrypted, version-pinned artifact download and bounded workspace
+  restoration are implemented. No API dispatch, credential broker, CodeBuild
+  apply project, or Terraform execution has been added yet.
 
 ## Tests / validation performed
 
 - PR #398 merged-main CI `43460570905` passed all seven jobs.
-- Focused contract tests: `9 passed`.
+- Focused contract and workspace tests: `14 passed`; Ruff passed on the
+  changed files. The workspace tests use a local fake S3 client and do not
+  establish AWS behavior.
 - Full `make verify`: `1,100 passed`; Ruff, Actions config, OpenAPI, and
   Compose checks passed. One existing Starlette/httpx deprecation warning.
-- Local and hosted PR #399 checks pending.
+- Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
+  contract-only head; they do not cover the workspace restore changes.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket399.md`
 - The focused contract test is `tests/test_nova_apply_contract.py`.
+- The artifact restoration helper and tests are
+  `apps/api/src/davdeploy/nova_apply_workspace.py` and
+  `tests/test_nova_apply_workspace.py`.
 - `docs/test/test399.md` will record the clean-room/non-AWS boundary evidence
   when the complete executable boundary is ready for that gate.
 
