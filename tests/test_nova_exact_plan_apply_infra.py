@@ -50,6 +50,12 @@ def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> No
     assert "exit 1" in project
     assert "aws_iam_role.customer_executor" not in project
     assert "aws_codebuild_project.nova_plan_only" not in project
+    for setting in (
+        "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL",
+        "DAVDEPLOY_TERRAFORM_STATE_ENABLED",
+        "DAVDEPLOY_TERRAFORM_STATE_API_URL",
+    ):
+        assert setting in project
 
     role = block(MAIN, 'resource "aws_iam_role" "nova_exact_plan_apply"')
     assert 'Principal = { Service = "codebuild.amazonaws.com" }' in role
@@ -65,6 +71,7 @@ def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> No
     assert "local.nova_exact_plan_apply_scoped_workspace_key" in policy
     assert '"codebuild:BuildArn"' in policy
     assert "/POST/api/v1/nova-apply/credentials" in policy
+    assert "/POST/api/v1/terraform-state/credentials" in policy
 
 
 def test_apply_dispatch_uses_only_durable_run_id_and_denies_build_overrides() -> None:
