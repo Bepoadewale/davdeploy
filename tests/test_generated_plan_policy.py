@@ -160,6 +160,28 @@ def evaluate(document=None, proposal_value=None):
     )
 
 
+def add_policy_resource(document, kind, name, arguments, *, after_unknown=None):
+    address = f"{kind}.{name}"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, kind, arguments)
+    )
+    unknown = after_unknown if after_unknown is not None else {}
+    document["resource_changes"].append(
+        change(address, kind, after_unknown=unknown)
+    )
+    resources = [item.model_dump(mode="json") for item in proposal().resources]
+    resources.append(
+        {
+            "resource_id": name.replace("_", "-"),
+            "resource_type": kind,
+            "name": name,
+            "arguments": arguments,
+            "rationale": "Apply the requested compute configuration with bounded metadata access.",
+        }
+    )
+    return proposal(resources)
+
+
 def dynamodb_case(point_in_time_recovery=_OMIT, *, backup_required=False, after_unknown=None):
     table_values = {
         "name": "app-records",
@@ -410,6 +432,113 @@ def test_secure_composed_s3_plan_is_eligible_only_for_human_review():
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert result.human_approval_required is True
     assert result.findings == ()
+
+
+@pytest.mark.parametrize(
+    ("kind", "options"),
+    [
+        (
+            "aws_instance",
+            {"http_endpoint": "enabled", "http_tokens": "required"},
+        ),
+        (
+            "aws_launch_template",
+            [{"http_endpoint": "enabled", "http_tokens": "required"}],
+        ),
+    ],
+)
+def test_ec2_metadata_access_requires_imdsv2_tokens(kind, options):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document, kind, "secure_compute", {"metadata_options": options}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("instance_metadata_") for code in codes(result))
+
+
+@pytest.mark.parametrize("kind", ["aws_instance", "aws_launch_template"])
+def test_ec2_metadata_endpoint_may_be_explicitly_disabled(kind):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        kind,
+        "metadata_disabled",
+        {
+            "metadata_options": {
+                "http_endpoint": "disabled",
+                "http_tokens": "optional",
+            }
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("instance_metadata_") for code in codes(result))
+
+
+@pytest.mark.parametrize("kind", ["aws_instance", "aws_launch_template"])
+def test_ec2_metadata_endpoint_with_optional_tokens_is_denied(kind):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        kind,
+        "imdsv1_compatible",
+        {
+            "metadata_options": {
+                "http_endpoint": "enabled",
+                "http_tokens": "optional",
+            }
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_v2_required" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [None, [], [{"http_endpoint": "enabled"}, {"http_endpoint": "disabled"}]],
+)
+def test_malformed_or_missing_ec2_metadata_options_are_denied(options):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        "aws_instance",
+        "unknown_metadata",
+        {"metadata_options": options},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_options_unknown" in codes(result)
+
+
+@pytest.mark.parametrize("kind", ["aws_instance", "aws_launch_template"])
+def test_unknown_ec2_metadata_token_requirement_is_denied(kind):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        kind,
+        "unknown_tokens",
+        {
+            "metadata_options": [
+                {"http_endpoint": "enabled", "http_tokens": "required"}
+            ]
+        },
+        after_unknown={"metadata_options": [{"http_tokens": True}]},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 @pytest.mark.parametrize(

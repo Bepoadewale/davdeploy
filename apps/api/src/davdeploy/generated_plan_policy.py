@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-12.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-13.2"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -106,6 +106,14 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_rds_cluster_instance": (("publicly_accessible",),),
     "aws_redshift_cluster": (("publicly_accessible",), ("encrypted",)),
     "aws_ebs_volume": (("encrypted",),),
+    "aws_instance": (
+        ("metadata_options", "http_endpoint"),
+        ("metadata_options", "http_tokens"),
+    ),
+    "aws_launch_template": (
+        ("metadata_options", "http_endpoint"),
+        ("metadata_options", "http_tokens"),
+    ),
     "aws_kms_key": (("key_usage",), ("deletion_window_in_days",)),
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
@@ -207,6 +215,7 @@ def _evaluate(
     _check_dynamodb_recovery(resources, proposal, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
+    _check_instance_metadata(resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -904,6 +913,39 @@ def _check_ebs_volumes(
                 "ebs_encryption_required",
                 item.get("address"),
                 "EBS volumes must have encryption enabled.",
+            )
+
+
+def _check_instance_metadata(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") not in {"aws_instance", "aws_launch_template"}:
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        options = values.get("metadata_options") if isinstance(values, dict) else None
+        if isinstance(options, list):
+            options = options[0] if len(options) == 1 else None
+        if not isinstance(options, dict):
+            _deny(
+                findings,
+                "instance_metadata_options_unknown",
+                address,
+                "The plan does not make instance metadata settings clear.",
+            )
+            continue
+
+        endpoint = options.get("http_endpoint")
+        tokens = options.get("http_tokens")
+        if endpoint == "disabled":
+            continue
+        if endpoint != "enabled" or tokens != "required":
+            _deny(
+                findings,
+                "instance_metadata_v2_required",
+                address,
+                "Instances with metadata access must require Instance Metadata Service Version 2 tokens.",
             )
 
 

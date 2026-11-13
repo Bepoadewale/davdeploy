@@ -76,6 +76,12 @@ class GeneratedResource(StrictContract):
                 "tokenvalidityunits",
             }:
                 return False
+            if (
+                normalized == "httptokens"
+                and isinstance(value, str)
+                and value.casefold() in {"optional", "required"}
+            ):
+                return False
             if normalized_parent == "tokenvalidityunits" and normalized in {
                 "accesstoken",
                 "idtoken",

@@ -1,6 +1,6 @@
 # ticket402 — enforce EC2 instance metadata protections in generated plans
 
-PR: pending draft PR creation
+PR: https://github.com/Bepoadewale/davdeploy/pull/402 (open draft)
 Branch: `feat/nova-instance-metadata-policy-402`
 
 ## Problem / goal
@@ -22,9 +22,10 @@ No Nova workload has been applied or certified.
 
 - `apps/api/src/davdeploy/generated_plan_policy.py`
 - `tests/test_generated_plan_policy.py`
-- AWS EC2 Instance Metadata Service configuration documentation
-- Terraform AWS provider documentation for `aws_instance` and
-  `aws_launch_template`
+- [Configure EC2 Instance Metadata Service options](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-options.html)
+- [Configure metadata options for new EC2 instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-IMDS-new-instances.html)
+- [Terraform `aws_instance`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
+- [Terraform `aws_launch_template`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template)
 
 ## Work planned for the PR
 
@@ -33,33 +34,40 @@ No Nova workload has been applied or certified.
 - Deny missing, malformed, or policy-critical unknown metadata settings.
 - Require `http_tokens = "required"` when `http_endpoint = "enabled"`; allow
   an explicitly disabled endpoint.
+- Treat `http_tokens` as a policy enum rather than credential material in the
+  structured proposal validator; policy still rejects unsafe values.
 - Add negative, positive, and unknown-value regression cases and update the
   finite capability evidence matrix.
 - Keep all execution feature gates unchanged and make no AWS calls or changes.
 
 ## Acceptance criteria
 
-- [ ] Planned instances and launch templates with enabled IMDS require
+- [x] Planned instances and launch templates with enabled IMDS require
       `http_tokens = "required"`.
-- [ ] Explicitly disabled IMDS endpoints remain eligible if all relevant
+- [x] Explicitly disabled IMDS endpoints remain eligible if all relevant
       values are known.
-- [ ] Missing, malformed, or policy-critical unknown settings fail closed.
-- [ ] Focused tests, full verification, docs convention, diff checks, and
-      required hosted CI pass.
-- [ ] No AWS resource is created, updated, or deleted.
+- [x] Missing, malformed, or policy-critical unknown settings fail closed.
+- [x] Focused tests, full verification, docs convention, and diff checks pass.
+- [ ] Required hosted CI passes on the final PR head.
+- [x] No AWS resource is created, updated, or deleted.
 
 ## Acceptance status
 
-Not started. This ticket is the draft-PR bootstrap and will be updated with
-implementation and evidence.
+Implementation is locally verified for enabled/disabled endpoint behavior,
+unsafe token modes, malformed inputs, and unknown values. Hosted CI remains
+pending. The draft stays open.
 
 ## Tests / validation performed
 
-Bootstrap only; no implementation tests have been run.
+Focused plan-policy and structured-proposal tests passed (216 total). Full
+verification passed with 1,105 tests; docs conventions and diff checks passed.
+Hosted CI is pending. Exact commands are recorded in
+`docs/test/test402.md`.
 
 ## Evidence files produced
 
-Pending: `docs/test/test402.md`.
+`docs/test/test402.md` records local source and test evidence; no AWS workload
+test occurred.
 
 ## Boundaries
 
