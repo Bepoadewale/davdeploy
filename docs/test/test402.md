@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: `079aea6` (combined source revision; final evidence commit and CI follow)
+Commit: `861b27b` (final evidence revision; its CI run passed)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -18,6 +18,8 @@ JSON and local proposal objects.
 - `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399`
 - `GITHUB_PR_NUMBER=402 /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python scripts/check_doc_conventions.py`
 - `git diff --check`
+- GitHub Actions CI run `43513116781` passed all seven jobs for final evidence
+  revision `861b27b`.
 - GitHub Actions CI run `43511986076` passed all seven jobs for combined
   revision `079aea6`.
 - GitHub Actions CI run `43502219872` passed all seven jobs for implementation
