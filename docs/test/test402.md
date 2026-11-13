@@ -20,6 +20,8 @@ JSON and local proposal objects.
 - `git diff --check`
 - GitHub Actions CI run `43502219872` passed all seven jobs for implementation
   commit `53ab621`.
+- GitHub Actions CI run `43503068011` passed all seven jobs for evidence
+  revision `d9fa007`.
 
 ## Observed result
 
@@ -32,7 +34,8 @@ changes occurred.
 Full verification passed: 1,105 tests, Ruff, GitHub Actions configuration,
 OpenAPI, and Docker Compose configuration checks. One existing Starlette/httpx
 deprecation warning remains. Documentation conventions and diff checks passed.
-Hosted CI is pending for the draft PR.
+Both recorded hosted CI runs passed all seven jobs; no cloud deployment or
+customer workload was involved.
 
 ## Teardown
 

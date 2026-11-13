@@ -49,20 +49,20 @@ No Nova workload has been applied or certified.
 - [x] Missing, malformed, or policy-critical unknown settings fail closed.
 - [x] Focused tests, full verification, docs convention, and diff checks pass.
 - [x] Hosted CI passed for implementation commit `53ab621` in run
-      `43502219872`; the evidence-only commit is subject to its own final CI.
+      `43502219872` and evidence commit `d9fa007` in run `43503068011`.
 - [x] No AWS resource is created, updated, or deleted.
 
 ## Acceptance status
 
-Implementation is locally verified for enabled/disabled endpoint behavior,
-unsafe token modes, malformed inputs, and unknown values. Hosted CI remains
-pending. The draft stays open.
+Implementation is locally and remotely verified for the bounded policy cases.
+Hosted CI passed on the implementation and evidence revisions. The draft stays
+open.
 
 ## Tests / validation performed
 
 Focused plan-policy and structured-proposal tests passed (216 total). Full
 verification passed with 1,105 tests; docs conventions and diff checks passed.
-Hosted CI is pending. Exact commands are recorded in
+Hosted CI runs `43502219872` and `43503068011` passed all seven jobs. Exact commands are recorded in
 `docs/test/test402.md`.
 
 ## Evidence files produced
