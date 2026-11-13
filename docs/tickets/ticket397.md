@@ -64,12 +64,12 @@ still blocks approval; no Nova apply executor exists.
 - [x] No apply dispatch, apply credentials, Terraform apply, AWS workload
   mutation, or Nova customer workload claim occurs. Existing local customer-plan
   fixtures ran only in the isolated Compose project.
-- [x] Focused tests, `make verify`, docs conventions, and isolated clean-room
-  local proof pass. Required hosted CI remains the release gate.
+- [x] Focused tests, `make verify`, docs conventions, isolated clean-room local
+  proof, and all seven required hosted CI jobs pass.
 
 ## Acceptance status
 
-- Implementation is in progress on the draft PR. The exact initialized workspace
+- Implementation is locally and CI verified. The exact initialized workspace
   is bundled separately from the saved plan, stored with KMS encryption and S3
   versioning, bound in the immutable manifest/database row, and verified before
   approval. Terraform apply remains intentionally out of scope.
@@ -83,11 +83,12 @@ still blocks approval; no Nova apply executor exists.
   implementation (including the encrypted/versioned workspace object round-trip).
 - `make verify`: 1,092 tests passed; Ruff, Actions configuration, OpenAPI, and
   Compose checks passed.
+- Final-head GitHub Actions run `43455432165` passed all seven required jobs.
 - Isolated clean-room local Compose proof passed as recorded in
   `docs/test/test397.md`; project containers were stopped, and its volume,
   network, images, and temporary override were retained.
 - Documentation conventions, Terraform formatting, and `git diff --check`
-  passed. Hosted PR CI and independent review are pending.
+  passed. Final diff review found no blocker.
 - No AWS, Bedrock, Terraform plan/apply, or hosted Nova customer workload
   execution occurred.
 
