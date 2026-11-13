@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: documentation review only
 Customer repository: none
-Commit: `b42bb4c` (final evidence revision; CI passed)
+Commit: `7ce330c` (final evidence revision; CI passed)
 AWS account: none
 AWS region: none
 
@@ -22,8 +22,8 @@ Documentation convention checks passed. `git diff --check` passed. Required
 GitHub Actions run `43518623188` passed all seven jobs, including
 docs-conventions, Python, policy, cloud-contracts, supply-chain, secrets, and
 fresh-runner local E2E. No application tests were necessary for this
-documentation-only change. The final evidence revision `b42bb4c` passed all
-seven jobs in run `43523893137`.
+documentation-only change. The final evidence revision `7ce330c` passed all
+seven jobs in run `43524521909`.
 
 ## Final boundary
 
