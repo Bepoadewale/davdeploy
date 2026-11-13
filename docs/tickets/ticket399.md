@@ -89,8 +89,10 @@ file must remain untouched.
 - Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
   contract-only head; they do not cover the workspace restore changes.
 - Hosted PR #399 checks for artifact restoration commit `ea25be2` passed all
-  seven jobs in run `43466898962`. The remote-state gate added after that head
-  has not yet run in CI.
+  seven jobs in run `43466898962`.
+- Final-head PR CI for `bc0cb47` passed all seven jobs in run `43467601843`.
+  Hosted clean-room CI validates the source tree but is not AWS execution
+  evidence.
 
 ## Evidence files produced
 
