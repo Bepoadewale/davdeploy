@@ -23,6 +23,7 @@ from davdeploy.main import app, product_service
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
     AuditEvent,
+    GeneratedPlanApplyRun,
     GeneratedPlanArtifact,
     GeneratedPlanRun,
     GeneratedPlanRunIdempotencyKey,
@@ -1636,6 +1637,35 @@ def _history_run(
     )
 
 
+def _apply_history_run(
+    *, project_id, revision_id, organization_id, requester_subject, created_at, index
+):
+    apply_id = str(uuid.uuid4())
+    return GeneratedPlanApplyRun(
+        id=apply_id,
+        organization_id=organization_id,
+        project_id=project_id,
+        revision_id=revision_id,
+        source_plan_run_id=str(uuid.uuid4()),
+        artifact_id=str(uuid.uuid4()),
+        approval_id=str(uuid.uuid4()),
+        requester_subject=requester_subject,
+        idempotency_key_sha256=hashlib.sha256(f"apply-history-key-{index}".encode()).hexdigest(),
+        request_sha256=hashlib.sha256(f"apply-history-request-{index}".encode()).hexdigest(),
+        manifest_sha256="b" * 64,
+        runner_run_id=apply_id,
+        codebuild_idempotency_token=f"apply-token-{index}",
+        codebuild_project="private-apply-project",
+        state="APPLY_RUNNING" if index % 2 else "QUEUED",
+        request_document={"raw_secret": "must-not-leak"},
+        result_metadata={"private_bucket": "must-not-leak"},
+        error_code="SAFE_FAILURE" if index % 2 == 0 else None,
+        error_summary="credential=must-not-leak" if index % 2 == 0 else None,
+        created_at=created_at,
+        started_at=created_at if index % 2 else None,
+    )
+
+
 def test_plan_history_is_stable_paginated_and_uses_safe_status_projection():
     service, db, _, _ = service_with_dispatcher()
     project, _, revision = make_submitted_revision(service)
@@ -1853,6 +1883,136 @@ def test_plan_history_hides_other_requesters_and_rejects_foreign_cursors():
     with pytest.raises(ValueError, match="page size"):
         service.generated_plan_run_history(founder(), project.id, limit=101)
     db.close()
+
+
+def test_apply_run_history_is_paginated_tenant_scoped_and_safe():
+    service, db, _, _ = service_with_dispatcher()
+    project, _, revision = make_submitted_revision(service)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    runs = [
+        _apply_history_run(
+            project_id=project.id,
+            revision_id=revision.id,
+            organization_id=founder().organization_id,
+            requester_subject=founder().subject,
+            created_at=start + timedelta(minutes=index),
+            index=index,
+        )
+        for index in (1, 3, 4)
+    ]
+    collaborator_run = _apply_history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject="another-project-member",
+        created_at=start + timedelta(minutes=2),
+        index=2,
+    )
+    db.add_all([*runs, collaborator_run])
+    db.commit()
+
+    first = service.generated_plan_apply_run_history(founder(), project.id, limit=2)
+    second = service.generated_plan_apply_run_history(
+        founder(), project.id, limit=2, cursor=first["next_cursor"]
+    )
+    administrator = Principal("workspace-admin", founder().organization_id, "administrator")
+    all_runs = service.generated_plan_apply_run_history(administrator, project.id, limit=10)
+
+    ordered_owner_runs = sorted(runs, key=lambda run: (run.created_at, run.id), reverse=True)
+    assert [item["id"] for item in first["items"]] == [
+        run.id for run in ordered_owner_runs[:2]
+    ]
+    assert [item["id"] for item in second["items"]] == [run.id for run in ordered_owner_runs[2:]]
+    assert second["next_cursor"] is None
+    assert len(all_runs["items"]) == 4
+    assert all_runs["items"][0]["plan_title"] == "AWS plan for nova-artifact-project"
+    expected_fields = {
+        "id",
+        "project_id",
+        "plan_title",
+        "revision_id",
+        "revision_number",
+        "source_plan_run_id",
+        "artifact_id",
+        "state",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "error_code",
+        "error_summary",
+        "execution_boundary",
+    }
+    assert set(first["items"][0]) == expected_fields
+    assert "must-not-leak" not in repr(all_runs)
+    assert "private-apply-project" not in repr(all_runs)
+    assert "The apply did not complete successfully." in repr(all_runs)
+
+    collaborator = Principal("another-project-member", founder().organization_id, "member")
+    assert [
+        item["id"] for item in service.generated_plan_apply_run_history(collaborator, project.id)["items"]
+    ] == [collaborator_run.id]
+    with pytest.raises(PermissionError, match="cursor is not visible"):
+        service.generated_plan_apply_run_history(collaborator, project.id, cursor=runs[0].id)
+    with pytest.raises(PermissionError, match="not found in this organization"):
+        service.generated_plan_apply_run_detail(
+            Principal("foreign-tenant", "org-foreign", "administrator"), runs[0].id
+        )
+    with pytest.raises(PermissionError, match="not visible to this user"):
+        service.generated_plan_apply_run_detail(collaborator, runs[0].id)
+    with pytest.raises(ValueError, match="page size"):
+        service.generated_plan_apply_run_history(founder(), project.id, limit=101)
+    db.close()
+
+
+def test_apply_run_status_http_routes_return_safe_tenant_scoped_data(tmp_path):
+    engine = make_engine(f"sqlite+pysqlite:///{tmp_path / 'plan-apply-history-api.db'}")
+    run_migrations(engine)
+    db = Session(engine, expire_on_commit=False)
+    service = ProductService(
+        db,
+        policy=PolicyClient(fixture=True),
+        executor=LocalExecutor(),
+        terraform_generator=StaticGenerator(),
+    )
+    service.seed_local_identity()
+    project, _, revision = make_submitted_revision(service)
+    apply_run = _apply_history_run(
+        project_id=project.id,
+        revision_id=revision.id,
+        organization_id=founder().organization_id,
+        requester_subject=founder().subject,
+        created_at=datetime.now(UTC),
+        index=100,
+    )
+    db.add(apply_run)
+    db.commit()
+
+    app.dependency_overrides[product_service] = lambda: service
+    try:
+        with TestClient(app) as client:
+            headers = {"Authorization": f"Bearer {issue_local_token('founder')}"}
+            history = client.get(
+                f"/api/v1/projects/{project.id}/generated-plan-apply-runs?limit=1",
+                headers=headers,
+            )
+            assert history.status_code == 200
+            assert history.json()["items"][0]["id"] == apply_run.id
+            detail = client.get(
+                f"/api/v1/generated-plan-apply-runs/{apply_run.id}", headers=headers
+            )
+            assert detail.status_code == 200
+            assert detail.json()["state"] == "QUEUED"
+            assert "raw_secret" not in detail.text
+            assert "private_bucket" not in detail.text
+
+            foreign = client.get(
+                f"/api/v1/projects/{project.id}/generated-plan-apply-runs",
+                headers={"Authorization": f"Bearer {issue_local_token('other-tenant')}"},
+            )
+            assert foreign.status_code == 403
+    finally:
+        app.dependency_overrides.pop(product_service, None)
+        db.close()
 
 
 def test_plan_history_http_route_returns_safe_page_and_denies_other_tenants(tmp_path):

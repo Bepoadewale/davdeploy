@@ -2182,6 +2182,20 @@ def get_generated_plan_run(
         translate(error)
 
 
+@app.get("/api/v1/generated-plan-apply-runs/{apply_run_id}")
+def get_generated_plan_apply_run(
+    apply_run_id: str,
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Return safe status for one organization-owned exact-plan apply request."""
+    REQUESTS.labels("generated_plan_apply_runs.get").inc()
+    try:
+        return service.generated_plan_apply_run_detail(principal, apply_run_id)
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
 @app.get("/api/v1/projects/{project_id}/customer-plan-revisions")
 def list_customer_plan_revisions(
     project_id: str,
@@ -2213,6 +2227,29 @@ def list_generated_plan_runs(
     REQUESTS.labels("generated_plan_runs.list").inc()
     try:
         return service.generated_plan_run_history(
+            principal,
+            project_id,
+            limit=limit,
+            cursor=cursor,
+            revision_id=revision_id,
+        )
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
+@app.get("/api/v1/projects/{project_id}/generated-plan-apply-runs")
+def list_generated_plan_apply_runs(
+    project_id: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None, min_length=1, max_length=36),
+    revision_id: str | None = Query(default=None, min_length=1, max_length=36),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """List safe exact-plan apply status for one authorized project."""
+    REQUESTS.labels("generated_plan_apply_runs.list").inc()
+    try:
+        return service.generated_plan_apply_run_history(
             principal,
             project_id,
             limit=limit,

@@ -62,6 +62,11 @@ file must remain untouched.
   version 35 adds the apply-run record and credential binding. The marker check
   does not establish pricing provenance or freshness; trusted pricing remains
   an unmet gate and this path is not enabled.
+- [x] Customers can retrieve safe apply-run status by run ID or paginated
+  project/revision history. Tenant and requester visibility is enforced; raw
+  request/result metadata, artifact locations, and build internals are omitted.
+  The response distinguishes runner status from application health or confirmed
+  cleanup.
 - [ ] A plan without complete trusted regional pricing and a persisted approval
   bound to its exact immutable manifest cannot reach a credentialed apply step.
 - [ ] Apply verifies and uses the exact saved-plan and workspace versions and
@@ -100,6 +105,11 @@ file must remain untouched.
   the source plan run and apply run, and become unusable when that exact
   CodeBuild build is no longer active. Runtime gates remain disabled, and no
   apply-request API or worker creates these records yet.
+- Read-only apply-run detail and project-history routes expose the durable
+  record with organization/project/revision scoping, requester/admin
+  visibility, bounded cursors, and a fixed safe field projection. No route
+  creates or dispatches apply runs; these routes have no real customer
+  execution data until dispatch and lifecycle observation are implemented.
 
 ## Tests / validation performed
 
@@ -138,6 +148,12 @@ file must remain untouched.
   evidence.
 - Documentation follow-up commit `be75264` passed all seven CI jobs in run
   `43468478089`.
+- Apply-run status detail/history tests: `2 passed`; Ruff passed on the
+  changed runtime and test files. Full `make verify` passed (1,115 tests),
+  including Ruff, Actions configuration, OpenAPI snapshot, and Compose checks.
+  The isolated local proof for the status API passed in a fresh Compose
+  project; final error sanitization and cursor-integrity guards also passed
+  the focused tests and full suite.
 - Apply-run state credential binding commit `34ac2471f9d0c73925b889ae9baccf2777906082`
   passed all seven final-head checks in run `43484459545`. PR #399 remains a
   draft; these source and CI checks do not establish a hosted customer apply.
