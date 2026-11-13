@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: documentation review only
 Customer repository: none
-Commit: working tree based on bootstrap `83217d2`; final commit and CI pending
+Commit: `b117109` (implementation revision; final evidence/CI follow)
 AWS account: none
 AWS region: none
 
@@ -19,8 +19,10 @@ None. No local tests or cloud calls have been run for the bootstrap commit.
 ## Observed result
 
 Documentation convention checks passed. `git diff --check` passed. Required
-GitHub CI evidence is recorded after the PR is updated. No application tests
-were necessary for this documentation-only change.
+GitHub Actions run `43518623188` passed all seven jobs, including
+docs-conventions, Python, policy, cloud-contracts, supply-chain, secrets, and
+fresh-runner local E2E. No application tests were necessary for this
+documentation-only change.
 
 ## Final boundary
 

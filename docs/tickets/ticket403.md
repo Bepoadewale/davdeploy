@@ -43,18 +43,21 @@ are not available.
 - [x] Tickets #401/#402 identify their merged state and evidence.
 - [x] No hosted or deployed customer capability is claimed.
 - [x] Documentation conventions and diff checks pass.
-- [ ] Required GitHub checks pass on the final evidence revision.
+- [x] Required GitHub checks passed all seven jobs in run
+      [`43518623188`](https://github.com/Bepoadewale/davdeploy/actions/runs/43518623188)
+      for implementation revision `b117109`.
 
 ## Acceptance status
 
-Status and capability documents now reflect the merged policy checks and their
-limits. Local documentation conventions and diff checks pass. Final hosted CI
-is pending. No source capability is deployed by this documentation PR.
+Status and capability documents reflect the merged policy checks and their
+limits. Local documentation conventions, diff checks, and all seven hosted CI
+jobs pass. No source capability is deployed by this documentation PR.
 
 ## Tests / validation performed
 
-`GITHUB_PR_NUMBER=403 ... scripts/check_doc_conventions.py` passed, and
-`git diff --check` passed. GitHub CI is pending on the updated PR revision.
+`GITHUB_PR_NUMBER=403 ... scripts/check_doc_conventions.py` and
+`git diff --check` passed. GitHub Actions run `43518623188` passed all seven
+required jobs for `b117109`.
 
 ## Evidence files produced
 
