@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: documentation review only
 Customer repository: none
-Commit: `87002c3` (final evidence revision; CI passed)
+Commit: `567c6fc` (final evidence revision; CI passed)
 AWS account: none
 AWS region: none
 
@@ -23,7 +23,8 @@ GitHub Actions run `43518623188` passed all seven jobs, including
 docs-conventions, Python, policy, cloud-contracts, supply-chain, secrets, and
 fresh-runner local E2E. No application tests were necessary for this
 documentation-only change. Final evidence revision `87002c3` passed all seven
-jobs in run `43519328914`.
+jobs in run `43519328914`; final revision `567c6fc` passed all seven jobs in
+run `43520296502`.
 
 ## Final boundary
 
