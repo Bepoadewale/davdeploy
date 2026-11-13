@@ -50,20 +50,20 @@ and include current draft PR #399 without claiming apply exists.
   enabled flags, IAM simulations, code, or CI.
 - [x] PR #399 is identified as draft and not deployed; pricing remains
   unavailable and approval/apply remain blocked.
-- [ ] Documentation conventions, diff checks and required CI pass.
+- [x] Documentation conventions, diff checks and required CI pass in final-head
+  run `43471519104` (all seven jobs).
 - [x] No infrastructure or customer data changes occur.
 
 ## Acceptance status
 
-In progress. The readiness matrix has been corrected against current source and
-read-only runtime evidence. Documentation convention and diff checks passed;
-required GitHub CI remains pending.
+Implementation and validation complete for this documentation-only scope.
+Runtime behavior is unchanged.
 
 ## Tests / validation performed
 
 `python3 scripts/check_doc_conventions.py` and `git diff --check` passed.
-Required GitHub CI is pending for the updated head. This is documentation-only;
-no `docs/test/test400.md` is required.
+All seven required CI jobs passed in run `43471519104`. This is
+documentation-only; no `docs/test/test400.md` is required.
 
 ## Evidence files produced
 
