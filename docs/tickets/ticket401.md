@@ -1,6 +1,6 @@
 # ticket401 — inspect network ACL exposure in generated Terraform plans
 
-PR: pending draft PR creation
+PR: https://github.com/Bepoadewale/davdeploy/pull/401 (open draft)
 Branch: `feat/nova-network-acl-policy-401`
 
 ## Problem / goal
@@ -24,32 +24,56 @@ has been applied or certified.
 - [AWS Network ACLs](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-network-acls.html)
 - [Terraform AWS network ACL rule resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/network_acl_rule)
 
-## Work to be done
+## Work planned for the PR
 
-- Inspect actual plan values and unknown metadata for `aws_network_acl` and
+- Inspect actual plan values and unknown metadata for `aws_network_acl`,
+  `aws_default_network_acl`, and
   `aws_network_acl_rule` ingress rules.
 - Deny malformed, incomplete, or policy-critical unknown ACL entries.
 - Deny public inbound rules for configured administrative/data ports; require
   human review for public web/general ingress, including IPv4 and IPv6 sources.
-- Add negative and valid scoped-network regression cases, update policy docs and
-  PR test evidence. No cloud mutation or feature-gate change.
+- Recognize globally routable IPv4/IPv6 source ranges in ACL and security-group
+  policy, rather than checking only `/0`.
+- Add negative and valid scoped-network regression cases. No cloud mutation or
+  feature-gate change.
 
 ## Acceptance criteria
 
-- [ ] Actual plans with malformed or critical unknown ACL ingress are denied.
-- [ ] Public administrative/data ports are denied for IPv4 and IPv6 CIDRs.
-- [ ] Public web/general ingress requires review; private/scoped ingress is not
+- [x] Actual plans with malformed or critical unknown ACL ingress are denied.
+- [x] Public administrative/data ports are denied for IPv4 and IPv6 CIDRs.
+- [x] Public web/general ingress requires review; private/scoped ingress is not
       misclassified as public.
-- [ ] Focused tests, full verification, docs convention, and required CI pass.
-- [ ] No apply, deployment, or AWS resource mutation occurs.
+- [x] Focused tests, full verification, docs convention, and diff checks pass.
+- [ ] Required hosted CI passes on the final PR head.
+- [x] No apply, deployment, or AWS resource mutation occurs.
 
-## Validation and evidence
+## Acceptance status
 
-Pending implementation. Evidence: `docs/test/test401.md`.
+Locally implemented and verified. Hosted PR checks are pending at this draft
+revision. No deployment or customer workload is claimed.
 
-## Boundaries and follow-up
+## Tests / validation performed
+
+Focused plan-policy tests, full `make verify`, the isolated `make local-proof`,
+documentation conventions, and diff checks are recorded in
+`docs/test/test401.md`.
+
+## Evidence files produced
+
+- `docs/test/test401.md`
+- Updated `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
+
+## Boundaries
 
 This policy addition is source-level only. It does not establish full network
-architecture coverage or hosted workload behavior. Route tables, NAT, gateways,
-VPC endpoints, and hybrid connectivity remain separate coverage items. Keep the
-PR draft until the product's customer-readiness gate is met.
+architecture coverage or hosted workload behavior. ACL-to-subnet associations,
+route tables, NAT, gateways, VPC endpoints, egress policy, and hybrid
+connectivity remain separate coverage items. Public ACL rules are evaluated
+individually; rule-number precedence and reachability through the full VPC
+topology are not computed. Keep the PR draft until the product's
+customer-readiness gate is met.
+
+## Follow-up work
+
+Add network ACL association and rule-precedence analysis, then continue with
+route, egress, endpoint, and end-to-end reachability policy coverage.

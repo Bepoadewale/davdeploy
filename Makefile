@@ -71,8 +71,8 @@ demo-readiness-failure:
 	$(PY) scripts/demo.py --readiness-failure
 
 trace-check:
-	curl -fsS http://127.0.0.1:3200/ready >/dev/null
-	curl -fsS 'http://127.0.0.1:3200/api/search?limit=1' | grep -q 'davdeploy-api'
+	curl -fsS "$${DAVDEPLOY_TEMPO_BASE_URL:-http://127.0.0.1:3200}/ready" >/dev/null
+	curl -fsS "$${DAVDEPLOY_TEMPO_BASE_URL:-http://127.0.0.1:3200}/api/search?limit=1" | grep -q 'davdeploy-api'
 	@echo "Tempo received davdeploy traces."
 
 api-contract:
