@@ -28,7 +28,7 @@ The GitHub repository was renamed from `ai-platform-product-strategy` to `davdep
 - CloudTrail management-event auditing is active: a multi-region, log-file-validated trail writes to a private encrypted S3 bucket with public access blocked.
 - Hosted invitation delivery is active: the verified Resend domain sends invitations from `notify@davdeploy.tech`, replies route to `support@davdeploy.tech`, and the sending-only key is held in a Standard SSM SecureString readable only by the API role. This proves sender delivery and reply routing, not yet the complete browser invitation-acceptance journey.
 - Approved App Runner cloud runs now have a durable execution boundary: an administrator can queue an exact-digest run only after all account/region/apply/runtime/confirmation gates pass, and the trusted worker invokes only the configured App Runner adapter. The default adapter is disabled and no live workload is executed by routine local/CI paths.
-- PRs #299–#303 add gated S3 and DynamoDB renderer bindings and typed Lambda/API inputs. PR #303 (`ea9de3a`) fixes the dispatcher allowlist for `table_name`; its seven CI checks passed, but the latest hosted apply is still PR #302 commit `7d087d0`. No hosted composed customer workload has been run.
+- PRs #299–#303 add gated S3 and DynamoDB renderer bindings and typed Lambda/API inputs. PR #303 (`ea9de3a`) fixes the dispatcher allowlist for `table_name` and is included in later hosted control-plane releases. These gated renderers still lack hosted composed customer workload evidence.
 - Nova PR #320 adds a bounded, sanitized semantic repair loop for proposal validation failures; PR #321 requires known encryption for generated `aws_ebs_volume` plans; and PR #322 blocks generated-plan approval while complete region-bound pricing evidence is unavailable. These are merged in source, not deployment evidence: no Nova-generated plan has been deployed, and the trusted pricing evaluator is not integrated. PR #318 is closed; its pricing approach remains unresolved. The hosted plan-only runner and tenant-scoped remote state remain incomplete.
 - Backend PRs #277/#278 persist typed module-instance records and scoped queue/worker/CodeBuild outcomes; PR #280 adds worker leases and reconciliation-required state. These changes were deployed by apply run `41716835229`. PRs #287–#302 add graph validation, dependency scheduling and typed renderer inputs/outputs; their package is included in apply run `41781326222`. These are execution foundations, not certified hosted multi-module deployment: the serverless paths remain gated, the dispatcher rejects multi-module runs, and PR #303's narrow `table_name` fix is not yet deployed.
 - Backend PR #279 improves the local Terraform run monitor. PR #280 adds atomic worker claims, lease heartbeats and explicit reconciliation for uncertain outcomes. Protected Terraform apply run `41716835229` deployed the merged worker/database changes from PRs #277, #278 and #280. Customer-execution gates remain unchanged.
@@ -108,6 +108,10 @@ returned HTTP 200 in account `654654474502`, region `us-east-1`. The isolated
 plan-only CodeBuild project uses its fixed service role and pinned runner
 release. Nova plan reviews, runner readiness, role verification, credential
 broker, and state storage/API are enabled in the hosted control plane; hosted
-certification remains disabled. No customer plan or workload was run, and
-pricing approval, customer-role permission proof, and customer lifecycle
-certification remain incomplete. Evidence: [`test391.md`](docs/test/test391.md).
+certification remains disabled. A disposable plan-only role passed IAM policy
+simulation for bounded metadata reads and explicit denials, then its exact test
+stack was deleted. This does not prove a real DavDeploy role assumption or
+customer-account effective permissions. No customer plan or workload was run;
+pricing approval and customer lifecycle certification remain incomplete.
+Evidence: [`test391.md`](docs/test/test391.md) and
+[`test392.md`](docs/test/test392.md).

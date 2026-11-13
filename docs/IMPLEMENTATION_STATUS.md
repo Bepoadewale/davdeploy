@@ -334,8 +334,10 @@ the fixed override-deny managed policy attached to `davdeploy-api`, and
 `/healthz` HTTP 200. The separate `davdeploy-nova-plan-only` CodeBuild project
 uses a fixed service role and pinned release package. Plan review, runner
 readiness, role verification, credential broker and Terraform state gates are
-enabled; hosted certification remains disabled. This is control-plane
-readiness only: no customer plan or workload ran, regional pricing is not
-integrated, customer effective permissions are unverified, and apply/health/
-recovery/teardown for customer workloads remain unproven. Exact evidence is in
-[`test391.md`](test/test391.md).
+enabled; hosted certification remains disabled. A disposable plan-only role
+passed IAM policy simulation for selected metadata reads and explicit denials,
+then its exact test stack was deleted. This does not prove a real DavDeploy
+role assumption or customer-account effective permissions. No customer plan or
+workload ran, regional pricing is not integrated, and customer apply/health/
+recovery/teardown remain unproven. Exact evidence is in [`test391.md`](test/test391.md)
+and [`test392.md`](test/test392.md).

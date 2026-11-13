@@ -2,23 +2,27 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-12, after PR #381
+## Current backend source — 2026-11-13, after PR #390
 
 Backend `main` is merge commit
-`a12205972cc124d08d85845f30c9b574f7cf87fd`; merged-main CI run
-[43257709757](https://github.com/Bepoadewale/davdeploy/actions/runs/43257709757)
+`ae9ec4450d527141081e95707a1c3ee05126b683`; merged-main CI run
+[43386326424](https://github.com/Bepoadewale/davdeploy/actions/runs/43386326424)
 passed all seven jobs. Current source includes the Nova intent scope guard
 (PR #377), RDS planner metadata access (#371–#372), actual-plan denial of
 unbound Secrets Manager value-read permissions (#374), and PR #379's bounded
 regional EC2 metadata reads for proposed VPCs, subnets, and security groups.
-The PR #379 code and PR #381 customer plan-role template are deployed/published.
-The immutable `8c5d…` template URL is verified, and the previous `f3d9…` URL
-remains available. No customer role is installed, and effective customer-role
-permissions have not been verified. Out-of-scope intent
-requests receive a fixed HTTP 422 explanation and are not stored as workload
-intents; DavDeploy is not a general-purpose question-answering assistant. Two
-bounded synthetic Bedrock checks distinguished stock advice from a
-stockbroking-app deployment; this is not a broad model-quality evaluation.
+The current control-plane release and the isolated plan-only runner are
+deployed; Nova plan review, runner, credential broker, role verification and
+state API gates are enabled, while hosted certification is disabled. PR #381's
+immutable `8c5d…` customer role template is published, and the previous
+`f3d9…` URL remains available. PR #392's disposable IAM policy simulation
+passed selected allow/deny cases and its exact test stack was deleted; a real
+customer connection, broker assumption, and account-effective permissions
+remain unverified. Out-of-scope intent requests receive a fixed HTTP 422
+explanation and are not stored as workload intents; DavDeploy is not a
+general-purpose question-answering assistant. Two bounded synthetic Bedrock
+checks distinguished stock advice from a stockbroking-app deployment; this is
+not a broad model-quality evaluation.
 The bounded RDS-managed secret ARN contract (#367) still does not retrieve
 customer secret values or grant runtime secret reads. Managed-policy
 attachments whose contents are unavailable remain review-required. Frontend
@@ -26,7 +30,7 @@ PR #102 remains draft/local-fixture work without an authenticated production
 customer journey. No Nova-generated customer plan or workload has been
 applied, operated, health-checked, recovered, or destroyed.
 
-## Current hosted release — 2026-11-12, PR #381 source
+## Historical hosted release — 2026-11-12, PR #381 source
 
 Backend commit `a12205972cc124d08d85845f30c9b574f7cf87fd` was deployed through
 protected plan [43260003885](https://github.com/Bepoadewale/davdeploy/actions/runs/43260003885)
@@ -318,8 +322,11 @@ attachment, and `/healthz` HTTP 200 in account `654654474502`, region
 `E1O6BxLyyxTN/epgvT0pyCkQU1bE4QXi+drUAp+cE+I=`. The isolated plan-only
 CodeBuild project uses the fixed service role and pinned runner release.
 Hosted Nova plan reviews, runner, credential broker, role verification, and
-state API gates are enabled; hosted certification remains disabled. No
-customer role installation, plan, workload, health check, recovery, apply,
-or teardown occurred. Complete pricing evidence and final cost-bound plan
-approval remain unavailable, and effective permissions for a customer plan
-role are not proven. Evidence: [`test391.md`](../test/test391.md).
+state API gates are enabled; hosted certification remains disabled. A
+disposable plan-only role passed IAM policy simulation for selected metadata
+reads and explicit denials, then its exact stack was deleted. This does not
+prove a real role assumption or account-effective permissions. No customer
+plan, workload, health check, recovery, apply, or teardown occurred. Complete
+pricing evidence and final cost-bound plan approval remain unavailable.
+Evidence: [`test391.md`](../test/test391.md) and
+[`test392.md`](../test/test392.md).
