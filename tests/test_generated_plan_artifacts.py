@@ -12,8 +12,8 @@ from davdeploy.generated_deployment_contract import (
     CostAssumption,
     GeneratedDeploymentProposal,
     GeneratedResource,
-    HealthAssertion,
     RecoveryRequirement,
+    StorageRoundTripAssertion,
     WorkloadRequirements,
 )
 from davdeploy.generated_plan_artifacts import (
@@ -44,7 +44,7 @@ PLAN_BYTES = b"encrypted plan fixture bytes"
 
 def verification_proposal() -> GeneratedDeploymentProposal:
     return GeneratedDeploymentProposal(
-        contract_version="1.0",
+        contract_version="1.1",
         source_revision="revision-1",
         context_digest="c" * 64,
         resources=(
@@ -58,7 +58,7 @@ def verification_proposal() -> GeneratedDeploymentProposal:
         ),
         requirements=WorkloadRequirements(region="us-east-1"),
         health_assertions=(
-            HealthAssertion(
+            StorageRoundTripAssertion(
                 kind="storage_roundtrip",
                 target_resource_id="storage",
                 description="Application can store and retrieve a synthetic object.",
@@ -360,7 +360,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 5
+    assert manifest["manifest_version"] == 6
     assert manifest["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [
@@ -368,6 +368,9 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
                 "kind": "storage_roundtrip",
                 "target_resource_id": "storage",
                 "description": "Application can store and retrieve a synthetic object.",
+                "payload_size_bytes": 128,
+                "timeout_seconds": 30,
+                "cleanup_required": True,
             }
         ],
         "recovery": {
@@ -442,7 +445,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         created_at="2026-11-04T00:00:00Z",
         remote_state=remote_state,
     )
-    assert owned_manifest["manifest_version"] == 7
+    assert owned_manifest["manifest_version"] == 8
     assert owned_manifest["remote_state"] == remote_state
     assert owned_manifest["ownership_inventory"] == {
         "version": 1,

@@ -84,7 +84,7 @@ def make_input_document(
         environment_id=environment_id,
     )
     proposal = GeneratedDeploymentProposal(
-        contract_version="1.0",
+        contract_version="1.1",
         source_revision=revision_id,
         context_digest=generation_context_digest(revision, revision_id),
         resources=(
@@ -525,7 +525,7 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
         "state_id": state_backend.state_id,
         "scope_sha256": state_backend.scope_sha256,
     }
-    assert result_document["manifest"]["manifest_version"] == 6
+    assert result_document["manifest"]["manifest_version"] == 7
     assert result_document["manifest"]["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [],

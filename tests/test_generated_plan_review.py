@@ -128,7 +128,7 @@ def generated_runner_result(
     plan_file.write_bytes(PLAN_BYTES)
     os.chmod(plan_file, 0o600)
     proposal = GeneratedDeploymentProposal(
-        contract_version="1.0",
+        contract_version="1.1",
         source_revision=revision.id,
         context_digest=generation_context_digest(revision.content, revision.id),
         resources=(

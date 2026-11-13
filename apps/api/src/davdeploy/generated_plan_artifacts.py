@@ -365,7 +365,7 @@ def generated_plan_manifest(
     if len({item.address for item in untagged_resources}) != len(untagged_resources):
         raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
     manifest = {
-        "manifest_version": 7 if untagged_resources else 6 if remote_state is not None else 5,
+        "manifest_version": 8 if untagged_resources else 7 if remote_state is not None else 6,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,

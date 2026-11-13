@@ -60,7 +60,7 @@ def proposal(resources=None, *, backup_required=False):
         resources[0]["outputs"] = [{"name": "id", "value_type": "string"}]
     return GeneratedDeploymentProposal.model_validate(
         {
-            "contract_version": "1.0",
+            "contract_version": "1.1",
             "source_revision": "test-revision",
             "context_digest": "a" * 64,
             "requirements": {"region": REGION},
