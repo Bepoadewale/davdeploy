@@ -93,6 +93,8 @@ file must remain untouched.
 - Final-head PR CI for `bc0cb47` passed all seven jobs in run `43467601843`.
   Hosted clean-room CI validates the source tree but is not AWS execution
   evidence.
+- Documentation follow-up commit `be75264` passed all seven CI jobs in run
+  `43468478089`.
 
 ## Evidence files produced
 
