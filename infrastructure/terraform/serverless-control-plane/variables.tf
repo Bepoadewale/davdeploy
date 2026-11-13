@@ -144,6 +144,27 @@ variable "enable_nova_plan_only_runner" {
   }
 }
 
+variable "enable_nova_exact_plan_apply_runner" {
+  type        = bool
+  description = "Provision a separate disabled-by-default CodeBuild boundary for exact saved-plan apply. This does not enable customer execution until the fixed worker, live approval/pricing checks and credential broker are implemented and verified."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_runner || var.enable_nova_plan_only_runner
+    error_message = "Nova exact-plan apply requires the isolated Nova plan-only boundary."
+  }
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_runner || var.enable_nova_plan_reviews
+    error_message = "Nova exact-plan apply requires encrypted plan review artifacts."
+  }
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_runner || var.enable_nova_terraform_state_api
+    error_message = "Nova exact-plan apply requires tenant-scoped remote state and locking."
+  }
+}
+
 variable "enable_nova_terraform_state_storage" {
   type        = bool
   description = "Provision the private versioned KMS state bucket. This does not enable the HTTP API or change the backend-free Nova runner."

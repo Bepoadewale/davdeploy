@@ -5,7 +5,16 @@ and apply workflows:
 
 - encrypted saved-plan and immutable release buckets;
 - dedicated KMS keys;
-- separate GitHub OIDC roles for planning and applying.
+- separate GitHub OIDC roles for planning and applying;
+- fixed CodeBuild StartBuild policies for the disabled Nova plan-only and
+  exact-plan apply projects, including explicit override-field denies.
+
+The Nova exact-plan apply policies authorize only the fixed
+`davdeploy-nova-saved-plan-apply` project and a server-generated durable run
+ID. The apply project is provisioned separately by the control-plane root and
+is disabled by default; its current fixed buildspec exits until the verified
+apply worker and live approval/pricing checks are implemented. These policies
+do not grant Terraform or customer-account resource permissions.
 
 The apply role can create only the AWS service-linked roles required by the managed RDS and
 Cognito-email integrations. It cannot create general-purpose IAM roles outside the named
