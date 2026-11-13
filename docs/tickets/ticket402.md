@@ -1,7 +1,8 @@
 # ticket402 — enforce EC2 instance metadata protections in generated plans
 
-PR: https://github.com/Bepoadewale/davdeploy/pull/402 (open draft)
-Branch: `feat/nova-instance-metadata-policy-402`
+PR: https://github.com/Bepoadewale/davdeploy/pull/402 (merged)
+Merged commit: `653619d9eb52f717c8c052a4b2aace2d7339b51c`
+Branch: `feat/nova-instance-metadata-policy-402` (deleted after merge)
 
 ## Problem / goal
 
@@ -66,6 +67,10 @@ Nova workload has been applied or certified.
       [`43511986076`](https://github.com/Bepoadewale/davdeploy/actions/runs/43511986076).
 - [x] Final evidence revision `861b27b` passed all seven checks in run
       [`43513116781`](https://github.com/Bepoadewale/davdeploy/actions/runs/43513116781).
+- [x] Final PR head `be1e111` passed all seven checks in run
+      [`43514648425`](https://github.com/Bepoadewale/davdeploy/actions/runs/43514648425).
+- [x] Merged-main CI passed all seven checks in run
+      [`43515569852`](https://github.com/Bepoadewale/davdeploy/actions/runs/43515569852).
 - [x] No AWS resource is created, updated, or deleted.
 
 ## Acceptance status
@@ -75,8 +80,9 @@ seven checks on `30b00b9`. After PR #401 merged, this branch integrated its
 network ACL policy and bumped the shared policy version to `.3`. The combined
 revision passes local focused/full checks and all seven hosted CI checks.
 Source commit `079aea6` passed run `43511986076`; final evidence revision
-`861b27b` passed run `43513116781`. The PR remains a draft; no Nova execution
-or AWS workload is enabled.
+`861b27b` passed run `43513116781`; final PR head `be1e111` passed run
+`43514648425`; merged-main CI passed all seven checks in `43515569852`. This
+is not an AWS deployment or customer workload.
 
 ## Tests / validation performed
 
@@ -84,9 +90,10 @@ The original implementation passed focused tests (222), full verification
 (1,111), and all seven checks in runs `43508435135` and `43509145986`. After
 integrating PR #401, combined focused suites passed (232), `make verify`
 passed (1,121 tests), and all seven checks passed in run `43511986076`.
-The evidence-only final revision `861b27b` also passed all seven checks in run
-`43513116781`. Documentation conventions and diff checks pass. Exact commands
-are recorded in `docs/test/test402.md`.
+The evidence-only final PR head `be1e111` passed all seven checks in run
+`43514648425`; merged-main CI passed all seven checks in `43515569852`.
+Documentation conventions and diff checks pass. Exact commands are recorded
+in `docs/test/test402.md`.
 
 ## Evidence files produced
 

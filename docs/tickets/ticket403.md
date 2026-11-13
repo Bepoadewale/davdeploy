@@ -3,7 +3,7 @@
 PR: https://github.com/Bepoadewale/davdeploy/pull/403 (draft)
 Branch: `docs/nova-policy-matrix-status-403`
 
-## Goal
+## Problem / goal
 
 Update the technical status and capability evidence to reflect that PRs #401
 and #402 are merged source. Preserve the limits of both policy checks and
@@ -17,7 +17,7 @@ Nova-hosted customer execution. The control plane is deployed through PR #390.
 Pricing remains held; exact-plan customer apply, health, recovery, and teardown
 are not available.
 
-## References
+## Research / references used
 
 - [`EXECUTION_READINESS_MATRIX.md`](../product/EXECUTION_READINESS_MATRIX.md)
 - [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](../product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
@@ -26,7 +26,7 @@ are not available.
 - [`test401.md`](../test/test401.md)
 - [`test402.md`](../test/test402.md)
 
-## Work planned
+## Work planned for the PR
 
 - Replace draft-only wording with merged-source wording for the network ACL
   and EC2 metadata policy checks.
@@ -39,13 +39,24 @@ are not available.
 
 ## Acceptance criteria
 
-- [ ] Both matrices identify #401/#402 as merged source and preserve limits.
-- [ ] Ticket #402 no longer reports the PR as open/draft.
-- [ ] No hosted or deployed customer capability is claimed.
-- [ ] Documentation conventions and diff checks pass.
+- [x] Both matrices identify #401/#402 as merged source and preserve limits.
+- [x] Tickets #401/#402 identify their merged state and evidence.
+- [x] No hosted or deployed customer capability is claimed.
+- [x] Documentation conventions and diff checks pass.
 - [ ] Required GitHub checks pass on the final evidence revision.
 
-## Evidence
+## Acceptance status
+
+Status and capability documents now reflect the merged policy checks and their
+limits. Local documentation conventions and diff checks pass. Final hosted CI
+is pending. No source capability is deployed by this documentation PR.
+
+## Tests / validation performed
+
+`GITHUB_PR_NUMBER=403 ... scripts/check_doc_conventions.py` passed, and
+`git diff --check` passed. GitHub CI is pending on the updated PR revision.
+
+## Evidence files produced
 
 `docs/test/test403.md`; documentation-only change, no runtime or cloud tests.
 
@@ -54,7 +65,7 @@ are not available.
 This PR records source and test evidence only. It does not change policy code,
 deploy the policy to AWS, enable apply, or claim customer workload readiness.
 
-## Follow-up
+## Follow-up work
 
 Continue the hosted plan, pricing, exact approval, apply, health, recovery,
 teardown, and composed-scenario gates in the private goal ledger.
