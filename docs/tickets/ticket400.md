@@ -1,6 +1,6 @@
 # ticket400 — reconcile Nova readiness matrix with live gates
 
-PR: [#400](https://github.com/Bepoadewale/davdeploy/pull/400) (draft)
+PR: [#400](https://github.com/Bepoadewale/davdeploy/pull/400)
 Branch: `docs/reconcile-nova-readiness-400`
 
 ## Problem / goal
