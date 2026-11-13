@@ -290,6 +290,26 @@ def summarize_plan(plan: Any) -> list[str]:
                 )
             )
 
+    drift_details: list[tuple[str, str, list[str], list[str]]] = []
+    for item in resource_drift[:MAX_SUMMARY_RESOURCES]:
+        if not isinstance(item, dict):
+            raise PlanSummaryError("resource drift metadata is invalid")
+        change = item.get("change")
+        if not isinstance(change, dict):
+            raise PlanSummaryError("resource drift metadata is invalid")
+        actions = _resource_actions(change)
+        resource_type = item.get("type")
+        if not isinstance(resource_type, str) or not SAFE_RESOURCE_TYPE.fullmatch(resource_type):
+            resource_type = "redacted-type"
+        drift_details.append(
+            (
+                _safe_address(item.get("address")),
+                resource_type,
+                actions,
+                _changed_fields(change),
+            )
+        )
+
     flags, used_plan_inputs = _runtime_flags(plan)
     version = plan.get("terraform_version")
     if not isinstance(version, str) or not SAFE_TERRAFORM_VERSION.fullmatch(version):
@@ -311,8 +331,17 @@ def summarize_plan(plan: Any) -> list[str]:
             f"resource address={address} type={resource_type}"
             f" actions={action_text} changed_fields={field_text}"
         )
+    for address, resource_type, actions, fields in drift_details:
+        action_text = ",".join(actions)
+        field_text = ",".join(fields) if fields else "none"
+        lines.append(
+            f"drift address={address} type={resource_type}"
+            f" actions={action_text} changed_fields={field_text}"
+        )
     if sum(counts.values()) > MAX_SUMMARY_RESOURCES:
         lines.append("resource_details=truncated")
+    if len(resource_drift) > MAX_SUMMARY_RESOURCES:
+        lines.append("drift_details=truncated")
     for name in FLAG_NAMES:
         lines.append(f"runtime_flag {name}={next(iter(flags[name]))}")
     if used_plan_inputs:
