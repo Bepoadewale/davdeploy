@@ -59,7 +59,9 @@ file must remain untouched.
   apply-run record binds the exact project, role, build ID/ARN, run ID, active
   status, current workspace administrators, verified AWS target, remote-state
   scope, saved-plan manifest, approval, and complete-pricing marker. Schema
-  version 35 adds the apply-run record and credential binding.
+  version 35 adds the apply-run record and credential binding. The marker check
+  does not establish pricing provenance or freshness; trusted pricing remains
+  an unmet gate and this path is not enabled.
 - [ ] A plan without complete trusted regional pricing and a persisted approval
   bound to its exact immutable manifest cannot reach a credentialed apply step.
 - [ ] Apply verifies and uses the exact saved-plan and workspace versions and
@@ -136,6 +138,9 @@ file must remain untouched.
   evidence.
 - Documentation follow-up commit `be75264` passed all seven CI jobs in run
   `43468478089`.
+- Apply-run state credential binding commit `34ac2471f9d0c73925b889ae9baccf2777906082`
+  passed all seven final-head checks in run `43484459545`. PR #399 remains a
+  draft; these source and CI checks do not establish a hosted customer apply.
 
 ## Evidence files produced
 
