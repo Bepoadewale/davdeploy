@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-13.3"
+POLICY_VERSION = "nova-generated-plan-2026-11-14.4"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -233,7 +233,7 @@ def _evaluate(
     _check_dynamodb_recovery(resources, proposal, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
-    _check_instance_metadata(resources, findings)
+    _check_instance_metadata(document, resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -1109,8 +1109,17 @@ def _check_ebs_volumes(
 
 
 def _check_instance_metadata(
-    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
 ) -> None:
+    planned_launch_templates = {
+        item.get("address"): item
+        for item in resources
+        if item.get("type") == "aws_launch_template"
+        and isinstance(item.get("address"), str)
+    }
+    configured_resources = _configured_resources(document)
     for item in resources:
         kind = item.get("type")
         if kind == "aws_ec2_instance_metadata_defaults":
@@ -1121,6 +1130,54 @@ def _check_instance_metadata(
                     "instance_metadata_defaults_require_v2",
                     item.get("address"),
                     "Regional EC2 metadata defaults must require Instance Metadata Service Version 2 tokens.",
+                )
+            continue
+        if kind == "aws_eks_node_group":
+            address = item.get("address")
+            values = item.get("values")
+            launch_templates = (
+                values.get("launch_template") if isinstance(values, dict) else None
+            )
+            configured = configured_resources.get(address)
+            expressions = configured.get("expressions") if isinstance(configured, dict) else None
+            launch_template_expression = (
+                expressions.get("launch_template") if isinstance(expressions, dict) else None
+            )
+            references = (
+                launch_template_expression.get("references")
+                if isinstance(launch_template_expression, dict)
+                else None
+            )
+            referenced_templates = {
+                template_address
+                for reference in references or ()
+                if isinstance(reference, str)
+                for template_address in planned_launch_templates
+                if _reference_targets_resource(reference, template_address, "aws_launch_template")
+            }
+            references_are_bound = bool(references) and all(
+                isinstance(reference, str)
+                and any(
+                    _reference_targets_resource(
+                        reference, template_address, "aws_launch_template"
+                    )
+                    for template_address in planned_launch_templates
+                )
+                for reference in references
+            )
+            if (
+                not isinstance(address, str)
+                or not isinstance(launch_templates, list)
+                or len(launch_templates) != 1
+                or not isinstance(launch_templates[0], dict)
+                or len(referenced_templates) != 1
+                or not references_are_bound
+            ):
+                _deny(
+                    findings,
+                    "eks_node_metadata_unverifiable",
+                    address,
+                    "Managed EKS nodes require one verifiable same-plan launch template so their metadata settings can be checked.",
                 )
             continue
         if kind not in {
@@ -1192,6 +1249,50 @@ def _configured_resource_references(document: dict[str, Any]) -> dict[str, tuple
                 references.extend(item for item in expression["references"] if isinstance(item, str))
         result[resource["address"]] = tuple(references)
     return result
+
+
+def _configured_resources(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    configuration = document.get("configuration")
+    root = configuration.get("root_module") if isinstance(configuration, dict) else None
+    if not isinstance(root, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    modules = [root]
+    while modules:
+        module = modules.pop()
+        resources = module.get("resources", [])
+        module_calls = module.get("module_calls", {})
+        if (
+            not isinstance(resources, list)
+            or any(not isinstance(resource, dict) for resource in resources)
+            or not isinstance(module_calls, dict)
+            or any(not isinstance(call, dict) for call in module_calls.values())
+        ):
+            return {}
+        for resource in resources:
+            address = resource.get("address")
+            if not isinstance(address, str):
+                continue
+            if address in result:
+                return {}
+            result[address] = resource
+        for call in module_calls.values():
+            child_module = call.get("module")
+            if not isinstance(child_module, dict):
+                return {}
+            modules.append(child_module)
+        if len(result) > 2_000:
+            return {}
+    return result
+
+
+def _reference_targets_resource(reference: str, address: str, resource_type: str) -> bool:
+    if reference == address or reference.startswith(f"{address}."):
+        return True
+    resource_address = address[address.rfind(f"{resource_type}.") :]
+    return bool(resource_address) and (
+        reference == resource_address or reference.startswith(f"{resource_address}.")
+    )
 
 
 def _trusted_account_guard_matches(configuration: Any, expected_account_id: str) -> bool:
