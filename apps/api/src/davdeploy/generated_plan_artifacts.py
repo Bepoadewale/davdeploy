@@ -22,7 +22,10 @@ from davdeploy.generated_plan_ownership import (
     UntaggedResourceOwnershipRecord,
 )
 from davdeploy.generated_plan_policy import GeneratedPlanPolicyResult
-from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
+from davdeploy.generated_terraform_plan import (
+    MAX_EXECUTION_WORKSPACE_BYTES,
+    GeneratedTerraformPlan,
+)
 
 MAX_SAVED_PLAN_BYTES = 128 * 1024 * 1024
 NOVA_PLAN_OBJECT_PREFIX = "plans/nova-generated"
@@ -129,6 +132,78 @@ class S3GeneratedPlanArtifactStore:
 
         return StoredPlanObject(self.bucket, key, version_id, size, expected_sha256)
 
+    def store_execution_workspace(
+        self,
+        path: str | Path,
+        *,
+        organization_id: str,
+        project_id: str,
+        revision_id: str,
+        run_id: str,
+        expected_sha256: str,
+    ) -> StoredPlanObject:
+        """Persist the exact initialized workspace required by a future apply."""
+        workspace_path = Path(path)
+        self._validate_artifact_file(
+            workspace_path,
+            expected_sha256,
+            max_bytes=MAX_EXECUTION_WORKSPACE_BYTES,
+        )
+        try:
+            parsed_run_id = uuid.UUID(run_id)
+        except (AttributeError, ValueError):
+            parsed_run_id = None
+        if parsed_run_id is None or str(parsed_run_id) != run_id.lower():
+            raise GeneratedPlanArtifactError("generated-plan run identifier is invalid")
+        run_id = str(parsed_run_id)
+
+        size = workspace_path.stat().st_size
+        key = self._key(
+            organization_id,
+            project_id,
+            revision_id,
+            run_id,
+            expected_sha256,
+            artifact_kind="workspace",
+        )
+        checksum = base64.b64encode(bytes.fromhex(expected_sha256)).decode("ascii")
+        try:
+            with workspace_path.open("rb") as body:
+                response = self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=body,
+                    ContentLength=size,
+                    ContentType="application/vnd.davdeploy.terraform-workspace+gzip",
+                    ServerSideEncryption="aws:kms",
+                    SSEKMSKeyId=self.kms_key_arn,
+                    ChecksumSHA256=checksum,
+                    IfNoneMatch="*",
+                    ExpectedBucketOwner=self.expected_bucket_owner,
+                    Metadata={
+                        "davdeploy-workspace-sha256": expected_sha256,
+                        "davdeploy-run-id": run_id,
+                    },
+                )
+            version_id = response.get("VersionId")
+            if not isinstance(version_id, str) or not version_id or version_id == "null":
+                raise GeneratedPlanArtifactError("generated-plan bucket versioning is unavailable")
+            stored = StoredPlanObject(self.bucket, key, version_id, size, expected_sha256)
+            self.verify_execution_workspace(
+                stored,
+                run_id=run_id,
+                organization_id=organization_id,
+                project_id=project_id,
+                revision_id=revision_id,
+            )
+        except GeneratedPlanArtifactError:
+            raise
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+            raise GeneratedPlanArtifactError(
+                "Terraform execution workspace could not be securely persisted"
+            ) from None
+        return StoredPlanObject(self.bucket, key, version_id, size, expected_sha256)
+
     def verify_stored_plan(
         self,
         stored: StoredPlanObject,
@@ -140,6 +215,56 @@ class S3GeneratedPlanArtifactStore:
         build_arn: str | None = None,
     ) -> None:
         """Verify the exact S3 object version before exposing or approving its manifest."""
+        self._verify_stored_file(
+            stored,
+            run_id=run_id,
+            organization_id=organization_id,
+            project_id=project_id,
+            revision_id=revision_id,
+            build_arn=build_arn,
+            artifact_kind="plan",
+            digest_metadata_key="davdeploy-plan-sha256",
+            max_bytes=self.max_bytes,
+        )
+
+    def verify_execution_workspace(
+        self,
+        stored: StoredPlanObject,
+        *,
+        run_id: str,
+        organization_id: str,
+        project_id: str,
+        revision_id: str,
+        build_arn: str | None = None,
+    ) -> None:
+        """Verify the exact encrypted workspace archive used for Terraform planning."""
+        self._verify_stored_file(
+            stored,
+            run_id=run_id,
+            organization_id=organization_id,
+            project_id=project_id,
+            revision_id=revision_id,
+            build_arn=build_arn,
+            artifact_kind="workspace",
+            digest_metadata_key="davdeploy-workspace-sha256",
+            max_bytes=MAX_EXECUTION_WORKSPACE_BYTES,
+        )
+
+    def _verify_stored_file(
+        self,
+        stored: StoredPlanObject,
+        *,
+        run_id: str,
+        organization_id: str,
+        project_id: str,
+        revision_id: str,
+        build_arn: str | None,
+        artifact_kind: str,
+        digest_metadata_key: str,
+        max_bytes: int,
+    ) -> None:
+        if build_arn is None:
+            build_arn = self._build_arn_from_key(stored.key)
         expected_key = self._key(
             organization_id,
             project_id,
@@ -147,6 +272,7 @@ class S3GeneratedPlanArtifactStore:
             run_id,
             stored.sha256,
             build_arn=build_arn,
+            artifact_kind=artifact_kind,
         )
         if (
             stored.bucket != self.bucket
@@ -155,7 +281,7 @@ class S3GeneratedPlanArtifactStore:
             or stored.version_id == "null"
             or not re.fullmatch(r"[a-f0-9]{64}", stored.sha256)
             or stored.size_bytes <= 0
-            or stored.size_bytes > self.max_bytes
+            or stored.size_bytes > max_bytes
         ):
             raise GeneratedPlanArtifactError("generated-plan artifact reference is invalid")
         try:
@@ -166,7 +292,13 @@ class S3GeneratedPlanArtifactStore:
                 ChecksumMode="ENABLED",
                 ExpectedBucketOwner=self.expected_bucket_owner,
             )
-            self._verify_head(head, stored.size_bytes, stored.sha256, run_id)
+            self._verify_head(
+                head,
+                stored.size_bytes,
+                stored.sha256,
+                run_id,
+                digest_metadata_key=digest_metadata_key,
+            )
             digest = hashlib.sha256()
             size = 0
             response = self.client.get_object(
@@ -181,7 +313,7 @@ class S3GeneratedPlanArtifactStore:
             try:
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     size += len(chunk)
-                    if size > self.max_bytes:
+                    if size > max_bytes:
                         raise GeneratedPlanArtifactError(
                             "stored generated plan exceeds its size limit"
                         )
@@ -199,17 +331,48 @@ class S3GeneratedPlanArtifactStore:
                 "stored generated plan could not be verified"
             ) from None
 
-    def _verify_head(self, head: dict[str, Any], size: int, digest: str, run_id: str) -> None:
+    @staticmethod
+    def _build_arn_from_key(key: str) -> str | None:
+        prefix = f"{NOVA_PLAN_OBJECT_PREFIX}/builds/"
+        if not isinstance(key, str) or not key.startswith(prefix):
+            return None
+        remainder = key[len(prefix) :]
+        marker = remainder.find("/org-")
+        if marker <= 0:
+            raise GeneratedPlanArtifactError("generated-plan build artifact key is invalid")
+        build_arn = remainder[:marker]
+        if not re.fullmatch(
+            r"arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/[A-Za-z0-9_-]+:[A-Za-z0-9-]+",
+            build_arn,
+        ):
+            raise GeneratedPlanArtifactError("generated-plan build artifact key is invalid")
+        return build_arn
+
+    def _verify_head(
+        self,
+        head: dict[str, Any],
+        size: int,
+        digest: str,
+        run_id: str,
+        *,
+        digest_metadata_key: str,
+    ) -> None:
         if (
             head.get("ContentLength") != size
             or head.get("ServerSideEncryption") != "aws:kms"
             or head.get("SSEKMSKeyId") != self.kms_key_arn
-            or head.get("Metadata", {}).get("davdeploy-plan-sha256") != digest
+            or head.get("Metadata", {}).get(digest_metadata_key) != digest
             or head.get("Metadata", {}).get("davdeploy-run-id") != run_id
         ):
             raise GeneratedPlanArtifactError("stored generated plan metadata failed verification")
 
     def _validate_plan_file(self, path: Path, expected_sha256: str) -> None:
+        self._validate_artifact_file(path, expected_sha256, max_bytes=self.max_bytes)
+
+    @staticmethod
+    def _validate_artifact_file(
+        path: Path, expected_sha256: str, *, max_bytes: int
+    ) -> None:
         if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
             raise GeneratedPlanArtifactError("generated-plan digest is invalid")
         if path.is_symlink() or not path.is_file():
@@ -218,10 +381,8 @@ class S3GeneratedPlanArtifactStore:
         if mode & 0o077:
             raise GeneratedPlanArtifactError("generated saved plan permissions are not private")
         size = path.stat().st_size
-        if size <= 0 or size > self.max_bytes:
-            raise GeneratedPlanArtifactError(
-                "generated saved plan is outside the allowed size limit"
-            )
+        if size <= 0 or size > max_bytes:
+            raise GeneratedPlanArtifactError("generated artifact is outside the allowed size limit")
         digest = hashlib.sha256()
         with path.open("rb") as source:
             for chunk in iter(lambda: source.read(1024 * 1024), b""):
@@ -238,6 +399,7 @@ class S3GeneratedPlanArtifactStore:
         digest: str,
         *,
         build_arn: str | None = None,
+        artifact_kind: str = "plan",
     ) -> str:
         identifiers = (organization_id, project_id, revision_id)
         if any(
@@ -245,6 +407,9 @@ class S3GeneratedPlanArtifactStore:
         ):
             raise GeneratedPlanArtifactError("generated-plan tenant scope is invalid")
         scope = [hashlib.sha256(value.encode("utf-8")).hexdigest()[:32] for value in identifiers]
+        if artifact_kind not in {"plan", "workspace"}:
+            raise GeneratedPlanArtifactError("generated-plan artifact type is invalid")
+        suffix = ".tfplan" if artifact_kind == "plan" else ".workspace.tar.gz"
         if build_arn is not None:
             if not re.fullmatch(
                 r"arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/[A-Za-z0-9_-]+:[A-Za-z0-9-]+",
@@ -253,9 +418,9 @@ class S3GeneratedPlanArtifactStore:
                 raise GeneratedPlanArtifactError("generated-plan CodeBuild ARN is invalid")
             return (
                 f"{NOVA_PLAN_OBJECT_PREFIX}/builds/{build_arn}/"
-                f"org-{scope[0]}/project-{scope[1]}/revision-{scope[2]}/{digest}.tfplan"
+                f"org-{scope[0]}/project-{scope[1]}/revision-{scope[2]}/{digest}{suffix}"
             )
-        return f"{NOVA_PLAN_OBJECT_PREFIX}/org-{scope[0]}/project-{scope[1]}/revision-{scope[2]}/{run_id}/{digest}.tfplan"
+        return f"{NOVA_PLAN_OBJECT_PREFIX}/org-{scope[0]}/project-{scope[1]}/revision-{scope[2]}/{run_id}/{digest}{suffix}"
 
 
 def configured_generated_plan_artifact_store() -> S3GeneratedPlanArtifactStore | None:
@@ -316,6 +481,7 @@ def generated_plan_manifest(
     revision_id: str,
     revision_sha256: str,
     stored_object: StoredPlanObject,
+    workspace_object: StoredPlanObject,
     plan: GeneratedTerraformPlan,
     proposal: GeneratedDeploymentProposal,
     policy_digest: str,
@@ -343,6 +509,18 @@ def generated_plan_manifest(
     ):
         raise GeneratedPlanArtifactError("customer plan permission evidence is malformed")
     if (
+        not isinstance(workspace_object, StoredPlanObject)
+        or not workspace_object.version_id
+        or workspace_object.version_id == "null"
+        or workspace_object.size_bytes <= 0
+        or workspace_object.size_bytes > MAX_EXECUTION_WORKSPACE_BYTES
+        or not re.fullmatch(r"[a-f0-9]{64}", workspace_object.sha256)
+        or workspace_object.sha256 != plan.workspace_bundle_sha256
+        or not isinstance(plan.workspace_bundle_path, str)
+        or not plan.workspace_bundle_path
+    ):
+        raise GeneratedPlanArtifactError("execution workspace evidence is malformed")
+    if (
         not isinstance(proposal, GeneratedDeploymentProposal)
         or proposal.requirements.region != plan.region
         or canonical_json_digest(proposal.model_dump(mode="json")) != plan.proposal_sha256
@@ -365,7 +543,7 @@ def generated_plan_manifest(
     if len({item.address for item in untagged_resources}) != len(untagged_resources):
         raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
     manifest = {
-        "manifest_version": 8 if untagged_resources else 7 if remote_state is not None else 6,
+        "manifest_version": 9 if untagged_resources else 8 if remote_state is not None else 7,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -385,6 +563,7 @@ def generated_plan_manifest(
             "ownership_scope_sha256": plan.ownership_scope_sha256,
             "ownership_plan_id_sha256": plan.ownership_plan_id_sha256,
             "saved_plan_sha256": stored_object.sha256,
+            "workspace_sha256": workspace_object.sha256,
             "policy_sha256": policy_digest,
         },
         "policy": {
@@ -440,6 +619,13 @@ def generated_plan_manifest(
             "key": stored_object.key,
             "version_id": stored_object.version_id,
             "size_bytes": stored_object.size_bytes,
+        },
+        "execution_workspace": {
+            "bucket": workspace_object.bucket,
+            "key": workspace_object.key,
+            "version_id": workspace_object.version_id,
+            "size_bytes": workspace_object.size_bytes,
+            "sha256": workspace_object.sha256,
         },
         "created_at": created_at,
     }

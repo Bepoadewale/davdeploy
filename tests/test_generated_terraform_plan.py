@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
+import io
 import json
 import os
+import tarfile
 import textwrap
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
@@ -13,6 +17,8 @@ from davdeploy.generated_plan_ownership import PlanOwnershipScope
 from davdeploy.generated_terraform_plan import (
     GeneratedTerraformPlanRunner,
     TerraformPlanExecutionError,
+    create_execution_workspace_bundle,
+    extract_execution_workspace_bundle,
     verify_saved_plan_artifact,
 )
 from davdeploy.nova_terraform_state_client import TerraformHTTPBackend
@@ -125,10 +131,12 @@ import pathlib
 import sys
 
 args = sys.argv[1:]
-with open(".terraform-command-log", "a") as command_log:
+log_root = pathlib.Path.cwd().parent / (pathlib.Path.cwd().name + "-logs")
+log_root.mkdir(parents=True, exist_ok=True)
+with open(log_root / ".terraform-command-log", "a") as command_log:
     command_log.write(" ".join(args) + "\\n")
-pathlib.Path(".terraform-cli-args-plan").write_text(os.environ.get("TF_CLI_ARGS_plan", ""))
-pathlib.Path(".terraform-http-env-present").write_text(json.dumps({{
+(log_root / ".terraform-cli-args-plan").write_text(os.environ.get("TF_CLI_ARGS_plan", ""))
+(log_root / ".terraform-http-env-present").write_text(json.dumps({{
     "username": bool(os.environ.get("TF_HTTP_USERNAME")),
     "password": bool(os.environ.get("TF_HTTP_PASSWORD")),
 }}))
@@ -141,7 +149,10 @@ elif args and args[0] == "plan":
     pathlib.Path(target).write_bytes(b"binary-saved-plan")
 elif args and args[0] == "show":
     print(json.dumps(json.loads({json.dumps(json.dumps(plan_doc))})))
-elif args and args[0] in {{"init", "validate"}}:
+elif args and args[0] == "init":
+    pathlib.Path(".terraform/providers").mkdir(parents=True, exist_ok=True)
+    pathlib.Path(".terraform/providers/fixture-provider").write_bytes(b"provider fixture")
+elif args and args[0] == "validate":
     pass
 else:
     raise SystemExit(91)
@@ -161,6 +172,95 @@ def runner(tmp_path, *, identity="654654474502", fake=None):
         terraform_binary=str(fake or fake_terraform(tmp_path)),
         identity_provider=lambda: identity,
     )
+
+
+def execution_workspace(root, *, provider_bytes=b"provider fixture"):
+    root.mkdir(mode=0o700)
+    (root / "main.tf.json").write_text('{"resource":{}}', encoding="utf-8")
+    (root / ".terraform.lock.hcl").write_text(LOCKFILE, encoding="utf-8")
+    provider = root / ".terraform" / "providers" / "fixture-provider"
+    provider.parent.mkdir(mode=0o700, parents=True)
+    provider.write_bytes(provider_bytes)
+    plan = root / "saved.tfplan"
+    plan.write_bytes(b"private plan bytes")
+    plan.chmod(0o600)
+    return plan
+
+
+def test_execution_workspace_bundle_is_deterministic_and_excludes_saved_plan(tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    execution_workspace(first)
+    execution_workspace(second)
+
+    first_bundle, first_digest = create_execution_workspace_bundle(first)
+    second_bundle, second_digest = create_execution_workspace_bundle(second)
+
+    assert first_digest == second_digest
+    assert first_bundle.read_bytes() == second_bundle.read_bytes()
+    with tarfile.open(first_bundle, "r:gz") as archive:
+        names = set(archive.getnames())
+    assert "main.tf.json" in names
+    assert ".terraform.lock.hcl" in names
+    assert ".terraform/providers/fixture-provider" in names
+    assert all("saved.tfplan" not in name for name in names)
+
+
+def test_execution_workspace_bundle_rejects_credential_bytes_and_links(tmp_path):
+    credential = "sensitive-session-token-value-123456"
+    root = tmp_path / "credential-workspace"
+    execution_workspace(root, provider_bytes=credential.encode("ascii"))
+    with pytest.raises(TerraformPlanExecutionError, match="contains credential data"):
+        create_execution_workspace_bundle(root, credential_values=(credential,))
+
+    linked = tmp_path / "linked-workspace"
+    execution_workspace(linked)
+    (linked / ".terraform" / "provider-link").symlink_to(
+        linked / ".terraform" / "providers" / "fixture-provider"
+    )
+    with pytest.raises(TerraformPlanExecutionError, match="symbolic link"):
+        create_execution_workspace_bundle(linked)
+
+
+def test_execution_workspace_bundle_extracts_only_verified_files(tmp_path):
+    source = tmp_path / "source"
+    execution_workspace(source)
+    bundle, digest = create_execution_workspace_bundle(source)
+    destination = tmp_path / "extracted"
+
+    extract_execution_workspace_bundle(bundle, destination, expected_sha256=digest)
+
+    assert (destination / "main.tf.json").read_bytes() == (source / "main.tf.json").read_bytes()
+    assert (
+        destination / ".terraform" / "providers" / "fixture-provider"
+    ).read_bytes() == b"provider fixture"
+    assert not (destination / "saved.tfplan").exists()
+
+
+def test_execution_workspace_extractor_rejects_traversal(tmp_path):
+    archive_path = tmp_path / "malicious.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        for name, payload in (
+            ("main.tf.json", b"{}"),
+            (".terraform.lock.hcl", b"lock"),
+            (".terraform/", b""),
+            ("../outside", b"no"),
+        ):
+            info = tarfile.TarInfo(name)
+            if name.endswith("/"):
+                info.type = tarfile.DIRTYPE
+                info.size = 0
+                archive.addfile(info)
+            else:
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+    archive_path.chmod(0o600)
+    digest = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+
+    with pytest.raises(TerraformPlanExecutionError, match="archive path is invalid"):
+        extract_execution_workspace_bundle(
+            archive_path, tmp_path / "rejected", expected_sha256=digest
+        )
 
 
 def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkeypatch):
@@ -192,7 +292,8 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
     assert generated["resource"]["aws_s3_bucket"]["bucket"]["tags"] == ownership_scope().tags()
     assert "data.aws_caller_identity.trusted.account_id" in json.dumps(generated)
     assert "654654474502" in json.dumps(generated)
-    commands = (workspace / ".terraform-command-log").read_text().splitlines()
+    log_root = tmp_path / "private-run-logs"
+    commands = (log_root / ".terraform-command-log").read_text().splitlines()
     assert commands == [
         "version -json",
         "init -backend=false -input=false -lockfile=readonly -no-color",
@@ -202,7 +303,7 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
         f"show -json {workspace / 'saved.tfplan'}",
     ]
     assert not hasattr(GeneratedTerraformPlanRunner, "apply")
-    assert (workspace / ".terraform-cli-args-plan").read_text() == ""
+    assert (log_root / ".terraform-cli-args-plan").read_text() == ""
 
 
 def test_proposal_digest_uses_canonical_unicode_json(tmp_path):
@@ -245,7 +346,7 @@ def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path)
         expires_at=datetime.now(UTC) + timedelta(minutes=15),
     )
     workspace = tmp_path / "remote-run"
-    runner(tmp_path).plan(
+    result = runner(tmp_path).plan(
         proposal(),
         expected_account_id="654654474502",
         region="us-east-1",
@@ -258,11 +359,15 @@ def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path)
     assert generated["terraform"]["backend"]["http"] == backend.backend_configuration()
     assert backend.username not in json.dumps(generated)
     assert backend.password not in json.dumps(generated)
-    assert json.loads((workspace / ".terraform-http-env-present").read_text()) == {
+    archived_workspace = gzip.decompress(Path(result.workspace_bundle_path).read_bytes())
+    assert backend.username.encode() not in archived_workspace
+    assert backend.password.encode() not in archived_workspace
+    log_root = tmp_path / "remote-run-logs"
+    assert json.loads((log_root / ".terraform-http-env-present").read_text()) == {
         "username": True,
         "password": True,
     }
-    commands = (workspace / ".terraform-command-log").read_text().splitlines()
+    commands = (log_root / ".terraform-command-log").read_text().splitlines()
     assert commands[1] == "init -input=false -lockfile=readonly -no-color"
     assert commands[4] == f"plan -input=false -no-color -out={workspace / 'saved.tfplan'}"
 
@@ -393,7 +498,7 @@ def test_untaggable_aws_resource_stops_before_terraform_plan(tmp_path):
             ownership_scope=ownership_scope(),
             workspace=tmp_path / "workspace",
         )
-    commands = (tmp_path / "workspace" / ".terraform-command-log").read_text().splitlines()
+    commands = (tmp_path / "workspace-logs" / ".terraform-command-log").read_text().splitlines()
     assert not any(command.startswith("plan ") for command in commands)
 
 

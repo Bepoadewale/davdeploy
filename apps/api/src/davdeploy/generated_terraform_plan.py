@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
 import re
 import stat
 import subprocess
+import tarfile
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -45,6 +47,8 @@ from davdeploy.terraform_state import TerraformStateError, terraform_state_scope
 
 PINNED_TERRAFORM_VERSION = "1.14.7"
 PINNED_AWS_PROVIDER_VERSION = "5.100.0"
+MAX_EXECUTION_WORKSPACE_BYTES = 512 * 1024 * 1024
+MAX_EXECUTION_WORKSPACE_ENTRIES = 10_000
 
 
 class TerraformPlanExecutionError(RuntimeError):
@@ -67,6 +71,8 @@ class GeneratedTerraformPlan:
     ownership_plan_id_sha256: str
     saved_plan_sha256: str
     saved_plan_path: str
+    workspace_bundle_sha256: str = "0" * 64
+    workspace_bundle_path: str = ""
     untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...] = ()
     plan_access_policy_version: str = "NOT_APPLICABLE"
     plan_access_policy_sha256: str = "0" * 64
@@ -266,6 +272,13 @@ class GeneratedTerraformPlanRunner:
             trusted_configuration=config,
             untagged_resource_ownership=untagged_resource_ownership,
         )
+        workspace_bundle_path, workspace_bundle_sha256 = create_execution_workspace_bundle(
+            working_root,
+            credential_values=(
+                *(aws_credentials or {}).values(),
+                *((remote_state.environment().values()) if remote_state is not None else ()),
+            ),
+        )
 
         return GeneratedTerraformPlan(
             summary=summary,
@@ -282,6 +295,8 @@ class GeneratedTerraformPlanRunner:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=hashlib.sha256(plan_bytes).hexdigest(),
             saved_plan_path=str(plan_path),
+            workspace_bundle_sha256=workspace_bundle_sha256,
+            workspace_bundle_path=str(workspace_bundle_path),
             untagged_resource_ownership=untagged_resource_ownership,
             plan_access_policy_version=plan_access_policy_version,
             plan_access_policy_sha256=plan_access_policy_sha256,
@@ -493,3 +508,255 @@ def verify_saved_plan_artifact(path: str | Path, expected_sha256: str) -> None:
             digest.update(chunk)
     if digest.hexdigest() != expected_sha256:
         raise TerraformPlanExecutionError("saved plan artifact digest does not match")
+
+
+def create_execution_workspace_bundle(
+    workspace: str | Path, *, credential_values: tuple[str, ...] = ()
+) -> tuple[Path, str]:
+    """Archive the exact plan-time configuration and initialized workspace.
+
+    The saved plan stays in its own encrypted artifact. The archive contains
+    only its generated configuration, provider lockfile and Terraform's
+    initialized `.terraform` directory so a later apply can reuse the original
+    working directory without regenerating configuration.
+    """
+    root = Path(workspace)
+    if root.is_symlink() or not root.is_dir():
+        raise TerraformPlanExecutionError("Terraform execution workspace is unavailable")
+    if stat.S_IMODE(root.stat().st_mode) & 0o077:
+        raise TerraformPlanExecutionError("Terraform execution workspace is not private")
+    required = ("main.tf.json", ".terraform.lock.hcl", ".terraform")
+    if any(not (root / name).exists() or (root / name).is_symlink() for name in required):
+        raise TerraformPlanExecutionError("Terraform execution workspace is incomplete")
+    saved_plan = root / "saved.tfplan"
+    try:
+        saved_metadata = saved_plan.lstat()
+    except OSError:
+        raise TerraformPlanExecutionError("Terraform saved plan is unavailable") from None
+    if not stat.S_ISREG(saved_metadata.st_mode) or saved_metadata.st_mode & 0o077:
+        raise TerraformPlanExecutionError("Terraform saved plan is not private")
+    if (root / ".terraform").is_symlink() or not (root / ".terraform").is_dir():
+        raise TerraformPlanExecutionError("Terraform initialized workspace is invalid")
+    allowed_top_level = {*required, "saved.tfplan"}
+    try:
+        unexpected = {item.name for item in root.iterdir()} - allowed_top_level
+    except OSError:
+        raise TerraformPlanExecutionError("Terraform execution workspace is unavailable") from None
+    if unexpected:
+        raise TerraformPlanExecutionError("Terraform execution workspace has unexpected files")
+
+    entries: list[tuple[Path, str, bool]] = [
+        (root / "main.tf.json", "main.tf.json", False),
+        (root / ".terraform.lock.hcl", ".terraform.lock.hcl", False),
+    ]
+    terraform_dir = root / ".terraform"
+    entries.append((terraform_dir, ".terraform", True))
+    total_size = 0
+    pending = [(terraform_dir, ".terraform")]
+    while pending:
+        directory, archive_directory = pending.pop()
+        try:
+            children = sorted(directory.iterdir(), key=lambda item: item.name)
+        except OSError:
+            raise TerraformPlanExecutionError("Terraform initialized workspace is unavailable") from None
+        for child in children:
+            if child.name in {".", ".."} or "/" in child.name or "\\" in child.name:
+                raise TerraformPlanExecutionError("Terraform workspace path is invalid")
+            relative = f"{archive_directory}/{child.name}"
+            metadata = child.lstat()
+            if stat.S_ISLNK(metadata.st_mode):
+                raise TerraformPlanExecutionError("Terraform workspace contains a symbolic link")
+            if stat.S_ISDIR(metadata.st_mode):
+                entries.append((child, relative, True))
+                pending.append((child, relative))
+            elif stat.S_ISREG(metadata.st_mode):
+                total_size += metadata.st_size
+                entries.append((child, relative, False))
+            else:
+                raise TerraformPlanExecutionError("Terraform workspace contains a special file")
+            if len(entries) > MAX_EXECUTION_WORKSPACE_ENTRIES:
+                raise TerraformPlanExecutionError("Terraform workspace has too many files")
+
+    for name in ("main.tf.json", ".terraform.lock.hcl"):
+        path = root / name
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode):
+            raise TerraformPlanExecutionError("generated Terraform configuration is invalid")
+        total_size += metadata.st_size
+    if total_size <= 0 or total_size > MAX_EXECUTION_WORKSPACE_BYTES:
+        raise TerraformPlanExecutionError("Terraform execution workspace exceeds its size limit")
+
+    entries.sort(key=lambda item: item[1])
+    for source, _archive_name, is_directory in entries:
+        if not is_directory and source.stat().st_size > 0 and _contains_credential_bytes(
+            source, credential_values
+        ):
+            raise TerraformPlanExecutionError(
+                "Terraform execution workspace contains credential data"
+            )
+    archive_path = root / "execution-workspace.tar.gz"
+    if archive_path.exists() or archive_path.is_symlink():
+        raise TerraformPlanExecutionError("Terraform workspace bundle path already exists")
+    try:
+        descriptor = os.open(
+            archive_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as raw_output, gzip.GzipFile(
+            filename="", fileobj=raw_output, mode="wb", mtime=0
+        ) as compressed, tarfile.open(fileobj=compressed, mode="w") as archive:
+            for source, archive_name, is_directory in entries:
+                current = source.lstat()
+                if is_directory:
+                    info = tarfile.TarInfo(archive_name.rstrip("/") + "/")
+                    info.type = tarfile.DIRTYPE
+                    info.mode = 0o700
+                    info.size = 0
+                else:
+                    if not stat.S_ISREG(current.st_mode) or stat.S_ISLNK(current.st_mode):
+                        raise TerraformPlanExecutionError(
+                            "Terraform workspace changed while being archived"
+                        )
+                    info = tarfile.TarInfo(archive_name)
+                    info.type = tarfile.REGTYPE
+                    info.mode = 0o700 if current.st_mode & 0o111 else 0o600
+                    info.size = current.st_size
+                info.uid = 0
+                info.gid = 0
+                info.uname = ""
+                info.gname = ""
+                info.mtime = 0
+                info.pax_headers = {}
+                if is_directory:
+                    archive.addfile(info)
+                else:
+                    with source.open("rb") as input_file:
+                        archive.addfile(info, input_file)
+        size = archive_path.stat().st_size
+        if size <= 0 or size > MAX_EXECUTION_WORKSPACE_BYTES:
+            raise TerraformPlanExecutionError("Terraform workspace bundle exceeds its size limit")
+        os.chmod(archive_path, stat.S_IRUSR | stat.S_IWUSR)
+        with archive_path.open("rb") as source:
+            digest = hashlib.file_digest(source, "sha256").hexdigest()
+    except TerraformPlanExecutionError:
+        raise
+    except (OSError, tarfile.TarError, ValueError):
+        raise TerraformPlanExecutionError("Terraform workspace could not be archived safely") from None
+    return archive_path, digest
+
+
+def _contains_credential_bytes(path: Path, credential_values: tuple[str, ...]) -> bool:
+    needles = tuple(
+        value.encode("utf-8")
+        for value in credential_values
+        if isinstance(value, str) and len(value) >= 12
+    )
+    if not needles:
+        return False
+    overlap = max(map(len, needles)) - 1
+    tail = b""
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            candidate = tail + chunk
+            if any(needle in candidate for needle in needles):
+                return True
+            tail = candidate[-overlap:] if overlap else b""
+    return False
+
+
+def extract_execution_workspace_bundle(
+    archive_path: str | Path,
+    destination: str | Path,
+    *,
+    expected_sha256: str,
+) -> Path:
+    """Verify and safely extract a DavDeploy workspace bundle into an empty directory."""
+    archive_path = Path(archive_path)
+    destination = Path(destination)
+    if archive_path.is_symlink() or not archive_path.is_file():
+        raise TerraformPlanExecutionError("Terraform execution workspace bundle is unavailable")
+    if not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
+        raise TerraformPlanExecutionError("Terraform execution workspace digest is invalid")
+    if stat.S_IMODE(archive_path.stat().st_mode) & 0o077:
+        raise TerraformPlanExecutionError("Terraform execution workspace bundle is not private")
+    digest = hashlib.sha256()
+    with archive_path.open("rb") as compressed:
+        for chunk in iter(lambda: compressed.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if digest.hexdigest() != expected_sha256:
+        raise TerraformPlanExecutionError("Terraform execution workspace digest does not match")
+    if destination.is_symlink():
+        raise TerraformPlanExecutionError("Terraform extraction directory is invalid")
+    destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not destination.is_dir() or stat.S_IMODE(destination.stat().st_mode) & 0o077:
+        raise TerraformPlanExecutionError("Terraform extraction directory is not private")
+    try:
+        if any(destination.iterdir()):
+            raise TerraformPlanExecutionError("Terraform extraction directory is not empty")
+        with tarfile.open(archive_path, mode="r:gz") as archive:
+            members = archive.getmembers()
+            if not members or len(members) > MAX_EXECUTION_WORKSPACE_ENTRIES:
+                raise TerraformPlanExecutionError("Terraform workspace archive entry limit exceeded")
+            paths: set[str] = set()
+            total_size = 0
+            directories: list[tuple[tarfile.TarInfo, str]] = []
+            files: list[tuple[tarfile.TarInfo, str]] = []
+            for member in members:
+                name = member.name.rstrip("/") if member.isdir() else member.name
+                parts = name.split("/")
+                if (
+                    not name
+                    or name.startswith("/")
+                    or "\\" in name
+                    or any(part in {"", ".", ".."} for part in parts)
+                    or name in paths
+                    or member.pax_headers
+                ):
+                    raise TerraformPlanExecutionError("Terraform workspace archive path is invalid")
+                paths.add(name)
+                allowed = name in {"main.tf.json", ".terraform.lock.hcl"} or name == ".terraform" or name.startswith(".terraform/")
+                if not allowed:
+                    raise TerraformPlanExecutionError("Terraform workspace archive has unexpected files")
+                if member.isdir():
+                    directories.append((member, name))
+                elif member.isfile():
+                    if member.size < 0:
+                        raise TerraformPlanExecutionError("Terraform workspace member size is invalid")
+                    total_size += member.size
+                    files.append((member, name))
+                else:
+                    raise TerraformPlanExecutionError("Terraform workspace archive contains a link or special file")
+                if total_size > MAX_EXECUTION_WORKSPACE_BYTES:
+                    raise TerraformPlanExecutionError("Terraform workspace archive exceeds its size limit")
+            if not {"main.tf.json", ".terraform.lock.hcl", ".terraform"} <= paths:
+                raise TerraformPlanExecutionError("Terraform execution workspace is incomplete")
+            for member, name in sorted(directories, key=lambda item: item[1].count("/")):
+                target = destination.joinpath(*name.split("/"))
+                target.mkdir(mode=0o700, exist_ok=True)
+            for member, name in files:
+                target = destination.joinpath(*name.split("/"))
+                parent = target.parent
+                if not parent.is_dir() or parent.is_symlink():
+                    raise TerraformPlanExecutionError("Terraform workspace extraction path is unsafe")
+                flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+                mode = 0o700 if member.mode & 0o111 else 0o600
+                descriptor = os.open(target, flags, mode)
+                source = archive.extractfile(member)
+                if source is None:
+                    os.close(descriptor)
+                    raise TerraformPlanExecutionError("Terraform workspace archive is malformed")
+                written = 0
+                with source, os.fdopen(descriptor, "wb") as output:
+                    while chunk := source.read(1024 * 1024):
+                        written += len(chunk)
+                        if written > member.size:
+                            raise TerraformPlanExecutionError("Terraform workspace member is oversized")
+                        output.write(chunk)
+                if written != member.size:
+                    raise TerraformPlanExecutionError("Terraform workspace member is truncated")
+    except TerraformPlanExecutionError:
+        raise
+    except (OSError, tarfile.TarError, ValueError):
+        raise TerraformPlanExecutionError("Terraform workspace archive could not be extracted safely") from None
+    return destination

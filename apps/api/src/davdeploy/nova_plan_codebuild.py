@@ -264,6 +264,25 @@ def run_nova_plan_build(
         generated_plan.saved_plan_path,
         generated_plan.saved_plan_sha256,
     )
+    workspace_key = S3GeneratedPlanArtifactStore._key(
+        binding["organization_id"],
+        binding["project_id"],
+        binding["revision_id"],
+        run_id,
+        generated_plan.workspace_bundle_sha256,
+        build_arn=build_arn,
+        artifact_kind="workspace",
+    )
+    stored_workspace = _put_execution_workspace(
+        s3,
+        bucket,
+        bucket_owner,
+        kms_key_arn,
+        run_id,
+        workspace_key,
+        generated_plan.workspace_bundle_path,
+        generated_plan.workspace_bundle_sha256,
+    )
     policy_doc, policy_sha256 = policy_evidence(generated_plan.policy)
     manifest = generated_plan_manifest(
         organization_id=binding["organization_id"],
@@ -271,6 +290,7 @@ def run_nova_plan_build(
         revision_id=binding["revision_id"],
         revision_sha256=binding["revision_sha256"],
         stored_object=stored_plan,
+        workspace_object=stored_workspace,
         plan=generated_plan,
         proposal=binding["proposal"],
         policy_digest=policy_sha256,
@@ -677,6 +697,58 @@ def _put_saved_plan(
         or response.get("BucketKeyEnabled") is not True
     ):
         raise NovaPlanBuildError("saved plan artifact is not a bucket-key version")
+    return StoredPlanObject(bucket, key, version_id, size, digest)
+
+
+def _put_execution_workspace(
+    s3: Any,
+    bucket: str,
+    expected_bucket_owner: str,
+    kms_key_arn: str,
+    run_id: str,
+    key: str,
+    path: str,
+    expected_sha256: str,
+) -> StoredPlanObject:
+    workspace_path = Path(path)
+    if workspace_path.is_symlink() or not workspace_path.is_file():
+        raise NovaPlanBuildError("Terraform execution workspace bundle is unavailable")
+    size = workspace_path.stat().st_size
+    if size <= 0 or size > MAX_PLAN_BYTES * 4:
+        raise NovaPlanBuildError("Terraform execution workspace bundle exceeds its size limit")
+    with workspace_path.open("rb") as workspace_file:
+        digest = hashlib.file_digest(workspace_file, "sha256").hexdigest()
+    if digest != expected_sha256:
+        raise NovaPlanBuildError("Terraform execution workspace bundle failed integrity verification")
+    checksum = base64.b64encode(bytes.fromhex(digest)).decode("ascii")
+    try:
+        with workspace_path.open("rb") as body:
+            response = s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentLength=size,
+                ContentType="application/vnd.davdeploy.terraform-workspace+gzip",
+                ServerSideEncryption="aws:kms",
+                SSEKMSKeyId=kms_key_arn,
+                BucketKeyEnabled=True,
+                ChecksumSHA256=checksum,
+                IfNoneMatch="*",
+                ExpectedBucketOwner=expected_bucket_owner,
+                Metadata={
+                    "davdeploy-workspace-sha256": digest,
+                    "davdeploy-run-id": run_id,
+                },
+            )
+    except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+        raise NovaPlanBuildError("Terraform execution workspace could not be stored safely") from None
+    version_id = _version_id(response)
+    if (
+        not isinstance(response, dict)
+        or not version_id
+        or response.get("BucketKeyEnabled") is not True
+    ):
+        raise NovaPlanBuildError("Terraform workspace is not a bucket-key version")
     return StoredPlanObject(bucket, key, version_id, size, digest)
 
 

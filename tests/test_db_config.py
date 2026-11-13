@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 33
+            == 34
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -94,7 +94,7 @@ def test_terraform_state_migration_adds_only_state_tables_to_v32_database():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 33
+    assert version == 34
     engine.dispose()
 
 
@@ -119,7 +119,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 33
+            == 34
         )
     engine.dispose()
 
@@ -148,7 +148,16 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     artifact_columns = {
         column["name"] for column in inspect(engine).get_columns("generated_plan_artifacts")
     }
-    assert {"context_sha256", "manifest_sha256", "artifact_version_id"} <= artifact_columns
+    assert {
+        "context_sha256",
+        "manifest_sha256",
+        "artifact_version_id",
+        "workspace_artifact_bucket",
+        "workspace_artifact_key",
+        "workspace_artifact_version_id",
+        "workspace_artifact_size_bytes",
+        "workspace_sha256",
+    } <= artifact_columns
     indexes = {
         index["name"] for index in inspect(engine).get_indexes("cloud_execution_module_instances")
     }
@@ -156,7 +165,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 33
+            == 34
         )
         connection.execute(
             text(
@@ -288,7 +297,7 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 33
+            == 34
         )
     engine.dispose()
 
@@ -335,7 +344,7 @@ def test_plan_role_migration_upgrades_version_31_with_only_plan_role_columns():
                 "plan_role_arn, plan_role_setup_state FROM cloud_connections WHERE id = 'connection-1'"
             )
         ).one()
-    assert version == 33
+    assert version == 34
     assert existing == (
         "123456789012",
         "arn:discovery",

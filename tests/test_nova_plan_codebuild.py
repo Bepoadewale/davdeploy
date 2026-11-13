@@ -27,6 +27,7 @@ from davdeploy.generated_terraform_plan import (
     PINNED_AWS_PROVIDER_VERSION,
     PINNED_TERRAFORM_VERSION,
     GeneratedTerraformPlan,
+    create_execution_workspace_bundle,
 )
 from davdeploy.nova_terraform_state_client import (
     TerraformHTTPBackend,
@@ -312,6 +313,13 @@ class FakePlanRunner:
         saved_plan = Path(workspace) / "saved.tfplan"
         saved_plan.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         saved_plan.write_bytes(b"opaque saved plan fixture")
+        saved_plan.chmod(0o600)
+        Path(workspace, "main.tf.json").write_text("{}", encoding="utf-8")
+        Path(workspace, ".terraform.lock.hcl").write_text("provider lock", encoding="utf-8")
+        provider_dir = Path(workspace, ".terraform", "providers")
+        provider_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        (provider_dir / "fixture-provider").write_bytes(b"provider fixture")
+        workspace_bundle, workspace_digest = create_execution_workspace_bundle(workspace)
         plan_digest = hashlib.sha256(saved_plan.read_bytes()).hexdigest()
         policy = GeneratedPlanPolicyResult(
             verdict=self.verdict,
@@ -347,6 +355,8 @@ class FakePlanRunner:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=plan_digest,
             saved_plan_path=str(saved_plan),
+            workspace_bundle_sha256=workspace_digest,
+            workspace_bundle_path=str(workspace_bundle),
             plan_access_policy_version=plan_access_policy_version,
             plan_access_policy_sha256=plan_access_policy_sha256,
         )
@@ -401,7 +411,7 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
     assert "external_id" not in document["plan_role"]
     assert EXTERNAL_A not in json.dumps(document)
     assert runner.calls[0]["aws_credentials"]["SecretAccessKey"] == "fixture-secret-credential"
-    assert len(s3.put_calls) == 2
+    assert len(s3.put_calls) == 3
 
     keys = [call[0]["Key"] for call in s3.put_calls]
     expected_plan_prefix = f"plans/nova-generated/builds/{build_arn_for()}/"
@@ -418,7 +428,7 @@ def test_build_reads_exact_build_input_and_writes_encrypted_versioned_artifacts(
     result_bytes = next(payload for call, payload in s3.put_calls if call is result_put)
     result_document = json.loads(result_bytes)
     assert result["result_key"] == result_put["Key"]
-    assert result["result_version_id"] == "output-version-2"
+    assert result["result_version_id"] == "output-version-3"
     assert result_document["run_id"] == RUN_ID
     assert result_document["codebuild_build_arn"] == build_arn_for()
     assert result_document["input"] == {
@@ -525,7 +535,7 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
         "state_id": state_backend.state_id,
         "scope_sha256": state_backend.scope_sha256,
     }
-    assert result_document["manifest"]["manifest_version"] == 7
+    assert result_document["manifest"]["manifest_version"] == 8
     assert result_document["manifest"]["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [],
@@ -541,7 +551,7 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
     }
     assert state_backend.password not in stored_result.decode()
     assert state_backend.username not in stored_result.decode()
-    assert result["result_version_id"] == "output-version-2"
+    assert result["result_version_id"] == "output-version-3"
 
 
 def test_remote_state_scope_mismatch_fails_before_terraform_plan(monkeypatch, tmp_path):

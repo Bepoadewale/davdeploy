@@ -364,6 +364,7 @@ def test_plan_only_object_keys_require_object_level_sse_kms_context() -> None:
     assert "StringLike" in role_policy
     assert "nova_plan_only_scoped_input_key" in role_policy
     assert "nova_plan_only_scoped_result_key" in role_policy
+    assert "nova_plan_only_scoped_workspace_key" in role_policy
 
     bootstrap = (ROOT / "infrastructure/terraform/terraform-operations-bootstrap/main.tf").read_text()
     plans_encryption = bootstrap.split(
@@ -371,6 +372,7 @@ def test_plan_only_object_keys_require_object_level_sse_kms_context() -> None:
     )[1].split('\nresource "', 1)[0]
     assert "bucket_key_enabled = true" in plans_encryption
     api_artifacts = resource_block(MAIN, "aws_iam_role_policy", "api_nova_plan_only_artifacts")
+    assert "nova_plan_only_build_workspace_key" in api_artifacts
     bucket_context = (
         '"kms:EncryptionContext:aws:s3:arn" = '
         '"arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"'
@@ -385,7 +387,7 @@ def test_plan_only_object_keys_require_object_level_sse_kms_context() -> None:
     dispatcher = (ROOT / "apps/api/src/davdeploy/nova_plan_dispatch.py").read_text()
     codebuild_runner = (ROOT / "apps/api/src/davdeploy/nova_plan_codebuild.py").read_text()
     assert dispatcher.count("BucketKeyEnabled=True") == 1
-    assert codebuild_runner.count("BucketKeyEnabled=True") == 2
+    assert codebuild_runner.count("BucketKeyEnabled=True") == 3
 
 
 def test_codebuild_artifact_permissions_are_scoped_to_its_exact_build_arn() -> None:

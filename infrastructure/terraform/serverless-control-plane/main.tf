@@ -15,9 +15,11 @@ locals {
   nova_plan_only_build_input_key       = "${local.nova_plan_only_build_prefix}/input.json"
   nova_plan_only_build_result_key      = "${local.nova_plan_only_build_prefix}/result.json"
   nova_plan_only_build_saved_plan_key  = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.tfplan"
+  nova_plan_only_build_workspace_key   = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.workspace.tar.gz"
   nova_plan_only_scoped_input_key      = "${local.nova_plan_only_scoped_prefix}/input.json"
   nova_plan_only_scoped_result_key     = "${local.nova_plan_only_scoped_prefix}/result.json"
   nova_plan_only_scoped_saved_plan_key = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.tfplan"
+  nova_plan_only_scoped_workspace_key  = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.workspace.tar.gz"
 }
 
 data "aws_availability_zones" "available" {
@@ -461,6 +463,11 @@ resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
       },
       {
         Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_workspace_key}"
+      },
+      {
+        Effect   = "Allow"
         Action   = ["kms:GenerateDataKey"]
         Resource = var.nova_plan_kms_key_arn
         Condition = {
@@ -654,6 +661,17 @@ resource "aws_iam_role_policy" "nova_plan_only" {
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
         Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_scoped_saved_plan_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_scoped_workspace_key}"
         Condition = {
           StringEquals = {
             "s3:x-amz-server-side-encryption"                = "aws:kms"

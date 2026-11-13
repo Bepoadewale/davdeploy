@@ -70,6 +70,24 @@ class ArtifactStoreFixture:
 
             raise GeneratedPlanArtifactError("not found")
 
+    def store_execution_workspace(self, path, **kwargs):
+        payload = Path(path).read_bytes()
+        self.workspace = payload
+        return StoredPlanObject(
+            "davdeploy-tfplans-654654474502",
+            "plans/nova-generated/org-hash/project-hash/revision-hash/run/workspace.tar.gz",
+            "workspace-version-exact-1",
+            len(payload),
+            hashlib.sha256(payload).hexdigest(),
+        )
+
+    def verify_execution_workspace(self, stored, *, run_id, **_scope):
+        self.verified.append((stored, run_id))
+        if self.missing_on_verify:
+            from davdeploy.generated_plan_artifacts import GeneratedPlanArtifactError
+
+            raise GeneratedPlanArtifactError("not found")
+
 
 def make_submitted_revision(service):
     project = service.create_project(
@@ -127,6 +145,9 @@ def generated_runner_result(
     plan_file = tmp_path / "saved.tfplan"
     plan_file.write_bytes(PLAN_BYTES)
     os.chmod(plan_file, 0o600)
+    workspace_bundle = tmp_path / "execution-workspace.tar.gz"
+    workspace_bundle.write_bytes(b"exact plan-time workspace")
+    os.chmod(workspace_bundle, 0o600)
     proposal = GeneratedDeploymentProposal(
         contract_version="1.1",
         source_revision=revision.id,
@@ -182,6 +203,8 @@ def generated_runner_result(
         ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
         saved_plan_sha256=hashlib.sha256(PLAN_BYTES).hexdigest(),
         saved_plan_path=str(plan_file),
+        workspace_bundle_sha256=hashlib.sha256(workspace_bundle.read_bytes()).hexdigest(),
+        workspace_bundle_path=str(workspace_bundle),
     )
     return proposal, generated
 
