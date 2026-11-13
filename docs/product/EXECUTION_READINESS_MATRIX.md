@@ -2,15 +2,23 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-13, after PR #390
+## Current backend source — 2026-11-13, after PR #393
 
 Backend `main` is merge commit
-`ae9ec4450d527141081e95707a1c3ee05126b683`; merged-main CI run
-[43386326424](https://github.com/Bepoadewale/davdeploy/actions/runs/43386326424)
-passed all seven jobs. Current source includes the Nova intent scope guard
+`3db0d979c9eb0810b183244281789f139d28e19f`; merged-main CI run
+[43399159484](https://github.com/Bepoadewale/davdeploy/actions/runs/43399159484)
+passed all seven jobs. The latest hosted control-plane package remains PR #390
+commit `ae9ec4450d527141081e95707a1c3ee05126b683` (apply
+[43389226372](https://github.com/Bepoadewale/davdeploy/actions/runs/43389226372));
+PR #393 is source-only. Current source includes the Nova intent scope guard
 (PR #377), RDS planner metadata access (#371–#372), actual-plan denial of
-unbound Secrets Manager value-read permissions (#374), and PR #379's bounded
-regional EC2 metadata reads for proposed VPCs, subnets, and security groups.
+unbound Secrets Manager value-read permissions (#374), PR #379's bounded
+regional EC2 metadata reads for proposed VPCs, subnets, and security groups,
+and PR #393's saved-plan manifest binding for proposed health, recovery, cost
+assumptions, assumptions, and limitations. Those proposal requirements are
+marked `PROPOSED_UNVALIDATED_NOT_EXECUTED`; they are not health observations or
+pricing evidence.
+
 The current control-plane release and the isolated plan-only runner are
 deployed; Nova plan review, runner, credential broker, role verification and
 state API gates are enabled, while hosted certification is disabled. PR #381's
@@ -23,12 +31,14 @@ explanation and are not stored as workload intents; DavDeploy is not a
 general-purpose question-answering assistant. Two bounded synthetic Bedrock
 checks distinguished stock advice from a stockbroking-app deployment; this is
 not a broad model-quality evaluation.
+
 The bounded RDS-managed secret ARN contract (#367) still does not retrieve
 customer secret values or grant runtime secret reads. Managed-policy
 attachments whose contents are unavailable remain review-required. Frontend
 PR #102 remains draft/local-fixture work without an authenticated production
 customer journey. No Nova-generated customer plan or workload has been
-applied, operated, health-checked, recovered, or destroyed.
+applied, operated, health-checked, recovered, or destroyed. The exact source
+evidence for PR #393 is in `docs/test/test393.md`.
 
 ## Historical hosted release — 2026-11-12, PR #381 source
 
