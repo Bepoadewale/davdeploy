@@ -310,7 +310,7 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 3. Integrate complete, trusted, region-specific pricing and usage assumptions before exact-plan approval. PR #318 remains held for account-owner direction; do not replace that work without direction.
 4. Safely enable and prove hosted Nova planning end to end, including Nova generation, validation, saved plan, plan history and useful failure reporting.
 5. Add separately authorized apply of the exact approved saved plan, with durable identity, leases, idempotency, restart reconciliation, bounded retries and exact state/artifact scoping.
-6. Add deterministic health probes, update and failure recovery, data-recovery evidence, exact destroy and independent absence checks.
+6. Execute the bounded typed health assertions introduced by PR #395; persist observed results, then add update and failure recovery, data-recovery evidence, exact destroy and independent absence checks. The current contract does not run probes or certify health.
 7. Run composed application scenarios through the hosted Nova path and align browser, CLI and MCP with the same lifecycle. Existing isolated AWS tests are reusable evidence, not proof of hosted customer execution.
 
 See `docs/test/test268.md` and `docs/tickets/ticket270.md` for legacy pilot evidence and boundaries.
