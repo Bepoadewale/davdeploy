@@ -318,8 +318,11 @@ attachment, and `/healthz` HTTP 200 in account `654654474502`, region
 `E1O6BxLyyxTN/epgvT0pyCkQU1bE4QXi+drUAp+cE+I=`. The isolated plan-only
 CodeBuild project uses the fixed service role and pinned runner release.
 Hosted Nova plan reviews, runner, credential broker, role verification, and
-state API gates are enabled; hosted certification remains disabled. No
-customer role installation, plan, workload, health check, recovery, apply,
-or teardown occurred. Complete pricing evidence and final cost-bound plan
-approval remain unavailable, and effective permissions for a customer plan
-role are not proven. Evidence: [`test391.md`](../test/test391.md).
+state API gates are enabled; hosted certification remains disabled. A
+disposable plan-only role passed IAM policy simulation for selected metadata
+reads and explicit denials, then its exact stack was deleted. This does not
+prove a real role assumption or account-effective permissions. No customer
+plan, workload, health check, recovery, apply, or teardown occurred. Complete
+pricing evidence and final cost-bound plan approval remain unavailable.
+Evidence: [`test391.md`](../test/test391.md) and
+[`test392.md`](../test/test392.md).

@@ -108,6 +108,10 @@ returned HTTP 200 in account `654654474502`, region `us-east-1`. The isolated
 plan-only CodeBuild project uses its fixed service role and pinned runner
 release. Nova plan reviews, runner readiness, role verification, credential
 broker, and state storage/API are enabled in the hosted control plane; hosted
-certification remains disabled. No customer plan or workload was run, and
-pricing approval, customer-role permission proof, and customer lifecycle
-certification remain incomplete. Evidence: [`test391.md`](docs/test/test391.md).
+certification remains disabled. A disposable plan-only role passed IAM policy
+simulation for bounded metadata reads and explicit denials, then its exact test
+stack was deleted. This does not prove a real DavDeploy role assumption or
+customer-account effective permissions. No customer plan or workload was run;
+pricing approval and customer lifecycle certification remain incomplete.
+Evidence: [`test391.md`](docs/test/test391.md) and
+[`test392.md`](docs/test/test392.md).

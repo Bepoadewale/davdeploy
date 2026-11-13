@@ -32,25 +32,31 @@ published plan-only template. No customer plan or workload was run.
 
 ## Acceptance criteria
 
-- [ ] Exact temporary resource manifest and teardown evidence are recorded in
+- [x] Exact temporary resource manifest and teardown evidence are recorded in
   `docs/test/test392.md`.
-- [ ] Current status documents distinguish policy simulation from a real
+- [x] Current status documents distinguish policy simulation from a real
   customer connection and effective account permissions.
-- [ ] No customer plan or workload readiness is claimed.
-- [ ] Documentation checks and required CI pass; PR merges.
+- [x] No customer plan or workload readiness is claimed.
+- [x] Local documentation checks pass.
+- [ ] Required CI passes and PR merges.
 
 ## Acceptance status
 
-- [ ] Evidence and status changes pending.
+- [x] Temporary role policy simulation and teardown complete.
+- [x] Status and evidence files updated.
+- [ ] Pull request CI and merge pending.
 
 ## Tests / validation performed
 
-- Pending.
+- `aws cloudformation validate-template` — passed.
+- IAM policy simulation and exact test stack teardown/role absence checks — passed.
+- `python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket392.md`
-- `docs/test/test392.md` (to be added).
+- `docs/test/test392.md`.
 
 ## Boundaries
 
