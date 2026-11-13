@@ -4982,9 +4982,9 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            8
+            9
             if untagged_records
-            else 7 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 6
+            else 8 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 7
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
@@ -5042,6 +5042,26 @@ class ProductService:
             size_bytes=artifact_doc.get("size_bytes"),
             sha256=saved_plan_sha256,
         )
+        workspace_doc = manifest.get("execution_workspace")
+        workspace_sha256 = digests.get("workspace_sha256")
+        if (
+            not isinstance(workspace_doc, dict)
+            or set(workspace_doc) != {"bucket", "key", "version_id", "size_bytes", "sha256"}
+            or not isinstance(workspace_sha256, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", workspace_sha256)
+            or workspace_doc.get("sha256") != workspace_sha256
+            or type(workspace_doc.get("size_bytes")) is not int
+            or workspace_doc["size_bytes"] <= 0
+            or workspace_doc["size_bytes"] > 512 * 1024 * 1024
+        ):
+            raise ValueError("Nova result execution workspace evidence is invalid")
+        stored_workspace = StoredPlanObject(
+            bucket=workspace_doc.get("bucket"),
+            key=workspace_doc.get("key"),
+            version_id=workspace_doc.get("version_id"),
+            size_bytes=workspace_doc.get("size_bytes"),
+            sha256=workspace_sha256,
+        )
         if (
             digests.get("customer_revision_sha256") != revision.content_digest
             or digests.get("proposal_sha256") != proposal_sha256
@@ -5067,6 +5087,8 @@ class ProductService:
             ownership_plan_id_sha256=ownership_scope.plan_id_sha256(),
             saved_plan_sha256=saved_plan_sha256,
             saved_plan_path="",
+            workspace_bundle_sha256=workspace_sha256,
+            workspace_bundle_path="verified-result-workspace.tar.gz",
             untagged_resource_ownership=tuple(untagged_records),
             plan_access_policy_version=access_policy.version,
             plan_access_policy_sha256=access_policy.sha256,
@@ -5077,6 +5099,7 @@ class ProductService:
             revision_id=revision.id,
             revision_sha256=revision.content_digest,
             stored_object=stored_plan,
+            workspace_object=stored_workspace,
             plan=generated_plan,
             proposal=proposal,
             policy_digest=result["policy_sha256"],
@@ -5093,6 +5116,14 @@ class ProductService:
             raise ValueError("generated Terraform plan review storage is not enabled")
         artifact_store.verify_stored_plan(
             stored_plan,
+            run_id=run_id,
+            organization_id=run.organization_id,
+            project_id=run.project_id,
+            revision_id=revision.id,
+            build_arn=(run.result_metadata or {}).get("codebuild_build_arn"),
+        )
+        artifact_store.verify_execution_workspace(
+            stored_workspace,
             run_id=run_id,
             organization_id=run.organization_id,
             project_id=run.project_id,
@@ -5137,6 +5168,11 @@ class ProductService:
             artifact_key=stored_plan.key,
             artifact_version_id=stored_plan.version_id,
             artifact_size_bytes=stored_plan.size_bytes,
+            workspace_artifact_bucket=stored_workspace.bucket,
+            workspace_artifact_key=stored_workspace.key,
+            workspace_artifact_version_id=stored_workspace.version_id,
+            workspace_artifact_size_bytes=stored_workspace.size_bytes,
+            workspace_sha256=stored_workspace.sha256,
             created_by_subject=run.requester_subject,
             created_at=datetime.now(UTC),
             expires_at=datetime.now(UTC) + timedelta(days=30),
@@ -5252,6 +5288,21 @@ class ProductService:
             )
         except GeneratedPlanArtifactError as error:
             raise ValueError("generated Terraform plan could not be securely persisted") from error
+        try:
+            with open(generated_plan.workspace_bundle_path, "rb") as workspace_file:
+                workspace_sha256 = hashlib.file_digest(workspace_file, "sha256").hexdigest()
+            if workspace_sha256 != generated_plan.workspace_bundle_sha256:
+                raise ValueError("generated Terraform workspace digest does not match")
+            stored_workspace = artifact_store.store_execution_workspace(
+                generated_plan.workspace_bundle_path,
+                organization_id=principal.organization_id,
+                project_id=customer_plan.project_id,
+                revision_id=revision.id,
+                run_id=run_id,
+                expected_sha256=generated_plan.workspace_bundle_sha256,
+            )
+        except (GeneratedPlanArtifactError, OSError, ValueError) as error:
+            raise ValueError("Terraform execution workspace could not be securely persisted") from error
 
         now = datetime.now(UTC)
         policy_doc, policy_sha256 = policy_evidence(generated_plan.policy)
@@ -5261,6 +5312,7 @@ class ProductService:
             revision_id=revision.id,
             revision_sha256=revision.content_digest,
             stored_object=stored_object,
+            workspace_object=stored_workspace,
             plan=generated_plan,
             proposal=proposal,
             policy_digest=policy_sha256,
@@ -5301,6 +5353,11 @@ class ProductService:
             artifact_key=stored_object.key,
             artifact_version_id=stored_object.version_id,
             artifact_size_bytes=stored_object.size_bytes,
+            workspace_artifact_bucket=stored_workspace.bucket,
+            workspace_artifact_key=stored_workspace.key,
+            workspace_artifact_version_id=stored_workspace.version_id,
+            workspace_artifact_size_bytes=stored_workspace.size_bytes,
+            workspace_sha256=stored_workspace.sha256,
             created_by_subject=principal.subject,
             created_at=now,
             expires_at=now + timedelta(days=30),
@@ -5351,6 +5408,20 @@ class ProductService:
             expires_at = expires_at.replace(tzinfo=UTC)
         expired = expires_at <= datetime.now(UTC)
         pricing_complete = has_complete_pricing_evidence(artifact.manifest)
+        workspace_doc = artifact.manifest.get("execution_workspace")
+        workspace_complete = bool(
+            artifact.workspace_artifact_bucket
+            and artifact.workspace_artifact_key
+            and artifact.workspace_artifact_version_id
+            and artifact.workspace_artifact_size_bytes
+            and artifact.workspace_sha256
+            and isinstance(workspace_doc, dict)
+            and workspace_doc.get("bucket") == artifact.workspace_artifact_bucket
+            and workspace_doc.get("key") == artifact.workspace_artifact_key
+            and workspace_doc.get("version_id") == artifact.workspace_artifact_version_id
+            and workspace_doc.get("size_bytes") == artifact.workspace_artifact_size_bytes
+            and workspace_doc.get("sha256") == artifact.workspace_sha256
+        )
         manifest_boundary = artifact.manifest.get("planning_boundary")
         planning_boundary = (
             manifest_boundary if isinstance(manifest_boundary, dict) else {}
@@ -5370,6 +5441,8 @@ class ProductService:
             )
         if not pricing_complete:
             approval_blockers.append("COST_EVIDENCE_INCOMPLETE")
+        if not workspace_complete:
+            approval_blockers.append("EXECUTION_WORKSPACE_UNAVAILABLE")
         if expired:
             approval_blockers.append("PLAN_EXPIRED")
         if approval:
@@ -5394,6 +5467,8 @@ class ProductService:
             if boundary_mode == "INITIAL_PLAN_NO_REMOTE_STATE"
             else "BLOCKED_PLANNING_BOUNDARY"
             if not boundary_allows_approval
+            else "BLOCKED_EXECUTION_WORKSPACE_UNAVAILABLE"
+            if not workspace_complete
             else "APPROVED_EXPIRED"
             if approval and expired
             else "APPROVED"
@@ -5429,6 +5504,7 @@ class ProductService:
                 "execution_allowed": False,
             },
             "pricing": pricing,
+            "execution_workspace": {"available": workspace_complete},
             "approval_allowed": approval_allowed,
             "approval_blockers": approval_blockers,
             "state": state,
@@ -5486,6 +5562,7 @@ class ProductService:
         target = manifest.get("target") or {}
         digests = manifest.get("digests") or {}
         manifest_artifact = manifest.get("artifact") or {}
+        workspace_artifact = manifest.get("execution_workspace") or {}
         if (
             tenant.get("organization_id") != artifact.organization_id
             or tenant.get("project_id") != artifact.project_id
@@ -5512,6 +5589,12 @@ class ProductService:
             or manifest_artifact.get("key") != artifact.artifact_key
             or manifest_artifact.get("version_id") != artifact.artifact_version_id
             or manifest_artifact.get("size_bytes") != artifact.artifact_size_bytes
+            or workspace_artifact.get("bucket") != artifact.workspace_artifact_bucket
+            or workspace_artifact.get("key") != artifact.workspace_artifact_key
+            or workspace_artifact.get("version_id") != artifact.workspace_artifact_version_id
+            or workspace_artifact.get("size_bytes") != artifact.workspace_artifact_size_bytes
+            or workspace_artifact.get("sha256") != artifact.workspace_sha256
+            or digests.get("workspace_sha256") != artifact.workspace_sha256
         ):
             raise ValueError("generated plan manifest fields do not match their immutable record")
         policy_doc = {
@@ -5595,6 +5678,27 @@ class ProductService:
                     artifact.artifact_version_id,
                     artifact.artifact_size_bytes,
                     artifact.saved_plan_sha256,
+                ),
+                run_id=artifact.run_id,
+                organization_id=artifact.organization_id,
+                project_id=artifact.project_id,
+                revision_id=artifact.revision_id,
+            )
+            if (
+                not artifact.workspace_artifact_bucket
+                or not artifact.workspace_artifact_key
+                or not artifact.workspace_artifact_version_id
+                or not artifact.workspace_artifact_size_bytes
+                or not artifact.workspace_sha256
+            ):
+                raise GeneratedPlanArtifactError("stored execution workspace is unavailable")
+            artifact_store.verify_execution_workspace(
+                StoredPlanObject(
+                    artifact.workspace_artifact_bucket,
+                    artifact.workspace_artifact_key,
+                    artifact.workspace_artifact_version_id,
+                    artifact.workspace_artifact_size_bytes,
+                    artifact.workspace_sha256,
                 ),
                 run_id=artifact.run_id,
                 organization_id=artifact.organization_id,

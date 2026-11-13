@@ -208,7 +208,7 @@ def run_migrations(target: Engine | None = None) -> None:
             _install_generated_plan_immutability(connection)
             # create_all uses current model metadata, so new databases already include
             # every column through the latest schema version.
-            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (33)"))
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (34)"))
             return
         if version < 2:
             connection.execute(
@@ -528,6 +528,20 @@ def run_migrations(target: Engine | None = None) -> None:
             # without altering existing tenant or plan records.
             Base.metadata.create_all(bind=connection)
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (33)"))
+            version = 33
+        if version < 34:
+            _add_columns_if_missing(
+                connection,
+                "generated_plan_artifacts",
+                {
+                    "workspace_artifact_bucket": "VARCHAR(255)",
+                    "workspace_artifact_key": "TEXT",
+                    "workspace_artifact_version_id": "VARCHAR(1024)",
+                    "workspace_artifact_size_bytes": "INTEGER",
+                    "workspace_sha256": "VARCHAR(64)",
+                },
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (34)"))
         _install_generated_plan_immutability(connection)
 
 

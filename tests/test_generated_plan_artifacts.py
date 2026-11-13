@@ -117,6 +117,34 @@ class FakeS3:
         return {"Body": BytesIO(self.stored_bytes)}
 
 
+class FakeWorkspaceS3:
+    def __init__(self):
+        self.calls = []
+        self.object = None
+
+    def put_object(self, **kwargs):
+        self.calls.append(("put_object", kwargs))
+        self.object = {
+            "body": kwargs["Body"].read(),
+            "metadata": kwargs["Metadata"],
+            "kwargs": kwargs,
+        }
+        return {"VersionId": "workspace-version-1"}
+
+    def head_object(self, **kwargs):
+        self.calls.append(("head_object", kwargs))
+        return {
+            "ContentLength": len(self.object["body"]),
+            "ServerSideEncryption": "aws:kms",
+            "SSEKMSKeyId": KMS_KEY,
+            "Metadata": self.object["metadata"],
+        }
+
+    def get_object(self, **kwargs):
+        self.calls.append(("get_object", kwargs))
+        return {"Body": BytesIO(self.object["body"])}
+
+
 def store(client=None, *, max_bytes=1024):
     return S3GeneratedPlanArtifactStore(
         bucket=BUCKET,
@@ -175,6 +203,46 @@ def test_store_uploads_conditionally_with_kms_and_verifies_exact_version(tmp_pat
     assert head["ChecksumMode"] == "ENABLED"
 
 
+def test_execution_workspace_is_encrypted_versioned_and_verified(tmp_path):
+    payload = b"private Terraform execution workspace"
+    path = tmp_path / "execution-workspace.tar.gz"
+    path.write_bytes(payload)
+    os.chmod(path, 0o600)
+    digest = hashlib.sha256(payload).hexdigest()
+    client = FakeWorkspaceS3()
+    artifact_store = S3GeneratedPlanArtifactStore(
+        bucket=BUCKET,
+        kms_key_arn=KMS_KEY,
+        expected_bucket_owner=OWNER,
+        client=client,
+    )
+
+    stored = artifact_store.store_execution_workspace(
+        path,
+        organization_id="org-private-customer",
+        project_id="project-private-name",
+        revision_id="revision-abc",
+        run_id=RUN_ID,
+        expected_sha256=digest,
+    )
+
+    assert stored.version_id == "workspace-version-1"
+    assert stored.sha256 == digest
+    put = client.object["kwargs"]
+    assert put["ServerSideEncryption"] == "aws:kms"
+    assert put["SSEKMSKeyId"] == KMS_KEY
+    assert put["IfNoneMatch"] == "*"
+    assert put["Metadata"]["davdeploy-workspace-sha256"] == digest
+    assert [operation for operation, _ in client.calls] == [
+        "put_object",
+        "head_object",
+        "get_object",
+    ]
+    for operation in ("head_object", "get_object"):
+        request = next(kwargs for name, kwargs in client.calls if name == operation)
+        assert request["VersionId"] == "workspace-version-1"
+
+
 def test_reverification_requires_exact_tenant_scoped_object_key():
     client = FakeS3()
     configured = store(client)
@@ -199,6 +267,28 @@ def test_reverification_requires_exact_tenant_scoped_object_key():
             project_id="different-project",
             revision_id="revision-1",
         )
+
+
+def test_reverification_accepts_only_build_scoped_key_for_exact_build_arn():
+    client = FakeS3()
+    configured = store(client)
+    digest = hashlib.sha256(PLAN_BYTES).hexdigest()
+    build_arn = (
+        "arn:aws:codebuild:us-east-1:654654474502:build/"
+        "davdeploy-nova-plan-only:build-123"
+    )
+    key = configured._key(
+        "org-1", "project-1", "revision-1", RUN_ID, digest, build_arn=build_arn
+    )
+    stored = StoredPlanObject(BUCKET, key, "v-plan-1", len(PLAN_BYTES), digest)
+    configured.verify_stored_plan(
+        stored,
+        run_id=RUN_ID,
+        organization_id="org-1",
+        project_id="project-1",
+        revision_id="revision-1",
+    )
+    assert [name for name, _ in client.calls] == ["head_object", "get_object"]
 
 
 @pytest.mark.parametrize(
@@ -302,6 +392,9 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     assert digest != canonical_json_digest({**right, "b": 3})
 
     stored = StoredPlanObject(BUCKET, "plans/nova-generated/opaque.tfplan", "v42", 12, "a" * 64)
+    stored_workspace = StoredPlanObject(
+        BUCKET, "plans/nova-generated/workspace.tar.gz", "workspace-v42", 24, "c" * 64
+    )
     policy = GeneratedPlanPolicyResult(
         PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW,
         "policy-v1",
@@ -346,6 +439,8 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         ownership_plan_id_sha256="9" * 64,
         saved_plan_sha256="a" * 64,
         saved_plan_path="/private/path/not-in-manifest",
+        workspace_bundle_sha256="c" * 64,
+        workspace_bundle_path="/private/workspace.tar.gz",
     )
     manifest = generated_plan_manifest(
         organization_id="org-1",
@@ -353,6 +448,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         revision_id="revision-1",
         revision_sha256="e" * 64,
         stored_object=stored,
+        workspace_object=stored_workspace,
         plan=plan,
         proposal=proposal,
         policy_digest=evidence_digest,
@@ -360,7 +456,8 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 6
+    assert manifest["manifest_version"] == 7
+    assert manifest["execution_workspace"]["sha256"] == "c" * 64
     assert manifest["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [
@@ -417,6 +514,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
             revision_id="revision-1",
             revision_sha256="e" * 64,
             stored_object=stored,
+            workspace_object=stored_workspace,
             plan=plan,
             proposal=changed_proposal,
             policy_digest=evidence_digest,
@@ -439,13 +537,14 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         revision_id="revision-1",
         revision_sha256="e" * 64,
         stored_object=stored,
+        workspace_object=stored_workspace,
         plan=route_plan,
         proposal=proposal,
         policy_digest=evidence_digest,
         created_at="2026-11-04T00:00:00Z",
         remote_state=remote_state,
     )
-    assert owned_manifest["manifest_version"] == 8
+    assert owned_manifest["manifest_version"] == 9
     assert owned_manifest["remote_state"] == remote_state
     assert owned_manifest["ownership_inventory"] == {
         "version": 1,
@@ -464,6 +563,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
             revision_id="revision-1",
             revision_sha256="e" * 64,
             stored_object=stored,
+            workspace_object=stored_workspace,
             plan=route_plan,
             proposal=proposal,
             policy_digest=evidence_digest,
