@@ -920,6 +920,16 @@ resource "aws_iam_role_policy" "nova_exact_plan_apply" {
           }
         }
       },
+      {
+        Effect   = "Allow"
+        Action   = ["execute-api:Invoke"]
+        Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/terraform-state/credentials"
+        Condition = {
+          ArnLike = {
+            "codebuild:BuildArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:build/${local.nova_exact_plan_apply_project_name}:*"
+          }
+        }
+      },
     ]
   })
 }
@@ -1223,6 +1233,21 @@ resource "aws_codebuild_project" "nova_exact_plan_apply" {
     environment_variable {
       name  = "DAVDEPLOY_NOVA_APPLY_CREDENTIAL_BROKER_URL"
       value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/nova-apply/credentials"
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"
+      value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/terraform-state/credentials"
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_ENABLED"
+      value = tostring(var.enable_nova_terraform_state_api)
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_API_URL"
+      value = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
       type  = "PLAINTEXT"
     }
     environment_variable {

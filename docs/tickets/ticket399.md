@@ -80,6 +80,9 @@ file must remain untouched.
   dispatch policy, and explicit StartBuild override denies. Its fixed buildspec
   exits because the worker is not wired; no API dispatcher, apply credential
   broker, CodeBuild callback consumer, or Terraform execution exists yet.
+  The role also has project/build-scoped permission and trusted project
+  settings for remote-state credential bootstrap, which exact-plan apply needs;
+  the existing state API still has to bind and validate an apply run.
   Terraform validate passed for both affected roots, and focused apply
   contract/workspace/infrastructure tests passed (19 tests). These checks do
   not prove AWS IAM behavior or hosted apply.
@@ -101,6 +104,10 @@ file must remain untouched.
   #399. These are local source checks only.
 - Draft PR #399 head `5989d08` passed all seven required CI jobs in run
   `43476451184`. CI does not enable the feature or prove a live customer apply.
+- The remote-state bootstrap permission addition passed 19 focused contract,
+  workspace, and apply-infrastructure tests; both affected Terraform roots
+  validated and formatting, docs conventions, Ruff, and diff checks passed.
+  The state API apply-run binding remains unimplemented.
 - Full `make verify`: `1,108 passed`; Ruff, Actions config, OpenAPI, and
   Compose checks passed. One existing Starlette/httpx deprecation warning.
 - Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
