@@ -8,6 +8,14 @@ from io import BytesIO
 
 import pytest
 from botocore.exceptions import ClientError
+from davdeploy.generated_deployment_contract import (
+    CostAssumption,
+    GeneratedDeploymentProposal,
+    GeneratedResource,
+    HealthAssertion,
+    RecoveryRequirement,
+    WorkloadRequirements,
+)
 from davdeploy.generated_plan_artifacts import (
     GeneratedPlanArtifactError,
     S3GeneratedPlanArtifactStore,
@@ -32,6 +40,47 @@ KMS_KEY = "arn:aws:kms:us-east-1:654654474502:key/12345678-1234-1234-1234-123456
 OWNER = "654654474502"
 RUN_ID = str(uuid.UUID("12345678-1234-1234-1234-123456789012"))
 PLAN_BYTES = b"encrypted plan fixture bytes"
+
+
+def verification_proposal() -> GeneratedDeploymentProposal:
+    return GeneratedDeploymentProposal(
+        contract_version="1.0",
+        source_revision="revision-1",
+        context_digest="c" * 64,
+        resources=(
+            GeneratedResource(
+                resource_id="storage",
+                resource_type="aws_s3_bucket",
+                name="app_storage",
+                arguments={"bucket": "app-data-123"},
+                rationale="Private application storage.",
+            ),
+        ),
+        requirements=WorkloadRequirements(region="us-east-1"),
+        health_assertions=(
+            HealthAssertion(
+                kind="storage_roundtrip",
+                target_resource_id="storage",
+                description="Application can store and retrieve a synthetic object.",
+            ),
+        ),
+        recovery=RecoveryRequirement(
+            backup_required=True,
+            recovery_point_objective_minutes=60,
+            recovery_time_objective_minutes=240,
+            destructive_change_notes="Retain the prior version during recovery.",
+        ),
+        cost_assumptions=(
+            CostAssumption(
+                resource_id="storage",
+                description="Low initial object volume.",
+                source="customer assumption",
+                captured_at="2026-11-13T00:00:00Z",
+            ),
+        ),
+        assumptions=("Initial workload has low request volume.",),
+        limitations=("This proposal has no executed health evidence.",),
+    )
 
 
 class FakeS3:
@@ -267,6 +316,8 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     assert evidence_digest == canonical_json_digest(evidence)
     assert policy_allows_human_review(policy)
 
+    proposal = verification_proposal()
+    proposal_sha256 = canonical_json_digest(proposal.model_dump(mode="json"))
     plan = GeneratedTerraformPlan(
         summary=TerraformPlanSummary(
             format_version="1.2",
@@ -288,7 +339,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         terraform_version="1.14.7",
         aws_provider_version="5.100.0",
         provider_lockfile_sha256="b" * 64,
-        proposal_sha256="c" * 64,
+        proposal_sha256=proposal_sha256,
         context_sha256="e" * 64,
         configuration_sha256="d" * 64,
         ownership_scope_sha256="f" * 64,
@@ -303,12 +354,39 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         revision_sha256="e" * 64,
         stored_object=stored,
         plan=plan,
+        proposal=proposal,
         policy_digest=evidence_digest,
         created_at="2026-11-04T00:00:00Z",
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 4
+    assert manifest["manifest_version"] == 5
+    assert manifest["proposal_requirements"] == {
+        "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
+        "health_assertions": [
+            {
+                "kind": "storage_roundtrip",
+                "target_resource_id": "storage",
+                "description": "Application can store and retrieve a synthetic object.",
+            }
+        ],
+        "recovery": {
+            "backup_required": True,
+            "recovery_point_objective_minutes": 60,
+            "recovery_time_objective_minutes": 240,
+            "destructive_change_notes": "Retain the prior version during recovery.",
+        },
+        "cost_assumptions": [
+            {
+                "resource_id": "storage",
+                "description": "Low initial object volume.",
+                "source": "customer assumption",
+                "captured_at": "2026-11-13T00:00:00Z",
+            }
+        ],
+        "assumptions": ["Initial workload has low request volume."],
+        "limitations": ["This proposal has no executed health evidence."],
+    }
     assert manifest["customer_plan_access"] == {
         "version": "NOT_APPLICABLE",
         "session_policy_sha256": "0" * 64,
@@ -328,6 +406,19 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     assert canonical_json_digest(manifest) != canonical_json_digest(
         {**manifest, "created_at": "later"}
     )
+    changed_proposal = proposal.model_copy(update={"limitations": ("different",)})
+    with pytest.raises(GeneratedPlanArtifactError, match="proposal verification evidence"):
+        generated_plan_manifest(
+            organization_id="org-1",
+            project_id="project-1",
+            revision_id="revision-1",
+            revision_sha256="e" * 64,
+            stored_object=stored,
+            plan=plan,
+            proposal=changed_proposal,
+            policy_digest=evidence_digest,
+            created_at="2026-11-04T00:00:00Z",
+        )
 
     remote_state = {"state_id": RUN_ID, "scope_sha256": "1" * 64}
     route_plan = replace(
@@ -346,11 +437,12 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         revision_sha256="e" * 64,
         stored_object=stored,
         plan=route_plan,
+        proposal=proposal,
         policy_digest=evidence_digest,
         created_at="2026-11-04T00:00:00Z",
         remote_state=remote_state,
     )
-    assert owned_manifest["manifest_version"] == 6
+    assert owned_manifest["manifest_version"] == 7
     assert owned_manifest["remote_state"] == remote_state
     assert owned_manifest["ownership_inventory"] == {
         "version": 1,
@@ -370,6 +462,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
             revision_sha256="e" * 64,
             stored_object=stored,
             plan=route_plan,
+            proposal=proposal,
             policy_digest=evidence_digest,
             created_at="2026-11-04T00:00:00Z",
         )
