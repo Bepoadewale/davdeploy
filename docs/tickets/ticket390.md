@@ -74,6 +74,7 @@ policy-creation permissions.
 - `terraform fmt -check -recursive infrastructure/terraform/terraform-operations-bootstrap infrastructure/terraform/serverless-control-plane` passed.
 - `terraform -chdir=infrastructure/terraform/terraform-operations-bootstrap validate` and the corresponding serverless-control-plane validate both passed.
 - `git diff --check` passed.
+- Full local clean-room proof was not run because the existing shared `davdeploy` containers occupy the fixed host ports used by the local stack. I left that running stack untouched; hosted `local-e2e` remains the clean integration check.
 
 ## Evidence files produced
 
