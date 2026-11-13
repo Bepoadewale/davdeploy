@@ -1,4 +1,5 @@
 import ast
+import json
 import re
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -244,8 +245,17 @@ def test_api_can_start_only_this_project_with_the_trusted_run_id_override() -> N
     assert "aws_codebuild_project.nova_plan_only[0].arn" in policy
     assert '"codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]' in policy
     assert '"codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_PLAN_RUN_ID.value" = "?*"' in policy
-    assert '"ForAnyValue:StringNotEquals"' in policy
-    assert "nova_plan_only_blocked_start_build_keys" in policy
+    deny_policy = resource_block(
+        MAIN, "aws_iam_policy", "api_nova_plan_only_start_build_overrides"
+    )
+    attachment = resource_block(
+        MAIN, "aws_iam_role_policy_attachment", "api_nova_plan_only_start_build_overrides"
+    )
+    assert "count = var.enable_nova_plan_only_runner ? 1 : 0" in deny_policy
+    assert "nova_plan_only_blocked_start_build_keys" in deny_policy
+    assert '"ForAnyValue:StringNotEquals"' in deny_policy
+    assert "aws_iam_role.api.name" in attachment
+    assert "aws_iam_policy.api_nova_plan_only_start_build_overrides[0].arn" in attachment
 
 
 def test_nova_plan_credential_route_is_iam_authenticated_and_gateway_bound():
@@ -276,6 +286,40 @@ def test_nova_plan_credential_route_is_iam_authenticated_and_gateway_bound():
         "codebuild:logsConfig",
     ):
         assert override in blocked_keys
+
+    keys = re.findall(r'"(codebuild:[^"]+)"', blocked_keys)
+    deny_policy = resource_block(
+        MAIN, "aws_iam_policy", "api_nova_plan_only_start_build_overrides"
+    )
+    assert len(keys) == 22
+    assert 'for condition_key in local.nova_plan_only_blocked_start_build_keys' in deny_policy
+    policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Deny",
+                "Action": ["codebuild:StartBuild"],
+                "Resource": "arn:aws:codebuild:us-east-1:654654474502:project/davdeploy-nova-plan-only",
+                "Condition": {"Null": {key: "false"}},
+            }
+            for key in keys
+        ]
+        + [
+            {
+                "Effect": "Deny",
+                "Action": ["codebuild:StartBuild"],
+                "Resource": "arn:aws:codebuild:us-east-1:654654474502:project/davdeploy-nova-plan-only",
+                "Condition": {
+                    "ForAnyValue:StringNotEquals": {
+                        "codebuild:environment.environmentVariables.name": [
+                            "DAVDEPLOY_NOVA_PLAN_RUN_ID"
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+    assert len(json.dumps(policy_document, separators=(",", ":"))) < 6144
 
 
 def test_fixed_dispatcher_source_sends_no_other_start_build_arguments() -> None:
