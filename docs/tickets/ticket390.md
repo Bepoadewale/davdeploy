@@ -56,16 +56,19 @@ policy-creation permissions.
 - [x] GitHub apply role gets no new IAM policy-management permission.
 - [x] Focused tests, full verification and Terraform validation pass.
 - [ ] Required CI passes and PR merges.
-- [ ] Bootstrap deployment and fresh protected control-plane plan/apply pass.
-- [ ] A monitored operations-bootstrap plan/apply deploys the permission; then
-  a fresh protected control-plane plan is reviewed before any apply.
+- [x] Bootstrap deployment and fresh protected control-plane plan/apply pass.
+- [x] A monitored operations-bootstrap plan/apply deployed the fixed policy;
+  a fresh protected control-plane plan was reviewed before applying it. Exact
+  release evidence is in `docs/test/test391.md` and the reconciliation PR #391.
 
 ## Acceptance status
 
 - [x] Implementation and local verification complete.
-- [ ] Hosted CI and merge pending.
-- [ ] Bootstrap deployment pending.
-- [ ] Fresh control-plane plan and deployment pending.
+- [x] Hosted CI and merge complete.
+- [x] Bootstrap policy deployment complete.
+- [x] Fresh control-plane plan/apply and read-only verification complete.
+- [x] No customer plan or workload was run; customer pricing, role-permission,
+  apply, health, recovery and teardown evidence remain outstanding.
 
 ## Tests / validation performed
 
@@ -82,10 +85,10 @@ policy-creation permissions.
 
 ## Boundaries
 
-Do not grant IAM policy creation to the GitHub apply role. Do not retry either
-failed control-plane plan. The override-deny policy must remain separate from
-the API role's aggregate inline-policy quota. This PR does not enable customer
-apply or certification.
+The GitHub apply role received no IAM policy-creation permission. The stale
+failed plan was not retried; the override-deny policy remains separate from
+the API role's aggregate inline-policy quota. The deployment enables the Nova
+plan-only control-plane gates, not customer apply or certification.
 
 ## Follow-up work
 
