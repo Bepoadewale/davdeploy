@@ -66,6 +66,45 @@ def test_contract_accepts_a_typed_reference_and_infers_dependency() -> None:
     assert [item.resource_id for item in result.resources] == ["uploads", "api"]
 
 
+def test_proposal_health_recovery_and_cost_evidence_is_bounded() -> None:
+    base = proposal([resource("uploads", "uploads")])
+    base["health_assertions"] = [
+        {
+            "kind": "storage_roundtrip",
+            "target_resource_id": "uploads",
+            "description": "A synthetic object can be stored and read back.",
+        }
+    ]
+    base["recovery"] = {
+        "backup_required": True,
+        "recovery_point_objective_minutes": 60,
+        "recovery_time_objective_minutes": 240,
+        "destructive_change_notes": "Keep the previous object version.",
+    }
+    base["cost_assumptions"] = [
+        {
+            "resource_id": "uploads",
+            "description": "Low initial request volume.",
+            "source": "customer input",
+            "captured_at": "2026-11-13T00:00:00Z",
+        }
+    ]
+    base["assumptions"] = ["Initial request volume is low."]
+    base["limitations"] = ["Health checks have not run."]
+    parsed = GeneratedDeploymentProposal.model_validate(base)
+    assert parsed.health_assertions[0].target_resource_id == "uploads"
+    assert parsed.recovery.backup_required is True
+    assert parsed.cost_assumptions[0].resource_id == "uploads"
+
+    too_many_health_checks = {**base, "health_assertions": base["health_assertions"] * 65}
+    with pytest.raises(ValidationError):
+        GeneratedDeploymentProposal.model_validate(too_many_health_checks)
+
+    overlong_assumption = {**base, "assumptions": ["x" * 501]}
+    with pytest.raises(ValidationError, match="bounded text"):
+        GeneratedDeploymentProposal.model_validate(overlong_assumption)
+
+
 @pytest.mark.parametrize(
     "resources",
     [

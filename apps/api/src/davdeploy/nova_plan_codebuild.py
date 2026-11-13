@@ -272,6 +272,7 @@ def run_nova_plan_build(
         revision_sha256=binding["revision_sha256"],
         stored_object=stored_plan,
         plan=generated_plan,
+        proposal=binding["proposal"],
         policy_digest=policy_sha256,
         created_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         remote_state=(

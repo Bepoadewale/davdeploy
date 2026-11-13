@@ -16,6 +16,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.generated_plan_ownership import (
     UNTAGGABLE_RESOURCE_TYPES_WITH_STATE_OWNERSHIP,
     UntaggedResourceOwnershipRecord,
@@ -316,6 +317,7 @@ def generated_plan_manifest(
     revision_sha256: str,
     stored_object: StoredPlanObject,
     plan: GeneratedTerraformPlan,
+    proposal: GeneratedDeploymentProposal,
     policy_digest: str,
     created_at: str,
     remote_state: dict[str, str] | None = None,
@@ -340,6 +342,14 @@ def generated_plan_manifest(
         or not re.fullmatch(r"[a-f0-9]{64}", plan.plan_access_policy_sha256)
     ):
         raise GeneratedPlanArtifactError("customer plan permission evidence is malformed")
+    if (
+        not isinstance(proposal, GeneratedDeploymentProposal)
+        or proposal.requirements.region != plan.region
+        or canonical_json_digest(proposal.model_dump(mode="json")) != plan.proposal_sha256
+    ):
+        raise GeneratedPlanArtifactError(
+            "proposal verification evidence does not match the saved plan digest"
+        )
     untagged_resources = plan.untagged_resource_ownership
     if untagged_resources and remote_state is None:
         raise GeneratedPlanArtifactError(
@@ -355,11 +365,7 @@ def generated_plan_manifest(
     if len({item.address for item in untagged_resources}) != len(untagged_resources):
         raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
     manifest = {
-        "manifest_version": (
-            6
-            if untagged_resources
-            else 5 if remote_state is not None else 4
-        ),
+        "manifest_version": 7 if untagged_resources else 6 if remote_state is not None else 5,
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -389,6 +395,18 @@ def generated_plan_manifest(
         "customer_plan_access": {
             "version": plan.plan_access_policy_version,
             "session_policy_sha256": plan.plan_access_policy_sha256,
+        },
+        "proposal_requirements": {
+            "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
+            "health_assertions": [
+                item.model_dump(mode="json") for item in proposal.health_assertions
+            ],
+            "recovery": proposal.recovery.model_dump(mode="json"),
+            "cost_assumptions": [
+                item.model_dump(mode="json") for item in proposal.cost_assumptions
+            ],
+            "assumptions": list(proposal.assumptions),
+            "limitations": list(proposal.limitations),
         },
         "summary": {
             "create_count": plan.summary.create_count,

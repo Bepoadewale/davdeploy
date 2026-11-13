@@ -4982,9 +4982,9 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            6
+            7
             if untagged_records
-            else 5 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 4
+            else 6 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 5
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
@@ -5078,6 +5078,7 @@ class ProductService:
             revision_sha256=revision.content_digest,
             stored_object=stored_plan,
             plan=generated_plan,
+            proposal=proposal,
             policy_digest=result["policy_sha256"],
             created_at=manifest.get("created_at"),
             remote_state=remote_state,
@@ -5261,6 +5262,7 @@ class ProductService:
             revision_sha256=revision.content_digest,
             stored_object=stored_object,
             plan=generated_plan,
+            proposal=proposal,
             policy_digest=policy_sha256,
             created_at=now.isoformat().replace("+00:00", "Z"),
         )

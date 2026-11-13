@@ -45,15 +45,22 @@ No hosted customer plan or health probe has run.
   fails closed during persistence.
 - [ ] Existing tenant/state/policy/plan artifact bindings remain intact.
 - [ ] Focused and full verification, docs conventions, and required CI pass.
-- [ ] No customer plan, apply, or AWS workload is executed by this PR.
+- [x] No customer plan, apply, or AWS workload is executed by this PR.
 
 ## Acceptance status
 
-- [ ] Implementation pending.
+- [x] The typed verification and recovery requirements are included in the exact-plan manifest.
+- [x] The manifest labels the requirements as proposed and unexecuted; plan pricing remains unavailable.
+- [x] Manifest construction checks proposal type, region, and canonical digest binding.
+- [x] Focused and full verification passed locally; hosted CI is pending.
+- [x] No customer plan, apply, or AWS workload was executed.
 
 ## Tests / validation performed
 
-- Pending.
+- Focused: `tests/test_generated_deployment_contract.py tests/test_generated_plan_artifacts.py tests/test_nova_plan_codebuild.py tests/test_nova_plan_runs.py` — 122 passed.
+- `make verify` — 1,064 passed; Ruff, OpenAPI snapshot, Actions configuration, and Docker Compose configuration checks passed. One existing Starlette/httpx deprecation warning remains.
+- Documentation convention check and `git diff --check` — passed.
+- GitHub Actions, independent review, and merge remain pending.
 
 ## Evidence files produced
 

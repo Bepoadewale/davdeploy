@@ -525,7 +525,20 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
         "state_id": state_backend.state_id,
         "scope_sha256": state_backend.scope_sha256,
     }
-    assert result_document["manifest"]["manifest_version"] == 5
+    assert result_document["manifest"]["manifest_version"] == 6
+    assert result_document["manifest"]["proposal_requirements"] == {
+        "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
+        "health_assertions": [],
+        "recovery": {
+            "backup_required": False,
+            "recovery_point_objective_minutes": None,
+            "recovery_time_objective_minutes": None,
+            "destructive_change_notes": None,
+        },
+        "cost_assumptions": [],
+        "assumptions": [],
+        "limitations": [],
+    }
     assert state_backend.password not in stored_result.decode()
     assert state_backend.username not in stored_result.decode()
     assert result["result_version_id"] == "output-version-2"

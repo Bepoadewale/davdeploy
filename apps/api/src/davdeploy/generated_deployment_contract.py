@@ -169,7 +169,7 @@ class WorkloadRequirements(StrictContract):
 
 class HealthAssertion(StrictContract):
     kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
-    target_resource_id: str
+    target_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
     description: str = Field(min_length=1, max_length=500)
 
 
@@ -181,7 +181,7 @@ class RecoveryRequirement(StrictContract):
 
 
 class CostAssumption(StrictContract):
-    resource_id: str
+    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
     description: str = Field(min_length=1, max_length=500)
     source: str = Field(min_length=1, max_length=300)
     captured_at: str = Field(min_length=1, max_length=80)
@@ -193,14 +193,19 @@ class GeneratedDeploymentProposal(StrictContract):
     context_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     resources: tuple[GeneratedResource, ...] = Field(min_length=1, max_length=200)
     requirements: WorkloadRequirements
-    health_assertions: tuple[HealthAssertion, ...] = ()
+    health_assertions: tuple[HealthAssertion, ...] = Field(default=(), max_length=64)
     recovery: RecoveryRequirement = Field(default_factory=RecoveryRequirement)
-    cost_assumptions: tuple[CostAssumption, ...] = ()
-    assumptions: tuple[str, ...] = ()
-    limitations: tuple[str, ...] = ()
+    cost_assumptions: tuple[CostAssumption, ...] = Field(default=(), max_length=200)
+    assumptions: tuple[str, ...] = Field(default=(), max_length=64)
+    limitations: tuple[str, ...] = Field(default=(), max_length=64)
 
     @model_validator(mode="after")
     def validate_graph(self) -> GeneratedDeploymentProposal:
+        if any(
+            not isinstance(item, str) or not item.strip() or len(item) > 500
+            for item in (*self.assumptions, *self.limitations)
+        ):
+            raise ValueError("proposal assumptions and limitations must be bounded text")
         by_id: dict[str, GeneratedResource] = {}
         addresses: set[tuple[str, str]] = set()
         for resource in self.resources:
