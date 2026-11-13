@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-12.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-13.3"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -106,12 +106,38 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_rds_cluster_instance": (("publicly_accessible",),),
     "aws_redshift_cluster": (("publicly_accessible",), ("encrypted",)),
     "aws_ebs_volume": (("encrypted",),),
+    "aws_instance": (
+        ("metadata_options", "http_endpoint"),
+        ("metadata_options", "http_tokens"),
+    ),
+    "aws_launch_template": (
+        ("metadata_options", "http_endpoint"),
+        ("metadata_options", "http_tokens"),
+    ),
+    "aws_launch_configuration": (
+        ("metadata_options", "http_endpoint"),
+        ("metadata_options", "http_tokens"),
+    ),
+    "aws_ec2_instance_metadata_defaults": (("http_tokens",),),
     "aws_kms_key": (("key_usage",), ("deletion_window_in_days",)),
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
         ("deletion_protection_enabled",),
         ("point_in_time_recovery", "enabled"),
         ("point_in_time_recovery", "recovery_period_in_days"),
+    ),
+    "aws_network_acl": (("ingress",),),
+    "aws_default_network_acl": (("ingress",),),
+    "aws_network_acl_rule": (
+        ("egress",),
+        ("protocol",),
+        ("rule_action",),
+        ("cidr_block",),
+        ("ipv6_cidr_block",),
+        ("from_port",),
+        ("to_port",),
+        ("icmp_type",),
+        ("icmp_code",),
     ),
 }
 
@@ -207,6 +233,7 @@ def _evaluate(
     _check_dynamodb_recovery(resources, proposal, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
+    _check_instance_metadata(resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -795,6 +822,180 @@ def _check_network(resources: tuple[dict[str, Any], ...], findings: list[PlanPol
                     "The plan exposes a network port to the internet. Confirm that the access is required.",
                 )
 
+    _check_network_acls(resources, findings)
+
+
+def _check_network_acls(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        kind = item.get("type")
+        values = item.get("values")
+        address = item.get("address")
+        if not isinstance(values, dict):
+            if kind in {"aws_network_acl", "aws_default_network_acl", "aws_network_acl_rule"}:
+                _deny(
+                    findings,
+                    "network_acl_ingress_unknown",
+                    address,
+                    "The plan does not make network ACL inbound access clear.",
+                )
+            continue
+
+        if kind in {"aws_network_acl", "aws_default_network_acl"}:
+            rules = values.get("ingress", [])
+            if not isinstance(rules, list):
+                _deny(
+                    findings,
+                    "network_acl_ingress_unknown",
+                    address,
+                    "The plan does not make network ACL inbound access clear.",
+                )
+                continue
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    _deny(
+                        findings,
+                        "network_acl_ingress_unknown",
+                        address,
+                        "The plan does not make network ACL inbound access clear.",
+                    )
+                    continue
+                _check_network_acl_ingress(rule, address, findings)
+        elif kind == "aws_network_acl_rule":
+            egress = values.get("egress")
+            if not isinstance(egress, bool):
+                _deny(
+                    findings,
+                    "network_acl_ingress_unknown",
+                    address,
+                    "The plan does not make network ACL direction clear.",
+                )
+            elif not egress:
+                _check_network_acl_ingress(values, address, findings)
+
+
+def _check_network_acl_ingress(
+    rule: dict[str, Any], address: Any, findings: list[PlanPolicyFinding]
+) -> None:
+    action = rule.get("rule_action")
+    if action == "deny":
+        return
+    if action != "allow":
+        _deny(
+            findings,
+            "network_acl_ingress_unknown",
+            address,
+            "The plan does not make network ACL rule behavior clear.",
+        )
+        return
+    if _network_acl_source_is_unknown(rule):
+        _deny(
+            findings,
+            "network_acl_ingress_unknown",
+            address,
+            "The plan does not make network ACL inbound access clear.",
+        )
+        return
+    source = {
+        "cidr_blocks": [rule["cidr_block"]] if rule.get("cidr_block") else [],
+        "ipv6_cidr_blocks": [rule["ipv6_cidr_block"]] if rule.get("ipv6_cidr_block") else [],
+    }
+    if not _is_public_source(source):
+        return
+
+    protocol = rule.get("protocol")
+    if isinstance(protocol, int) and not isinstance(protocol, bool):
+        protocol = str(protocol)
+    if not isinstance(protocol, str) or not protocol:
+        _deny(
+            findings,
+            "network_acl_ingress_unknown",
+            address,
+            "The plan does not make network ACL protocol exposure clear.",
+        )
+        return
+    if protocol == "-1":
+        _deny(
+            findings,
+            "network_acl_public_all_protocols_denied",
+            address,
+            "The plan allows all inbound network protocols from a public address range.",
+        )
+        return
+
+    low, high = _network_acl_ports(rule)
+    if protocol in {"6", "17", "tcp", "udp"}:
+        if low is None or high is None or low > high:
+            _deny(
+                findings,
+                "network_acl_ingress_unknown",
+                address,
+                "The plan does not make public TCP or UDP ports clear.",
+            )
+            return
+        if any(low <= port <= high for port in RISKY_PUBLIC_PORTS):
+            _deny(
+                findings,
+                "network_acl_public_sensitive_port_denied",
+                address,
+                "The plan exposes an administrative or data port through a public network ACL.",
+            )
+            return
+        if low <= 80 <= high or low <= 443 <= high:
+            _review(
+                findings,
+                "network_acl_public_web_ingress_review",
+                address,
+                "The plan allows public web traffic through a network ACL. Confirm that the service is intended to be public.",
+            )
+        else:
+            _review(
+                findings,
+                "network_acl_public_ingress_review",
+                address,
+                "The plan allows public traffic through a network ACL. Confirm that the access is required.",
+            )
+        return
+
+    _review(
+        findings,
+        "network_acl_public_ingress_review",
+        address,
+        "The plan allows a non-TCP/UDP protocol from a public address range. Confirm that the access is required.",
+    )
+
+
+def _network_acl_source_is_unknown(rule: dict[str, Any]) -> bool:
+    keys = ("cidr_block", "ipv6_cidr_block")
+    present = [key for key in keys if key in rule]
+    if not present:
+        return True
+    found = False
+    for key in present:
+        value = rule[key]
+        if value is None:
+            continue
+        if value == "":
+            continue
+        if not isinstance(value, str):
+            return True
+        try:
+            ipaddress.ip_network(value, strict=False)
+        except ValueError:
+            return True
+        found = True
+    return not found
+
+
+def _network_acl_ports(rule: dict[str, Any]) -> tuple[int | None, int | None]:
+    port_range = rule.get("port_range")
+    if port_range is not None:
+        if not isinstance(port_range, dict):
+            return None, None
+        return _integer(port_range.get("from")), _integer(port_range.get("to"))
+    return _integer(rule.get("from_port")), _integer(rule.get("to_port"))
+
 
 def _check_databases(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]) -> None:
     public_database_types = {
@@ -904,6 +1105,54 @@ def _check_ebs_volumes(
                 "ebs_encryption_required",
                 item.get("address"),
                 "EBS volumes must have encryption enabled.",
+            )
+
+
+def _check_instance_metadata(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        kind = item.get("type")
+        if kind == "aws_ec2_instance_metadata_defaults":
+            values = item.get("values")
+            if not isinstance(values, dict) or values.get("http_tokens") != "required":
+                _deny(
+                    findings,
+                    "instance_metadata_defaults_require_v2",
+                    item.get("address"),
+                    "Regional EC2 metadata defaults must require Instance Metadata Service Version 2 tokens.",
+                )
+            continue
+        if kind not in {
+            "aws_instance",
+            "aws_launch_template",
+            "aws_launch_configuration",
+        }:
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        options = values.get("metadata_options") if isinstance(values, dict) else None
+        if isinstance(options, list):
+            options = options[0] if len(options) == 1 else None
+        if not isinstance(options, dict):
+            _deny(
+                findings,
+                "instance_metadata_options_unknown",
+                address,
+                "The plan does not make instance metadata settings clear.",
+            )
+            continue
+
+        endpoint = options.get("http_endpoint")
+        tokens = options.get("http_tokens")
+        if endpoint == "disabled":
+            continue
+        if endpoint != "enabled" or tokens != "required":
+            _deny(
+                findings,
+                "instance_metadata_v2_required",
+                address,
+                "Instances with metadata access must require Instance Metadata Service Version 2 tokens.",
             )
 
 
@@ -1503,7 +1752,7 @@ def _is_public_source(rule: dict[str, Any]) -> bool:
             network = ipaddress.ip_network(source, strict=False)
         except ValueError:
             continue
-        if network.prefixlen == 0:
+        if network.is_global:
             return True
     return False
 

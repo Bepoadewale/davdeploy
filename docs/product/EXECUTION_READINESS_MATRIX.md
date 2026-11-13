@@ -2,11 +2,11 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-13, after PR #397
+## Current backend source — 2026-11-13, after PR #402
 
 Backend `main` is merge commit
-`12c39b4f495c034824f8ca00c7693a644015e9e3`; merged-main CI run
-[43457148983](https://github.com/Bepoadewale/davdeploy/actions/runs/43457148983)
+`653619d9eb52f717c8c052a4b2aace2d7339b51c`; merged-main CI run
+[43515569852](https://github.com/Bepoadewale/davdeploy/actions/runs/43515569852)
 passed all seven jobs. The latest hosted control-plane package remains PR #390
 commit `ae9ec4450d527141081e95707a1c3ee05126b683` (apply
 [43389226372](https://github.com/Bepoadewale/davdeploy/actions/runs/43389226372));
@@ -21,6 +21,12 @@ separate encrypted/versioned artifact; approval verifies it beside the exact
 saved plan. PR #397 does not add or enable apply and is not deployed. Those
 proposal requirements are marked `PROPOSED_UNVALIDATED_NOT_EXECUTED`; they are
 not health observations or pricing evidence.
+
+PRs #401 and #402 add merged-source network ACL ingress and EC2 metadata
+checks to the deterministic actual-plan policy. Their tests are synthetic and
+CI is on GitHub-hosted runners; neither policy update has been deployed to the
+control plane or exercised on a customer plan. ACL topology/reachability and
+EKS node metadata remain uncovered.
 
 The current control-plane release and the isolated plan-only runner are
 deployed; Nova plan review, runner, credential broker, role verification and
@@ -308,6 +314,15 @@ These entries identify resource roots or module paths. None is automatically a c
 The standalone `infrastructure/terraform/customer-workload-serverless-api` root has isolated AWS evidence, but its `aws-serverless-api` renderer is disabled for ordinary hosted customer execution. PR #275 adds project isolation; PR #284 adds a certification-only API lifecycle guarded by a disabled-by-default flag and explicit workspace allowlist. It remains unproven in hosted AWS. PR #299 adds a separately gated private S3 renderer; it is not customer-enabled and has no real AWS lifecycle evidence. PR #300 adds a single typed S3 bucket-name input and scoped Lambda policy, but it does not enable customer execution. PR #301 adds a gated DynamoDB renderer; PR #302 adds the table-to-API binding; PR #303's dispatcher allowlist correction is deployed. App Runner remains the only generally enabled customer renderer. No hosted AWS lifecycle evidence exists for these gated renderers.
 
 ## Active Nova-led work that remains
+
+The generated actual-plan policy has a narrow, draft-only IMDSv2 check for
+planned `aws_instance`, `aws_launch_template`, and
+`aws_launch_configuration` resources. It also requires planned regional
+`aws_ec2_instance_metadata_defaults.http_tokens = "required"`; this resource
+sets defaults and is not an enforcement control, so launch-specific values
+still require checks. This does not cover EKS nodes, all Auto Scaling behavior,
+or all compute resources. Evidence is tracked under draft PR #402 and is not
+hosted customer-execution evidence.
 
 1. Install and verify the versioned plan-role template in an authorized test/customer account; keep role trust/account verification separate from effective-permission claims. PR #369 enabled the trust/account verification gate, but customer installation and effective-permission evidence are still absent.
 2. Inject tenant-scoped remote state through the isolated state API and plan worker, with locking, verified identity and artifact boundaries; current infrastructure storage exists, but runtime access and worker dispatch remain disabled.

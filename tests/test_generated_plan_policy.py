@@ -160,6 +160,51 @@ def evaluate(document=None, proposal_value=None):
     )
 
 
+def add_policy_resource(document, kind, name, arguments, *, after_unknown=None):
+    address = f"{kind}.{name}"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, kind, arguments)
+    )
+    unknown = after_unknown if after_unknown is not None else {}
+    document["resource_changes"].append(
+        change(address, kind, after_unknown=unknown)
+    )
+    resources = [item.model_dump(mode="json") for item in proposal().resources]
+
+    resources.append(
+        {
+            "resource_id": name.replace("_", "-"),
+            "resource_type": kind,
+            "name": name,
+            "arguments": arguments,
+            "rationale": "Apply the requested compute configuration with bounded metadata access.",
+        }
+    )
+    return proposal(resources)
+
+
+def add_network_resource(document, kind, name, arguments, *, after_unknown=None):
+    address = f"{kind}.{name}"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, kind, arguments)
+    )
+    changes = {}
+    if after_unknown is not None:
+        changes["after_unknown"] = after_unknown
+    document["resource_changes"].append(change(address, kind, **changes))
+    proposal_resources = [item.model_dump(mode="json") for item in proposal().resources]
+    proposal_resources.append(
+        {
+            "resource_id": name.replace("_", "-"),
+            "resource_type": kind,
+            "name": name,
+            "arguments": arguments,
+            "rationale": "Apply a bounded network access rule for the application.",
+        }
+    )
+    return proposal(proposal_resources)
+
+
 def dynamodb_case(point_in_time_recovery=_OMIT, *, backup_required=False, after_unknown=None):
     table_values = {
         "name": "app-records",
@@ -410,6 +455,166 @@ def test_secure_composed_s3_plan_is_eligible_only_for_human_review():
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert result.human_approval_required is True
     assert result.findings == ()
+
+
+@pytest.mark.parametrize(
+    ("kind", "options"),
+    [
+        (
+            "aws_instance",
+            {"http_endpoint": "enabled", "http_tokens": "required"},
+        ),
+        (
+            "aws_launch_template",
+            [{"http_endpoint": "enabled", "http_tokens": "required"}],
+        ),
+        (
+            "aws_launch_configuration",
+            [{"http_endpoint": "enabled", "http_tokens": "required"}],
+        ),
+    ],
+)
+def test_ec2_metadata_access_requires_imdsv2_tokens(kind, options):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document, kind, "secure_compute", {"metadata_options": options}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("instance_metadata_") for code in codes(result))
+
+
+@pytest.mark.parametrize("kind", ["aws_instance", "aws_launch_template"])
+def test_ec2_metadata_endpoint_may_be_explicitly_disabled(kind):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        kind,
+        "metadata_disabled",
+        {
+            "metadata_options": {
+                "http_endpoint": "disabled",
+                "http_tokens": "optional",
+            }
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("instance_metadata_") for code in codes(result))
+
+
+@pytest.mark.parametrize("kind", ["aws_instance", "aws_launch_template"])
+def test_ec2_metadata_endpoint_with_optional_tokens_is_denied(kind):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        kind,
+        "imdsv1_compatible",
+        {
+            "metadata_options": {
+                "http_endpoint": "enabled",
+                "http_tokens": "optional",
+            }
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_v2_required" in codes(result)
+
+
+def test_regional_ec2_metadata_defaults_must_require_imdsv2():
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        "aws_ec2_instance_metadata_defaults",
+        "regional_defaults",
+        {"region": REGION, "http_tokens": "required"},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "instance_metadata_defaults_require_v2" not in codes(result)
+
+
+@pytest.mark.parametrize("tokens", ["optional", "no_preference"])
+def test_regional_ec2_metadata_defaults_that_do_not_require_imdsv2_are_denied(tokens):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        "aws_ec2_instance_metadata_defaults",
+        "regional_defaults",
+        {"region": REGION, "http_tokens": tokens},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_defaults_require_v2" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [None, [], [{"http_endpoint": "enabled"}, {"http_endpoint": "disabled"}]],
+)
+def test_malformed_or_missing_ec2_metadata_options_are_denied(options):
+    document = plan()
+    proposal_value = add_policy_resource(
+        document,
+        "aws_instance",
+        "unknown_metadata",
+        {"metadata_options": options},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_options_unknown" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "aws_instance",
+        "aws_launch_template",
+        "aws_launch_configuration",
+        "aws_ec2_instance_metadata_defaults",
+    ],
+)
+def test_unknown_ec2_metadata_token_requirement_is_denied(kind):
+    document = plan()
+    options = (
+        {"http_tokens": "required"}
+        if kind == "aws_ec2_instance_metadata_defaults"
+        else {
+            "metadata_options": [
+                {"http_endpoint": "enabled", "http_tokens": "required"}
+            ]
+        }
+    )
+    unknown = (
+        {"http_tokens": True}
+        if kind == "aws_ec2_instance_metadata_defaults"
+        else {"metadata_options": [{"http_tokens": True}]}
+    )
+    proposal_value = add_policy_resource(
+        document,
+        kind,
+        "unknown_tokens",
+        options,
+        after_unknown=unknown,
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 @pytest.mark.parametrize(
@@ -1007,6 +1212,255 @@ def test_scoped_security_group_source_is_not_treated_as_unknown_or_public():
     result = evaluate(document, proposal_value)
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert result.findings == ()
+
+
+@pytest.mark.parametrize(
+    ("source_key", "source", "port"),
+    [
+        ("cidr_block", "8.0.0.0/8", 22),
+        ("cidr_block", "1.1.1.1/32", 5432),
+        ("ipv6_cidr_block", "2606:4700::/32", 3306),
+    ],
+)
+def test_public_network_acl_admin_and_data_ports_are_denied(source_key, source, port):
+    document = plan()
+    other_source_key = "ipv6_cidr_block" if source_key == "cidr_block" else "cidr_block"
+    arguments = {
+        "egress": False,
+        "protocol": "6",
+        "rule_action": "allow",
+        "rule_number": 100,
+        "from_port": port,
+        "to_port": port,
+        source_key: source,
+        other_source_key: None,
+    }
+    proposal_value = add_network_resource(document, "aws_network_acl_rule", "public", arguments)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "network_acl_public_sensitive_port_denied" in codes(result)
+
+
+def test_public_network_acl_all_protocols_is_denied():
+    document = plan()
+    proposal_value = add_network_resource(
+        document,
+        "aws_network_acl_rule",
+        "all_protocols",
+        {
+            "egress": False,
+            "protocol": "-1",
+            "rule_action": "allow",
+            "rule_number": 100,
+            "cidr_block": "1.1.1.0/24",
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "network_acl_public_all_protocols_denied" in codes(result)
+
+
+def test_public_network_acl_web_ingress_requires_review():
+    document = plan()
+    proposal_value = add_network_resource(
+        document,
+        "aws_network_acl_rule",
+        "public_web",
+        {
+            "egress": False,
+            "protocol": "6",
+            "rule_action": "allow",
+            "rule_number": 100,
+            "from_port": 443,
+            "to_port": 443,
+            "cidr_block": "1.1.1.0/24",
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "network_acl_public_web_ingress_review" in codes(result)
+
+
+def test_private_network_acl_ingress_and_public_egress_are_not_public_ingress():
+    document = plan()
+    proposal_resources = add_network_resource(
+        document,
+        "aws_network_acl_rule",
+        "private_ingress",
+        {
+            "egress": False,
+            "protocol": "6",
+            "rule_action": "allow",
+            "rule_number": 100,
+            "from_port": 8080,
+            "to_port": 8080,
+            "cidr_block": "10.0.0.0/8",
+        },
+    )
+    proposal_value = add_network_resource(
+        document,
+        "aws_network_acl_rule",
+        "public_egress",
+        {
+            "egress": True,
+            "protocol": "-1",
+            "rule_action": "allow",
+            "rule_number": 101,
+            "cidr_block": "0.0.0.0/0",
+        },
+    )
+    # Retain both proposed resources in the test contract.
+    proposal_value = proposal(
+        [item.model_dump(mode="json") for item in proposal_resources.resources]
+        + [item.model_dump(mode="json") for item in proposal_value.resources if item.resource_id == "public-egress"]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("network_acl_public_") for code in codes(result))
+
+
+def test_network_acl_malformed_and_unknown_values_fail_closed():
+    document = plan()
+    proposal_value = add_network_resource(
+        document,
+        "aws_network_acl_rule",
+        "unknown_source",
+        {
+            "egress": False,
+            "protocol": "6",
+            "rule_action": "allow",
+            "rule_number": 100,
+            "from_port": 80,
+            "to_port": 80,
+            "cidr_block": "not-a-cidr",
+        },
+    )
+    assert "network_acl_ingress_unknown" in codes(evaluate(document, proposal_value))
+
+    document = plan()
+    proposal_value = add_network_resource(
+        document,
+        "aws_network_acl_rule",
+        "unknown_port",
+        {
+            "egress": False,
+            "protocol": "6",
+            "rule_action": "allow",
+            "rule_number": 100,
+            "from_port": 80,
+            "to_port": 80,
+            "cidr_block": "1.1.1.0/24",
+        },
+        after_unknown={"to_port": True},
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_inline_network_acl_public_sensitive_ingress_is_denied():
+    document = plan()
+    proposal_value = add_network_resource(
+        document,
+        "aws_network_acl",
+        "application",
+        {
+            "vpc_id": "vpc-0123456789abcdef0",
+            "ingress": [
+                {
+                    "protocol": "6",
+                    "rule_action": "allow",
+                    "rule_no": 100,
+                    "from_port": 22,
+                    "to_port": 22,
+                    "cidr_block": "1.1.1.0/24",
+                }
+            ],
+            "egress": [],
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "network_acl_public_sensitive_port_denied" in codes(result)
+
+
+def test_default_network_acl_public_data_ingress_is_denied():
+    document = plan()
+    proposal_value = add_network_resource(
+        document,
+        "aws_default_network_acl",
+        "default",
+        {
+            "default_network_acl_id": "acl-0123456789abcdef0",
+            "ingress": [
+                {
+                    "protocol": "6",
+                    "rule_action": "allow",
+                    "rule_no": 100,
+                    "from_port": 27017,
+                    "to_port": 27017,
+                    "cidr_block": "8.8.8.0/24",
+                }
+            ],
+            "egress": [],
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "network_acl_public_sensitive_port_denied" in codes(result)
+
+
+def test_publicly_routable_security_group_cidr_is_not_limited_to_world_open_cidr():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            "aws_security_group_rule.public_database",
+            "aws_security_group_rule",
+            {
+                "protocol": "tcp",
+                "from_port": 5432,
+                "to_port": 5432,
+                "cidr_blocks": ["1.1.1.0/24"],
+            },
+        )
+    )
+    document["resource_changes"].append(
+        change("aws_security_group_rule.public_database", "aws_security_group_rule")
+    )
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "public-database",
+                "resource_type": "aws_security_group_rule",
+                "name": "public_database",
+                "arguments": {
+                    "protocol": "tcp",
+                    "from_port": 5432,
+                    "to_port": 5432,
+                    "cidr_blocks": ["1.1.1.0/24"],
+                },
+                "rationale": "This fixture verifies non-default public CIDRs are recognized.",
+            },
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "public_sensitive_port" in codes(result)
 
 
 @pytest.mark.parametrize(

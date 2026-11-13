@@ -76,6 +76,19 @@ class GeneratedResource(StrictContract):
                 "tokenvalidityunits",
             }:
                 return False
+            if (
+                normalized == "httptokens"
+                and isinstance(value, str)
+                and (
+                    value.casefold() in {"optional", "required"}
+                    or (
+                        self.resource_type == "aws_ec2_instance_metadata_defaults"
+                        and parent_key is None
+                        and value.casefold() == "no_preference"
+                    )
+                )
+            ):
+                return False
             if normalized_parent == "tokenvalidityunits" and normalized in {
                 "accesstoken",
                 "idtoken",
