@@ -44,7 +44,8 @@ has been applied or certified.
 - [x] Public web/general ingress requires review; private/scoped ingress is not
       misclassified as public.
 - [x] Focused tests, full verification, docs convention, and diff checks pass.
-- [ ] Required hosted CI passes on the final PR head.
+- [x] Required hosted CI passed on implementation commit `481c386` in run
+      `43498568620`; this evidence-only update is subject to its own CI run.
 - [x] No apply, deployment, or AWS resource mutation occurs.
 
 ## Acceptance status
