@@ -1,0 +1,60 @@
+# ticket403 — reconcile Nova plan-policy status after PRs #401 and #402
+
+PR: https://github.com/Bepoadewale/davdeploy/pull/403 (draft)
+Branch: `docs/nova-policy-matrix-status-403`
+
+## Goal
+
+Update the technical status and capability evidence to reflect that PRs #401
+and #402 are merged source. Preserve the limits of both policy checks and
+continue to distinguish merged source from deployment and customer execution.
+
+## Current repo state
+
+Backend `main` is `653619d` after PR #402. PR #401/#402 modify deterministic
+policy on actual Terraform plans; neither applies infrastructure nor proves
+Nova-hosted customer execution. The control plane is deployed through PR #390.
+Pricing remains held; exact-plan customer apply, health, recovery, and teardown
+are not available.
+
+## References
+
+- [`EXECUTION_READINESS_MATRIX.md`](../product/EXECUTION_READINESS_MATRIX.md)
+- [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](../product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
+- [`ticket401.md`](ticket401.md)
+- [`ticket402.md`](ticket402.md)
+- [`test401.md`](../test/test401.md)
+- [`test402.md`](../test/test402.md)
+
+## Work planned
+
+- Replace draft-only wording with merged-source wording for the network ACL
+  and EC2 metadata policy checks.
+- Add their exact CI and test evidence without claiming AWS deployment or
+  customer workload coverage.
+- Preserve the network topology, EC2 default-override, and wider capability
+  gaps.
+- Reconcile ticket #402's PR state and keep pricing/apply/lifecycle blockers
+  clear.
+
+## Acceptance criteria
+
+- [ ] Both matrices identify #401/#402 as merged source and preserve limits.
+- [ ] Ticket #402 no longer reports the PR as open/draft.
+- [ ] No hosted or deployed customer capability is claimed.
+- [ ] Documentation conventions and diff checks pass.
+- [ ] Required GitHub checks pass on the final evidence revision.
+
+## Evidence
+
+`docs/test/test403.md`; documentation-only change, no runtime or cloud tests.
+
+## Boundaries
+
+This PR records source and test evidence only. It does not change policy code,
+deploy the policy to AWS, enable apply, or claim customer workload readiness.
+
+## Follow-up
+
+Continue the hosted plan, pricing, exact approval, apply, health, recovery,
+teardown, and composed-scenario gates in the private goal ledger.
