@@ -93,3 +93,21 @@ On 2026-10-09, authenticated Terraform plans and identity-only applies completed
 CI validates Terraform and Kubernetes contracts. The manual GitHub OIDC saved-plan workflow has been
 dispatched successfully for the hosted serverless control-plane releases. That proves the platform
 trust route only; it does not authorise a customer-workload Terraform apply or destroy.
+
+## Latest hosted Nova plan-only control-plane deployment — 2026-11-13
+
+Backend `main` commit `ae9ec4450d527141081e95707a1c3ee05126b683` (PR #390)
+was deployed using protected plan [43388286514](https://github.com/Bepoadewale/davdeploy/actions/runs/43388286514)
+and exact saved-plan apply [43389226372](https://github.com/Bepoadewale/davdeploy/actions/runs/43389226372).
+The reviewed plan had 1 addition, 8 in-place changes, and 0 destroys or
+replacements. Database migration verification passed. Read-only verification
+confirmed the fixed `nova-plan-only-start-build-overrides` policy is attached
+to `davdeploy-api`, the API Lambda is Active/Successful with
+`CodeSha256=E1O6BxLyyxTN/epgvT0pyCkQU1bE4QXi+drUAp+cE+I=`, and `/healthz`
+returned HTTP 200 in account `654654474502`, region `us-east-1`. The isolated
+plan-only CodeBuild project uses its fixed service role and pinned runner
+release. Nova plan reviews, runner readiness, role verification, credential
+broker, and state storage/API are enabled in the hosted control plane; hosted
+certification remains disabled. No customer plan or workload was run, and
+pricing approval, customer-role permission proof, and customer lifecycle
+certification remain incomplete. Evidence: [`test391.md`](docs/test/test391.md).
