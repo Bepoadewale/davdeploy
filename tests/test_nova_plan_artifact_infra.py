@@ -75,14 +75,15 @@ def test_composed_nova_runner_configuration_enables_recovery_and_scoped_start_on
     assert '"codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]' in start_policy
 
     override_policy = terraform.split(
-        'resource "aws_iam_policy" "api_nova_plan_only_start_build_overrides"', 1
-    )[1].split('\nresource "', 1)[0]
+        'data "aws_iam_policy" "api_nova_plan_only_start_build_overrides"', 1
+    )[1].split("\n}", 1)[0]
     override_attachment = terraform.split(
         'resource "aws_iam_role_policy_attachment" "api_nova_plan_only_start_build_overrides"',
         1,
     )[1].split('\nresource "', 1)[0]
-    assert "nova_plan_only_blocked_start_build_keys" in override_policy
+    assert "policy/nova-plan-only-start-build-overrides" in override_policy
     assert "aws_iam_role.api.name" in override_attachment
+    assert "data.aws_iam_policy.api_nova_plan_only_start_build_overrides.arn" in override_attachment
 
     review_policy = terraform.split('resource "aws_iam_role_policy" "api"', 1)[1].split(
         '\nresource "aws_iam_role_policy" "api_nova_plan_only_codebuild"', 1

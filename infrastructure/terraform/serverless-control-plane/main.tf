@@ -18,30 +18,6 @@ locals {
   nova_plan_only_scoped_input_key      = "${local.nova_plan_only_scoped_prefix}/input.json"
   nova_plan_only_scoped_result_key     = "${local.nova_plan_only_scoped_prefix}/result.json"
   nova_plan_only_scoped_saved_plan_key = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.tfplan"
-  nova_plan_only_blocked_start_build_keys = [
-    "codebuild:autoRetryLimit",
-    "codebuild:source.buildspec",
-    "codebuild:source",
-    "codebuild:source.location",
-    "codebuild:source.auth.resource",
-    "codebuild:source.auth.type",
-    "codebuild:source.insecureSsl",
-    "codebuild:serviceRole",
-    "codebuild:environment.image",
-    "codebuild:environment.type",
-    "codebuild:environment.computeType",
-    "codebuild:environment.privilegedMode",
-    "codebuild:environment.imagePullCredentialsType",
-    "codebuild:environment.registryCredential",
-    "codebuild:environment.certificate",
-    "codebuild:environment.fleet.fleetArn",
-    "codebuild:artifacts",
-    "codebuild:secondaryArtifacts",
-    "codebuild:secondarySources",
-    "codebuild:encryptionKey",
-    "codebuild:cache",
-    "codebuild:logsConfig",
-  ]
 }
 
 data "aws_availability_zones" "available" {
@@ -420,48 +396,15 @@ resource "aws_iam_role_policy" "api_nova_plan_only_codebuild" {
 # Keep the explicit StartBuild override denies on a separate managed policy.
 # The API role already has several inline policies, whose aggregate AWS limit
 # is 10,240 bytes; the fixed deny list must not be removed to fit that limit.
-resource "aws_iam_policy" "api_nova_plan_only_start_build_overrides" {
-  count = var.enable_nova_plan_only_runner ? 1 : 0
-
-  name = "nova-plan-only-start-build-overrides"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(
-      # IAM evaluates different condition keys in one condition block as AND.
-      # One explicit Deny per IAM-exposed override key ensures any one override
-      # rejects StartBuild. The fixed dispatcher also limits request arguments
-      # for fields without a corresponding IAM condition key.
-      [
-        for condition_key in local.nova_plan_only_blocked_start_build_keys : {
-          Effect   = "Deny"
-          Action   = ["codebuild:StartBuild"]
-          Resource = aws_codebuild_project.nova_plan_only[0].arn
-          Condition = {
-            Null = { (condition_key) = "false" }
-          }
-        }
-      ],
-      [
-        {
-          Effect   = "Deny"
-          Action   = ["codebuild:StartBuild"]
-          Resource = aws_codebuild_project.nova_plan_only[0].arn
-          Condition = {
-            "ForAnyValue:StringNotEquals" = {
-              "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_PLAN_RUN_ID"]
-            }
-          }
-        }
-      ]
-    )
-  })
+data "aws_iam_policy" "api_nova_plan_only_start_build_overrides" {
+  arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/nova-plan-only-start-build-overrides"
 }
 
 resource "aws_iam_role_policy_attachment" "api_nova_plan_only_start_build_overrides" {
   count = var.enable_nova_plan_only_runner ? 1 : 0
 
   role       = aws_iam_role.api.name
-  policy_arn = aws_iam_policy.api_nova_plan_only_start_build_overrides[0].arn
+  policy_arn = data.aws_iam_policy.api_nova_plan_only_start_build_overrides.arn
 }
 
 resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
