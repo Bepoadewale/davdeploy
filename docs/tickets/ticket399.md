@@ -30,8 +30,9 @@ file must remain untouched.
 - `apps/api/src/davdeploy/service.py` (`approve_generated_plan_artifact`)
 - `infrastructure/terraform/serverless-control-plane/main.tf`
 - `infrastructure/terraform/terraform-operations-bootstrap/main.tf`
-- Official CodeBuild `StartBuild` override controls and Terraform saved-plan
-  behavior, recorded in the private handoff.
+- [CodeBuild StartBuild API](https://docs.aws.amazon.com/codebuild/latest/APIReference/API_StartBuild.html)
+- [CodeBuild IAM condition keys](https://docs.aws.amazon.com/codebuild/latest/userguide/action-context-keys.html)
+- [Terraform apply command and saved-plan behavior](https://developer.hashicorp.com/terraform/cli/commands/apply)
 
 ## Work planned for the PR
 
