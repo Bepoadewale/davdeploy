@@ -62,6 +62,8 @@ Nova workload has been applied or certified.
 - [x] Focused tests, full verification, docs convention, and diff checks pass.
 - [x] Hosted CI passed all seven checks for implementation commit `30b00b9`
       in run [`43508435135`](https://github.com/Bepoadewale/davdeploy/actions/runs/43508435135).
+- [x] Combined PR #401/#402 revision passed all seven checks in run
+      [`43511986076`](https://github.com/Bepoadewale/davdeploy/actions/runs/43511986076).
 - [x] No AWS resource is created, updated, or deleted.
 
 ## Acceptance status
@@ -69,16 +71,18 @@ Nova workload has been applied or certified.
 The expanded launch-configuration and regional-default coverage passed all
 seven checks on `30b00b9`. After PR #401 merged, this branch integrated its
 network ACL policy and bumped the shared policy version to `.3`. The combined
-revision passes local focused/full checks; hosted CI is pending. The PR remains
-a draft; no Nova execution or AWS workload is enabled.
+revision passes local focused/full checks and all seven hosted CI checks in
+run `43511986076`. The PR remains a draft; no Nova execution or AWS workload
+is enabled.
 
 ## Tests / validation performed
 
 The original implementation passed focused tests (222), full verification
 (1,111), and all seven checks in runs `43508435135` and `43509145986`. After
-integrating PR #401, combined focused suites passed (232) and `make verify`
-passed (1,121 tests); refreshed docs convention, diff, and hosted CI checks are
-pending. Exact commands are recorded in `docs/test/test402.md`.
+integrating PR #401, combined focused suites passed (232), `make verify`
+passed (1,121 tests), and all seven checks passed in run `43511986076`.
+Documentation conventions and diff checks pass. Exact commands are recorded
+in `docs/test/test402.md`.
 
 ## Evidence files produced
 

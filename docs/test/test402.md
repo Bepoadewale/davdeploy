@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: local integration of merged main `53503f5` with PR #402 (combined revision; CI pending)
+Commit: `079aea6` (combined source revision; final evidence commit and CI follow)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -18,6 +18,8 @@ JSON and local proposal objects.
 - `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399`
 - `GITHUB_PR_NUMBER=402 /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python scripts/check_doc_conventions.py`
 - `git diff --check`
+- GitHub Actions CI run `43511986076` passed all seven jobs for combined
+  revision `079aea6`.
 - GitHub Actions CI run `43502219872` passed all seven jobs for implementation
   commit `53ab621`.
 - GitHub Actions CI run `43503068011` passed all seven jobs for evidence
@@ -47,8 +49,9 @@ PR #401 merged to main at `53503f5` and adds network ACL policy checks. This
 PR branch integrates that policy alongside the EC2 metadata checks and uses
 shared policy version `nova-generated-plan-2026-11-13.3`. The combined focused
 plan-policy and proposal-contract suites passed (232 tests). `make verify`
-passed with 1,121 tests. The matrix now records both checks and their limits.
-Final commit, docs checks, and CI for this combined revision are pending.
+passed with 1,121 tests. The matrix records both checks and their limits.
+Documentation conventions and diff checks passed; all seven hosted jobs passed
+for this combined revision in run `43511986076`.
 
 ## Teardown
 
