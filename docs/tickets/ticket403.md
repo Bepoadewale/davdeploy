@@ -46,22 +46,22 @@ are not available.
 - [x] Required GitHub checks passed all seven jobs in run
       [`43518623188`](https://github.com/Bepoadewale/davdeploy/actions/runs/43518623188)
       for implementation revision `b117109`.
-- [x] Final evidence revision `1e3e8be` passed all seven jobs in run
-      [`43523226256`](https://github.com/Bepoadewale/davdeploy/actions/runs/43523226256).
+- [x] Final evidence revision `b42bb4c` passed all seven jobs in run
+      [`43523893137`](https://github.com/Bepoadewale/davdeploy/actions/runs/43523893137).
 
 ## Acceptance status
 
 Status and capability documents reflect the merged policy checks and their
 limits. Local documentation conventions, diff checks, and all seven hosted CI
-jobs pass on both recorded revisions, including final head `1e3e8be`. No source
+jobs pass on both recorded revisions, including final head `b42bb4c`. No source
 capability is deployed by this documentation PR.
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=403 ... scripts/check_doc_conventions.py` and
 `git diff --check` passed. GitHub Actions run `43518623188` passed all seven
-jobs for `b117109`; final evidence revision `1e3e8be` passed all seven jobs in
-run `43523226256`.
+jobs for `b117109`; final evidence revision `b42bb4c` passed all seven jobs in
+run `43523893137`.
 
 ## Evidence files produced
 
