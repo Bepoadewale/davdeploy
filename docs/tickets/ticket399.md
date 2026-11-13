@@ -13,13 +13,16 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend main is `4bd4c55d1c6343546ca5cc2b70886d15fae36b31` after PR #400;
-merged-main CI run `43473967717` passed all seven jobs. PR #397 persists the
-encrypted/versioned workspace artifact beside the exact saved plan. Generated
-plan approval still fails closed because complete trusted regional pricing is
-unavailable; PR #318 is closed and held for account-owner direction. No Nova
-customer workload has been applied. The protected untracked `--only-show-errors`
-file must remain untouched.
+Backend `main` is `0e07f6b1886f84f3c0c6e8397d1105430e574fd4` after PR #403;
+merged-main CI run `43525834890` passed all seven jobs. PRs #401/#402 add
+merged-source network ACL and EC2 metadata checks; PR #403 reconciles their
+status and limitations. This branch includes those changes through merge
+commit `3ad0086`; combined `make verify` passes with 1,144 tests. PR #397
+persists the encrypted/versioned workspace artifact beside the exact saved
+plan. Generated-plan approval still fails closed because complete trusted
+regional pricing is unavailable; PR #318 remains closed and held for
+account-owner direction. No Nova customer workload has been applied. The
+protected untracked `--only-show-errors` file must remain untouched.
 
 ## Research / references used
 

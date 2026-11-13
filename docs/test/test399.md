@@ -4,7 +4,7 @@ Date: 2026-11-13
 Execution type: two isolated local Docker and fixture proofs only
 Customer repository: `Bepoadewale/davdeploy`
 Branch: `feat/nova-exact-plan-apply-399`
-Commit: pending (working tree based on `fadaa5a`)
+Commit: `3ad0086` (PR #399 branch merged with latest main; final ticket/evidence update pending)
 AWS account: none (no AWS execution)
 AWS region: none (no AWS execution)
 
@@ -58,6 +58,15 @@ state files, along with `.venv-pr399`, were retained. The pre-existing
 - Latest `make verify`: 1,115 tests passed; Ruff, Actions configuration,
   OpenAPI, and Compose checks passed. One existing Starlette/httpx deprecation
   warning. Documentation convention and `git diff --check` also passed.
+
+## Combined mainline verification — 2026-11-14
+
+The PR #399 branch merged current `origin/main` at PR #403 merge commit
+`0e07f6b` with no conflicts. Combined `make verify VENV=.venv-pr399` passed
+1,144 tests, Ruff, Actions configuration, OpenAPI, and Docker Compose checks.
+One existing Starlette/httpx deprecation warning remains. This merge adds the
+source-only #401/#402 actual-plan policy checks; it does not add apply
+dispatch, enable an apply gate, or establish trusted pricing.
 
 The local proof uses the existing fixture executor. It is not evidence that a
 customer AWS plan was applied, that application health was observed, or that
