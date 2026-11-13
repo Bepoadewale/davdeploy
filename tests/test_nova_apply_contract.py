@@ -13,18 +13,23 @@ from davdeploy.nova_apply_contract import (
     NovaApplyContractError,
     validate_nova_apply_request,
 )
+from davdeploy.terraform_state import terraform_state_scope_digest
 
 
 def _request_document(*, now: datetime | None = None) -> dict:
     current = now or datetime.now(UTC)
     run_id = str(uuid4())
     source_plan_run_id = str(uuid4())
+    organization_id = str(uuid4())
+    project_id = str(uuid4())
+    revision_id = str(uuid4())
+    environment_id = str(uuid4())
     project = "davdeploy-nova-apply"
     build_arn = f"arn:aws:codebuild:us-east-1:654654474502:build/{project}:build-abc123"
     plan = {
         "bucket": "davdeploy-plans-654654474502",
         "key": S3GeneratedPlanArtifactStore._key(
-            "org-1", "project-1", "revision-1", source_plan_run_id, "a" * 64
+            organization_id, project_id, revision_id, source_plan_run_id, "a" * 64
         ),
         "version_id": "plan-version-1",
         "size_bytes": 512,
@@ -33,9 +38,9 @@ def _request_document(*, now: datetime | None = None) -> dict:
     workspace = {
         "bucket": "davdeploy-plans-654654474502",
         "key": S3GeneratedPlanArtifactStore._key(
-            "org-1",
-            "project-1",
-            "revision-1",
+            organization_id,
+            project_id,
+            revision_id,
             source_plan_run_id,
             "b" * 64,
             artifact_kind="workspace",
@@ -46,11 +51,22 @@ def _request_document(*, now: datetime | None = None) -> dict:
     }
     manifest = {
         "tenant": {
-            "organization_id": "org-1",
-            "project_id": "project-1",
-            "revision_id": "revision-1",
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "revision_id": revision_id,
+            "environment_id": environment_id,
         },
         "target": {"account_id": "654654474502", "region": "us-east-1"},
+        "remote_state": {
+            "state_id": str(uuid4()),
+            "scope_sha256": terraform_state_scope_digest(
+                organization_id=organization_id,
+                project_id=project_id,
+                environment_id=environment_id,
+                target_account_id="654654474502",
+                region="us-east-1",
+            ),
+        },
         "digests": {
             "saved_plan_sha256": plan["sha256"],
             "workspace_sha256": workspace["sha256"],
@@ -75,9 +91,9 @@ def _request_document(*, now: datetime | None = None) -> dict:
         "codebuild_project": project,
         "codebuild_build_arn": build_arn,
         "tenant": {
-            "organization_id": "org-1",
-            "project_id": "project-1",
-            "revision_id": "revision-1",
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "revision_id": revision_id,
             "artifact_id": "artifact-1",
             "source_plan_run_id": source_plan_run_id,
         },
@@ -88,9 +104,9 @@ def _request_document(*, now: datetime | None = None) -> dict:
         "approval": {
             "approval_id": "approval-1",
             "state": "APPROVED",
-            "organization_id": "org-1",
-            "project_id": "project-1",
-            "revision_id": "revision-1",
+            "organization_id": organization_id,
+            "project_id": project_id,
+            "revision_id": revision_id,
             "artifact_id": "artifact-1",
             "approved_manifest_sha256": manifest_sha256,
             "approver_subject": "admin-1",
@@ -174,6 +190,26 @@ def test_rejects_stale_actor_authorization():
 
     with pytest.raises(NovaApplyContractError, match="authorization is stale or expired"):
         _validate(document, now=now)
+
+
+def test_rejects_apply_without_tenant_scoped_remote_state():
+    document = _request_document()
+    document["manifest"].pop("remote_state")
+    document["manifest_sha256"] = canonical_json_digest(document["manifest"])
+    document["approval"]["approved_manifest_sha256"] = document["manifest_sha256"]
+
+    with pytest.raises(NovaApplyContractError, match="requires tenant-scoped remote"):
+        _validate(document)
+
+
+def test_rejects_remote_state_scope_for_another_environment():
+    document = _request_document()
+    document["manifest"]["remote_state"]["scope_sha256"] = "0" * 64
+    document["manifest_sha256"] = canonical_json_digest(document["manifest"])
+    document["approval"]["approved_manifest_sha256"] = document["manifest_sha256"]
+
+    with pytest.raises(NovaApplyContractError, match="scope does not match"):
+        _validate(document)
 
 
 def test_rejects_wrong_codebuild_run_identity():

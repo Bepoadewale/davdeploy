@@ -59,8 +59,9 @@ file must remain untouched.
   bound to its exact immutable manifest cannot reach a credentialed apply step.
 - [ ] Apply verifies and uses the exact saved-plan and workspace versions and
   their manifests; changed, stale, cross-tenant, or mismatched artifacts fail
-  closed. Contract and workspace restore checks are implemented; apply dispatch
-  and execution are not.
+  closed. Contract and workspace restore checks are implemented. The contract
+  also rejects plans without tenant-scoped remote state; apply dispatch and
+  execution are not implemented.
 - [ ] The worker is idempotent and reports uncertain outcomes for reconciliation
   instead of retrying an apply blindly.
 - [ ] Apply uses a separate CodeBuild project and IAM role with explicit denies
@@ -80,12 +81,16 @@ file must remain untouched.
 
 - PR #398 merged-main CI `43460570905` passed all seven jobs.
 - Focused contract and workspace tests: `14 passed`; Ruff passed on the
-  changed files. The workspace tests use a local fake S3 client and do not
+  changed files. After adding remote-state scope checks, focused tests pass:
+  `16 passed`. The workspace tests use a local fake S3 client and do not
   establish AWS behavior.
-- Full `make verify`: `1,100 passed`; Ruff, Actions config, OpenAPI, and
+- Full `make verify`: `1,108 passed`; Ruff, Actions config, OpenAPI, and
   Compose checks passed. One existing Starlette/httpx deprecation warning.
 - Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
   contract-only head; they do not cover the workspace restore changes.
+- Hosted PR #399 checks for artifact restoration commit `ea25be2` passed all
+  seven jobs in run `43466898962`. The remote-state gate added after that head
+  has not yet run in CI.
 
 ## Evidence files produced
 
