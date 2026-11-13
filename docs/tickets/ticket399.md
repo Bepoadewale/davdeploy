@@ -99,6 +99,8 @@ file must remain untouched.
   OpenAPI, and Compose checks passed. `make terraform-validate` passed across
   the configured Terraform roots. Documentation conventions passed for PR
   #399. These are local source checks only.
+- Draft PR #399 head `5989d08` passed all seven required CI jobs in run
+  `43476451184`. CI does not enable the feature or prove a live customer apply.
 - Full `make verify`: `1,108 passed`; Ruff, Actions config, OpenAPI, and
   Compose checks passed. One existing Starlette/httpx deprecation warning.
 - Hosted PR #399 checks `43465074051` passed all seven jobs for the earlier
