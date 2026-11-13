@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-13.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-13.3"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -125,6 +125,19 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("deletion_protection_enabled",),
         ("point_in_time_recovery", "enabled"),
         ("point_in_time_recovery", "recovery_period_in_days"),
+    ),
+    "aws_network_acl": (("ingress",),),
+    "aws_default_network_acl": (("ingress",),),
+    "aws_network_acl_rule": (
+        ("egress",),
+        ("protocol",),
+        ("rule_action",),
+        ("cidr_block",),
+        ("ipv6_cidr_block",),
+        ("from_port",),
+        ("to_port",),
+        ("icmp_type",),
+        ("icmp_code",),
     ),
 }
 
@@ -808,6 +821,180 @@ def _check_network(resources: tuple[dict[str, Any], ...], findings: list[PlanPol
                     address,
                     "The plan exposes a network port to the internet. Confirm that the access is required.",
                 )
+
+    _check_network_acls(resources, findings)
+
+
+def _check_network_acls(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        kind = item.get("type")
+        values = item.get("values")
+        address = item.get("address")
+        if not isinstance(values, dict):
+            if kind in {"aws_network_acl", "aws_default_network_acl", "aws_network_acl_rule"}:
+                _deny(
+                    findings,
+                    "network_acl_ingress_unknown",
+                    address,
+                    "The plan does not make network ACL inbound access clear.",
+                )
+            continue
+
+        if kind in {"aws_network_acl", "aws_default_network_acl"}:
+            rules = values.get("ingress", [])
+            if not isinstance(rules, list):
+                _deny(
+                    findings,
+                    "network_acl_ingress_unknown",
+                    address,
+                    "The plan does not make network ACL inbound access clear.",
+                )
+                continue
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    _deny(
+                        findings,
+                        "network_acl_ingress_unknown",
+                        address,
+                        "The plan does not make network ACL inbound access clear.",
+                    )
+                    continue
+                _check_network_acl_ingress(rule, address, findings)
+        elif kind == "aws_network_acl_rule":
+            egress = values.get("egress")
+            if not isinstance(egress, bool):
+                _deny(
+                    findings,
+                    "network_acl_ingress_unknown",
+                    address,
+                    "The plan does not make network ACL direction clear.",
+                )
+            elif not egress:
+                _check_network_acl_ingress(values, address, findings)
+
+
+def _check_network_acl_ingress(
+    rule: dict[str, Any], address: Any, findings: list[PlanPolicyFinding]
+) -> None:
+    action = rule.get("rule_action")
+    if action == "deny":
+        return
+    if action != "allow":
+        _deny(
+            findings,
+            "network_acl_ingress_unknown",
+            address,
+            "The plan does not make network ACL rule behavior clear.",
+        )
+        return
+    if _network_acl_source_is_unknown(rule):
+        _deny(
+            findings,
+            "network_acl_ingress_unknown",
+            address,
+            "The plan does not make network ACL inbound access clear.",
+        )
+        return
+    source = {
+        "cidr_blocks": [rule["cidr_block"]] if rule.get("cidr_block") else [],
+        "ipv6_cidr_blocks": [rule["ipv6_cidr_block"]] if rule.get("ipv6_cidr_block") else [],
+    }
+    if not _is_public_source(source):
+        return
+
+    protocol = rule.get("protocol")
+    if isinstance(protocol, int) and not isinstance(protocol, bool):
+        protocol = str(protocol)
+    if not isinstance(protocol, str) or not protocol:
+        _deny(
+            findings,
+            "network_acl_ingress_unknown",
+            address,
+            "The plan does not make network ACL protocol exposure clear.",
+        )
+        return
+    if protocol == "-1":
+        _deny(
+            findings,
+            "network_acl_public_all_protocols_denied",
+            address,
+            "The plan allows all inbound network protocols from a public address range.",
+        )
+        return
+
+    low, high = _network_acl_ports(rule)
+    if protocol in {"6", "17", "tcp", "udp"}:
+        if low is None or high is None or low > high:
+            _deny(
+                findings,
+                "network_acl_ingress_unknown",
+                address,
+                "The plan does not make public TCP or UDP ports clear.",
+            )
+            return
+        if any(low <= port <= high for port in RISKY_PUBLIC_PORTS):
+            _deny(
+                findings,
+                "network_acl_public_sensitive_port_denied",
+                address,
+                "The plan exposes an administrative or data port through a public network ACL.",
+            )
+            return
+        if low <= 80 <= high or low <= 443 <= high:
+            _review(
+                findings,
+                "network_acl_public_web_ingress_review",
+                address,
+                "The plan allows public web traffic through a network ACL. Confirm that the service is intended to be public.",
+            )
+        else:
+            _review(
+                findings,
+                "network_acl_public_ingress_review",
+                address,
+                "The plan allows public traffic through a network ACL. Confirm that the access is required.",
+            )
+        return
+
+    _review(
+        findings,
+        "network_acl_public_ingress_review",
+        address,
+        "The plan allows a non-TCP/UDP protocol from a public address range. Confirm that the access is required.",
+    )
+
+
+def _network_acl_source_is_unknown(rule: dict[str, Any]) -> bool:
+    keys = ("cidr_block", "ipv6_cidr_block")
+    present = [key for key in keys if key in rule]
+    if not present:
+        return True
+    found = False
+    for key in present:
+        value = rule[key]
+        if value is None:
+            continue
+        if value == "":
+            continue
+        if not isinstance(value, str):
+            return True
+        try:
+            ipaddress.ip_network(value, strict=False)
+        except ValueError:
+            return True
+        found = True
+    return not found
+
+
+def _network_acl_ports(rule: dict[str, Any]) -> tuple[int | None, int | None]:
+    port_range = rule.get("port_range")
+    if port_range is not None:
+        if not isinstance(port_range, dict):
+            return None, None
+        return _integer(port_range.get("from")), _integer(port_range.get("to"))
+    return _integer(rule.get("from_port")), _integer(rule.get("to_port"))
 
 
 def _check_databases(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]) -> None:
@@ -1565,7 +1752,7 @@ def _is_public_source(rule: dict[str, Any]) -> bool:
             network = ipaddress.ip_network(source, strict=False)
         except ValueError:
             continue
-        if network.prefixlen == 0:
+        if network.is_global:
             return True
     return False
 

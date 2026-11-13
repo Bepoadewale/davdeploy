@@ -15,11 +15,13 @@ plan-policy check only; it must not enable an executor.
 
 ## Current repo state
 
-Backend `main` is `4bd4c55` after PR #400. PR #401 is a separate open draft for
-network ACL ingress policy and is not merged. Generated-plan policy still has
-coverage gaps across catalogue modules and Terraform roots. Nova exact-plan
-apply remains a separate draft and is not available; trusted pricing is held.
-No Nova workload has been applied or certified.
+Backend `main` includes PR #401 at `53503f5`, adding bounded network ACL
+ingress checks. This branch merges that updated mainline and combines the
+network ACL and EC2 metadata policy under policy version
+`nova-generated-plan-2026-11-13.3`. Generated-plan policy still has coverage
+gaps across catalogue modules and Terraform roots. Nova exact-plan apply
+remains a separate draft and is not available; trusted pricing is held. No
+Nova workload has been applied or certified.
 
 ## Research / references used
 
@@ -64,16 +66,19 @@ No Nova workload has been applied or certified.
 
 ## Acceptance status
 
-The expanded launch-configuration and regional-default coverage is locally
-verified and passed all seven hosted checks on `30b00b9`. The PR remains a
-draft; no Nova execution or AWS workload is enabled.
+The expanded launch-configuration and regional-default coverage passed all
+seven checks on `30b00b9`. After PR #401 merged, this branch integrated its
+network ACL policy and bumped the shared policy version to `.3`. The combined
+revision passes local focused/full checks; hosted CI is pending. The PR remains
+a draft; no Nova execution or AWS workload is enabled.
 
 ## Tests / validation performed
 
-Focused plan-policy and structured-proposal suites passed (222 total). Full
-verification passed with 1,111 tests; documentation convention and diff
-checks passed. All seven hosted checks passed for `30b00b9` in run
-`43508435135`. Exact commands are recorded in `docs/test/test402.md`.
+The original implementation passed focused tests (222), full verification
+(1,111), and all seven checks in runs `43508435135` and `43509145986`. After
+integrating PR #401, combined focused suites passed (232) and `make verify`
+passed (1,121 tests); refreshed docs convention, diff, and hosted CI checks are
+pending. Exact commands are recorded in `docs/test/test402.md`.
 
 ## Evidence files produced
 

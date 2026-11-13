@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: `30b00b9` (expanded implementation; evidence refresh follows)
+Commit: local integration of merged main `53503f5` with PR #402 (combined revision; CI pending)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -40,6 +40,15 @@ OpenAPI, and Docker Compose configuration checks. One existing Starlette/httpx
 deprecation warning remains. Documentation convention and diff checks passed.
 All seven hosted jobs passed for the expanded implementation revision. No AWS
 calls or feature-gate changes occurred.
+
+## Combined mainline verification
+
+PR #401 merged to main at `53503f5` and adds network ACL policy checks. This
+PR branch integrates that policy alongside the EC2 metadata checks and uses
+shared policy version `nova-generated-plan-2026-11-13.3`. The combined focused
+plan-policy and proposal-contract suites passed (232 tests). `make verify`
+passed with 1,121 tests. The matrix now records both checks and their limits.
+Final commit, docs checks, and CI for this combined revision are pending.
 
 ## Teardown
 
