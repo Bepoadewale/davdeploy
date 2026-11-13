@@ -1,7 +1,8 @@
 # ticket401 — inspect network ACL exposure in generated Terraform plans
 
-PR: https://github.com/Bepoadewale/davdeploy/pull/401 (open draft)
-Branch: `feat/nova-network-acl-policy-401`
+PR: https://github.com/Bepoadewale/davdeploy/pull/401 (merged)
+Merged commit: `53503f5d3cec6afe8629666569986bee41f5a4d1`
+Branch: `feat/nova-network-acl-policy-401` (deleted after merge)
 
 ## Problem / goal
 
@@ -12,7 +13,7 @@ existing plan-only execution boundary.
 
 ## Current repo state
 
-Backend main is `4bd4c55` (PR #400). Plan-level policy checks security groups,
+At implementation start, backend main was `4bd4c55` (PR #400). Plan-level policy checks security groups,
 public storage, databases, IAM, and selected invocation paths. Exact apply source
 is separate and not deployed; trusted pricing remains held. No customer workload
 has been applied or certified.
@@ -46,12 +47,16 @@ has been applied or certified.
 - [x] Focused tests, full verification, docs convention, and diff checks pass.
 - [x] Required hosted CI passed on implementation commit `481c386` in run
       `43498568620`; this evidence-only update is subject to its own CI run.
+- [x] Final-head CI passed all seven checks in run
+      [`43499374066`](https://github.com/Bepoadewale/davdeploy/actions/runs/43499374066).
+- [x] Merged-main CI passed all seven checks in run
+      [`43510804165`](https://github.com/Bepoadewale/davdeploy/actions/runs/43510804165).
 - [x] No apply, deployment, or AWS resource mutation occurs.
 
 ## Acceptance status
 
-Locally implemented and verified. Hosted PR checks are pending at this draft
-revision. No deployment or customer workload is claimed.
+Merged source and locally verified. Final PR checks and merged-main CI passed.
+This is not deployed policy or customer-workload evidence.
 
 ## Tests / validation performed
 
@@ -66,13 +71,13 @@ documentation conventions, and diff checks are recorded in
 
 ## Boundaries
 
-This policy addition is source-level only. It does not establish full network
+This policy addition is merged source only. It does not establish full network
 architecture coverage or hosted workload behavior. ACL-to-subnet associations,
 route tables, NAT, gateways, VPC endpoints, egress policy, and hybrid
 connectivity remain separate coverage items. Public ACL rules are evaluated
 individually; rule-number precedence and reachability through the full VPC
-topology are not computed. Keep the PR draft until the product's
-customer-readiness gate is met.
+topology are not computed. This remains a bounded policy check, not a complete
+network analysis.
 
 ## Follow-up work
 

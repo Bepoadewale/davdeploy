@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: synthetic Terraform plan policy tests; local source verification
 Customer repository: none; backend source worktree
-Commit: `861b27b` (final evidence revision; its CI run passed)
+Commit: `be1e111` (final PR evidence revision; merged as `653619d`)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -20,6 +20,10 @@ JSON and local proposal objects.
 - `git diff --check`
 - GitHub Actions CI run `43513116781` passed all seven jobs for final evidence
   revision `861b27b`.
+- GitHub Actions CI run `43514648425` passed all seven jobs for final PR head
+  `be1e111`.
+- Merged-main CI run `43515569852` passed all seven jobs for merge commit
+  `653619d`.
 - GitHub Actions CI run `43511986076` passed all seven jobs for combined
   revision `079aea6`.
 - GitHub Actions CI run `43502219872` passed all seven jobs for implementation
@@ -54,6 +58,10 @@ plan-policy and proposal-contract suites passed (232 tests). `make verify`
 passed with 1,121 tests. The matrix records both checks and their limits.
 Documentation conventions and diff checks passed; all seven hosted jobs passed
 for this combined revision in run `43511986076`.
+
+The PR evidence revision passed all seven checks in run `43513116781`; the
+merged main commit passed all seven checks in run `43515569852`. No AWS
+deployment or customer workload was part of these runs.
 
 ## Teardown
 

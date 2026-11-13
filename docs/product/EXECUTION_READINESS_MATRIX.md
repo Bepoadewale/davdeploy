@@ -2,11 +2,11 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-13, after PR #397
+## Current backend source — 2026-11-13, after PR #402
 
 Backend `main` is merge commit
-`12c39b4f495c034824f8ca00c7693a644015e9e3`; merged-main CI run
-[43457148983](https://github.com/Bepoadewale/davdeploy/actions/runs/43457148983)
+`653619d9eb52f717c8c052a4b2aace2d7339b51c`; merged-main CI run
+[43515569852](https://github.com/Bepoadewale/davdeploy/actions/runs/43515569852)
 passed all seven jobs. The latest hosted control-plane package remains PR #390
 commit `ae9ec4450d527141081e95707a1c3ee05126b683` (apply
 [43389226372](https://github.com/Bepoadewale/davdeploy/actions/runs/43389226372));
@@ -21,6 +21,12 @@ separate encrypted/versioned artifact; approval verifies it beside the exact
 saved plan. PR #397 does not add or enable apply and is not deployed. Those
 proposal requirements are marked `PROPOSED_UNVALIDATED_NOT_EXECUTED`; they are
 not health observations or pricing evidence.
+
+PRs #401 and #402 add merged-source network ACL ingress and EC2 metadata
+checks to the deterministic actual-plan policy. Their tests are synthetic and
+CI is on GitHub-hosted runners; neither policy update has been deployed to the
+control plane or exercised on a customer plan. ACL topology/reachability and
+EKS node metadata remain uncovered.
 
 The current control-plane release and the isolated plan-only runner are
 deployed; Nova plan review, runner, credential broker, role verification and

@@ -3,7 +3,7 @@
 Date: 2026-11-13
 Execution type: isolated local fixture and synthetic Terraform plan policy tests
 Customer repository: none; backend source worktree
-Commit: `bbcfe72` (implementation and local-proof revision)
+Commit: `233aa4c` (final evidence revision; merged as `53503f5`)
 AWS account: none; no AWS credentials used
 AWS region: none
 
@@ -23,6 +23,10 @@ retention status are recorded below.
 - `git diff --check`
 - GitHub Actions CI run `43498568620` passed all seven jobs for implementation
   commit `481c386`.
+- GitHub Actions CI run `43499374066` passed all seven jobs for final PR head
+  `233aa4c`.
+- Merged-main CI run `43510804165` passed all seven jobs for merge commit
+  `53503f5`.
 
 ## Scope and result
 
@@ -88,4 +92,5 @@ stack was left running.
 ## Final boundary
 
 No AWS infrastructure or customer workload was created, applied, operated,
-health-checked, or destroyed. This evidence is local only.
+health-checked, or destroyed. Final PR CI and merged-main CI also passed all
+seven checks; these are source and local fixture evidence only.
