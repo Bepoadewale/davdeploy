@@ -29,6 +29,7 @@ published plan-only template. No customer plan or workload was run.
   real-assumption or workload-plan verification.
 - Update product status and backlog without marking the role or plan flow
   customer-ready.
+- Reconcile the execution matrix's current source/release heading with PR #390.
 
 ## Acceptance criteria
 
@@ -37,6 +38,7 @@ published plan-only template. No customer plan or workload was run.
 - [x] Current status documents distinguish policy simulation from a real
   customer connection and effective account permissions.
 - [x] No customer plan or workload readiness is claimed.
+- [x] Current source and historical release labels are reconciled.
 - [x] Local documentation checks pass.
 - [ ] Required CI passes and PR merges.
 
