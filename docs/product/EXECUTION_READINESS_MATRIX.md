@@ -2,11 +2,11 @@
 
 Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315). Current hosted deployment evidence is updated below; dated entries that follow remain historical where explicitly stated. App Runner remains the only enabled customer renderer; the Lambda, S3 and DynamoDB renderer routes remain gated off.
 
-## Current backend source — 2026-11-13, after PR #393
+## Current backend source — 2026-11-13, after PR #397
 
 Backend `main` is merge commit
-`3db0d979c9eb0810b183244281789f139d28e19f`; merged-main CI run
-[43399159484](https://github.com/Bepoadewale/davdeploy/actions/runs/43399159484)
+`12c39b4f495c034824f8ca00c7693a644015e9e3`; merged-main CI run
+[43457148983](https://github.com/Bepoadewale/davdeploy/actions/runs/43457148983)
 passed all seven jobs. The latest hosted control-plane package remains PR #390
 commit `ae9ec4450d527141081e95707a1c3ee05126b683` (apply
 [43389226372](https://github.com/Bepoadewale/davdeploy/actions/runs/43389226372));
@@ -15,9 +15,12 @@ PR #393 is source-only. Current source includes the Nova intent scope guard
 unbound Secrets Manager value-read permissions (#374), PR #379's bounded
 regional EC2 metadata reads for proposed VPCs, subnets, and security groups,
 and PR #393's saved-plan manifest binding for proposed health, recovery, cost
-assumptions, assumptions, and limitations. Those proposal requirements are
-marked `PROPOSED_UNVALIDATED_NOT_EXECUTED`; they are not health observations or
-pricing evidence.
+assumptions, and limitations. PR #397 stores the exact plan-time
+generated configuration, lockfile, and initialized Terraform workspace as a
+separate encrypted/versioned artifact; approval verifies it beside the exact
+saved plan. PR #397 does not add or enable apply and is not deployed. Those
+proposal requirements are marked `PROPOSED_UNVALIDATED_NOT_EXECUTED`; they are
+not health observations or pricing evidence.
 
 The current control-plane release and the isolated plan-only runner are
 deployed; Nova plan review, runner, credential broker, role verification and
@@ -38,7 +41,8 @@ attachments whose contents are unavailable remain review-required. Frontend
 PR #102 remains draft/local-fixture work without an authenticated production
 customer journey. No Nova-generated customer plan or workload has been
 applied, operated, health-checked, recovered, or destroyed. The exact source
-evidence for PR #393 is in `docs/test/test393.md`.
+evidence for PR #393 is in `docs/test/test393.md`; PR #397's isolated local
+verification is in `docs/test/test397.md`.
 
 ## Historical hosted release — 2026-11-12, PR #381 source
 
@@ -216,7 +220,7 @@ certification gate disabled and its workspace allowlist empty.
 | Layer | Current evidence | State |
 |---|---|---|
 | Natural-language planning and typed architecture catalogue | 26 `ArchitectureModule` definitions in `module_catalogue.py` | Implemented; planning inputs/pricing still include fixtures |
-| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access; actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization, RDS retention/final snapshots and DynamoDB recovery (#314, #324–#334, #340, #353–#356, #358–#359, #361, #363); typed secret input/output constraints (#365, #367); bounded RDS planner metadata access (#371–#372); unbound Secrets Manager value-read denial (#374); Nova intent scope boundary (#377); bounded VPC/subnet/security-group metadata reads (#379) | PR #379 is merged source after the deployed PR #377 release; it does not deploy the customer role template or prove effective role permissions. PR #377 rejects out-of-scope intent requests but does not make Nova a general-purpose assistant or prove an authenticated customer journey. Plan-role trust/account verification is enabled. The bounded secret ARN contract does not resolve customer secret values or grant runtime access. The state API, plan worker, credential broker, and plan review remain disabled; no customer role is installed or verified, and effective permissions remain unattested. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. See `docs/test/test380.md`. |
+| Model-generated Terraform | Typed proposal and provider-schema checks; fixed initial planner; tenant plan-request/history APIs; saved-plan and approval contracts; exact plan-time workspace artifact with approval verification (#397); isolated CodeBuild boundary; dedicated encrypted state storage; proposal-scoped customer plan access; actual-plan policy hardening for IAM, SQS, Lambda invocation, API Gateway route authorization, RDS retention/final snapshots and DynamoDB recovery (#314, #324–#334, #340, #353–#356, #358–#359, #361, #363); typed secret input/output constraints (#365, #367); bounded RDS planner metadata access (#371–#372); unbound Secrets Manager value-read denial (#374); Nova intent scope boundary (#377); bounded VPC/subnet/security-group metadata reads (#379) | PR #397 is merged source after the deployed PR #390 release; its encrypted workspace artifact does not add or enable apply. PR #379 is merged source but does not deploy the customer role template or prove effective role permissions. PR #377 rejects out-of-scope intent requests but does not make Nova a general-purpose assistant or prove an authenticated customer journey. Plan-role trust/account verification is enabled. The bounded secret ARN contract does not resolve customer secret values or grant runtime access. The state API, plan worker, credential broker, and plan review remain disabled; no customer role is installed or verified, and effective permissions remain unattested. Pricing is unavailable, so approval remains blocked. No customer apply, health, recovery or destroy is available on this path. See `docs/test/test397.md`. |
 | Internal Terraform implementation registry | 30 `ModuleImplementation` entries in `module_implementations.py` | Catalogued; entries default disabled |
 | Renderer registry | `aws-managed-application` enabled; `aws-serverless-api`, `aws-file-storage` and `aws-nosql-data` disabled | One customer renderer enabled; S3 and DynamoDB renderer routes remain gated; PR #303's allowlist correction is included in the November 10 backend release |
 | CodeBuild dispatcher | Fixed registry mapping; unknown, disabled, malformed, unresolved input bindings, repeated renderer types and shared Terraform state roots fail closed. PR #297 aligns adapter identity/reference fields; #298 adds dependency-ready one-node scheduling; #299 adds the gated S3 dispatch mapping; #300 adds a validated S3 bucket input for Lambda; #301 adds the gated DynamoDB dispatch route; #302 adds its `table_name` input; #303 corrects the source allowlist for that input. | #303 is deployed with renderer gates still disabled; live composed lifecycle remains unproven |
@@ -309,7 +313,7 @@ The standalone `infrastructure/terraform/customer-workload-serverless-api` root 
 2. Inject tenant-scoped remote state through the isolated state API and plan worker, with locking, verified identity and artifact boundaries; current infrastructure storage exists, but runtime access and worker dispatch remain disabled.
 3. Integrate complete, trusted, region-specific pricing and usage assumptions before exact-plan approval. PR #318 remains held for account-owner direction; do not replace that work without direction.
 4. Safely enable and prove hosted Nova planning end to end, including Nova generation, validation, saved plan, plan history and useful failure reporting.
-5. Add separately authorized apply of the exact approved saved plan, with durable identity, leases, idempotency, restart reconciliation, bounded retries and exact state/artifact scoping.
+5. Add a separately authorized apply worker that verifies and consumes the exact approved saved plan and the workspace artifact preserved by PR #397, with durable identity, leases, idempotency, restart reconciliation, bounded retries and exact state/artifact scoping. Keep apply gated until complete regional pricing and exact cost-bound approval are available.
 6. Execute the bounded typed health assertions introduced by PR #395; persist observed results, then add update and failure recovery, data-recovery evidence, exact destroy and independent absence checks. The current contract does not run probes or certify health.
 7. Run composed application scenarios through the hosted Nova path and align browser, CLI and MCP with the same lifecycle. Existing isolated AWS tests are reusable evidence, not proof of hosted customer execution.
 
