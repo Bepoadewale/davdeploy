@@ -44,7 +44,7 @@ seven jobs; local and isolated clean-room evidence is in `docs/test/test397.md`.
 - [x] Health assertions remain proposed until deterministic probes execute and
   persist observed evidence.
 - [x] Documentation conventions and diff checks pass locally.
-- [ ] Required hosted PR checks pass.
+- [x] Required hosted PR checks pass on final head `e6d2fe9`; run `43459154292` passed all seven jobs.
 
 ## Acceptance status
 
@@ -55,7 +55,7 @@ seven jobs; local and isolated clean-room evidence is in `docs/test/test397.md`.
 - `python3 scripts/check_doc_conventions.py` passed.
 - `git diff --check` passed.
 - Merged-main CI run `43457148983` passed all seven jobs.
-- PR #398 required hosted checks pending.
+- PR #398 final-head CI run `43459154292` passed all seven jobs. The initial run failed the ticket heading convention; restoring the required heading fixed it.
 
 ## Evidence files produced
 
