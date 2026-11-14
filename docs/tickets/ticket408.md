@@ -47,7 +47,7 @@ executed.
 
 ## Acceptance status
 
-Implementation commit `5cb1108dcd624da021cab9637004eaa458e9ac29` adds the typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display. Focused tests (222), full verification (1,193 tests), OpenAPI snapshot, and local docs conventions pass. GitHub Actions run [43590712160](https://github.com/Bepoadewale/davdeploy/actions/runs/43590712160) passed all seven jobs, including fresh-runner lifecycle, Terraform/Kubernetes contracts, and docs conventions. No live catalog request, customer plan, or workload mutation has occurred.
+Implementation commit `5cb1108dcd624da021cab9637004eaa458e9ac29` adds the typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display. Focused tests (222), full verification (1,193 tests), OpenAPI snapshot, and local docs conventions pass. GitHub Actions run [43591083601](https://github.com/Bepoadewale/davdeploy/actions/runs/43591083601) passed all seven jobs on PR head `47072d9ecc7e104d912b2f62c803f45ee6d1357f`, including fresh-runner lifecycle, Terraform/Kubernetes contracts, and docs conventions. No live catalog request, customer plan, or workload mutation has occurred.
 
 ## Tests / validation performed
 
