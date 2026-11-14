@@ -79,6 +79,21 @@ def plan(
     }
 
 
+def s3_bucket_plan(*, values=None):
+    bucket_values = {
+        "bucket": "davdeploy-pricing-test",
+        "object_lock_enabled": False,
+        "object_lock_configuration": None,
+    }
+    if values:
+        bucket_values.update(values)
+    return plan(
+        resource_type="terraform_data",
+        resource_values={"input": None},
+        extra_resources=(resource("aws_s3_bucket.store", "aws_s3_bucket", bucket_values),)
+    )
+
+
 def price_product(
     *,
     region=REGION,
@@ -137,6 +152,61 @@ class FakePriceList:
         return {"PriceList": products, "NextToken": self.next_token}
 
 
+class FakeS3PriceList:
+    def __init__(self):
+        self.calls = []
+
+    def get_products(self, **kwargs):
+        self.calls.append(kwargs)
+        filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        service = kwargs["ServiceCode"]
+        family = filters["productFamily"]
+        if service == "AmazonS3" and family == "Storage":
+            attributes = {"regionCode": REGION, "storageClass": "General Purpose", "volumeType": "Standard"}
+            sku = "s3-storage"
+            dimensions = {
+                "first": {"beginRange": "0", "endRange": "51200", "unit": "GB-Mo", "pricePerUnit": {"USD": "0.023"}},
+                "second": {"beginRange": "51200", "endRange": "512000", "unit": "GB-Mo", "pricePerUnit": {"USD": "0.022"}},
+                "third": {"beginRange": "512000", "endRange": "Inf", "unit": "GB-Mo", "pricePerUnit": {"USD": "0.021"}},
+            }
+        elif service == "AmazonS3" and family == "API Request":
+            tier = 1 if filters["group"] == "S3-API-Tier1" else 2
+            attributes = {"regionCode": REGION, "group": f"S3-API-Tier{tier}"}
+            sku, unit, price = (
+                f"s3-request-{tier}", "Requests", "0.000005" if tier == 1 else "0.0000004"
+            )
+            begin, end = "0", "Inf"
+            dimensions = {"dimension": {
+                "beginRange": begin, "endRange": end, "unit": unit,
+                "pricePerUnit": {"USD": price},
+            }}
+        elif service == "AWSDataTransfer":
+            attributes = {"fromRegionCode": REGION, "toLocation": "External", "transferType": "AWS Outbound"}
+            sku, unit, price, begin, end = "egress", "GB", "0.09", "0", "10240"
+            dimensions = {"dimension": {
+                "beginRange": begin, "endRange": end, "unit": unit,
+                "pricePerUnit": {"USD": price},
+            }}
+        else:
+            raise AssertionError("unexpected pricing query")
+        product = {
+            "product": {"sku": sku, "productFamily": family, "attributes": attributes},
+            "serviceCode": service,
+            "publicationDate": "2026-11-13T12:00:00Z",
+            "terms": {"OnDemand": {"offer": {
+                "sku": sku,
+                "effectiveDate": "2026-11-01T00:00:00Z",
+                "priceDimensions": dimensions,
+            }}},
+        }
+        return {"PriceList": [json.dumps(product)]}
+
+
+class MissingS3PriceList:
+    def get_products(self, **kwargs):
+        return {"PriceList": []}
+
+
 def evaluate(
     document=None,
     *,
@@ -147,8 +217,9 @@ def evaluate(
     currency="USD",
     context_digest=PERSISTED_CONTEXT_SHA256,
     usage_assumptions=None,
+    catalog_client=None,
 ):
-    client = client or FakePriceList()
+    client = catalog_client or client or FakePriceList()
     return (
         evaluate_generated_plan_pricing(
             document or plan(),
@@ -175,6 +246,13 @@ def test_gp3_price_uses_exact_region_and_known_gib_month_quantity():
     assert result.monthly_low_minor == result.monthly_high_minor == 400
     assert result.within_budget is True
     assert result.approval_eligible is True
+    assert pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 400, PERSISTED_CONTEXT_SHA256
+        ),
+        now=CAPTURED_AT,
+    )
     assert result.lines[0].quantity == 50
     assert result.lines[0].unit == "GB-Mo"
     assert result.lines[0].catalog_sku == "sku-gp3"
@@ -203,6 +281,36 @@ def test_gp3_price_uses_exact_region_and_known_gib_month_quantity():
         "regionCode": REGION,
     }
     assert "cost_explorer" not in repr(call).lower()
+
+
+def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
+    result, _ = evaluate(budget=400)
+    legacy = result.as_manifest_document()
+    legacy["version"] = 2
+    for line in legacy["lines"]:
+        for field in (
+            "quantity_max",
+            "monthly_cost_max_minor",
+            "unit_price_low_usd",
+            "unit_price_low_source_url",
+            "low_cost_quantity",
+        ):
+            line.pop(field)
+    unsigned = {key: value for key, value in legacy.items() if key != "evidence_sha256"}
+    legacy["evidence_sha256"] = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    ).hexdigest()
+
+    parsed = GeneratedPlanPricingEvidence.from_manifest_document(legacy)
+
+    assert parsed.status == PlanPricingStatus.COMPLETE
+    assert pricing_evidence_is_approval_eligible(
+        legacy,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 400, PERSISTED_CONTEXT_SHA256
+        ),
+        now=CAPTURED_AT,
+    )
 
 
 @pytest.mark.parametrize(("budget", "eligible"), [(400, True), (399, False)])
@@ -558,10 +666,10 @@ def test_usage_assumptions_are_carried_in_digest_bound_pricing_evidence():
         "monthly_get_requests": {"minimum": 300, "maximum": 400},
         "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
     }
-    document = plan(
-        extra_resources=(resource("aws_s3_bucket.store", "aws_s3_bucket", {"bucket": "store"}),)
+    result, _ = evaluate(
+        s3_bucket_plan(), budget=500, usage_assumptions=assumptions,
+        catalog_client=FakeS3PriceList(),
     )
-    result, _ = evaluate(document, budget=500, usage_assumptions=assumptions)
     manifest = result.as_manifest_document()
     changed_context = TrustedPlanPricingContext(
         REGION,
@@ -571,13 +679,30 @@ def test_usage_assumptions_are_carried_in_digest_bound_pricing_evidence():
         {**assumptions, "monthly_get_requests": {"minimum": 300, "maximum": 401}},
     )
 
-    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.status == PlanPricingStatus.COMPLETE
     assert result.usage_assumptions == assumptions
     assert manifest["usage_assumptions"] == assumptions
     assert pricing_evidence_document_is_valid(manifest)
     assert result.safe_summary()["usage_assumptions"] == assumptions
     parsed = GeneratedPlanPricingEvidence.from_manifest_document(manifest)
     assert parsed.usage_assumptions == assumptions
+    assert result.monthly_low_minor == 21
+    assert result.monthly_high_minor == 93
+    assert len(result.lines) == 4
+    assert all(line.quantity_max is not None for line in result.lines)
+    assert all(line.catalog_product_sha256 for line in result.lines)
+    egress_line = next(line for line in result.lines if "transfer out" in line.description)
+    assert egress_line.unit_price_usd == "0.09"
+    assert egress_line.unit_price_low_usd == "0.05"
+    assert egress_line.unit_price_low_source_url == "https://aws.amazon.com/s3/pricing/"
+    assert egress_line.low_cost_quantity == 0
+    assert pricing_evidence_is_approval_eligible(
+        manifest,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 500, PERSISTED_CONTEXT_SHA256, assumptions
+        ),
+        now=CAPTURED_AT,
+    )
     assert not pricing_evidence_is_approval_eligible(
         manifest, trusted_context=changed_context, now=CAPTURED_AT
     )
@@ -589,6 +714,182 @@ def test_usage_assumptions_are_carried_in_digest_bound_pricing_evidence():
     ).hexdigest()
     with pytest.raises(PlanPricingError, match="pricing evidence fields are invalid"):
         GeneratedPlanPricingEvidence.from_manifest_document(malformed)
+
+
+def test_s3_without_usage_assumptions_remains_incomplete_and_skips_catalog():
+    client = FakeS3PriceList()
+    result, _ = evaluate(s3_bucket_plan(), catalog_client=client)
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert {finding.code for finding in result.findings} == {"s3_usage_assumptions_missing"}
+    assert client.calls == []
+
+
+def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
+    assumptions = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+    result, _ = evaluate(
+        s3_bucket_plan(), budget=50, usage_assumptions=assumptions,
+        catalog_client=FakeS3PriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.monthly_low_minor == 21
+    assert result.monthly_high_minor == 93
+    assert result.within_budget is False
+    assert result.approval_eligible is False
+    manifest = result.as_manifest_document()
+    assert manifest["version"] == 3
+    assert pricing_evidence_document_is_valid(manifest)
+    assert not pricing_evidence_is_approval_eligible(
+        manifest,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 50, PERSISTED_CONTEXT_SHA256, assumptions
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+def test_s3_cost_tampering_is_rejected_even_with_recomputed_document_digest():
+    assumptions = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+    result, _ = evaluate(
+        s3_bucket_plan(), budget=500, usage_assumptions=assumptions,
+        catalog_client=FakeS3PriceList(),
+    )
+    manifest = result.as_manifest_document()
+    lines = [dict(item) for item in manifest["lines"]]
+    lines[0]["monthly_cost_max_minor"] += 1
+    unsigned = {
+        **manifest,
+        "lines": lines,
+        "monthly_high_minor": manifest["monthly_high_minor"] + 1,
+    }
+    unsigned.pop("evidence_sha256")
+    tampered = {
+        **unsigned,
+        "evidence_sha256": hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+        ).hexdigest(),
+    }
+
+    assert pricing_evidence_document_is_valid(tampered)
+    assert not pricing_evidence_is_approval_eligible(
+        tampered,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 500, PERSISTED_CONTEXT_SHA256, assumptions
+        ),
+        now=CAPTURED_AT,
+    )
+
+    quantity_lines = [dict(item) for item in manifest["lines"]]
+    storage_line = next(
+        item for item in quantity_lines if item["description"] == "Amazon S3 Standard storage"
+    )
+    high_delta = 49 - storage_line["monthly_cost_max_minor"]
+    storage_line["quantity_max"] += 1
+    storage_line["monthly_cost_max_minor"] = 49
+    quantity_unsigned = {
+        **manifest,
+        "lines": quantity_lines,
+        "monthly_high_minor": manifest["monthly_high_minor"] + high_delta,
+    }
+    quantity_unsigned.pop("evidence_sha256")
+    quantity_tampered = {
+        **quantity_unsigned,
+        "evidence_sha256": hashlib.sha256(
+            json.dumps(
+                quantity_unsigned,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode()
+        ).hexdigest(),
+    }
+
+    assert pricing_evidence_document_is_valid(quantity_tampered)
+    assert not pricing_evidence_is_approval_eligible(
+        quantity_tampered,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 500, PERSISTED_CONTEXT_SHA256, assumptions
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+def test_s3_object_lock_blocks_but_aggregate_assumptions_price_multiple_buckets():
+    assumptions = {
+        "monthly_storage_gb": {"minimum": 1, "maximum": 1},
+        "monthly_put_copy_post_list_requests": {"minimum": 0, "maximum": 0},
+        "monthly_get_requests": {"minimum": 0, "maximum": 0},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+    }
+    locked, _ = evaluate(
+        s3_bucket_plan(values={"object_lock_enabled": True}),
+        usage_assumptions=assumptions,
+        catalog_client=FakeS3PriceList(),
+    )
+    multiple, _ = evaluate(
+        plan(resource_type="terraform_data", resource_values={"input": None}, extra_resources=(
+            resource("aws_s3_bucket.one", "aws_s3_bucket", {
+                "bucket": "one", "object_lock_enabled": False, "object_lock_configuration": None,
+            }),
+            resource("aws_s3_bucket.two", "aws_s3_bucket", {
+                "bucket": "two", "object_lock_enabled": False, "object_lock_configuration": None,
+            }),
+        )),
+        usage_assumptions=assumptions,
+        catalog_client=FakeS3PriceList(),
+    )
+
+    assert locked.status == PlanPricingStatus.INCOMPLETE
+    assert "s3_object_lock_unpriced" in {item.code for item in locked.findings}
+    assert multiple.status == PlanPricingStatus.COMPLETE
+    assert multiple.approval_eligible is True
+    assert len(multiple.lines) == 4
+
+
+def test_s3_egress_above_published_price_limit_blocks_approval():
+    assumptions = {
+        "monthly_storage_gb": {"minimum": 0, "maximum": 0},
+        "monthly_put_copy_post_list_requests": {"minimum": 0, "maximum": 0},
+        "monthly_get_requests": {"minimum": 0, "maximum": 0},
+        "monthly_internet_egress_gb": {"minimum": 500_001, "maximum": 500_001},
+    }
+    result, _ = evaluate(
+        s3_bucket_plan(), usage_assumptions=assumptions,
+        catalog_client=FakeS3PriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert "s3_egress_price_limit_exceeded" in {item.code for item in result.findings}
+
+
+def test_missing_s3_price_product_keeps_the_plan_incomplete():
+    assumptions = {
+        "monthly_storage_gb": {"minimum": 1, "maximum": 1},
+        "monthly_put_copy_post_list_requests": {"minimum": 0, "maximum": 0},
+        "monthly_get_requests": {"minimum": 0, "maximum": 0},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+    }
+    result, _ = evaluate(
+        s3_bucket_plan(), usage_assumptions=assumptions,
+        catalog_client=MissingS3PriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert {item.code for item in result.findings} == {"regional_price_ambiguous"}
 
 
 def test_pricing_evidence_digest_is_bound_to_trusted_context_digest():

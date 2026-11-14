@@ -298,7 +298,7 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
     assert detail["pricing"]["monthly_low_minor"] is None
     assert detail["pricing"]["monthly_high_minor"] is None
     assert detail["pricing"]["monthly_budget_minor"] == 50_000
-    assert detail["pricing"]["reason_code"] == "resource_pricing_unavailable"
+    assert detail["pricing"]["reason_code"] == "s3_usage_assumptions_missing"
     assert detail["pricing"]["evidence_complete"] is False
     assert detail["pricing"]["lines"] == []
     assert detail["approval_allowed"] is False

@@ -58,7 +58,7 @@ from davdeploy.terraform_state import terraform_state_scope_digest
 
 RUN_ID_ENV = "DAVDEPLOY_NOVA_PLAN_RUN_ID"
 INPUT_CONTRACT = "davdeploy.nova-plan-request.v1"
-RESULT_CONTRACT = "davdeploy.nova-plan-result.v4"
+RESULT_CONTRACT = "davdeploy.nova-plan-result.v5"
 MAX_INPUT_BYTES = 1_000_000
 MAX_RESULT_BYTES = 1_000_000
 MAX_PLAN_BYTES = 128 * 1024 * 1024

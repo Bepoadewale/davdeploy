@@ -1,21 +1,24 @@
-# PR #409 — Price revision-bound S3 usage assumptions
+# ticket409 — Price revision-bound S3 usage assumptions
 
-## Goal
+PR: #409
+Branch: `feat/nova-s3-pricing-409`
+
+## Problem / goal
 
 Use current regional AWS Price List data to price supported Amazon S3 Standard storage, request, and internet egress usage in Nova generated-plan evidence. Bind every estimate to the exact persisted usage-assumption revision, proposal, plan, region, and catalog evidence. Keep approval blocked whenever a material S3 charge dimension, usage assumption, or catalog rate cannot be established.
 
-## Current repository state
+## Current repo state
 
 This branch starts from backend main PR #408 (`aa8d3d0`), which adds typed, immutable-revision-bound S3 usage assumptions and includes them in pricing context and result contract v4. PR #407 prices explicitly sized EBS gp3 only. Unsupported material plan costs block approval. The hosted backend release remains PR #405; no Nova customer workload has been applied.
 
-## Research and references
+## Research / references used
 
 - [Amazon S3 pricing](https://aws.amazon.com/s3/pricing/): storage, requests/retrieval, data transfer, and other charge dimensions depend on usage and storage class.
 - [AWS Price List Query API — GetProducts](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html): regional product catalog filters and offer data.
 - [AWS Price List Query API — attribute discovery](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_DescribeServices.html): service attributes used to constrain catalog lookup.
-- Read-only AWS Pricing API queries in `us-east-1` identified S3 Standard storage and request product families and regional usage types. Exact matched rates and product identities will be recorded after implementation verification.
+- Read-only AWS Pricing API queries in `us-east-1` matched S3 Standard storage SKU `WP9ANXZGBYYSGJEA` (published 2026-11-09, effective 2026-10-01; $0.023/$0.022/$0.021 per GB-month across its tiers), PUT/COPY/POST/LIST SKU `E9YHNFENF4XQBZR6` ($0.000005/request), GET SKU `ZWQ6Q48CRJXX4FXE` ($0.0000004/request), and AWS Data Transfer SKU `HQEH3ZWJVT46JHRG` ($0.09/GB first tier; published 2026-11-11, effective 2026-11-01). The S3 page documents the shared 100 GB monthly allowance and declining egress tiers down to $0.05/GB; transfers above 500 TB/month need a separate quote.
 
-## Work
+## Work planned for the PR
 
 - Extend the trusted regional catalog lookup to resolve exact, current S3 Standard storage, PUT/COPY/POST/LIST request, GET request, and internet-egress rates from narrowly filtered AWS Price List products.
 - Calculate conservative low/high monthly costs from persisted bounded usage ranges, with explicit units, rounding, catalog SKU/product digest, publication/effective times, and usage assumptions on each evidence line.
@@ -25,18 +28,30 @@ This branch starts from backend main PR #408 (`aa8d3d0`), which adds typed, immu
 
 ## Acceptance criteria
 
-- [ ] Exact regional rates are obtained only from trusted AWS Price List results; Nova/customer values cannot provide prices.
-- [ ] Supported S3 monthly cost ranges are calculated from immutable persisted assumptions and recorded with source provenance and digests.
-- [ ] Missing assumptions or unsupported S3 charge dimensions yield explicit incomplete evidence and prevent approval.
-- [ ] Tampering with assumptions, rate identity, product digest, evidence, proposal, or plan is rejected before approval.
-- [ ] Focused tests, full `make verify`, documentation conventions, and required GitHub CI pass.
-- [ ] Implementation status and this ticket accurately distinguish source status from deployed status; no customer AWS workload is claimed.
+- [x] Regional high rates are selected only from trusted AWS Price List products; the documented AWS pricing page supplies the published low egress tier and allowance. Nova/customer values cannot provide prices.
+- [x] Supported S3 monthly cost ranges are calculated from immutable persisted assumptions and recorded with source provenance and digests. High estimates use the highest catalog unit rates without assuming shared discounts; low estimates use the lowest published rate and the documented egress allowance.
+- [x] Missing assumptions, unsupported S3 settings, and unsupported egress ranges yield explicit incomplete evidence and prevent approval.
+- [x] Existing digest-bound context, rate/product provenance, plan identity, and approval eligibility tests cover changed assumptions, evidence, and plan data; focused PR tests pass.
+- [x] Focused tests (220), full `make verify` (1,200 tests), Ruff, OpenAPI, Compose configuration, and documentation conventions pass. Required GitHub CI is pending.
+- [x] Status documentation distinguishes source changes from the PR #405 deployed release. No customer AWS workload is claimed.
 
-## Validation and evidence
+## Tests / validation performed
 
-- Initial state: planned; no code or customer workload test has been performed.
-- Evidence file: `docs/test/test409.md` will record validation and explicitly state whether AWS workload execution occurred.
+- Implementation: in progress; 220 focused tests and 1,200 full verification tests pass, along with Ruff, OpenAPI, Compose, and documentation conventions. The read-only AWS Price List lookup described above used no customer workload resources.
+- Evidence file: `docs/test/test409.md` records validation and explicitly states no AWS workload execution occurred.
 
-## Boundaries and follow-up
+## Acceptance status
 
-This PR does not apply infrastructure or make S3 plans eligible where any charge is not modeled. It does not claim a full S3 bill estimate, a hard spending cap, or hosted Nova deployment readiness. S3 Glacier classes, intelligent tiering, lifecycle transitions, replication, retrieval, KMS request charges, acceleration, and non-internet transfer remain unsupported unless separately modeled and validated.
+Implementation is in progress. Focused tests, full local verification, Ruff, OpenAPI, Docker Compose validation, and documentation conventions pass; hosted CI remains pending.
+
+## Evidence files produced
+
+- `docs/test/test409.md`
+
+## Boundaries
+
+This PR does not apply infrastructure or make plans eligible where any material charge is not modeled. Usage ranges apply across proposal S3 Standard buckets. S3 configurations using Object Lock, versioning, customer-managed KMS, non-Standard classes, replication, or other unmodeled charges remain blocked. Egress above 500 TB/month remains blocked because AWS requires a separate quote. It does not claim a full S3 bill estimate, a hard spending cap, or hosted Nova deployment readiness.
+
+## Follow-up work
+
+Price other material resources and complete hosted planning, approval, application, health, recovery, and destroy evidence in later work. S3 Glacier classes, intelligent tiering, lifecycle transitions, replication, retrieval, KMS request charges, acceleration, and non-internet transfer remain unsupported unless separately modeled and validated.

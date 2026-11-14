@@ -15,8 +15,9 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_CEILING, Decimal, InvalidOperation
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from enum import StrEnum
+from itertools import pairwise
 from typing import Any, ClassVar, Protocol
 
 import boto3
@@ -63,6 +64,11 @@ class PlanCostLine:
     catalog_product_sha256: str
     catalog_published_at: str
     catalog_effective_at: str
+    quantity_max: int | None = None
+    monthly_cost_max_minor: int | None = None
+    unit_price_low_usd: str | None = None
+    unit_price_low_source_url: str | None = None
+    low_cost_quantity: int | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +128,7 @@ class GeneratedPlanPricingEvidence:
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 2,
+            "version": 3,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -155,6 +161,11 @@ class GeneratedPlanPricingEvidence:
                     "catalog_product_sha256": item.catalog_product_sha256,
                     "catalog_published_at": item.catalog_published_at,
                     "catalog_effective_at": item.catalog_effective_at,
+                    "quantity_max": item.quantity_max,
+                    "monthly_cost_max_minor": item.monthly_cost_max_minor,
+                    "unit_price_low_usd": item.unit_price_low_usd,
+                    "unit_price_low_source_url": item.unit_price_low_source_url,
+                    "low_cost_quantity": item.low_cost_quantity,
                 }
                 for item in self.lines
             ],
@@ -189,7 +200,7 @@ class GeneratedPlanPricingEvidence:
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
             "usage_assumptions", "lines", "transitions", "findings", "evidence_sha256",
         }
-        if set(document) != expected_fields or document.get("version") != 2:
+        if set(document) != expected_fields or document.get("version") not in {2, 3}:
             raise PlanPricingError("pricing evidence shape is invalid")
         try:
             usage_assumptions = document["usage_assumptions"]
@@ -235,7 +246,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if result.as_manifest_document() != document:
+        if document.get("version") == 3 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -248,6 +259,8 @@ class CatalogRate:
     effective_at: str
     published_at: str
     product_digest: str
+    low_unit_price_usd: str | None = None
+    low_rate_source_url: str | None = None
 
 
 class PriceListClient(Protocol):
@@ -394,6 +407,103 @@ class AwsPriceListCatalog:
             self._cache[cache_key] = (now + self.cache_ttl_seconds, rate)
         return rate
 
+    def s3_standard_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonS3",
+            region,
+            "s3-standard-storage",
+            [
+                ("productFamily", "Storage"),
+                ("storageClass", "General Purpose"),
+                ("volumeType", "Standard"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def s3_standard_request_rate(self, region: str, *, tier: int) -> CatalogRate:
+        if tier not in {1, 2}:
+            raise PlanPricingError("S3 request price tier is unsupported")
+        return self._regional_rate(
+            "AmazonS3",
+            region,
+            f"s3-standard-requests-tier-{tier}",
+            [
+                ("productFamily", "API Request"),
+                ("group", f"S3-API-Tier{tier}"),
+                ("regionCode", region),
+            ],
+            "Requests",
+        )
+
+    def aws_internet_egress_rate(self, region: str) -> CatalogRate:
+        rate = self._regional_rate(
+            "AWSDataTransfer",
+            region,
+            "aws-internet-egress",
+            [
+                ("productFamily", "Data Transfer"),
+                ("fromRegionCode", region),
+                ("toLocation", "External"),
+                ("transferType", "AWS Outbound"),
+            ],
+            "GB",
+        )
+        # AWS's public data transfer page publishes a lowest Internet egress
+        # tier of $0.05/GB above 150 TB/month. Price List returns only the first
+        # tier for this usage code, so use that documented rate only as the
+        # lower estimate while preserving the matched catalog product digest.
+        return CatalogRate(
+            rate.sku,
+            rate.unit,
+            rate.unit_price_usd,
+            rate.effective_at,
+            rate.published_at,
+            rate.product_digest,
+            low_unit_price_usd="0.05",
+            low_rate_source_url="https://aws.amazon.com/s3/pricing/",
+        )
+
+    def _regional_rate(
+        self,
+        service_code: str,
+        region: str,
+        rate_key: str,
+        attributes: list[tuple[str, str]],
+        expected_unit: str,
+    ) -> CatalogRate:
+        if not isinstance(region, str) or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
+            raise PlanPricingError("plan region is invalid")
+        cache_key = (region, rate_key)
+        now = self.clock()
+        with self._cache_lock:
+            cached = self._cache.get(cache_key)
+            if cached and cached[0] > now:
+                return cached[1]
+        filters = [
+            {"Type": "TERM_MATCH", "Field": field, "Value": value}
+            for field, value in attributes
+        ]
+        try:
+            response = self.client.get_products(
+                ServiceCode=service_code, Filters=filters, MaxResults=100
+            )
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+            raise PriceListUnavailableError("AWS regional price lookup is unavailable") from None
+        if not isinstance(response, dict):
+            raise PriceListUnavailableError("AWS regional price response is malformed")
+        if response.get("NextToken"):
+            raise PlanPricingError("AWS regional price results are truncated")
+        raw_products = response.get("PriceList")
+        if not isinstance(raw_products, list) or len(raw_products) != 1:
+            raise PlanPricingError("AWS regional price match is missing or ambiguous")
+        rate = _parse_regional_product(
+            raw_products[0], service_code, dict(attributes), expected_unit
+        )
+        with self._cache_lock:
+            self._cache[cache_key] = (now + self.cache_ttl_seconds, rate)
+        return rate
+
 
 # These resources have no direct hourly, request, storage, or transfer charge.
 # Any billable companion resources and usage-based services are priced
@@ -434,9 +544,9 @@ def evaluate_generated_plan_pricing(
 ) -> GeneratedPlanPricingEvidence:
     """Price plan resources from trusted mappings and explicit plan quantities.
 
-    Nova-authored price, SKU, and usage text is not read here. Only gp3 EBS
-    storage has a billable mapping in this initial version. Any unsupported
-    resource or usage dimension prevents approval.
+    Nova-authored price, SKU, and usage text is not read here. Only EBS gp3
+    and proposal-wide usage across plain S3 Standard buckets have billable
+    mappings. Any unsupported resource or usage dimension prevents approval.
     """
     if not isinstance(trusted_context, TrustedPlanPricingContext):
         raise PlanPricingError("trusted persisted pricing context is required")
@@ -584,15 +694,19 @@ def evaluate_generated_plan_pricing(
     resources = _planned_managed_resources(document)
     changes = _changes_by_address(document)
     transitions, transition_findings = _classify_aws_transitions(resources, changes)
-    pricing_catalog = catalog or AwsPriceListCatalog()
+    pricing_catalog = catalog
     lines: list[PlanCostLine] = []
     findings: list[PlanPricingFinding] = list(transition_findings)
     unavailable = False
+    s3_buckets: list[dict[str, Any]] = []
     for resource in resources:
         address = resource["address"]
         resource_type = resource["type"]
         values = resource["values"]
         if resource_type in ZERO_DIRECT_CHARGE_RESOURCE_TYPES:
+            continue
+        if resource_type == "aws_s3_bucket":
+            s3_buckets.append(resource)
             continue
         if resource_type != "aws_ebs_volume":
             findings.append(
@@ -614,6 +728,8 @@ def evaluate_generated_plan_pricing(
             findings.append(PlanPricingFinding(error[0], address, error[1]))
             continue
         try:
+            if pricing_catalog is None:
+                pricing_catalog = AwsPriceListCatalog()
             rate = pricing_catalog.ebs_gp3_storage_rate(region)
         except PriceListUnavailableError:
             unavailable = True
@@ -654,8 +770,134 @@ def evaluate_generated_plan_pricing(
             )
         )
 
-    total_minor = sum(item.monthly_cost_minor for item in lines)
-    within_budget = None if monthly_budget_minor is None else total_minor <= monthly_budget_minor
+    if s3_buckets:
+        if trusted_context.usage_assumptions is None:
+            findings.append(
+                PlanPricingFinding(
+                    "s3_usage_assumptions_missing",
+                    s3_buckets[0]["address"],
+                    "S3 Standard storage, request, and internet transfer usage assumptions are required.",
+                )
+            )
+        else:
+            bucket = s3_buckets[0]
+            bucket_error = None
+            for item in s3_buckets:
+                error = _validate_s3_bucket(item["values"], changes.get(item["address"]))
+                if error:
+                    bucket_error = (item, error)
+                    break
+            if bucket_error:
+                invalid_bucket, error = bucket_error
+                findings.append(
+                    PlanPricingFinding(error[0], invalid_bucket["address"], error[1])
+                )
+            else:
+                try:
+                    if pricing_catalog is None:
+                        pricing_catalog = AwsPriceListCatalog()
+                    usage = S3PricingUsageAssumptions.model_validate(
+                        trusted_context.usage_assumptions
+                    )
+                    s3_rates = (
+                        ("Amazon S3 Standard storage", "monthly_storage_gb", "GB-Mo",
+                         pricing_catalog.s3_standard_storage_rate(region)),
+                        ("Amazon S3 Standard PUT/COPY/POST/LIST requests",
+                         "monthly_put_copy_post_list_requests", "Requests",
+                         pricing_catalog.s3_standard_request_rate(region, tier=1)),
+                        ("Amazon S3 Standard GET requests", "monthly_get_requests", "Requests",
+                         pricing_catalog.s3_standard_request_rate(region, tier=2)),
+                        ("AWS internet data transfer out", "monthly_internet_egress_gb", "GB",
+                         pricing_catalog.aws_internet_egress_rate(region)),
+                    )
+                    if usage.monthly_internet_egress_gb.maximum > 500_000:
+                        findings.append(
+                            PlanPricingFinding(
+                                "s3_egress_price_limit_exceeded",
+                                bucket["address"],
+                                "S3 internet egress above 500 TB per month needs a separate AWS quote.",
+                            )
+                        )
+                    else:
+                        for description, assumption_name, unit, rate in s3_rates:
+                            amount = getattr(usage, assumption_name)
+                            unit_price = Decimal(rate.unit_price_usd)
+                            low_unit_price = Decimal(
+                                rate.low_unit_price_usd or rate.unit_price_usd
+                            )
+                            low_quantity = amount.minimum
+                            # AWS's 100 GB Internet egress allowance is shared
+                            # across commercial services and regions. Use it
+                            # only for those low estimates; the budget ceiling
+                            # assumes no free allowance.
+                            if (
+                                assumption_name == "monthly_internet_egress_gb"
+                                and not region.startswith(("cn-", "us-gov-"))
+                            ):
+                                low_quantity = max(0, low_quantity - 100)
+                            low_minor = int(
+                                (low_unit_price * low_quantity * 100).quantize(
+                                    Decimal(1), rounding=ROUND_FLOOR
+                                )
+                            )
+                            high_minor = int(
+                                (unit_price * amount.maximum * 100).quantize(
+                                    Decimal(1), rounding=ROUND_CEILING
+                                )
+                            )
+                            lines.append(
+                                PlanCostLine(
+                                    address="usage_assumptions.s3",
+                                    resource_type="aws_s3_bucket",
+                                    description=description,
+                                    quantity=amount.minimum,
+                                    quantity_max=amount.maximum,
+                                    unit=unit,
+                                    unit_price_usd=rate.unit_price_usd,
+                                    monthly_cost_minor=low_minor,
+                                    monthly_cost_max_minor=high_minor,
+                                    unit_price_low_usd=format(low_unit_price, "f"),
+                                    unit_price_low_source_url=rate.low_rate_source_url,
+                                    low_cost_quantity=low_quantity,
+                                    catalog_sku=rate.sku,
+                                    catalog_product_sha256=rate.product_digest,
+                                    catalog_published_at=rate.published_at,
+                                    catalog_effective_at=rate.effective_at,
+                                )
+                            )
+                except PriceListUnavailableError:
+                    unavailable = True
+                    findings.append(
+                        PlanPricingFinding(
+                            "regional_price_lookup_unavailable",
+                            bucket["address"],
+                            "DavDeploy could not verify current regional S3 or transfer prices.",
+                        )
+                    )
+                except PlanPricingError:
+                    findings.append(
+                        PlanPricingFinding(
+                            "regional_price_ambiguous",
+                            bucket["address"],
+                            "DavDeploy could not identify one exact regional S3 or transfer price.",
+                        )
+                    )
+                except (TypeError, ValueError):
+                    findings.append(
+                        PlanPricingFinding(
+                            "s3_usage_assumptions_invalid",
+                            bucket["address"],
+                            "Persisted S3 usage assumptions are invalid for pricing.",
+                        )
+                    )
+
+    total_max_minor = sum(
+        item.monthly_cost_minor
+        if item.monthly_cost_max_minor is None
+        else item.monthly_cost_max_minor
+        for item in lines
+    )
+    within_budget = None if monthly_budget_minor is None else total_max_minor <= monthly_budget_minor
     if within_budget is False:
         findings.append(
             PlanPricingFinding(
@@ -783,6 +1025,7 @@ def pricing_evidence_is_approval_eligible(
     ):
         return False
     line_total = 0
+    line_max_total = 0
     for line in lines:
         if not isinstance(line, dict):
             return False
@@ -790,10 +1033,116 @@ def pricing_evidence_is_approval_eligible(
         if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
             return False
         line_total += amount
-    # This version's supported mappings have exact quantities and rates, so
-    # the evidence must present one exact total rather than an invented range.
-    if low != high or high != line_total:
+        maximum = line.get("monthly_cost_max_minor", amount)
+        if maximum is None:
+            maximum = amount
+        quantity = line.get("quantity")
+        quantity_max = line.get("quantity_max")
+        if quantity_max is None:
+            quantity_max = quantity
+        if (
+            isinstance(maximum, bool)
+            or not isinstance(maximum, int)
+            or maximum < amount
+            or isinstance(quantity, bool)
+            or not isinstance(quantity, int)
+            or quantity < 0
+            or isinstance(quantity_max, bool)
+            or not isinstance(quantity_max, int)
+            or quantity_max < quantity
+        ):
+            return False
+        low_cost_quantity = line.get("low_cost_quantity")
+        if low_cost_quantity is None:
+            low_cost_quantity = quantity
+        if (
+            isinstance(low_cost_quantity, bool)
+            or not isinstance(low_cost_quantity, int)
+            or low_cost_quantity < 0
+            or low_cost_quantity > quantity
+        ):
+            return False
+        if line.get("unit_price_low_usd") is not None:
+            try:
+                low_rate = Decimal(line["unit_price_low_usd"])
+                high_rate = Decimal(line["unit_price_usd"])
+            except (InvalidOperation, TypeError, ValueError):
+                return False
+            if (
+                not low_rate.is_finite()
+                or not high_rate.is_finite()
+                or low_rate < 0
+                or high_rate < low_rate
+                or amount
+                != int(
+                    (low_rate * low_cost_quantity * 100).quantize(
+                        Decimal(1), rounding=ROUND_FLOOR
+                    )
+                )
+                or maximum
+                != int(
+                    (high_rate * quantity_max * 100).quantize(
+                        Decimal(1), rounding=ROUND_CEILING
+                    )
+                )
+            ):
+                return False
+        line_max_total += maximum
+    if low != line_total or high != line_max_total:
         return False
+    s3_lines = [line for line in lines if line.get("resource_type") == "aws_s3_bucket"]
+    if s3_lines:
+        if trusted_context.usage_assumptions is None:
+            return False
+        try:
+            assumptions = S3PricingUsageAssumptions.model_validate(
+                trusted_context.usage_assumptions
+            )
+        except (TypeError, ValueError):
+            return False
+        expected_s3_lines = {
+            "Amazon S3 Standard storage": (
+                assumptions.monthly_storage_gb,
+                "GB-Mo",
+            ),
+            "Amazon S3 Standard PUT/COPY/POST/LIST requests": (
+                assumptions.monthly_put_copy_post_list_requests,
+                "Requests",
+            ),
+            "Amazon S3 Standard GET requests": (
+                assumptions.monthly_get_requests,
+                "Requests",
+            ),
+            "AWS internet data transfer out": (
+                assumptions.monthly_internet_egress_gb,
+                "GB",
+            ),
+        }
+        if len(s3_lines) != len(expected_s3_lines):
+            return False
+        actual_s3_lines = {line.get("description"): line for line in s3_lines}
+        if set(actual_s3_lines) != set(expected_s3_lines):
+            return False
+        for description, (usage, unit) in expected_s3_lines.items():
+            line = actual_s3_lines[description]
+            expected_low_quantity = usage.minimum
+            if description == "AWS internet data transfer out" and not trusted_context.region.startswith(
+                ("cn-", "us-gov-")
+            ):
+                expected_low_quantity = max(0, expected_low_quantity - 100)
+            if (
+                line.get("quantity") != usage.minimum
+                or line.get("quantity_max") != usage.maximum
+                or line.get("low_cost_quantity") != expected_low_quantity
+                or line.get("unit") != unit
+            ):
+                return False
+            if description == "AWS internet data transfer out" and (
+                line.get("unit_price_low_usd") != "0.05"
+                or line.get("unit_price_low_source_url")
+                != "https://aws.amazon.com/s3/pricing/"
+            ):
+                return False
     expected_within_budget = (
         None
         if trusted_context.monthly_budget_minor is None
@@ -852,6 +1201,37 @@ def _validate_gp3_volume(
         )
     if not isinstance(values.get("encrypted"), bool):
         return "storage_encryption_unknown", "The planned storage encryption setting is unknown."
+    return None
+
+
+def _validate_s3_bucket(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "plan_change_metadata_missing", "The plan lacks S3 bucket pricing metadata."
+    change_document = change["change"]
+    after = change_document.get("after")
+    unknown = change_document.get("after_unknown")
+    if not isinstance(after, dict) or not isinstance(unknown, dict):
+        return "plan_final_values_missing", "The plan lacks final S3 bucket pricing values."
+    if not _valid_unknown_tree(unknown):
+        return "plan_unknown_structure_invalid", "The plan has an invalid S3 unknown-value shape."
+    if values.get("object_lock_enabled") is not False or after.get("object_lock_enabled") is not False:
+        return (
+            "s3_object_lock_unpriced",
+            "S3 Object Lock retention and object versions are not included in this estimate.",
+        )
+    if _path_contains_unknown(unknown, ("object_lock_enabled",)):
+        return "s3_configuration_unknown", "The planned S3 Object Lock setting is unknown."
+    if values.get("object_lock_configuration") not in (None, {}) or after.get(
+        "object_lock_configuration"
+    ) not in (None, {}):
+        return (
+            "s3_object_lock_unpriced",
+            "S3 Object Lock retention and object versions are not included in this estimate.",
+        )
+    if values != after:
+        return "plan_final_values_mismatch", "S3 pricing values do not match the final planned bucket."
     return None
 
 
@@ -921,6 +1301,106 @@ def _parse_gp3_product(raw_product: Any, region: str) -> CatalogRate:
     published_at = published_datetime.astimezone(UTC).isoformat().replace("+00:00", "Z")
     digest = _canonical_digest(product_doc)
     return CatalogRate(sku, "GB-Mo", format(price, "f"), effective_at, published_at, digest)
+
+
+def _parse_regional_product(
+    raw_product: Any,
+    service_code: str,
+    expected_attributes: dict[str, str],
+    expected_unit: str,
+) -> CatalogRate:
+    if not isinstance(raw_product, str):
+        raise PlanPricingError("AWS regional price result is malformed")
+    try:
+        product_doc = json.loads(raw_product)
+    except (json.JSONDecodeError, TypeError):
+        raise PlanPricingError("AWS regional price result is malformed") from None
+    if not isinstance(product_doc, dict):
+        raise PlanPricingError("AWS regional price result is malformed")
+    product = product_doc.get("product")
+    attributes = product.get("attributes") if isinstance(product, dict) else None
+    if (
+        product_doc.get("serviceCode") != service_code
+        or not isinstance(product, dict)
+        or product.get("productFamily") != expected_attributes.get("productFamily")
+        or not isinstance(attributes, dict)
+        or any(attributes.get(key) != value for key, value in expected_attributes.items()
+               if key != "productFamily")
+    ):
+        raise PlanPricingError("AWS regional price result did not match the requested product")
+    sku = product.get("sku")
+    if not isinstance(sku, str) or not sku:
+        raise PlanPricingError("AWS regional price SKU is missing")
+    terms = product_doc.get("terms")
+    on_demand = terms.get("OnDemand") if isinstance(terms, dict) else None
+    if not isinstance(on_demand, dict) or len(on_demand) != 1:
+        raise PlanPricingError("AWS On-Demand price term is missing or ambiguous")
+    term = next(iter(on_demand.values()))
+    if not isinstance(term, dict) or term.get("sku") != sku:
+        raise PlanPricingError("AWS On-Demand price term does not match the product SKU")
+    dimensions = term.get("priceDimensions")
+    if not isinstance(dimensions, dict) or not dimensions:
+        raise PlanPricingError("AWS price dimensions are missing")
+    prices: list[Decimal] = []
+    tier_ranges: list[tuple[Decimal, Decimal]] = []
+    for dimension in dimensions.values():
+        if not isinstance(dimension, dict) or dimension.get("unit") != expected_unit:
+            raise PlanPricingError("AWS price unit is unsupported")
+        price_per_unit = dimension.get("pricePerUnit")
+        raw_price = price_per_unit.get("USD") if isinstance(price_per_unit, dict) else None
+        try:
+            price = Decimal(str(raw_price))
+        except (InvalidOperation, ValueError):
+            raise PlanPricingError("AWS USD unit price is invalid") from None
+        if not price.is_finite() or price < 0:
+            raise PlanPricingError("AWS USD unit price is invalid")
+        begin, end = dimension.get("beginRange"), dimension.get("endRange")
+        if not isinstance(begin, str) or not isinstance(end, str):
+            raise PlanPricingError("AWS price tier bounds are invalid")
+        try:
+            lower = Decimal(begin)
+            upper = Decimal("Infinity") if end == "Inf" else Decimal(end)
+        except InvalidOperation:
+            raise PlanPricingError("AWS price tier bounds are invalid") from None
+        if not lower.is_finite() or lower < 0 or (not upper.is_finite() and end != "Inf"):
+            raise PlanPricingError("AWS price tier bounds are invalid")
+        if upper.is_finite() and upper <= lower:
+            raise PlanPricingError("AWS price tier bounds are invalid")
+        prices.append(price)
+        tier_ranges.append((lower, upper))
+    if service_code != "AWSDataTransfer":
+        ordered_ranges = sorted(tier_ranges)
+        if ordered_ranges[0][0] != 0 or any(
+            left[1] != right[0]
+            for left, right in pairwise(ordered_ranges)
+        ) or ordered_ranges[-1][1] != Decimal("Infinity"):
+            raise PlanPricingError("AWS price tiers do not cover the full usage range")
+    # Usage tiers and account-wide free allowances can depend on traffic outside
+    # this proposal. Applying the highest published unit rate to all declared
+    # usage avoids assuming that a shared allowance or cheaper tier is available.
+    price = max(prices)
+    effective_at = term.get("effectiveDate")
+    published_at = product_doc.get("publicationDate")
+    if not isinstance(effective_at, str) or not isinstance(published_at, str):
+        raise PlanPricingError("AWS price timestamps are missing")
+    try:
+        effective_datetime = datetime.fromisoformat(effective_at)
+        published_datetime = datetime.fromisoformat(published_at)
+    except ValueError:
+        raise PlanPricingError("AWS price catalog timestamp is malformed") from None
+    if effective_datetime.tzinfo is None or published_datetime.tzinfo is None:
+        raise PlanPricingError("AWS price catalog timestamp is not timezone-aware")
+    effective_at = effective_datetime.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    published_at = published_datetime.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    return CatalogRate(
+        sku,
+        expected_unit,
+        format(price, "f"),
+        effective_at,
+        published_at,
+        _canonical_digest(product_doc),
+        low_unit_price_usd=format(min(prices), "f"),
+    )
 
 
 def _plan_region_matches(document: dict[str, Any], region: str) -> bool:
@@ -1171,7 +1651,13 @@ def _evidence(
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
     findings = tuple(sorted(findings, key=lambda item: (item.code, item.address or "")))
-    low = high = sum(item.monthly_cost_minor for item in lines)
+    low = sum(item.monthly_cost_minor for item in lines)
+    high = sum(
+        item.monthly_cost_minor
+        if item.monthly_cost_max_minor is None
+        else item.monthly_cost_max_minor
+        for item in lines
+    )
     if status != PlanPricingStatus.COMPLETE:
         low = high = None
     if budget is not None and status == PlanPricingStatus.COMPLETE and within_budget is None:
@@ -1181,7 +1667,7 @@ def _evidence(
         region, currency, budget, persisted_context_sha256, usage_assumptions
     )
     payload = {
-        "version": 2,
+        "version": 3,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -1218,6 +1704,11 @@ def _evidence(
                 "catalog_product_sha256": item.catalog_product_sha256,
                 "catalog_published_at": item.catalog_published_at,
                 "catalog_effective_at": item.catalog_effective_at,
+                "quantity_max": item.quantity_max,
+                "monthly_cost_max_minor": item.monthly_cost_max_minor,
+                "unit_price_low_usd": item.unit_price_low_usd,
+                "unit_price_low_source_url": item.unit_price_low_source_url,
+                "low_cost_quantity": item.low_cost_quantity,
             }
             for item in lines
         ],
