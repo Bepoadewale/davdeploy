@@ -657,6 +657,16 @@
             ],
             "title": "Public Access"
           },
+          "rds_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RdsPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "region": {
             "anyOf": [
               {
@@ -699,16 +709,6 @@
               }
             ],
             "title": "Workload Type"
-          },
-          "rds_pricing_usage_assumptions": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RdsPricingUsageAssumptions"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "title": "InfrastructurePlanConstraintUpdateRequest",
@@ -976,6 +976,20 @@
         "title": "ProjectRequest",
         "type": "object"
       },
+      "RdsPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Bounded monthly RDS backup storage usage; quantities only, never prices.",
+        "properties": {
+          "monthly_backup_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_backup_storage_gb_month"
+        ],
+        "title": "RdsPricingUsageAssumptions",
+        "type": "object"
+      },
       "S3PricingUsageAssumptions": {
         "additionalProperties": false,
         "description": "Explicit S3 Standard usage ranges; these are quantities, never prices.",
@@ -1211,20 +1225,6 @@
           "type"
         ],
         "title": "ValidationError",
-        "type": "object"
-      },
-      "RdsPricingUsageAssumptions": {
-        "additionalProperties": false,
-        "description": "Customer-declared monthly RDS backup storage usage range.",
-        "properties": {
-          "monthly_backup_storage_gb_month": {
-            "$ref": "#/components/schemas/MonthlyUsageRange"
-          }
-        },
-        "required": [
-          "monthly_backup_storage_gb_month"
-        ],
-        "title": "RdsPricingUsageAssumptions",
         "type": "object"
       }
     }
