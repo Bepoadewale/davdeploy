@@ -36,13 +36,14 @@ PR #411 is a draft based on main commit 01895d6b6ceb7d69837187e3c19c0a5cd5033830
 
 ## Acceptance status
 
-In progress. Implementation is present on the branch. Required hosted CI is still running or being corrected. No workload apply has been performed.
+Implementation is present and all seven hosted CI checks passed on commit 26a45ef57f00e9294c2d88280437b155605f42d9 (run 43643432110). The PR remains a draft pending final-head CI after this evidence update. No workload apply has been performed.
 
 ## Tests / validation performed
 
 - Added tests for pricing ranges, persisted-context extraction, digest binding, unsupported configurations, and missing assumptions.
-- GitHub Actions run 43641000322 failed the docs convention check because required ticket markers were missing; this file has been corrected on the branch.
-- Full hosted CI for the corrected final head is pending.
+- GitHub Actions run 43643432110 passed all seven required checks on commit 26a45ef57f00e9294c2d88280437b155605f42d9.
+- The hosted Python job passed 1,226 tests; hosted end-to-end verification including API contract and OpenAPI checks passed.
+- An earlier docs convention failure was corrected before the passing run.
 - No local test commands or AWS workload commands were run.
 
 ## Evidence files produced
