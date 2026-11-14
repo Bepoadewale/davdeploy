@@ -90,3 +90,23 @@ was created, changed, or deleted.
 
 This records local fixture evidence only. It does not claim hosted customer
 apply, health, recovery, or teardown readiness.
+
+
+## Hosted branch verification — 2026-11-14
+
+After GitHub updated this PR branch to the latest mainline, run
+`43638007038` passed all seven required checks on commit
+`44fa76f6e3e85fa0bddce26ddc0f25e724b03209`: Python, cloud contracts,
+policy, documentation conventions, secrets, supply chain, and the hosted
+`local-e2e` job. The first synchronized run exposed stale test fixtures that
+did not carry the new digest-bound regional pricing evidence and a bootstrap
+guard that recognized only the plan-runner role. The apply bootstrap guard now
+admits the configured fixed apply role only when the apply feature flag is
+enabled; exact-run, current approval, and administrator checks remain in the
+route. The fixtures now use structurally valid, fresh pricing evidence.
+
+No local tests were run for this update. No AWS workload or customer apply was
+started. The saved-plan apply worker remains intentionally unwired and
+fail-closed, and PR #399 remains a draft because material pricing and hosted
+lifecycle acceptance are incomplete. The earlier local fixture evidence above
+is historical and is not a substitute for hosted AWS execution evidence.
