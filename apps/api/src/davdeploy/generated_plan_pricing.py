@@ -23,7 +23,11 @@ from typing import Any, ClassVar, Protocol
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from davdeploy.domain import S3PricingUsageAssumptions, SqsPricingUsageAssumptions
+from davdeploy.domain import (
+    RdsPricingUsageAssumptions,
+    S3PricingUsageAssumptions,
+    SqsPricingUsageAssumptions,
+)
 
 
 class PlanPricingStatus(StrEnum):
@@ -99,6 +103,7 @@ class GeneratedPlanPricingEvidence:
     plan_json_sha256: str
     usage_assumptions: dict[str, Any] | None
     sqs_usage_assumptions: dict[str, Any] | None
+    rds_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -125,12 +130,13 @@ class GeneratedPlanPricingEvidence:
             "estimate_disclaimer": self.estimate_disclaimer,
             "usage_assumptions": self.usage_assumptions,
             "sqs_usage_assumptions": self.sqs_usage_assumptions,
+            "rds_usage_assumptions": self.rds_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 4,
+            "version": 5,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -151,6 +157,7 @@ class GeneratedPlanPricingEvidence:
             "plan_json_sha256": self.plan_json_sha256,
             "usage_assumptions": self.usage_assumptions,
             "sqs_usage_assumptions": self.sqs_usage_assumptions,
+            "rds_usage_assumptions": self.rds_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -201,10 +208,18 @@ class GeneratedPlanPricingEvidence:
             "proposal_declared_budget_minor", "proposal_declared_currency",
             "budget_source", "persisted_context_sha256",
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
-            "usage_assumptions", "sqs_usage_assumptions", "lines", "transitions", "findings", "evidence_sha256",
+            "usage_assumptions", "sqs_usage_assumptions", "rds_usage_assumptions",
+            "lines", "transitions", "findings", "evidence_sha256",
         }
-        legacy_fields = expected_fields - {"sqs_usage_assumptions"}
-        if (set(document) != expected_fields and set(document) != legacy_fields) or document.get("version") not in {2, 3, 4}:
+        version_4_fields = expected_fields - {"rds_usage_assumptions"}
+        legacy_fields = expected_fields - {"sqs_usage_assumptions", "rds_usage_assumptions"}
+        version = document.get("version")
+        valid_shape = (
+            version == 5 and set(document) == expected_fields
+            or version == 4 and set(document) == version_4_fields
+            or version in {2, 3} and set(document) == legacy_fields
+        )
+        if not valid_shape:
             raise PlanPricingError("pricing evidence shape is invalid")
         try:
             usage_assumptions = document["usage_assumptions"]
@@ -218,6 +233,14 @@ class GeneratedPlanPricingEvidence:
             sqs_usage = None if raw_sqs_usage is None else SqsPricingUsageAssumptions.model_validate(raw_sqs_usage).model_dump(mode="json")
             if sqs_usage != raw_sqs_usage:
                 raise ValueError("non-canonical SQS usage assumptions")
+            raw_rds_usage = document.get("rds_usage_assumptions")
+            rds_usage = (
+                None
+                if raw_rds_usage is None
+                else RdsPricingUsageAssumptions.model_validate(raw_rds_usage).model_dump(mode="json")
+            )
+            if rds_usage != raw_rds_usage:
+                raise ValueError("non-canonical RDS usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -248,6 +271,7 @@ class GeneratedPlanPricingEvidence:
                 plan_json_sha256=document["plan_json_sha256"],
                 usage_assumptions=usage_assumptions,
                 sqs_usage_assumptions=sqs_usage,
+                rds_usage_assumptions=rds_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -255,7 +279,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 4 and result.as_manifest_document() != document:
+        if document.get("version") == 5 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -291,6 +315,7 @@ class TrustedPlanPricingContext:
     persisted_context_sha256: str
     usage_assumptions: dict[str, Any] | None = None
     sqs_usage_assumptions: dict[str, Any] | None = None
+    rds_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -302,6 +327,7 @@ class TrustedPlanPricingContext:
             self.persisted_context_sha256,
             self.usage_assumptions,
             self.sqs_usage_assumptions,
+            self.rds_usage_assumptions,
         )
 
     @classmethod
@@ -339,6 +365,11 @@ class TrustedPlanPricingContext:
             if isinstance(workload_spec, dict)
             else None
         )
+        raw_rds_usage_assumptions = (
+            workload_spec.get("rds_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
         if provider != "aws":
             raise PlanPricingError("persisted customer revision is not an AWS plan")
         if not isinstance(region, str) or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
@@ -369,6 +400,15 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json")
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid SQS pricing usage assumptions") from None
+        if raw_rds_usage_assumptions is None:
+            rds_usage_assumptions = None
+        else:
+            try:
+                rds_usage_assumptions = RdsPricingUsageAssumptions.model_validate(
+                    raw_rds_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid RDS pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -376,6 +416,7 @@ class TrustedPlanPricingContext:
             persisted_context_sha256=expected_sha256,
             usage_assumptions=usage_assumptions,
             sqs_usage_assumptions=sqs_usage_assumptions,
+            rds_usage_assumptions=rds_usage_assumptions,
         )
 
 
@@ -1854,6 +1895,7 @@ def _evidence(
     transitions: tuple[PlanTransition, ...] = (),
     usage_assumptions: dict[str, Any] | None = None,
     sqs_usage_assumptions: dict[str, Any] | None = None,
+    rds_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -1900,6 +1942,7 @@ def _evidence(
         "plan_json_sha256": plan_digest,
         "usage_assumptions": usage_assumptions,
         "sqs_usage_assumptions": sqs_usage_assumptions,
+        "rds_usage_assumptions": rds_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -1958,6 +2001,7 @@ def _evidence(
         plan_json_sha256=plan_digest,
         usage_assumptions=usage_assumptions,
         sqs_usage_assumptions=sqs_usage_assumptions,
+        rds_usage_assumptions=rds_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -1977,6 +2021,7 @@ def _pricing_context_digest(
     persisted_context_sha256: str,
     usage_assumptions: dict[str, Any] | None = None,
     sqs_usage_assumptions: dict[str, Any] | None = None,
+    rds_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
@@ -1987,5 +2032,6 @@ def _pricing_context_digest(
             "persisted_context_sha256": persisted_context_sha256,
             "usage_assumptions": usage_assumptions,
             "sqs_usage_assumptions": sqs_usage_assumptions,
+            "rds_usage_assumptions": rds_usage_assumptions,
         }
     )
