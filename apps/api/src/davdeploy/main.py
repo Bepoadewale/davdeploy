@@ -201,13 +201,23 @@ configure_frontend_cors(
 @app.middleware("http")
 async def apply_api_guardrails(request: Request, call_next):
     """Apply bounded abuse protection, contract metadata and security headers."""
+    bootstrap_principal = request.headers.get("x-davdeploy-bootstrap-principal")
+    plan_role = os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN")
+    trusted_plan_role = trusted_codebuild_role_matches(bootstrap_principal, plan_role)
+    apply_runner_enabled = (
+        os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() == "true"
+    )
+    apply_role = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN")
+    trusted_apply_role = (
+        request.method == "POST"
+        and request.url.path == "/api/v1/terraform-state/credentials"
+        and apply_runner_enabled
+        and trusted_codebuild_role_matches(bootstrap_principal, apply_role)
+    )
     is_terraform_state_bootstrap = (
         request.method == "POST"
         and request.url.path == "/api/v1/terraform-state/credentials"
-        and trusted_codebuild_role_matches(
-            request.headers.get("x-davdeploy-bootstrap-principal"),
-            os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN"),
-        )
+        and (trusted_plan_role or trusted_apply_role)
     )
     is_nova_plan_credential_bootstrap = (
         request.method == "POST"
