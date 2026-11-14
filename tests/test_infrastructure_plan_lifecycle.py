@@ -178,6 +178,34 @@ def test_customer_usage_assumptions_are_persisted_only_in_a_new_revision():
     )
 
 
+def test_customer_sqs_usage_assumptions_are_persisted_and_cleared_by_new_revisions():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "monthly_standard_request_units": {"minimum": 1_000, "maximum": 2_000},
+        "monthly_fifo_request_units": {"minimum": 0, "maximum": 0},
+        "monthly_fair_queue_request_units": {"minimum": 0, "maximum": 0},
+        "monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+    }
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"sqs_pricing_usage_assumptions": usage},
+    )
+    assert revised.revision_number == 2
+    assert revised.content["user_constraints"]["sqs_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"]["sqs_pricing_usage_assumptions"] == usage
+    assert revised.content["revision_diff"]["sqs_pricing_usage_assumptions"] == {
+        "before": None, "after": usage,
+    }
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"sqs_pricing_usage_assumptions": None},
+    )
+    assert "sqs_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "sqs_pricing_usage_assumptions" not in cleared.content["application_analysis"]["workload_spec"]
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

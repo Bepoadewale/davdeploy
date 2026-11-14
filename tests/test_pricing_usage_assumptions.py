@@ -3,6 +3,7 @@ from davdeploy.domain import (
     InfrastructurePlanConstraintUpdateRequest,
     MonthlyUsageRange,
     S3PricingUsageAssumptions,
+    SqsPricingUsageAssumptions,
 )
 from pydantic import ValidationError
 
@@ -70,3 +71,33 @@ def test_constraint_revision_input_is_strict_about_usage_assumption_fields():
         InfrastructurePlanConstraintUpdateRequest.model_validate(
             {"pricing_usage_assumptions": assumptions(), "arbitrary": "value"}
         )
+
+
+def test_sqs_usage_assumptions_are_strict_bounded_request_unit_ranges():
+    value = SqsPricingUsageAssumptions.model_validate({
+        "monthly_standard_request_units": {"minimum": 100, "maximum": 200},
+        "monthly_fifo_request_units": {"minimum": 5, "maximum": 10},
+        "monthly_fair_queue_request_units": {"minimum": 0, "maximum": 0},
+        "monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+    })
+    assert value.monthly_fifo_request_units.maximum == 10
+    with pytest.raises(ValidationError):
+        SqsPricingUsageAssumptions.model_validate({
+            "monthly_standard_request_units": {"minimum": 0, "maximum": 2},
+            "monthly_fifo_request_units": {"minimum": 0, "maximum": 1},
+            "monthly_fair_queue_request_units": {"minimum": 0, "maximum": 0},
+            "monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+            "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+            "unit_price_usd": "0.0000004",
+        })
+    with pytest.raises(ValidationError):
+        InfrastructurePlanConstraintUpdateRequest.model_validate({
+            "sqs_pricing_usage_assumptions": {
+                "monthly_standard_request_units": {"minimum": 10, "maximum": 1},
+                "monthly_fifo_request_units": {"minimum": 0, "maximum": 0},
+                "monthly_fair_queue_request_units": {"minimum": 0, "maximum": 0},
+                "monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+                "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+            }
+        })

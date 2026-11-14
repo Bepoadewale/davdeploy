@@ -1359,6 +1359,14 @@ class ProductService:
             else:
                 workload["pricing_usage_assumptions"] = usage_assumptions
                 next_constraints["pricing_usage_assumptions"] = usage_assumptions
+        if "sqs_pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["sqs_pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("sqs_pricing_usage_assumptions", None)
+                next_constraints.pop("sqs_pricing_usage_assumptions", None)
+            else:
+                workload["sqs_pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["sqs_pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1406,6 +1414,10 @@ class ProductService:
             "pricing_usage_assumptions": (
                 before_spec.get("pricing_usage_assumptions"),
                 after_spec.get("pricing_usage_assumptions"),
+            ),
+            "sqs_pricing_usage_assumptions": (
+                before_spec.get("sqs_pricing_usage_assumptions"),
+                after_spec.get("sqs_pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),
@@ -5034,9 +5046,9 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            12
-            if untagged_records
-            else 11 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 10
+            (13 if untagged_records else 12 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 11)
+            if pricing_document is not None
+            else (9 if untagged_records else 8 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 7)
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")

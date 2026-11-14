@@ -677,6 +677,16 @@
             "title": "Rejected Assumptions",
             "type": "array"
           },
+          "sqs_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SqsPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workload_type": {
             "anyOf": [
               {
@@ -980,6 +990,36 @@
           "monthly_internet_egress_gb"
         ],
         "title": "S3PricingUsageAssumptions",
+        "type": "object"
+      },
+      "SqsPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Proposal-wide monthly billed SQS request units by queue type.",
+        "properties": {
+          "monthly_cross_region_transfer_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_fair_queue_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_fifo_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_standard_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_standard_request_units",
+          "monthly_fifo_request_units",
+          "monthly_fair_queue_request_units",
+          "monthly_cross_region_transfer_gb",
+          "monthly_internet_egress_gb"
+        ],
+        "title": "SqsPricingUsageAssumptions",
         "type": "object"
       },
       "SubscriptionRequest": {
