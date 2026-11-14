@@ -185,3 +185,24 @@ After this source boundary is complete, integrate trusted regional pricing only
 after the user clarifies the held PR #318 direction; verify actual customer-role
 execution permissions and hosted plan behavior; then prove apply, health,
 update, recovery, destroy and independent absence through the hosted API.
+
+
+## Hosted handoff update — 2026-11-14
+
+- Main release `01895d6` is deployed; the hosted API is healthy and the
+  Nova plan-only runner is active. This did not deploy or certify a customer
+  workload.
+- Mainline now has revision-bound S3 and SQS price evidence. AWS Price List
+  currently returns `$0.016/hour` for RDS MySQL `db.t4g.micro` Single-AZ
+  and `$0.115/GB-month` for MySQL GP3 storage in `us-east-1`; those lookups
+  are not yet integrated into Nova pricing and do not cover backup, transfer,
+  or other material costs.
+- The apply CodeBuild project in this PR intentionally fails closed with an
+  unwired buildspec. Do not enable or describe it as an operational apply path.
+- GitHub synchronized the PR branch with current mainline. Follow-up fixes for
+  the strict pricing evidence shape and the fixed apply-role state bootstrap
+  passed all seven checks in run `43638007038` on commit
+  `44fa76f6e3e85fa0bddce26ddc0f25e724b03209`.
+- Keep this PR in draft until the exact-plan worker is wired and the pricing,
+  policy, and hosted lifecycle gates in the Nova goal are met. No local checks
+  were run for this update.
