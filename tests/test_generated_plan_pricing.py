@@ -24,6 +24,85 @@ CAPTURED_AT = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 PERSISTED_CONTEXT_SHA256 = "a" * 64
 
 
+def rds_values(**overrides):
+    values = {
+        "engine": "mysql",
+        "instance_class": "db.m6g.large",
+        "storage_type": "gp3",
+        "allocated_storage": 20,
+        "multi_az": False,
+        "publicly_accessible": False,
+        "backup_retention_period": 7,
+        "engine_lifecycle_support": "open-source-rds-extended-support-disabled",
+        "performance_insights_enabled": False,
+        "monitoring_interval": 0,
+        "max_allocated_storage": 0,
+        "iops": 3000,
+        "storage_throughput": 125,
+        "kms_key_id": None,
+        "enabled_cloudwatch_logs_exports": [],
+        "replicate_source_db": None,
+        "license_model": "general-public-license",
+    }
+    values.update(overrides)
+    return values
+
+
+RDS_USAGE = {"monthly_backup_storage_gb_month": {"minimum": 0, "maximum": 10}}
+
+
+def rds_plan(*, values=None, after_unknown=None):
+    return plan(
+        resource_type="aws_db_instance",
+        resource_values=values or rds_values(),
+    ) if after_unknown is None else _rds_plan_with_unknown(values or rds_values(), after_unknown)
+
+
+def _rds_plan_with_unknown(values, after_unknown):
+    document = rds_plan(values=values)
+    rds_change = next(item for item in document["resource_changes"] if item["type"] == "aws_db_instance")
+    rds_change["change"]["after_unknown"] = after_unknown
+    return document
+
+
+class FakeRdsPriceList:
+    def __init__(self):
+        self.calls = []
+
+    def get_products(self, **kwargs):
+        self.calls.append(kwargs)
+        filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        service = kwargs["ServiceCode"]
+        family = filters["productFamily"]
+        usage_type = filters.get("usagetype")
+        if service != "AmazonRDS":
+            raise AssertionError("unexpected pricing service")
+        if family == "Database Instance":
+            price, unit, sku = "0.016", "Hrs", "rds-instance"
+        elif family == "Database Storage":
+            price, unit, sku = "0.115", "GB-Mo", "rds-gp3"
+        elif family == "Storage Snapshot":
+            price, unit, sku = "0.095", "GB-Mo", "rds-backup"
+        else:
+            raise AssertionError("unexpected RDS price family")
+        attributes = {key: value for key, value in filters.items() if key != "productFamily"}
+        product = {
+            "product": {"sku": sku, "productFamily": family, "attributes": attributes},
+            "serviceCode": service,
+            "publicationDate": "2026-11-13T12:00:00Z",
+            "terms": {"OnDemand": {"offer": {
+                "sku": sku,
+                "effectiveDate": "2026-11-01T00:00:00Z",
+                "priceDimensions": {"dimension": {
+                    "beginRange": "0", "endRange": "Inf", "unit": unit,
+                    "pricePerUnit": {"USD": price},
+                }},
+            }}},
+        }
+        assert usage_type
+        return {"PriceList": [json.dumps(product)]}
+
+
 def ebs_values(**overrides):
     values = {
         "type": "gp3",
@@ -217,6 +296,8 @@ def evaluate(
     currency="USD",
     context_digest=PERSISTED_CONTEXT_SHA256,
     usage_assumptions=None,
+    sqs_usage_assumptions=None,
+    rds_usage_assumptions=None,
     catalog_client=None,
 ):
     client = catalog_client or client or FakePriceList()
@@ -229,6 +310,8 @@ def evaluate(
                 monthly_budget_minor=budget,
                 persisted_context_sha256=context_digest,
                 usage_assumptions=usage_assumptions,
+                sqs_usage_assumptions=sqs_usage_assumptions,
+                rds_usage_assumptions=rds_usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -287,6 +370,8 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     result, _ = evaluate(budget=400)
     legacy = result.as_manifest_document()
     legacy["version"] = 2
+    legacy.pop("sqs_usage_assumptions")
+    legacy.pop("rds_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -424,6 +509,37 @@ def test_sqs_usage_is_extracted_from_integrity_checked_customer_revision():
     with pytest.raises(ValueError, match="integrity check"):
         TrustedPlanPricingContext.from_persisted_revision(
             {**revision, "application_analysis": {"workload_spec": {}}},
+            expected_sha256=revision_sha256,
+        )
+
+
+
+def test_rds_usage_is_extracted_from_integrity_checked_customer_revision():
+    usage = {"monthly_backup_storage_gb_month": {"minimum": 2, "maximum": 20}}
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"rds_pricing_usage_assumptions": usage}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+
+    assert context.rds_usage_assumptions == usage
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256
+    ).pricing_context_sha256
+    with pytest.raises(ValueError, match="integrity check"):
+        TrustedPlanPricingContext.from_persisted_revision(
+            {
+                **revision,
+                "application_analysis": {"workload_spec": {}},
+            },
             expected_sha256=revision_sha256,
         )
 
@@ -770,7 +886,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 4
+    assert manifest["version"] == 5
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,
@@ -1021,3 +1137,94 @@ def test_expired_price_cache_never_falls_back_to_stale_rate():
 
     with pytest.raises(PriceListUnavailableError):
         catalog.ebs_gp3_storage_rate(REGION)
+
+
+def test_rds_mysql_price_includes_instance_gp3_and_backup_range_bound_to_context():
+    usage = RDS_USAGE
+    result, client = evaluate(
+        rds_plan(),
+        budget=1_500,
+        rds_usage_assumptions=usage,
+        catalog_client=FakeRdsPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.monthly_low_minor == 1_398
+    assert result.monthly_high_minor == 1_493
+    assert result.within_budget is True
+    assert result.rds_usage_assumptions == usage
+    assert len(result.lines) == 3
+    assert {line.description for line in result.lines} == {
+        "Amazon RDS for MySQL Single-AZ instance hours",
+        "Amazon RDS for MySQL GP3 storage",
+        "RDS MySQL backup storage (before account-level free allowance)",
+    }
+    assert pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            region=REGION,
+            currency="USD",
+            monthly_budget_minor=1_500,
+            persisted_context_sha256=PERSISTED_CONTEXT_SHA256,
+            rds_usage_assumptions=usage,
+        ),
+        now=CAPTURED_AT,
+    )
+    assert len(client.calls) == 3
+
+
+def test_rds_without_backup_usage_assumptions_blocks_before_price_lookup():
+    client = FakeRdsPriceList()
+    result, _ = evaluate(rds_plan(), catalog_client=client)
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert {item.code for item in result.findings} == {"rds_usage_assumptions_missing"}
+    assert client.calls == []
+
+
+@pytest.mark.parametrize(
+    ("overrides", "unknown_field", "expected_code"),
+    [
+        ({"publicly_accessible": True}, None, "rds_deployment_unpriced"),
+        ({"multi_az": True}, None, "rds_deployment_unpriced"),
+        ({"instance_class": "db.t4g.micro"}, None, "rds_instance_class_unpriced"),
+        ({"kms_key_id": "arn:aws:kms:us-east-1:654654474502:key/example"}, None, "rds_customer_kms_unpriced"),
+        ({}, "allocated_storage", "rds_cost_driver_unknown"),
+    ],
+)
+def test_unsupported_rds_configuration_blocks_before_price_lookup(overrides, unknown_field, expected_code):
+    values = rds_values(**overrides)
+    after_unknown = {key: False for key in values}
+    if unknown_field:
+        after_unknown[unknown_field] = True
+    client = FakeRdsPriceList()
+    result, _ = evaluate(
+        rds_plan(values=values, after_unknown=after_unknown if unknown_field else None),
+        rds_usage_assumptions=RDS_USAGE,
+        catalog_client=client,
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert expected_code in {item.code for item in result.findings}
+    assert client.calls == []
+
+
+def test_rds_backup_assumption_tampering_invalidates_approval_context():
+    result, _ = evaluate(
+        rds_plan(),
+        budget=1_500,
+        rds_usage_assumptions=RDS_USAGE,
+        catalog_client=FakeRdsPriceList(),
+    )
+    changed_usage = {"monthly_backup_storage_gb_month": {"minimum": 0, "maximum": 11}}
+
+    assert not pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 1_500, PERSISTED_CONTEXT_SHA256,
+            rds_usage_assumptions=changed_usage,
+        ),
+        now=CAPTURED_AT,
+    )

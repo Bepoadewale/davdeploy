@@ -154,6 +154,20 @@ class SqsPricingUsageAssumptions(BaseModel):
         return self
 
 
+class RdsPricingUsageAssumptions(BaseModel):
+    """Bounded monthly RDS backup storage usage; quantities only, never prices."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_backup_storage_gb_month: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_backup_bounds(self) -> RdsPricingUsageAssumptions:
+        if self.monthly_backup_storage_gb_month.maximum > 1_000_000_000:
+            raise ValueError("monthly RDS backup storage usage exceeds the supported bound")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -164,6 +178,7 @@ class WorkloadSpec(BaseModel):
     monthly_budget_usd: int | None = Field(default=None, ge=1)
     pricing_usage_assumptions: S3PricingUsageAssumptions | None = None
     sqs_pricing_usage_assumptions: SqsPricingUsageAssumptions | None = None
+    rds_pricing_usage_assumptions: RdsPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -570,6 +585,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     rejected_assumptions: list[str] = Field(default_factory=list, max_length=20)
     pricing_usage_assumptions: S3PricingUsageAssumptions | None = None
     sqs_pricing_usage_assumptions: SqsPricingUsageAssumptions | None = None
+    rds_pricing_usage_assumptions: RdsPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):

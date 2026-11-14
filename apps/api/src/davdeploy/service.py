@@ -1367,6 +1367,14 @@ class ProductService:
             else:
                 workload["sqs_pricing_usage_assumptions"] = usage_assumptions
                 next_constraints["sqs_pricing_usage_assumptions"] = usage_assumptions
+        if "rds_pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["rds_pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("rds_pricing_usage_assumptions", None)
+                next_constraints.pop("rds_pricing_usage_assumptions", None)
+            else:
+                workload["rds_pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["rds_pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1418,6 +1426,10 @@ class ProductService:
             "sqs_pricing_usage_assumptions": (
                 before_spec.get("sqs_pricing_usage_assumptions"),
                 after_spec.get("sqs_pricing_usage_assumptions"),
+            ),
+            "rds_pricing_usage_assumptions": (
+                before_spec.get("rds_pricing_usage_assumptions"),
+                after_spec.get("rds_pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),

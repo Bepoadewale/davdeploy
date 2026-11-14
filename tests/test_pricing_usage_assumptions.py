@@ -2,6 +2,7 @@ import pytest
 from davdeploy.domain import (
     InfrastructurePlanConstraintUpdateRequest,
     MonthlyUsageRange,
+    RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
     SqsPricingUsageAssumptions,
 )
@@ -99,5 +100,32 @@ def test_sqs_usage_assumptions_are_strict_bounded_request_unit_ranges():
                 "monthly_fair_queue_request_units": {"minimum": 0, "maximum": 0},
                 "monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
                 "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+            }
+        })
+
+
+def test_rds_backup_usage_assumptions_are_bounded_and_constraint_input_is_strict():
+    usage = {"monthly_backup_storage_gb_month": {"minimum": 2, "maximum": 20}}
+    value = RdsPricingUsageAssumptions.model_validate(usage)
+    assert value.model_dump(mode="json") == usage
+
+    request = InfrastructurePlanConstraintUpdateRequest.model_validate(
+        {"rds_pricing_usage_assumptions": usage}
+    )
+    assert request.rds_pricing_usage_assumptions == value
+    assert InfrastructurePlanConstraintUpdateRequest.model_validate(
+        {"rds_pricing_usage_assumptions": None}
+    ).model_dump(mode="json", exclude_unset=True) == {
+        "rds_pricing_usage_assumptions": None
+    }
+
+    with pytest.raises(ValidationError):
+        RdsPricingUsageAssumptions.model_validate({
+            "monthly_backup_storage_gb_month": {"minimum": 0, "maximum": 1_000_000_001}
+        })
+    with pytest.raises(ValidationError):
+        InfrastructurePlanConstraintUpdateRequest.model_validate({
+            "rds_pricing_usage_assumptions": {
+                **usage, "unknown_price": "0.10"
             }
         })

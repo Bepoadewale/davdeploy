@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 from pathlib import Path
 
@@ -27,8 +28,15 @@ def main() -> int:
         CONTRACT.write_text(rendered)
         print(f"Wrote {CONTRACT.relative_to(ROOT)}")
         return 0
-    if not CONTRACT.exists() or CONTRACT.read_text() != rendered:
+    current = CONTRACT.read_text() if CONTRACT.exists() else ""
+    if current != rendered:
         print("OpenAPI snapshot differs; run: make openapi-update")
+        print("".join(difflib.unified_diff(
+            current.splitlines(keepends=True),
+            rendered.splitlines(keepends=True),
+            fromfile="contracts/openapi-v1.json",
+            tofile="generated OpenAPI",
+        )))
         return 1
     print("OpenAPI v1 snapshot matches the FastAPI application.")
     return 0
