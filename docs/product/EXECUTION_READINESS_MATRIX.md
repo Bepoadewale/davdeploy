@@ -4,7 +4,7 @@ Audit originally captured 2026-11-04 at backend main commit `c2c6279` (PR #315).
 
 ## Current backend source and deployment — 2026-11-14, after PR #408
 
-Backend source `main` is commit `aa8d3d0ee1329da14f5fea32053e8a0970049bee` (PR #408); PR #409 is in progress as a draft.
+Backend source `main` is commit `aa8d3d0ee1329da14f5fea32053e8a0970049bee` (PR #408); PR #409 adds regional S3 pricing and remains unmerged.
 The deployed control-plane release remains PR #405, source commit
 `74016e70aa7a702ebf3338cf1fbb43d4f563a838`, deployed to account `654654474502`, region
 `us-east-1`, by protected plan

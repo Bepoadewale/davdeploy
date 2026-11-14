@@ -1,7 +1,7 @@
 # Implementation Status
 
 Current backend source `main` is commit `aa8d3d0ee1329da14f5fea32053e8a0970049bee`
-(PR #408); PR #409 is the open draft for regional S3 pricing. The deployed
+(PR #408); PR #409 is open for regional S3 pricing. The deployed
 control-plane release remains PR #405, source commit
 `74016e70aa7a702ebf3338cf1fbb43d4f563a838`, applied using protected plan
 [43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292)

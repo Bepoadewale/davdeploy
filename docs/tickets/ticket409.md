@@ -32,17 +32,17 @@ This branch starts from backend main PR #408 (`aa8d3d0`), which adds typed, immu
 - [x] Supported S3 monthly cost ranges are calculated from immutable persisted assumptions and recorded with source provenance and digests. High estimates use the highest catalog unit rates without assuming shared discounts; low estimates use the lowest published rate and the documented egress allowance.
 - [x] Missing assumptions, unsupported S3 settings, and unsupported egress ranges yield explicit incomplete evidence and prevent approval.
 - [x] Existing digest-bound context, rate/product provenance, plan identity, and approval eligibility tests cover changed assumptions, evidence, and plan data; focused PR tests pass.
-- [x] Focused tests (220), full `make verify` (1,200 tests), Ruff, OpenAPI, Compose configuration, and documentation conventions pass. GitHub Actions run [43594267261](https://github.com/Bepoadewale/davdeploy/actions/runs/43594267261) passed all seven jobs, including fresh-runner `local-e2e` and Terraform/Kubernetes `cloud-contracts`.
+- [x] Focused tests (220), full `make verify` (1,200 tests), Ruff, OpenAPI, Compose configuration, and documentation conventions pass. GitHub Actions run [43594664860](https://github.com/Bepoadewale/davdeploy/actions/runs/43594664860) on PR head `d009167` passed all seven jobs, including fresh-runner `local-e2e` and Terraform/Kubernetes `cloud-contracts`.
 - [x] Status documentation distinguishes source changes from the PR #405 deployed release. No customer AWS workload is claimed.
 
 ## Tests / validation performed
 
-- Implementation: in progress; 220 focused tests and 1,200 full verification tests pass, along with Ruff, OpenAPI, Compose, and documentation conventions. The read-only AWS Price List lookup described above used no customer workload resources.
+- Implementation: supported S3 pricing scope is implemented; 220 focused tests and 1,200 full verification tests pass, along with Ruff, OpenAPI, Compose, and documentation conventions. The read-only AWS Price List lookup described above used no customer workload resources.
 - Evidence file: `docs/test/test409.md` records validation and explicitly states no AWS workload execution occurred.
 
 ## Acceptance status
 
-Implementation is in progress. Focused tests, full local verification, Ruff, OpenAPI, Docker Compose validation, and documentation conventions pass; hosted CI passes on PR head `b3afe7f`; the final documentation update still needs its required CI run.
+Implementation is complete for the supported S3 pricing scope and is locally and CI verified. PR #409 remains open and is not deployed; unsupported and other unpriced material costs continue to block approval.
 
 ## Evidence files produced
 
