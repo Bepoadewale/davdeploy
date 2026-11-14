@@ -116,6 +116,8 @@ protected untracked `--only-show-errors` file must remain untouched.
 
 ## Tests / validation performed
 
+- After PR #406 merged, PR #399 was synchronized with current `main` through merge commit `af1c19356b3d93df3ca35431771c9e0e7c119521`. All seven required CI jobs passed for this synchronized head in run `43576086458` (2026-11-14). This updates source integration evidence only; apply remains unwired and disabled.
+
 - PR #398 merged-main CI `43460570905` passed all seven jobs.
 - Focused contract and workspace tests: `14 passed`; Ruff passed on the
   changed files. After adding remote-state scope checks, focused tests pass:
