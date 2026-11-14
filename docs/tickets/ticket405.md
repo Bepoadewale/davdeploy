@@ -43,19 +43,22 @@ only and has not been deployed or exercised on a customer EKS plan.
 - [x] The bounded policy behavior and remaining EKS limitations are accurate.
 - [x] No deployment, customer EKS plan, or workload readiness is claimed.
 - [x] Documentation conventions and diff checks pass.
-- [ ] All required final-head CI passes.
+- [x] All seven required checks pass for implementation commit `e8f67c1` in
+  [run `43564266865`](https://github.com/Bepoadewale/davdeploy/actions/runs/43564266865).
 
 ## Acceptance status
 
 The capability matrix, execution readiness matrix, implementation status,
 backlog, PR #404 ticket, and PR #404 evidence now reflect the merged-source
 state and preserved deployment/customer-plan limitations. Documentation
-conventions and `git diff --check` pass. Final-head CI is pending.
+conventions and `git diff --check` pass. All seven required checks passed in
+run `43564266865` for commit `e8f67c1`.
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=405 .venv-pr399/bin/python scripts/check_doc_conventions.py`
-and `git diff --check` pass. Final-head GitHub CI is pending.
+and `git diff --check` pass. All seven GitHub CI checks passed in run
+`43564266865` for commit `e8f67c1`.
 
 ## Evidence files produced
 
