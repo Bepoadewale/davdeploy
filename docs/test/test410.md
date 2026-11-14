@@ -3,7 +3,7 @@
 Date: 2026-11-14
 Execution type: Local deterministic unit and integration tests
 Customer repository: None; no customer workload was created
-Commit: Pending PR implementation commit
+Commit: `ead02fbc8f84c2783edc1a637431040e051a2241`
 AWS account: None; catalog evidence is read-only price-list data
 AWS region: `us-east-1` for product match; local tests do not access AWS
 
