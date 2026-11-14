@@ -511,6 +511,35 @@ def test_sqs_usage_is_extracted_from_integrity_checked_customer_revision():
         )
 
 
+
+def test_rds_usage_is_extracted_from_integrity_checked_customer_revision():
+    usage = {"monthly_backup_storage_gb_month": {"minimum": 2, "maximum": 20}}
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"rds_pricing_usage_assumptions": usage}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+
+    assert context.rds_usage_assumptions == usage
+    assert "rds_usage_assumptions" in context.pricing_context_sha256
+    with pytest.raises(ValueError, match="integrity check"):
+        TrustedPlanPricingContext.from_persisted_revision(
+            {
+                **revision,
+                "application_analysis": {"workload_spec": {}},
+            },
+            expected_sha256=revision_sha256,
+        )
+
+
 def test_approved_revision_without_a_budget_has_no_trusted_ceiling():
     revision = {
         "target": {"provider": "aws", "region": REGION},
