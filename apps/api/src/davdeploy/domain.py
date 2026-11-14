@@ -130,6 +130,30 @@ class S3PricingUsageAssumptions(BaseModel):
         return self
 
 
+class SqsPricingUsageAssumptions(BaseModel):
+    """Proposal-wide monthly billed SQS request units by queue type."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_standard_request_units: MonthlyUsageRange
+    monthly_fifo_request_units: MonthlyUsageRange
+    monthly_fair_queue_request_units: MonthlyUsageRange
+    monthly_cross_region_transfer_gb: MonthlyUsageRange
+    monthly_internet_egress_gb: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_request_bounds(self) -> SqsPricingUsageAssumptions:
+        if (
+            self.monthly_standard_request_units.maximum > 1_000_000_000_000
+            or self.monthly_fifo_request_units.maximum > 1_000_000_000_000
+            or self.monthly_fair_queue_request_units.maximum > 1_000_000_000_000
+            or self.monthly_cross_region_transfer_gb.maximum > 1_000_000_000
+            or self.monthly_internet_egress_gb.maximum > 1_000_000_000
+        ):
+            raise ValueError("monthly SQS request usage exceeds the supported bound")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -139,6 +163,7 @@ class WorkloadSpec(BaseModel):
     peak_rps: int | None = Field(default=None, ge=0)
     monthly_budget_usd: int | None = Field(default=None, ge=1)
     pricing_usage_assumptions: S3PricingUsageAssumptions | None = None
+    sqs_pricing_usage_assumptions: SqsPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -544,6 +569,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     accepted_assumptions: list[str] = Field(default_factory=list, max_length=20)
     rejected_assumptions: list[str] = Field(default_factory=list, max_length=20)
     pricing_usage_assumptions: S3PricingUsageAssumptions | None = None
+    sqs_pricing_usage_assumptions: SqsPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):

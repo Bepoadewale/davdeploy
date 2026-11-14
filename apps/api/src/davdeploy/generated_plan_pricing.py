@@ -23,7 +23,7 @@ from typing import Any, ClassVar, Protocol
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from davdeploy.domain import S3PricingUsageAssumptions
+from davdeploy.domain import S3PricingUsageAssumptions, SqsPricingUsageAssumptions
 
 
 class PlanPricingStatus(StrEnum):
@@ -98,6 +98,7 @@ class GeneratedPlanPricingEvidence:
     within_budget: bool | None
     plan_json_sha256: str
     usage_assumptions: dict[str, Any] | None
+    sqs_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -123,12 +124,13 @@ class GeneratedPlanPricingEvidence:
             "captured_at": self.captured_at,
             "estimate_disclaimer": self.estimate_disclaimer,
             "usage_assumptions": self.usage_assumptions,
+            "sqs_usage_assumptions": self.sqs_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 3,
+            "version": 4,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -148,6 +150,7 @@ class GeneratedPlanPricingEvidence:
             "within_budget": self.within_budget,
             "plan_json_sha256": self.plan_json_sha256,
             "usage_assumptions": self.usage_assumptions,
+            "sqs_usage_assumptions": self.sqs_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -198,9 +201,10 @@ class GeneratedPlanPricingEvidence:
             "proposal_declared_budget_minor", "proposal_declared_currency",
             "budget_source", "persisted_context_sha256",
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
-            "usage_assumptions", "lines", "transitions", "findings", "evidence_sha256",
+            "usage_assumptions", "sqs_usage_assumptions", "lines", "transitions", "findings", "evidence_sha256",
         }
-        if set(document) != expected_fields or document.get("version") not in {2, 3}:
+        legacy_fields = expected_fields - {"sqs_usage_assumptions"}
+        if (set(document) != expected_fields and set(document) != legacy_fields) or document.get("version") not in {2, 3, 4}:
             raise PlanPricingError("pricing evidence shape is invalid")
         try:
             usage_assumptions = document["usage_assumptions"]
@@ -210,6 +214,10 @@ class GeneratedPlanPricingEvidence:
                 ).model_dump(mode="json")
                 if usage_assumptions != document["usage_assumptions"]:
                     raise ValueError("non-canonical usage assumptions")
+            raw_sqs_usage = document.get("sqs_usage_assumptions")
+            sqs_usage = None if raw_sqs_usage is None else SqsPricingUsageAssumptions.model_validate(raw_sqs_usage).model_dump(mode="json")
+            if sqs_usage != raw_sqs_usage:
+                raise ValueError("non-canonical SQS usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -239,6 +247,7 @@ class GeneratedPlanPricingEvidence:
                 within_budget=document["within_budget"],
                 plan_json_sha256=document["plan_json_sha256"],
                 usage_assumptions=usage_assumptions,
+                sqs_usage_assumptions=sqs_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -246,7 +255,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 3 and result.as_manifest_document() != document:
+        if document.get("version") == 4 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -281,6 +290,7 @@ class TrustedPlanPricingContext:
     monthly_budget_minor: int | None
     persisted_context_sha256: str
     usage_assumptions: dict[str, Any] | None = None
+    sqs_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -291,6 +301,7 @@ class TrustedPlanPricingContext:
             self.monthly_budget_minor,
             self.persisted_context_sha256,
             self.usage_assumptions,
+            self.sqs_usage_assumptions,
         )
 
     @classmethod
@@ -323,6 +334,11 @@ class TrustedPlanPricingContext:
             if isinstance(workload_spec, dict)
             else None
         )
+        raw_sqs_usage_assumptions = (
+            workload_spec.get("sqs_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
         if provider != "aws":
             raise PlanPricingError("persisted customer revision is not an AWS plan")
         if not isinstance(region, str) or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
@@ -344,12 +360,22 @@ class TrustedPlanPricingContext:
                 raise PlanPricingError(
                     "persisted customer revision has invalid pricing usage assumptions"
                 ) from None
+        if raw_sqs_usage_assumptions is None:
+            sqs_usage_assumptions = None
+        else:
+            try:
+                sqs_usage_assumptions = SqsPricingUsageAssumptions.model_validate(
+                    raw_sqs_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid SQS pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
             monthly_budget_minor=None if budget_dollars is None else budget_dollars * 100,
             persisted_context_sha256=expected_sha256,
             usage_assumptions=usage_assumptions,
+            sqs_usage_assumptions=sqs_usage_assumptions,
         )
 
 
@@ -431,6 +457,20 @@ class AwsPriceListCatalog:
             [
                 ("productFamily", "API Request"),
                 ("group", f"S3-API-Tier{tier}"),
+                ("regionCode", region),
+            ],
+            "Requests",
+        )
+
+    def sqs_request_rate(self, region: str, *, fifo: bool) -> CatalogRate:
+        queue_type = "FIFO (first-in, first-out)" if fifo else "Standard"
+        return self._regional_rate(
+            "AWSQueueService",
+            region,
+            f"sqs-requests-{queue_type}",
+            [
+                ("productFamily", "API Request"),
+                ("queueType", queue_type),
                 ("regionCode", region),
             ],
             "Requests",
@@ -601,6 +641,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
+            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -626,6 +667,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
+            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -647,6 +689,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
+            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -671,6 +714,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
+            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -689,6 +733,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_budget_minor=proposal_declared_budget_minor,
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
+            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -699,6 +744,7 @@ def evaluate_generated_plan_pricing(
     findings: list[PlanPricingFinding] = list(transition_findings)
     unavailable = False
     s3_buckets: list[dict[str, Any]] = []
+    sqs_queues: list[dict[str, Any]] = []
     for resource in resources:
         address = resource["address"]
         resource_type = resource["type"]
@@ -707,6 +753,9 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_s3_bucket":
             s3_buckets.append(resource)
+            continue
+        if resource_type == "aws_sqs_queue":
+            sqs_queues.append(resource)
             continue
         if resource_type != "aws_ebs_volume":
             findings.append(
@@ -891,6 +940,99 @@ def evaluate_generated_plan_pricing(
                         )
                     )
 
+    if sqs_queues:
+        assumptions = trusted_context.sqs_usage_assumptions
+        if assumptions is None:
+            findings.append(PlanPricingFinding(
+                "sqs_usage_assumptions_missing", sqs_queues[0]["address"],
+                "Monthly billed request-unit assumptions are required for SQS queues.",
+            ))
+        else:
+            invalid_queue = next(
+                ((queue, error) for queue in sqs_queues
+                 if (error := _validate_sqs_queue(queue["values"], changes.get(queue["address"]))) is not None),
+                None,
+            )
+            try:
+                usage = SqsPricingUsageAssumptions.model_validate(assumptions)
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "sqs_usage_assumptions_invalid", sqs_queues[0]["address"],
+                    "Persisted SQS request usage assumptions are invalid for pricing.",
+                ))
+            else:
+                if usage.monthly_fair_queue_request_units.maximum > 0:
+                    findings.append(PlanPricingFinding(
+                        "sqs_fair_queue_unpriced", sqs_queues[0]["address"],
+                        "Fair Queue requests have a separate surcharge that is not priced yet.",
+                    ))
+                if (
+                    usage.monthly_cross_region_transfer_gb.maximum > 0
+                    or usage.monthly_internet_egress_gb.maximum > 0
+                ):
+                    findings.append(PlanPricingFinding(
+                        "sqs_data_transfer_unpriced", sqs_queues[0]["address"],
+                        "Cross-region and internet SQS data transfer are not priced yet.",
+                    ))
+                if invalid_queue:
+                    queue, error = invalid_queue
+                    findings.append(PlanPricingFinding(error[0], queue["address"], error[1]))
+                else:
+                    queue_types = {bool(queue["values"].get("fifo_queue")) for queue in sqs_queues}
+                    standard = usage.monthly_standard_request_units
+                    fifo = usage.monthly_fifo_request_units
+                    if (False not in queue_types and standard.maximum) or (True not in queue_types and fifo.maximum):
+                        findings.append(PlanPricingFinding(
+                            "sqs_usage_queue_type_mismatch", sqs_queues[0]["address"],
+                            "Usage assumptions include requests for a queue type absent from the Terraform plan.",
+                        ))
+                    else:
+                        try:
+                            if pricing_catalog is None:
+                                pricing_catalog = AwsPriceListCatalog()
+                            rates = []
+                            for is_fifo, amount, description in (
+                                (True, fifo, "Amazon SQS FIFO requests"),
+                                (False, standard, "Amazon SQS Standard requests"),
+                            ):
+                                if amount.maximum == 0:
+                                    continue
+                                rate = pricing_catalog.sqs_request_rate(region, fifo=is_fifo)
+                                rates.append((is_fifo, amount, description, rate))
+                            free_units = 1_000_000 if not region.startswith(("cn-", "us-gov-")) else 0
+                            for is_fifo, amount, description, rate in rates:
+                                low_quantity = amount.minimum
+                                if free_units:
+                                    applied = min(low_quantity, free_units)
+                                    low_quantity -= applied
+                                    free_units -= applied
+                                low_rate = Decimal(rate.low_unit_price_usd or rate.unit_price_usd)
+                                high_rate = Decimal(rate.unit_price_usd)
+                                low_minor = int((low_rate * low_quantity * 100).quantize(Decimal(1), rounding=ROUND_FLOOR))
+                                high_minor = int((high_rate * amount.maximum * 100).quantize(Decimal(1), rounding=ROUND_CEILING))
+                                lines.append(PlanCostLine(
+                                    address="usage_assumptions.sqs.fifo" if is_fifo else "usage_assumptions.sqs.standard",
+                                    resource_type="aws_sqs_queue", description=description,
+                                    quantity=amount.minimum, quantity_max=amount.maximum, unit="Requests",
+                                    unit_price_usd=rate.unit_price_usd, monthly_cost_minor=low_minor,
+                                    monthly_cost_max_minor=high_minor, unit_price_low_usd=format(low_rate, "f"),
+                                    low_cost_quantity=low_quantity, catalog_sku=rate.sku,
+                                    catalog_product_sha256=rate.product_digest,
+                                    catalog_published_at=rate.published_at,
+                                    catalog_effective_at=rate.effective_at,
+                                ))
+                        except PriceListUnavailableError:
+                            unavailable = True
+                            findings.append(PlanPricingFinding(
+                                "regional_price_lookup_unavailable", sqs_queues[0]["address"],
+                                "DavDeploy could not verify current regional SQS request prices.",
+                            ))
+                        except PlanPricingError:
+                            findings.append(PlanPricingFinding(
+                                "regional_price_ambiguous", sqs_queues[0]["address"],
+                                "DavDeploy could not identify one exact regional SQS request price.",
+                            ))
+
     total_max_minor = sum(
         item.monthly_cost_minor
         if item.monthly_cost_max_minor is None
@@ -928,6 +1070,7 @@ def evaluate_generated_plan_pricing(
         proposal_declared_currency=proposal_declared_currency,
         persisted_context_sha256=persisted_context_sha256,
         usage_assumptions=trusted_context.usage_assumptions,
+            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
         transitions=transitions,
     )
 
@@ -976,6 +1119,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "captured_at": document.get("captured_at"),
         "estimate_disclaimer": document.get("estimate_disclaimer"),
         "usage_assumptions": document.get("usage_assumptions"),
+        "sqs_usage_assumptions": document.get("sqs_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -999,6 +1143,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("persisted_context_sha256") != trusted_context.persisted_context_sha256
         or document.get("pricing_context_sha256") != trusted_context.pricing_context_sha256
         or document.get("usage_assumptions") != trusted_context.usage_assumptions
+        or document.get("sqs_usage_assumptions") != trusted_context.sqs_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -1143,6 +1288,46 @@ def pricing_evidence_is_approval_eligible(
                 != "https://aws.amazon.com/s3/pricing/"
             ):
                 return False
+    sqs_lines = [line for line in lines if line.get("resource_type") == "aws_sqs_queue"]
+    if sqs_lines:
+        if trusted_context.sqs_usage_assumptions is None:
+            return False
+        try:
+            assumptions = SqsPricingUsageAssumptions.model_validate(
+                trusted_context.sqs_usage_assumptions
+            )
+        except (TypeError, ValueError):
+            return False
+        if (
+            assumptions.monthly_fair_queue_request_units.maximum > 0
+            or assumptions.monthly_cross_region_transfer_gb.maximum > 0
+            or assumptions.monthly_internet_egress_gb.maximum > 0
+        ):
+            return False
+        expected = {
+            "Amazon SQS Standard requests": (assumptions.monthly_standard_request_units, "usage_assumptions.sqs.standard"),
+            "Amazon SQS FIFO requests": (assumptions.monthly_fifo_request_units, "usage_assumptions.sqs.fifo"),
+        }
+        active = {name: value for name, value in expected.items() if value[0].maximum > 0}
+        actual = {line.get("description"): line for line in sqs_lines}
+        if set(actual) != set(active):
+            return False
+        free_units = 1_000_000 if not trusted_context.region.startswith(("cn-", "us-gov-")) else 0
+        for name in ("Amazon SQS FIFO requests", "Amazon SQS Standard requests"):
+            if name not in active:
+                continue
+            usage, address = active[name]
+            line = actual[name]
+            free_applied = min(usage.minimum, free_units)
+            free_units -= free_applied
+            if (
+                line.get("quantity") != usage.minimum
+                or line.get("quantity_max") != usage.maximum
+                or line.get("low_cost_quantity") != usage.minimum - free_applied
+                or line.get("address") != address
+                or line.get("unit") != "Requests"
+            ):
+                return False
     expected_within_budget = (
         None
         if trusted_context.monthly_budget_minor is None
@@ -1201,6 +1386,26 @@ def _validate_gp3_volume(
         )
     if not isinstance(values.get("encrypted"), bool):
         return "storage_encryption_unknown", "The planned storage encryption setting is unknown."
+    return None
+
+
+def _validate_sqs_queue(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "sqs_plan_change_metadata_missing", "The SQS plan lacks resource-level queue metadata."
+    after = change["change"].get("after")
+    unknown = change["change"].get("after_unknown")
+    if not isinstance(after, dict) or not isinstance(unknown, dict):
+        return "sqs_configuration_unknown", "The planned SQS queue configuration is unknown."
+    if unknown.get("fifo_queue") is not False or not isinstance(after.get("fifo_queue"), bool):
+        return "sqs_configuration_unknown", "The planned SQS queue type is unknown."
+    if after.get("kms_master_key_id") not in (None, ""):
+        return "sqs_kms_unpriced", "Customer-managed SQS encryption keys are not priced by this estimate."
+    if unknown.get("kms_master_key_id") is not False:
+        return "sqs_configuration_unknown", "The planned SQS encryption configuration is unknown."
+    if values.get("fifo_queue") != after.get("fifo_queue"):
+        return "sqs_configuration_unknown", "The SQS queue type does not match the final planned resource."
     return None
 
 
@@ -1647,6 +1852,7 @@ def _evidence(
     persisted_context_sha256: str,
     transitions: tuple[PlanTransition, ...] = (),
     usage_assumptions: dict[str, Any] | None = None,
+    sqs_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -1664,10 +1870,11 @@ def _evidence(
         within_budget = high is not None and high <= budget
     plan_digest = _canonical_digest(document) if isinstance(document, (dict, list)) else "0" * 64
     pricing_context_digest = _pricing_context_digest(
-        region, currency, budget, persisted_context_sha256, usage_assumptions
+        region, currency, budget, persisted_context_sha256, usage_assumptions,
+        sqs_usage_assumptions,
     )
     payload = {
-        "version": 3,
+        "version": 4,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -1691,6 +1898,7 @@ def _evidence(
         "within_budget": within_budget,
         "plan_json_sha256": plan_digest,
         "usage_assumptions": usage_assumptions,
+        "sqs_usage_assumptions": sqs_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -1748,6 +1956,7 @@ def _evidence(
         within_budget=within_budget,
         plan_json_sha256=plan_digest,
         usage_assumptions=usage_assumptions,
+        sqs_usage_assumptions=sqs_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -1766,14 +1975,16 @@ def _pricing_context_digest(
     monthly_budget_minor: int | None,
     persisted_context_sha256: str,
     usage_assumptions: dict[str, Any] | None = None,
+    sqs_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 2,
+            "version": 3,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
             "persisted_context_sha256": persisted_context_sha256,
             "usage_assumptions": usage_assumptions,
+            "sqs_usage_assumptions": sqs_usage_assumptions,
         }
     )
