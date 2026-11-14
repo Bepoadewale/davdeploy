@@ -1,17 +1,24 @@
 # Implementation Status
 
-Current source is backend PR #402 merge commit `653619d9eb52f717c8c052a4b2aace2d7339b51c`;
-merged-main CI run [43515569852](https://github.com/Bepoadewale/davdeploy/actions/runs/43515569852)
-passed all seven jobs. The latest hosted control-plane release remains PR #390 commit
-`ae9ec4450d527141081e95707a1c3ee05126b683` (apply `43389226372`). PR #393 adds
+Current source is backend `main` commit `74016e70aa7a702ebf3338cf1fbb43d4f563a838`
+(PR #405); merged-main CI run [43565090000](https://github.com/Bepoadewale/davdeploy/actions/runs/43565090000)
+passed all seven jobs. It was deployed using protected plan
+[43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292)
+and exact saved-plan apply [43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945).
+Six Lambdas share package `oN2XezDmrH9YrIQVe47NZG9IsfSeI+zOd4tJIXMU2Kw=`;
+database migrations and `/healthz` HTTP 200 passed. Plan runner, plan review,
+role verification, credential broker and state API flags are enabled. This
+deployment is not a customer workload execution result. PR #393 adds
 proposal health, recovery, cost-assumption, assumption, and limitation details
 to the saved-plan manifest as proposed and unvalidated. PR #395 adds bounded
 typed health assertions. PR #397 preserves the exact plan-time Terraform
 workspace as a separate encrypted/versioned object and verifies it with the
-saved plan before approval. PRs #393, #395 and #397 are source-only; #401/#402
-add merged-source network ACL and EC2 metadata checks but are not deployed.
-Pricing is still unavailable, apply remains unimplemented, and no probes or health
-observations have executed.
+saved plan before approval. PRs #393, #395 and #397 are merged source; #401/#402
+add network ACL and EC2 metadata checks, and #404 adds bounded EKS managed-node
+IMDSv2 validation when a same-plan launch template is visible. These policy
+checks are deployed but have not been exercised on a customer plan. Pricing is
+still unavailable, the customer apply path remains unimplemented, and no
+customer workload probes or health observations have executed.
 
 ## Executed locally
 
@@ -21,7 +28,7 @@ observations have executed.
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
 | Nova intent scope boundary | PR #377 adds typed infrastructure/out-of-scope classification. Unrelated requests receive a fixed HTTP 422 explanation before a workload intent is stored; deploying financial-domain software remains in scope. The code is deployed with backend `40439ab6b493a40c522102fa88de1c48043b4177` via protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048). Two bounded synthetic model checks passed for stock advice and a stockbroking-app deployment, but this is not broad classification-quality evidence and no authenticated customer API journey was exercised. |
-| Nova proposal policy and execution boundary | Source includes the strict generated graph, provider-schema checks, bounded proposal repair, actual-plan security/ownership/retention policy, network ACL and EC2 metadata checks (#401–#402), isolated plan-only runner, plan-review and tenant-state APIs, customer plan-role checks, proposal verification requirements (#393), typed bounded health assertions (#395), and exact plan-time workspace persistence/approval verification (#397). The latest hosted release remains PR #390 via plan [43388286514](https://github.com/Bepoadewale/davdeploy/actions/runs/43388286514) and exact apply [43389226372](https://github.com/Bepoadewale/davdeploy/actions/runs/43389226372); plan-review, runner, broker, role-verification and state gates are enabled, while hosted certification is disabled. PRs #393, #395, #397, #401 and #402 are merged source; #401/#402 have not been deployed. PR #397 does not add or enable apply. Pricing remains unavailable, so exact-plan approval is blocked; PR #318 remains held. No authenticated customer request has produced a hosted Terraform plan, no customer role has been fully permission-verified, and no Nova workload has been applied. No probes or health observations have executed; recovery and teardown remain incomplete. See `docs/test/test391.md`, `docs/test/test393.md`, `docs/test/test395.md`, `docs/test/test397.md`, `docs/test/test401.md`, and `docs/test/test402.md`. |
+| Nova proposal policy and execution boundary | Source includes the strict generated graph, provider-schema checks, bounded proposal repair, actual-plan security/ownership/retention policy, network ACL and EC2 metadata checks (#401–#402), bounded EKS managed-node IMDSv2 validation (#404) when a same-plan launch template is visible, isolated plan-only runner, plan-review and tenant-state APIs, customer plan-role checks, proposal verification requirements (#393), typed bounded health assertions (#395), and exact plan-time workspace persistence/approval verification (#397). Backend main `74016e7` was deployed using plan [43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292) and exact apply [43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945); the policy checks and runner, broker, role-verification, state and plan-review gates are live, while hosted certification is disabled. PR #397 does not add or enable customer apply. Pricing remains unavailable, so exact-plan approval is blocked; PR #318 remains held. No authenticated customer request has produced a hosted Terraform plan, no customer role has been fully permission-verified, and no Nova workload has been applied. No probes or health observations have executed; recovery and teardown remain incomplete. See `docs/test/test391.md`, `docs/test/test393.md`, `docs/test/test395.md`, `docs/test/test397.md`, `docs/test/test401.md`, `docs/test/test402.md`, `docs/test/test404.md`, and `docs/test/test406.md`. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -334,7 +341,7 @@ or independent cleanup verification.
 
 The older dated sections below describe implementation and validation at their stated time. Read them as historical evidence, not as the current deployment state.
 
-## Latest hosted Nova plan-only control-plane deployment — 2026-11-13
+## Previous hosted Nova plan-only control-plane deployment — 2026-11-13
 
 Backend `main` commit `ae9ec4450d527141081e95707a1c3ee05126b683` (PR #390)
 was deployed using protected plan [43388286514](https://github.com/Bepoadewale/davdeploy/actions/runs/43388286514)
@@ -354,3 +361,20 @@ role assumption or customer-account effective permissions. No customer plan or
 workload ran, regional pricing is not integrated, and customer apply/health/
 recovery/teardown remain unproven. Exact evidence is in [`test391.md`](test/test391.md)
 and [`test392.md`](test/test392.md).
+
+## Latest hosted control-plane deployment — 2026-11-14
+
+Backend commit `74016e70aa7a702ebf3338cf1fbb43d4f563a838` (PR #405) was
+deployed in account `654654474502`, region `us-east-1`, using protected plan
+[43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292)
+and exact saved-plan apply
+[43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945).
+The plan applied 0 additions, 9 updates, and 0 destroys/replacements; it
+reported two separate IAM drift summaries. Migrations completed successfully.
+All six `davdeploy-*` Lambda functions share CodeSha256
+`oN2XezDmrH9YrIQVe47NZG9IsfSeI+zOd4tJIXMU2Kw=`; the API is Active, the fixed
+plan-only CodeBuild project is present, and `/healthz` returns HTTP 200. The
+plan runner, review, role-verification, credential-broker, and state API
+runtime gates are enabled. No Nova-generated customer plan or workload has
+been executed; regional pricing, customer apply, workload health, recovery and
+teardown remain incomplete. See [`test406.md`](test/test406.md).

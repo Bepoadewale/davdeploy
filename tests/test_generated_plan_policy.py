@@ -8,7 +8,9 @@ from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResou
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
     _check_rds_final_snapshot_changes,
+    _configured_resources,
     _path_contains_unknown,
+    _reference_targets_resource,
     evaluate_generated_plan_policy,
 )
 
@@ -557,6 +559,136 @@ def test_regional_ec2_metadata_defaults_that_do_not_require_imdsv2_are_denied(to
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "instance_metadata_defaults_require_v2" in codes(result)
+
+
+def eks_node_group_case(*, metadata_tokens="required", launch_template_references=None):
+    document = plan()
+    template_address = "aws_launch_template.eks_nodes"
+    node_group_address = "aws_eks_node_group.app_nodes"
+    template_values = {
+        "name": "app-nodes",
+        "metadata_options": [
+            {"http_endpoint": "enabled", "http_tokens": metadata_tokens}
+        ],
+    }
+    node_group_values = {
+        "cluster_name": "app-cluster",
+        "node_group_name": "app-nodes",
+        "launch_template": [{"id": "lt-0123456789abcdef0", "version": "1"}],
+    }
+    document["planned_values"]["root_module"]["resources"].extend(
+        [
+            resource(template_address, "aws_launch_template", template_values),
+            resource(node_group_address, "aws_eks_node_group", node_group_values),
+        ]
+    )
+    document["resource_changes"].extend(
+        [
+            change(template_address, "aws_launch_template"),
+            change(node_group_address, "aws_eks_node_group"),
+        ]
+    )
+    references = (
+        [f"{template_address}.id", template_address]
+        if launch_template_references is None
+        else launch_template_references
+    )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": template_address, "expressions": {}},
+            {
+                "address": node_group_address,
+                "expressions": {"launch_template": {"references": references}},
+            },
+        ]
+    }
+    resources = [item.model_dump(mode="json") for item in proposal().resources]
+    resources.extend(
+        [
+            {
+                "resource_id": "eks-nodes-template",
+                "resource_type": "aws_launch_template",
+                "name": "eks_nodes",
+                "arguments": template_values,
+                "rationale": "Use IMDSv2 for managed Kubernetes nodes.",
+            },
+            {
+                "resource_id": "eks-node-group",
+                "resource_type": "aws_eks_node_group",
+                "name": "app_nodes",
+                "arguments": node_group_values,
+                "rationale": "Run the application on managed Kubernetes nodes.",
+            },
+        ]
+    )
+    return document, proposal(resources)
+
+
+def test_eks_node_group_requires_same_plan_launch_template_with_imdsv2():
+    document, proposal_value = eks_node_group_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "eks_node_metadata_unverifiable" not in codes(result)
+    assert "instance_metadata_v2_required" not in codes(result)
+
+
+@pytest.mark.parametrize(
+    "references",
+    [[], ["aws_launch_template.external.id"], ["aws_launch_template.eks_nodes.id", "aws_launch_template.other.id"]],
+)
+def test_eks_node_group_without_one_same_plan_template_reference_is_denied(references):
+    document, proposal_value = eks_node_group_case(launch_template_references=references)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_node_metadata_unverifiable" in codes(result)
+
+
+def test_eks_node_group_with_launch_template_that_allows_imdsv1_is_denied():
+    document, proposal_value = eks_node_group_case(metadata_tokens="optional")
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "instance_metadata_v2_required" in codes(result)
+
+
+def test_configured_resource_lookup_includes_child_modules():
+    document = plan(
+        configuration={
+            "root_module": {
+                "resources": [],
+                "module_calls": {
+                    "eks": {
+                        "module": {
+                            "resources": [
+                                {
+                                    "address": "module.eks.aws_eks_node_group.nodes",
+                                    "expressions": {},
+                                }
+                            ],
+                            "module_calls": {},
+                        }
+                    }
+                },
+            }
+        }
+    )
+
+    assert "module.eks.aws_eks_node_group.nodes" in _configured_resources(document)
+    assert _reference_targets_resource(
+        "aws_launch_template.nodes.id",
+        "module.eks.aws_launch_template.nodes",
+        "aws_launch_template",
+    )
+    assert _reference_targets_resource(
+        "aws_launch_template.nodes",
+        "module.eks.aws_launch_template.nodes",
+        "aws_launch_template",
+    )
 
 
 @pytest.mark.parametrize(
