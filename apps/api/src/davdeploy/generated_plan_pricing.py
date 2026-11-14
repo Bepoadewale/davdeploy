@@ -2196,7 +2196,7 @@ def _evidence(
     plan_digest = _canonical_digest(document) if isinstance(document, (dict, list)) else "0" * 64
     pricing_context_digest = _pricing_context_digest(
         region, currency, budget, persisted_context_sha256, usage_assumptions,
-        sqs_usage_assumptions,
+        sqs_usage_assumptions, rds_usage_assumptions,
     )
     payload = {
         "version": 5,
