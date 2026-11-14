@@ -14,6 +14,7 @@ import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.generated_plan_artifacts import canonical_json_digest
 from davdeploy.generated_plan_ownership import PlanOwnershipScope
+from davdeploy.generated_plan_pricing import TrustedPlanPricingContext
 from davdeploy.generated_terraform_plan import (
     GeneratedTerraformPlanRunner,
     TerraformPlanExecutionError,
@@ -165,7 +166,20 @@ else:
 def runner(tmp_path, *, identity="654654474502", fake=None):
     lockfile = tmp_path / "aws.lock.hcl"
     lockfile.write_text(LOCKFILE)
-    return GeneratedTerraformPlanRunner(
+    class PricingRunner(GeneratedTerraformPlanRunner):
+        def plan(self, *args, **kwargs):
+            kwargs.setdefault(
+                "trusted_pricing_context",
+                TrustedPlanPricingContext(
+                    region="us-east-1",
+                    currency="USD",
+                    monthly_budget_minor=None,
+                    persisted_context_sha256="c" * 64,
+                ),
+            )
+            return super().plan(*args, **kwargs)
+
+    return PricingRunner(
         provider_lockfile=lockfile,
         expected_terraform_version="1.14.7",
         expected_aws_provider_version="5.100.0",

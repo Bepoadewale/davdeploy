@@ -71,6 +71,14 @@ from davdeploy.generated_plan_policy import (
     PlanPolicyFinding,
     PlanPolicyVerdict,
 )
+from davdeploy.generated_plan_pricing import (
+    GeneratedPlanPricingEvidence,
+    PlanPricingError,
+    TrustedPlanPricingContext,
+    pricing_evidence_document_is_valid,
+    pricing_evidence_is_approval_eligible,
+    pricing_evidence_safe_summary,
+)
 from davdeploy.generated_terraform_plan import (
     PINNED_AWS_PROVIDER_VERSION,
     PINNED_TERRAFORM_VERSION,
@@ -4950,12 +4958,14 @@ class ProductService:
             "no_op_count",
             "drift_count",
             "contains_sensitive_changes",
+            "pricing",
         }
         if (
             not isinstance(summary_doc, dict)
             or set(summary_doc) != summary_keys
             or any(type(summary_doc.get(key)) is not int or summary_doc[key] < 0 for key in summary_keys - {"contains_sensitive_changes"})
             or type(summary_doc.get("contains_sensitive_changes")) is not bool
+            or not isinstance(summary_doc.get("pricing"), dict)
         ):
             raise ValueError("Nova result safe summary is invalid")
         summary = TerraformPlanSummary(
@@ -4976,15 +4986,45 @@ class ProductService:
         artifact_doc = manifest.get("artifact")
         if not isinstance(digests, dict) or not isinstance(artifact_doc, dict):
             raise TypeError("Nova result artifact binding is invalid")
+        pricing_document = manifest.get("pricing_evidence")
+        if (
+            not pricing_evidence_document_is_valid(pricing_document)
+            or pricing_evidence_safe_summary(pricing_document) != summary_doc["pricing"]
+            or (manifest.get("pricing") or {}).get("evidence_sha256")
+            != pricing_document.get("evidence_sha256")
+            or digests.get("pricing_evidence_sha256")
+            != pricing_document.get("evidence_sha256")
+            or digests.get("pricing_context_sha256")
+            != pricing_document.get("pricing_context_sha256")
+            or digests.get("plan_json_sha256") != pricing_document.get("plan_json_sha256")
+            or pricing_document.get("region") != region
+        ):
+            raise ValueError("Nova result pricing evidence is invalid or unbound")
+        try:
+            pricing = GeneratedPlanPricingEvidence.from_manifest_document(pricing_document)
+            trusted_pricing_context = TrustedPlanPricingContext.from_persisted_revision(
+                revision_content, expected_sha256=revision.content_digest
+            )
+        except PlanPricingError:
+            raise ValueError("Nova result pricing context failed integrity verification") from None
+        if (
+            pricing.region != region
+            or pricing.persisted_context_sha256 != revision.content_digest
+            or pricing.pricing_context_sha256 != trusted_pricing_context.pricing_context_sha256
+            or pricing.proposal_declared_budget_minor
+            not in (None, trusted_pricing_context.monthly_budget_minor)
+            or pricing.proposal_declared_currency not in (None, trusted_pricing_context.currency)
+        ):
+            raise ValueError("Nova result pricing context does not match the persisted revision")
         expected_boundary = {
             "mode": boundary_mode,
             "approval_allowed": False,
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            9
+            10
             if untagged_records
-            else 8 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 7
+            else 9 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 8
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
@@ -5092,6 +5132,7 @@ class ProductService:
             untagged_resource_ownership=tuple(untagged_records),
             plan_access_policy_version=access_policy.version,
             plan_access_policy_sha256=access_policy.sha256,
+            pricing=pricing,
         )
         expected_manifest = generated_plan_manifest(
             organization_id=run.organization_id,
@@ -5193,8 +5234,8 @@ class ProductService:
 
         The current customer-facing revision must be submitted or explicitly
         approved. Only the trusted server runner can call this boundary with a
-        typed proposal and its real saved plan. Regional pricing is recorded as
-        unavailable until a trusted evaluator is integrated.
+        typed proposal, its real saved plan, and bound pricing evidence. Incomplete
+        estimates remain visible for review but cannot pass approval.
         """
         revision = self._infrastructure_revision(principal, revision_id)
         try:
@@ -5221,6 +5262,25 @@ class ProductService:
             raise ValueError("generated Terraform plan is stale because a newer revision exists")
         if revision.content_digest != plan_hash(revision.content):
             raise ValueError("customer revision failed integrity verification")
+        try:
+            trusted_pricing_context = TrustedPlanPricingContext.from_persisted_revision(
+                revision.content, expected_sha256=revision.content_digest
+            )
+            pricing = generated_plan.pricing
+            pricing_document = pricing.as_manifest_document() if pricing is not None else None
+        except (PlanPricingError, AttributeError):
+            raise ValueError("generated plan pricing evidence failed validation") from None
+        if (
+            pricing is None
+            or not pricing_evidence_document_is_valid(pricing_document)
+            or pricing.region != trusted_pricing_context.region
+            or pricing.persisted_context_sha256 != revision.content_digest
+            or pricing.pricing_context_sha256 != trusted_pricing_context.pricing_context_sha256
+            or pricing.proposal_declared_budget_minor
+            not in (None, trusted_pricing_context.monthly_budget_minor)
+            or pricing.proposal_declared_currency not in (None, trusted_pricing_context.currency)
+        ):
+            raise ValueError("generated plan pricing does not match the persisted customer context")
 
         target = (revision.content or {}).get("target") or {}
         ownership_scope = self._generated_plan_ownership_scope(
@@ -5348,6 +5408,7 @@ class ProductService:
                 "no_op_count": generated_plan.summary.no_op_count,
                 "drift_count": generated_plan.summary.drift_count,
                 "contains_sensitive_changes": generated_plan.summary.contains_sensitive_changes,
+                "pricing": pricing_evidence_safe_summary(pricing_document),
             },
             artifact_bucket=stored_object.bucket,
             artifact_key=stored_object.key,
@@ -5450,18 +5511,52 @@ class ProductService:
         approval_allowed = not approval_blockers
         manifest_pricing = artifact.manifest.get("pricing")
         manifest_pricing = manifest_pricing if isinstance(manifest_pricing, dict) else {}
+        pricing_document = artifact.manifest.get("pricing_evidence")
+        pricing_lines = (
+            [
+                {
+                    key: line.get(key)
+                    for key in (
+                        "address", "resource_type", "description", "quantity",
+                        "unit", "monthly_cost_minor", "catalog_sku",
+                        "catalog_published_at", "catalog_effective_at",
+                    )
+                }
+                for line in pricing_document.get("lines", [])
+                if isinstance(line, dict)
+            ]
+            if pricing_evidence_document_is_valid(pricing_document)
+            and isinstance(pricing_document.get("lines"), list)
+            else []
+        )
+        pricing_findings = (
+            [item for item in pricing_document.get("findings", []) if isinstance(item, dict)]
+            if pricing_evidence_document_is_valid(pricing_document)
+            and isinstance(pricing_document.get("findings"), list)
+            else []
+        )
         pricing = {
             "status": manifest_pricing.get("status", "UNAVAILABLE"),
             "region": manifest_pricing.get("region", artifact.region),
             "currency": manifest_pricing.get("currency"),
             "monthly_cost": manifest_pricing.get("monthly_cost"),
-            "reason_code": manifest_pricing.get(
-                "reason_code", "regional_pricing_evaluator_not_integrated"
-            ),
+            "monthly_low_minor": manifest_pricing.get("monthly_low_minor"),
+            "monthly_high_minor": manifest_pricing.get("monthly_high_minor"),
+            "monthly_budget_minor": manifest_pricing.get("monthly_budget_minor"),
+            "rate_type": manifest_pricing.get("rate_type"),
+            "captured_at": manifest_pricing.get("captured_at"),
+            "estimate_disclaimer": manifest_pricing.get("estimate_disclaimer"),
+            "lines": pricing_lines,
+            "findings": pricing_findings,
+            "reason_code": pricing_findings[0].get("code") if pricing_findings else None,
             "evidence_complete": pricing_complete,
         }
         if not pricing_complete:
-            pricing["message"] = "Waiting for complete regional cost evidence."
+            pricing["message"] = (
+                "Material resource costs are unknown or incomplete; this plan cannot be approved."
+                if pricing_findings
+                else "Waiting for complete regional cost evidence."
+            )
         state = (
             "BLOCKED_NO_REMOTE_STATE"
             if boundary_mode == "INITIAL_PLAN_NO_REMOTE_STATE"
@@ -5543,10 +5638,6 @@ class ProductService:
         if canonical_json_digest(artifact.manifest) != artifact.manifest_sha256:
             raise ValueError("generated plan manifest failed integrity verification")
         manifest = artifact.manifest
-        if not has_complete_pricing_evidence(manifest):
-            raise ValueError(
-                "complete regional cost evidence is unavailable; generated plan cannot be approved"
-            )
         if (manifest.get("planning_boundary") or {}).get("mode") == "INITIAL_PLAN_NO_REMOTE_STATE":
             raise ValueError(
                 "durable remote Terraform state is unavailable; initial-state plans cannot be approved"
@@ -5558,6 +5649,10 @@ class ProductService:
             or planning_boundary.get("execution_allowed") is not True
         ):
             raise ValueError("the generated plan's execution boundary does not allow approval")
+        if not has_complete_pricing_evidence(manifest):
+            raise ValueError(
+                "complete regional cost evidence is unavailable; generated plan cannot be approved"
+            )
         tenant = manifest.get("tenant") or {}
         target = manifest.get("target") or {}
         digests = manifest.get("digests") or {}
@@ -5574,6 +5669,14 @@ class ProductService:
             or digests.get("configuration_sha256") != artifact.configuration_sha256
             or digests.get("saved_plan_sha256") != artifact.saved_plan_sha256
             or digests.get("policy_sha256") != artifact.policy_sha256
+            or digests.get("pricing_evidence_sha256")
+            != (manifest.get("pricing_evidence") or {}).get("evidence_sha256")
+            or digests.get("pricing_context_sha256")
+            != (manifest.get("pricing_evidence") or {}).get("pricing_context_sha256")
+            or digests.get("plan_json_sha256")
+            != (manifest.get("pricing_evidence") or {}).get("plan_json_sha256")
+            or manifest.get("pricing")
+            != pricing_evidence_safe_summary(manifest.get("pricing_evidence"))
             or (manifest.get("toolchain") or {}).get("terraform_version")
             != artifact.terraform_version
             or (manifest.get("toolchain") or {}).get("aws_provider_version")
@@ -5620,6 +5723,19 @@ class ProductService:
             or revision.content_digest != plan_hash(revision.content)
         ):
             raise ValueError("generated plan is no longer bound to the current approved revision")
+        try:
+            trusted_pricing_context = TrustedPlanPricingContext.from_persisted_revision(
+                revision.content, expected_sha256=revision.content_digest
+            )
+        except PlanPricingError:
+            raise ValueError("generated plan pricing context failed integrity verification") from None
+        approval_checked_at = datetime.now(UTC)
+        if not pricing_evidence_is_approval_eligible(
+            manifest.get("pricing_evidence"),
+            trusted_context=trusted_pricing_context,
+            now=approval_checked_at,
+        ):
+            raise ValueError("generated plan pricing is stale, incomplete, over budget, or mismatched")
         latest = self.db.scalar(
             select(InfrastructurePlanRevision)
             .where(
@@ -5658,7 +5774,7 @@ class ProductService:
         expiry = artifact.expires_at
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=UTC)
-        if expiry <= datetime.now(UTC):
+        if expiry <= approval_checked_at:
             raise ValueError("generated plan artifact has expired")
         if self.db.scalar(
             select(GeneratedPlanApproval.id).where(GeneratedPlanApproval.artifact_id == artifact.id)

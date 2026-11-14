@@ -38,6 +38,13 @@ from davdeploy.generated_plan_policy import (
     GeneratedPlanPolicyResult,
     evaluate_generated_plan_policy,
 )
+from davdeploy.generated_plan_pricing import (
+    AwsPriceListCatalog,
+    GeneratedPlanPricingEvidence,
+    PlanPricingError,
+    TrustedPlanPricingContext,
+    evaluate_generated_plan_pricing,
+)
 from davdeploy.generated_provider_validation import (
     GeneratedProviderSchemaError,
     validate_generated_proposal,
@@ -76,6 +83,7 @@ class GeneratedTerraformPlan:
     untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...] = ()
     plan_access_policy_version: str = "NOT_APPLICABLE"
     plan_access_policy_sha256: str = "0" * 64
+    pricing: GeneratedPlanPricingEvidence | None = None
 
 
 class GeneratedTerraformPlanRunner:
@@ -96,6 +104,7 @@ class GeneratedTerraformPlanRunner:
         terraform_binary: str = "terraform",
         command_timeout_seconds: int = 300,
         identity_provider: Callable[[], str] | None = None,
+        pricing_catalog: AwsPriceListCatalog | None = None,
     ):
         if not re.fullmatch(r"\d+\.\d+\.\d+", expected_terraform_version):
             raise ValueError("expected Terraform version must be an exact semantic version")
@@ -109,6 +118,7 @@ class GeneratedTerraformPlanRunner:
         self.terraform_binary = terraform_binary
         self.command_timeout_seconds = command_timeout_seconds
         self.identity_provider = identity_provider or self._aws_account_id
+        self.pricing_catalog = pricing_catalog
 
     def plan(
         self,
@@ -118,6 +128,7 @@ class GeneratedTerraformPlanRunner:
         region: str,
         ownership_scope: PlanOwnershipScope,
         workspace: str | Path,
+        trusted_pricing_context: TrustedPlanPricingContext | None = None,
         aws_credentials: dict[str, str] | None = None,
         remote_state: TerraformHTTPBackend | None = None,
         plan_access_policy_version: str = "NOT_APPLICABLE",
@@ -126,12 +137,16 @@ class GeneratedTerraformPlanRunner:
         """Validate and plan; never apply, destroy, or return resource values."""
         if not isinstance(ownership_scope, PlanOwnershipScope):
             raise TerraformPlanExecutionError("trusted plan ownership scope is required")
+        if not isinstance(trusted_pricing_context, TrustedPlanPricingContext):
+            raise TerraformPlanExecutionError("trusted persisted pricing context is required")
         if not re.fullmatch(r"\d{12}", expected_account_id):
             raise TerraformPlanExecutionError("trusted AWS account ID is invalid")
         if not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
             raise TerraformPlanExecutionError("trusted AWS region is invalid")
         if proposal.requirements.region != region:
             raise TerraformPlanExecutionError("proposal region does not match trusted region")
+        if trusted_pricing_context.region != region:
+            raise TerraformPlanExecutionError("pricing region does not match trusted plan region")
         if any(key.startswith("AWS_ENDPOINT_URL") for key in os.environ):
             raise TerraformPlanExecutionError("custom AWS endpoints are not allowed for planning")
 
@@ -272,6 +287,18 @@ class GeneratedTerraformPlanRunner:
             trusted_configuration=config,
             untagged_resource_ownership=untagged_resource_ownership,
         )
+        try:
+            pricing = evaluate_generated_plan_pricing(
+                document,
+                trusted_context=trusted_pricing_context,
+                proposal_declared_budget_minor=proposal.requirements.monthly_budget_minor,
+                proposal_declared_currency=proposal.requirements.currency,
+                catalog=self.pricing_catalog,
+            )
+        except PlanPricingError:
+            raise TerraformPlanExecutionError(
+                "Terraform plan pricing evidence could not be safely evaluated"
+            ) from None
         workspace_bundle_path, workspace_bundle_sha256 = create_execution_workspace_bundle(
             working_root,
             credential_values=(
@@ -300,6 +327,7 @@ class GeneratedTerraformPlanRunner:
             untagged_resource_ownership=untagged_resource_ownership,
             plan_access_policy_version=plan_access_policy_version,
             plan_access_policy_sha256=plan_access_policy_sha256,
+            pricing=pricing,
         )
 
     def _run(
