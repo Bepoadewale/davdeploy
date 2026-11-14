@@ -47,7 +47,7 @@ executed.
 
 ## Acceptance status
 
-The typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display are implemented and locally verified. Focused and full verification, OpenAPI snapshot, and local docs conventions pass. Required clean-runner CI is pending. No live catalog request, customer plan, or workload mutation has occurred.
+Implementation commit `5cb1108dcd624da021cab9637004eaa458e9ac29` adds the typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display. Focused tests (222), full verification (1,193 tests), OpenAPI snapshot, and local docs conventions pass. Required clean-runner CI is pending. No live catalog request, customer plan, or workload mutation has occurred.
 
 ## Tests / validation performed
 
