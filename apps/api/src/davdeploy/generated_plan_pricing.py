@@ -677,9 +677,9 @@ def evaluate_generated_plan_pricing(
     """Price plan resources from trusted mappings and explicit plan quantities.
 
     Nova-authored price, SKU, and usage text is not read here. EBS gp3, plain
-    S3 Standard usage, and Standard/FIFO SQS billed request units have bounded
-    mappings. Any unsupported resource or price-driving usage dimension
-    prevents approval.
+    S3 Standard usage, Standard/FIFO SQS billed request units, and bounded
+    private Single-AZ RDS MySQL configurations have mappings. Any unsupported
+    resource or price-driving usage dimension prevents approval.
     """
     if not isinstance(trusted_context, TrustedPlanPricingContext):
         raise PlanPricingError("trusted persisted pricing context is required")
