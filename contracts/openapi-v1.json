@@ -878,8 +878,8 @@
             "type": "integer"
           },
           "minimum": {
-            "maximum": 1000000000000,
-            "minimum": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
             "title": "Minimum",
             "type": "integer"
           }
