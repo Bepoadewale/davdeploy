@@ -584,9 +584,10 @@ def evaluate_generated_plan_pricing(
 ) -> GeneratedPlanPricingEvidence:
     """Price plan resources from trusted mappings and explicit plan quantities.
 
-    Nova-authored price, SKU, and usage text is not read here. Only EBS gp3
-    and proposal-wide usage across plain S3 Standard buckets have billable
-    mappings. Any unsupported resource or usage dimension prevents approval.
+    Nova-authored price, SKU, and usage text is not read here. EBS gp3, plain
+    S3 Standard usage, and Standard/FIFO SQS billed request units have bounded
+    mappings. Any unsupported resource or price-driving usage dimension
+    prevents approval.
     """
     if not isinstance(trusted_context, TrustedPlanPricingContext):
         raise PlanPricingError("trusted persisted pricing context is required")
