@@ -9,14 +9,20 @@ from uuid import uuid4
 
 import pytest
 from davdeploy import main
+from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
 from davdeploy.models import (
     AuditEvent,
     Base,
+    CloudConnection,
     Environment,
+    GeneratedPlanApplyRun,
+    GeneratedPlanApproval,
+    GeneratedPlanArtifact,
     GeneratedPlanRun,
     InfrastructurePlan,
     InfrastructurePlanRevision,
     Organization,
+    ProductUser,
     Project,
     TerraformRemoteState,
     TerraformStateCredential,
@@ -451,6 +457,294 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
         assert cross_tenant.status_code == 401
 
     assert len(codebuild.calls) == 1
+    db.close()
+
+
+def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    db = Session(engine, expire_on_commit=False)
+    plan_id = "d1dd65f5-4f21-4e26-85b7-74d75fc7db8c"
+    revision_id = "fdac3a35-9b91-4b45-84a7-c6067106d485"
+    plan_run_id = "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0"
+    artifact_id = "ed350f1b-61b1-4edc-9799-35332aa96283"
+    approval_id = "8f7c5f1e-9200-4d9c-91d9-8afdd81ec52f"
+    apply_run_id = "12345678-1234-4234-8234-123456789abc"
+    build_uuid = "abcdefff-1234-4234-8234-123456789abc"
+    build_id = f"fixed-apply:{build_uuid}"
+    build_arn = f"arn:aws:codebuild:us-east-1:654654474502:build/{build_id}"
+    apply_role = "arn:aws:iam::654654474502:role/fixed-apply"
+    assumed_apply_role = (
+        f"arn:aws:sts::654654474502:assumed-role/fixed-apply/AWSCodeBuild-{build_uuid}"
+    )
+    connection_id = "66b3854d-745f-4553-90bf-46e5c4da390f"
+    account_id = "654654474502"
+    region = "us-east-1"
+    revision_content = {
+        "target": {
+            "connection_id": connection_id,
+            "environment_id": ENVIRONMENT,
+            "account_id": account_id,
+            "region": region,
+        }
+    }
+    revision_digest = main.plan_hash(revision_content)
+    state_scope = terraform_state_scope_digest(
+        organization_id=ORG,
+        project_id=PROJECT,
+        environment_id=ENVIRONMENT,
+        target_account_id=account_id,
+        region=region,
+    )
+    pricing_evidence = _evidence(
+        status=PlanPricingStatus.COMPLETE,
+        region=region,
+        currency="USD",
+        captured_at=datetime.now(UTC).isoformat(),
+        budget=None,
+        document={},
+        lines=(),
+        findings=(),
+        persisted_context_sha256="b" * 64,
+    )
+    pricing_document = pricing_evidence.as_manifest_document()
+    manifest = {
+        "tenant": {
+            "organization_id": ORG,
+            "project_id": PROJECT,
+            "revision_id": revision_id,
+            "environment_id": ENVIRONMENT,
+        },
+        "target": {"account_id": account_id, "region": region},
+        "remote_state": {"scope_sha256": state_scope},
+        "pricing": pricing_evidence.safe_summary(),
+        "pricing_evidence": pricing_document,
+        "digests": {
+            "customer_revision_sha256": revision_digest,
+            "pricing_evidence_sha256": pricing_document["evidence_sha256"],
+            "pricing_context_sha256": pricing_document["pricing_context_sha256"],
+            "plan_json_sha256": pricing_document["plan_json_sha256"],
+        },
+    }
+    manifest_digest = main.canonical_json_digest(manifest)
+    db.add_all(
+        [
+            Organization(id=ORG, name="state-apply-test-org"),
+            Project(id=PROJECT, organization_id=ORG, name="state-apply-test-project"),
+            Environment(
+                id=ENVIRONMENT,
+                organization_id=ORG,
+                project_id=PROJECT,
+                name="production",
+                environment_type="production",
+                state="READY",
+                desired_state={},
+                observed_state={},
+            ),
+            ProductUser(id="apply-admin-user", organization_id=ORG, subject="admin", role="administrator"),
+            CloudConnection(
+                id=connection_id,
+                organization_id=ORG,
+                provider="aws",
+                display_name="Verified account",
+                account_id=account_id,
+                setup_state="VERIFIED",
+            ),
+            InfrastructurePlan(
+                id=plan_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                creator_subject="admin",
+                title="Apply state test",
+            ),
+            InfrastructurePlanRevision(
+                id=revision_id,
+                infrastructure_plan_id=plan_id,
+                organization_id=ORG,
+                revision_number=1,
+                state="APPROVED",
+                content=revision_content,
+                content_digest=revision_digest,
+            ),
+            GeneratedPlanRun(
+                id=plan_run_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                requester_subject="admin",
+                idempotency_key_sha256="b" * 64,
+                request_sha256="c" * 64,
+                request_document={"target_account_id": account_id, "region": region},
+                runner_run_id=plan_run_id,
+                revision_sha256=revision_digest,
+                state="PLAN_READY_REVIEW_ONLY",
+                codebuild_project="fixed-plan",
+                codebuild_build_id="fixed-plan:old-plan-run",
+                input_key="plan-input.json",
+                result_key="plan-result.json",
+            ),
+            GeneratedPlanArtifact(
+                id=artifact_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                run_id=plan_run_id,
+                target_account_id=account_id,
+                region=region,
+                terraform_version="1.14.7",
+                aws_provider_version="6.0.0",
+                provider_lockfile_sha256="d" * 64,
+                proposal_sha256="e" * 64,
+                context_sha256="f" * 64,
+                configuration_sha256="1" * 64,
+                saved_plan_sha256="2" * 64,
+                policy_sha256="3" * 64,
+                manifest_sha256=manifest_digest,
+                manifest=manifest,
+                policy_version="generated-plan-policy-v1",
+                policy_verdict="REVIEW_REQUIRED",
+                artifact_bucket="davdeploy-plans-654654474502",
+                artifact_key="plans/nova-generated/plan.tfplan",
+                artifact_version_id="plan-version",
+                artifact_size_bytes=10,
+                created_by_subject="admin",
+                expires_at=datetime.now(UTC) + timedelta(minutes=30),
+            ),
+            GeneratedPlanApproval(
+                id=approval_id,
+                artifact_id=artifact_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                approved_manifest_sha256=manifest_digest,
+                approver_subject="admin",
+                creator_subject="admin",
+                is_self_approval=True,
+                authorization_policy="workspace-administrator-self-approval-allowed",
+            ),
+            GeneratedPlanApplyRun(
+                id=apply_run_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                source_plan_run_id=plan_run_id,
+                artifact_id=artifact_id,
+                approval_id=approval_id,
+                requester_subject="admin",
+                idempotency_key_sha256="4" * 64,
+                request_sha256="5" * 64,
+                manifest_sha256=manifest_digest,
+                runner_run_id=apply_run_id,
+                codebuild_idempotency_token=apply_run_id,
+                codebuild_project="fixed-apply",
+                codebuild_build_id=build_id,
+                codebuild_build_arn=build_arn,
+                state="BUILD_STARTED",
+                request_document={"manifest_sha256": manifest_digest},
+            ),
+        ]
+    )
+    db.commit()
+
+    def override_session():
+        yield db
+
+    class FakeCodeBuild:
+        def __init__(self):
+            self.calls = []
+
+        def batch_get_builds(self, *, ids):
+            self.calls.append(ids)
+            return {
+                "builds": [
+                    {
+                        "id": build_id,
+                        "projectName": "fixed-apply",
+                        "serviceRole": apply_role,
+                        "buildStatus": "IN_PROGRESS",
+                        "arn": build_arn,
+                        "environment": {
+                            "environmentVariables": [
+                                {"name": "DAVDEPLOY_NOVA_APPLY_RUN_ID", "value": apply_run_id}
+                            ]
+                        },
+                    }
+                ]
+            }
+
+    codebuild = FakeCodeBuild()
+    monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN", apply_role)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "fixed-apply")
+    monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_API_URL", "https://api.davdeploy.tech")
+    monkeypatch.setattr(main, "ensure_aurora_ready", lambda: None)
+    monkeypatch.setattr(
+        main.boto3,
+        "client",
+        lambda name, **_kwargs: codebuild if name == "codebuild" else None,
+    )
+    monkeypatch.setitem(main.app.dependency_overrides, main.session, override_session)
+
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert response.status_code == 200
+        assert codebuild.calls == [[build_id]]
+        credential_document = response.json()
+        credential = db.scalar(
+            select(TerraformStateCredential).where(
+                TerraformStateCredential.username == credential_document["username"]
+            )
+        )
+        assert credential is not None
+        assert credential.run_id == plan_run_id
+        assert credential.apply_run_id == apply_run_id
+        state_credential, authorized_run = main._terraform_state_authorization(
+            credential.state_id,
+            SimpleNamespace(
+                username=credential_document["username"],
+                password=credential_document["password"],
+            ),
+            db,
+        )
+        assert state_credential.id == credential.id
+        assert authorized_run.id == plan_run_id
+        event = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "terraform_state_credentials.issued")
+        )
+        assert event is not None
+        assert event.entity_type == "generated_plan_apply_run"
+        assert event.entity_id == apply_run_id
+
+        db.get(ProductUser, "apply-admin-user").role = "developer"
+        db.commit()
+        codebuild.calls.clear()
+        with pytest.raises(HTTPException, match="Current workspace administrator authorization"):
+            main._terraform_state_authorization(
+                credential.state_id,
+                SimpleNamespace(
+                    username=credential_document["username"],
+                    password=credential_document["password"],
+                ),
+                db,
+            )
+        assert codebuild.calls == []
+        denied = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert denied.status_code == 403
+        assert codebuild.calls == []
+
     db.close()
     engine.dispose()
 

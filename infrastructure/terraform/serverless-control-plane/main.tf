@@ -8,18 +8,30 @@ locals {
 }
 
 locals {
-  nova_plan_only_project_name          = "${local.name}-nova-plan-only"
-  nova_plan_only_input_key             = "plans/nova-generated/requests/*/input.json"
-  nova_plan_only_build_prefix          = "plans/nova-generated/builds/*"
-  nova_plan_only_scoped_prefix         = "plans/nova-generated/builds/$${codebuild:buildArn}"
-  nova_plan_only_build_input_key       = "${local.nova_plan_only_build_prefix}/input.json"
-  nova_plan_only_build_result_key      = "${local.nova_plan_only_build_prefix}/result.json"
-  nova_plan_only_build_saved_plan_key  = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.tfplan"
-  nova_plan_only_build_workspace_key   = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.workspace.tar.gz"
-  nova_plan_only_scoped_input_key      = "${local.nova_plan_only_scoped_prefix}/input.json"
-  nova_plan_only_scoped_result_key     = "${local.nova_plan_only_scoped_prefix}/result.json"
-  nova_plan_only_scoped_saved_plan_key = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.tfplan"
-  nova_plan_only_scoped_workspace_key  = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.workspace.tar.gz"
+  nova_plan_only_project_name                = "${local.name}-nova-plan-only"
+  nova_plan_only_input_key                   = "plans/nova-generated/requests/*/input.json"
+  nova_plan_only_build_prefix                = "plans/nova-generated/builds/*"
+  nova_plan_only_scoped_prefix               = "plans/nova-generated/builds/$${codebuild:buildArn}"
+  nova_plan_only_build_input_key             = "${local.nova_plan_only_build_prefix}/input.json"
+  nova_plan_only_build_result_key            = "${local.nova_plan_only_build_prefix}/result.json"
+  nova_plan_only_build_saved_plan_key        = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.tfplan"
+  nova_plan_only_build_workspace_key         = "${local.nova_plan_only_build_prefix}/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.workspace.tar.gz"
+  nova_plan_only_scoped_input_key            = "${local.nova_plan_only_scoped_prefix}/input.json"
+  nova_plan_only_scoped_result_key           = "${local.nova_plan_only_scoped_prefix}/result.json"
+  nova_plan_only_scoped_saved_plan_key       = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.tfplan"
+  nova_plan_only_scoped_workspace_key        = "${local.nova_plan_only_scoped_prefix}/org-*/project-*/revision-*/*.workspace.tar.gz"
+  nova_exact_plan_apply_project_name         = "${local.name}-nova-saved-plan-apply"
+  nova_exact_plan_apply_input_key            = "plans/nova-generated/apply-requests/*/input.json"
+  nova_exact_plan_apply_build_prefix         = "plans/nova-generated/apply-builds/*"
+  nova_exact_plan_apply_build_scoped_prefix  = "plans/nova-generated/apply-builds/$${codebuild:buildArn}"
+  nova_exact_plan_apply_build_input_key      = "${local.nova_exact_plan_apply_build_prefix}/input.json"
+  nova_exact_plan_apply_build_result_key     = "${local.nova_exact_plan_apply_build_prefix}/result.json"
+  nova_exact_plan_apply_scoped_input_key     = "${local.nova_exact_plan_apply_build_scoped_prefix}/input.json"
+  nova_exact_plan_apply_scoped_result_key    = "${local.nova_exact_plan_apply_build_scoped_prefix}/result.json"
+  nova_exact_plan_apply_plan_key             = "plans/nova-generated/builds/*/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.tfplan"
+  nova_exact_plan_apply_workspace_key        = "plans/nova-generated/builds/*/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.workspace.tar.gz"
+  nova_exact_plan_apply_scoped_plan_key      = "plans/nova-generated/builds/*/org-*/project-*/revision-*/*.tfplan"
+  nova_exact_plan_apply_scoped_workspace_key = "plans/nova-generated/builds/*/org-*/project-*/revision-*/*.workspace.tar.gz"
 }
 
 data "aws_availability_zones" "available" {
@@ -409,6 +421,78 @@ resource "aws_iam_role_policy_attachment" "api_nova_plan_only_start_build_overri
   policy_arn = data.aws_iam_policy.api_nova_plan_only_start_build_overrides.arn
 }
 
+data "aws_iam_policy" "api_nova_exact_plan_apply_codebuild" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/nova-exact-plan-apply-codebuild"
+}
+
+resource "aws_iam_role_policy_attachment" "api_nova_exact_plan_apply_codebuild" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  role       = aws_iam_role.api.name
+  policy_arn = data.aws_iam_policy.api_nova_exact_plan_apply_codebuild[0].arn
+}
+
+data "aws_iam_policy" "api_nova_exact_plan_apply_start_build_overrides" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/nova-exact-plan-apply-start-build-overrides"
+}
+
+resource "aws_iam_role_policy_attachment" "api_nova_exact_plan_apply_start_build_overrides" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  role       = aws_iam_role.api.name
+  policy_arn = data.aws_iam_policy.api_nova_exact_plan_apply_start_build_overrides[0].arn
+}
+
+resource "aws_iam_role_policy" "api_nova_exact_plan_apply_artifacts" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  name = "nova-exact-plan-apply-artifacts"
+  role = aws_iam_role.api.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_input_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_input_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_build_result_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:GenerateDataKey", "kms:Decrypt"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "api_nova_plan_only_artifacts" {
   count = var.enable_nova_plan_only_runner ? 1 : 0
 
@@ -738,6 +822,126 @@ resource "aws_iam_role_policy" "nova_plan_only" {
   })
 }
 
+resource "aws_iam_role" "nova_exact_plan_apply" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  name = "${local.name}-nova-saved-plan-apply"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "codebuild.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+        ArnEquals = {
+          "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/${local.nova_exact_plan_apply_project_name}"
+        }
+      }
+    }]
+  })
+  tags = merge(local.common_tags, { Purpose = "isolated-nova-exact-plan-apply-runner" })
+}
+
+resource "aws_iam_role_policy" "nova_exact_plan_apply" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  name = "isolated-nova-exact-plan-apply-artifacts"
+  role = aws_iam_role.nova_exact_plan_apply[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.nova_exact_plan_apply[0].arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_input_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_scoped_result_key}"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_scoped_plan_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_scoped_workspace_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = var.nova_plan_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}"
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersion"]
+        Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.artifact_bucket}/${var.artifact_key}"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.nova_plan_runner_release_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "s3.${var.region}.${data.aws_partition.current.dns_suffix}"
+          }
+          StringLike = {
+            "kms:EncryptionContext:aws:s3:arn" = [
+              "arn:${data.aws_partition.current.partition}:s3:::${var.artifact_bucket}",
+              "arn:${data.aws_partition.current.partition}:s3:::${var.artifact_bucket}/${var.artifact_key}",
+            ]
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["execute-api:Invoke"]
+        Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/nova-apply/credentials"
+        Condition = {
+          ArnLike = {
+            "codebuild:BuildArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:build/${local.nova_exact_plan_apply_project_name}:*"
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["execute-api:Invoke"]
+        Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/terraform-state/credentials"
+        Condition = {
+          ArnLike = {
+            "codebuild:BuildArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:build/${local.nova_exact_plan_apply_project_name}:*"
+          }
+        }
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "nova_plan_credentials_bootstrap" {
   count = var.enable_nova_plan_credential_broker ? 1 : 0
 
@@ -988,6 +1192,118 @@ resource "aws_codebuild_project" "nova_plan_only" {
   tags = merge(local.common_tags, { Purpose = "isolated-nova-plan-only-runner" })
 }
 
+resource "aws_cloudwatch_log_group" "nova_exact_plan_apply" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  name              = "/aws/codebuild/${local.nova_exact_plan_apply_project_name}"
+  retention_in_days = 14
+  tags              = merge(local.common_tags, { Purpose = "isolated-nova-exact-plan-apply-runner" })
+}
+
+resource "aws_codebuild_project" "nova_exact_plan_apply" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  name                   = local.nova_exact_plan_apply_project_name
+  description            = "Separate fixed CodeBuild boundary for future exact approved-plan apply; no customer apply is wired by this disabled project."
+  service_role           = aws_iam_role.nova_exact_plan_apply[0].arn
+  build_timeout          = 120
+  queued_timeout         = 5
+  concurrent_build_limit = 1
+
+  artifacts { type = "NO_ARTIFACTS" }
+
+  environment {
+    compute_type                = "BUILD_GENERAL1_SMALL"
+    image                       = "aws/codebuild/standard:7.0"
+    type                        = "LINUX_CONTAINER"
+    privileged_mode             = false
+    image_pull_credentials_type = "CODEBUILD"
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_ARTIFACT_BUCKET"
+      value = var.nova_plan_artifact_bucket
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN"
+      value = var.nova_plan_kms_key_arn
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER"
+      value = data.aws_caller_identity.current.account_id
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_PROJECT_NAME"
+      value = local.nova_exact_plan_apply_project_name
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_CREDENTIAL_BROKER_URL"
+      value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/nova-apply/credentials"
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL"
+      value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/terraform-state/credentials"
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_ENABLED"
+      value = tostring(var.enable_nova_terraform_state_api)
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_TERRAFORM_STATE_API_URL"
+      value = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_CODE_BUCKET"
+      value = var.artifact_bucket
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_CODE_KEY"
+      value = var.artifact_key
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_CODE_VERSION"
+      value = coalesce(var.artifact_object_version, "disabled")
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_CODE_BUCKET_OWNER"
+      value = data.aws_caller_identity.current.account_id
+      type  = "PLAINTEXT"
+    }
+  }
+
+  source {
+    type      = "NO_SOURCE"
+    buildspec = <<-EOT
+      version: 0.2
+      phases:
+        install:
+          commands:
+            - echo "The fixed Nova exact-plan apply worker is not wired." >&2
+            - exit 1
+    EOT
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name  = aws_cloudwatch_log_group.nova_exact_plan_apply[0].name
+      stream_name = "build"
+      status      = "ENABLED"
+    }
+    s3_logs { status = "DISABLED" }
+  }
+
+  tags = merge(local.common_tags, { Purpose = "isolated-nova-exact-plan-apply-runner" })
+}
+
 resource "aws_iam_role" "policy" {
   name = "${local.name}-policy"
   assume_role_policy = jsonencode({
@@ -1189,6 +1505,9 @@ locals {
     DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
     DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
     DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                    = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
+    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT              = var.enable_nova_exact_plan_apply_runner ? aws_codebuild_project.nova_exact_plan_apply[0].name : ""
+    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN             = var.enable_nova_exact_plan_apply_runner ? aws_iam_role.nova_exact_plan_apply[0].arn : ""
+    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY         = tostring(var.enable_nova_exact_plan_apply_runner)
     DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)
     DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
     DAVDEPLOY_TERRAFORM_STATE_BUCKET                     = var.enable_nova_terraform_state_storage ? aws_s3_bucket.nova_terraform_state[0].bucket : ""
@@ -1562,6 +1881,17 @@ resource "aws_sqs_queue_policy" "worker_events" {
             "aws:SourceArn" = aws_cloudwatch_event_rule.nova_plan_only_completion[0].arn
           }
         }
+      }] : [],
+      var.enable_nova_exact_plan_apply_runner ? [{
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.worker.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_cloudwatch_event_rule.nova_exact_plan_apply_completion[0].arn
+          }
+        }
       }] : []
     )
   })
@@ -1602,6 +1932,29 @@ resource "aws_cloudwatch_event_target" "nova_plan_only_completion" {
   count = var.enable_nova_plan_only_runner ? 1 : 0
 
   rule       = aws_cloudwatch_event_rule.nova_plan_only_completion[0].name
+  arn        = aws_sqs_queue.worker.arn
+  depends_on = [aws_sqs_queue_policy.worker_events]
+}
+
+resource "aws_cloudwatch_event_rule" "nova_exact_plan_apply_completion" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  name = "${local.name}-nova-exact-plan-apply-completion"
+  event_pattern = jsonencode({
+    source        = ["aws.codebuild"]
+    "detail-type" = ["CodeBuild Build State Change"]
+    detail = {
+      "project-name" = [aws_codebuild_project.nova_exact_plan_apply[0].name]
+      "build-status" = ["SUCCEEDED", "FAILED", "FAULT", "TIMED_OUT", "STOPPED"]
+    }
+  })
+  tags = merge(local.common_tags, { Purpose = "isolated-nova-exact-plan-apply-runner" })
+}
+
+resource "aws_cloudwatch_event_target" "nova_exact_plan_apply_completion" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  rule       = aws_cloudwatch_event_rule.nova_exact_plan_apply_completion[0].name
   arn        = aws_sqs_queue.worker.arn
   depends_on = [aws_sqs_queue_policy.worker_events]
 }

@@ -120,6 +120,7 @@ from davdeploy.models import (
     Environment,
     EnvironmentOutput,
     ExecutionJob,
+    GeneratedPlanApplyRun,
     GeneratedPlanApproval,
     GeneratedPlanArtifact,
     GeneratedPlanRun,
@@ -4423,6 +4424,197 @@ class ProductService:
         return self._generated_plan_run_payload(run) | {
             "plan_title": plan_title,
             "revision_number": revision_number,
+        }
+
+    def generated_plan_apply_run_detail(
+        self, principal: Principal, apply_run_id: str
+    ) -> dict[str, Any]:
+        try:
+            canonical_id = str(uuid.UUID(apply_run_id))
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("apply run identifier is invalid") from None
+        row = self.db.execute(
+            select(GeneratedPlanApplyRun, InfrastructurePlan.title,
+                   InfrastructurePlanRevision.revision_number)
+            .join(
+                InfrastructurePlanRevision,
+                GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+            )
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+            )
+            .where(
+                GeneratedPlanApplyRun.id == canonical_id,
+                GeneratedPlanApplyRun.organization_id == principal.organization_id,
+                GeneratedPlanApplyRun.project_id == InfrastructurePlan.project_id,
+                GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+                InfrastructurePlan.organization_id == principal.organization_id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+        ).one_or_none()
+        if row is None:
+            raise PermissionError("apply run not found in this organization")
+        apply_run, plan_title, revision_number = row
+        if (
+            not self._is_workspace_administrator(principal)
+            and apply_run.requester_subject != principal.subject
+        ):
+            raise PermissionError("apply run is not visible to this user")
+        return self._generated_plan_apply_run_payload(
+            apply_run, plan_title, revision_number
+        )
+
+    def generated_plan_apply_run_history(
+        self,
+        principal: Principal,
+        project_id: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+        revision_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List bounded, tenant-scoped status for exact-plan apply requests."""
+        project = self._project(principal, project_id)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("apply history page size must be between 1 and 100")
+
+        visibility = [
+            GeneratedPlanApplyRun.organization_id == principal.organization_id,
+            GeneratedPlanApplyRun.project_id == project.id,
+        ]
+        if not self._is_workspace_administrator(principal):
+            visibility.append(GeneratedPlanApplyRun.requester_subject == principal.subject)
+        if revision_id is not None:
+            try:
+                canonical_revision_id = str(uuid.UUID(revision_id))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("apply history revision is invalid") from None
+            revision_exists = self.db.scalar(
+                select(InfrastructurePlanRevision.id)
+                .join(
+                    InfrastructurePlan,
+                    InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+                )
+                .where(
+                    InfrastructurePlanRevision.id == canonical_revision_id,
+                    InfrastructurePlanRevision.organization_id == principal.organization_id,
+                    InfrastructurePlan.organization_id == principal.organization_id,
+                    InfrastructurePlan.project_id == project.id,
+                )
+            )
+            if revision_exists is None:
+                raise PermissionError("plan revision not found for this project")
+            visibility.append(GeneratedPlanApplyRun.revision_id == canonical_revision_id)
+
+        query = (
+            select(
+                GeneratedPlanApplyRun,
+                InfrastructurePlan.title,
+                InfrastructurePlanRevision.revision_number,
+            )
+            .join(
+                InfrastructurePlanRevision,
+                GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+            )
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+            )
+            .where(
+                *visibility,
+                InfrastructurePlan.project_id == project.id,
+                InfrastructurePlan.organization_id == principal.organization_id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+        )
+        if cursor is not None:
+            try:
+                canonical_cursor = str(uuid.UUID(cursor))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("apply history cursor is invalid") from None
+            anchor = self.db.scalar(
+                select(GeneratedPlanApplyRun)
+                .join(
+                    InfrastructurePlanRevision,
+                    GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+                )
+                .join(
+                    InfrastructurePlan,
+                    InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+                )
+                .where(
+                    *visibility,
+                    GeneratedPlanApplyRun.id == canonical_cursor,
+                    GeneratedPlanApplyRun.project_id == InfrastructurePlan.project_id,
+                    InfrastructurePlan.project_id == project.id,
+                    InfrastructurePlan.organization_id == principal.organization_id,
+                    InfrastructurePlanRevision.organization_id == principal.organization_id,
+                )
+            )
+            if anchor is None:
+                raise PermissionError("apply history cursor is not visible")
+            query = query.where(
+                or_(
+                    GeneratedPlanApplyRun.created_at < anchor.created_at,
+                    and_(
+                        GeneratedPlanApplyRun.created_at == anchor.created_at,
+                        GeneratedPlanApplyRun.id < anchor.id,
+                    ),
+                )
+            )
+
+        selected = list(
+            self.db.execute(
+                query.order_by(
+                    GeneratedPlanApplyRun.created_at.desc(), GeneratedPlanApplyRun.id.desc()
+                ).limit(limit + 1)
+            )
+        )
+        has_more = len(selected) > limit
+        page = selected[:limit]
+        return {
+            "project_id": project.id,
+            "items": [
+                self._generated_plan_apply_run_payload(apply_run, title, revision_number)
+                for apply_run, title, revision_number in page
+            ],
+            "next_cursor": page[-1][0].id if has_more and page else None,
+        }
+
+    @staticmethod
+    def _generated_plan_apply_run_payload(
+        apply_run: GeneratedPlanApplyRun, plan_title: str, revision_number: int
+    ) -> dict[str, Any]:
+        """Return customer-safe run status, never build inputs or artifact locations."""
+        error_code = (
+            apply_run.error_code
+            if isinstance(apply_run.error_code, str)
+            and re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", apply_run.error_code)
+            else None
+        )
+        return {
+            "id": apply_run.id,
+            "project_id": apply_run.project_id,
+            "plan_title": plan_title,
+            "revision_id": apply_run.revision_id,
+            "revision_number": revision_number,
+            "source_plan_run_id": apply_run.source_plan_run_id,
+            "artifact_id": apply_run.artifact_id,
+            "state": apply_run.state,
+            "created_at": apply_run.created_at.isoformat() if apply_run.created_at else None,
+            "started_at": apply_run.started_at.isoformat() if apply_run.started_at else None,
+            "finished_at": apply_run.finished_at.isoformat() if apply_run.finished_at else None,
+            "error_code": error_code,
+            "error_summary": (
+                "The apply did not complete successfully. Verify the run outcome before retrying."
+                if error_code
+                else None
+            ),
+            "execution_boundary": (
+                "An apply-run status does not establish application health or successful "
+                "resource cleanup; those require separate observed lifecycle evidence."
+            ),
         }
 
     @staticmethod
