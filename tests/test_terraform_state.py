@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from davdeploy import main
+from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
 from davdeploy.models import (
     AuditEvent,
     Base,
@@ -499,6 +500,18 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         target_account_id=account_id,
         region=region,
     )
+    pricing_evidence = _evidence(
+        status=PlanPricingStatus.COMPLETE,
+        region=region,
+        currency="USD",
+        captured_at=datetime.now(UTC).isoformat(),
+        budget=None,
+        document={},
+        lines=(),
+        findings=(),
+        persisted_context_sha256="b" * 64,
+    )
+    pricing_document = pricing_evidence.as_manifest_document()
     manifest = {
         "tenant": {
             "organization_id": ORG,
@@ -508,12 +521,14 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         },
         "target": {"account_id": account_id, "region": region},
         "remote_state": {"scope_sha256": state_scope},
-        "pricing": {
-            "status": "COMPLETE",
-            "region": region,
-            "evidence_sha256": "a" * 64,
+        "pricing": pricing_evidence.safe_summary(),
+        "pricing_evidence": pricing_document,
+        "digests": {
+            "customer_revision_sha256": revision_digest,
+            "pricing_evidence_sha256": pricing_document["evidence_sha256"],
+            "pricing_context_sha256": pricing_document["pricing_context_sha256"],
+            "plan_json_sha256": pricing_document["plan_json_sha256"],
         },
-        "digests": {"customer_revision_sha256": revision_digest},
     }
     manifest_digest = main.canonical_json_digest(manifest)
     db.add_all(
