@@ -2,7 +2,7 @@
 Date: 2026-11-14
 Execution type: Hosted GitHub Actions validation; no customer workload test
 Customer repository: Bepoadewale/davdeploy (implementation repository)
-Commit: ac9945f4cb4cf84bd215831095e99641e08b4e90
+Commit: b0806de84109bc04fdcaf7790c699e15774af038
 AWS account: Not accessed for workload testing
 AWS region: us-east-1 is the implementation's price lookup input; no workload resources were created
 
@@ -12,9 +12,9 @@ None. No AWS workload resources were created, modified, or destroyed.
 
 ## Commands executed
 
-- GitHub Actions PR validation for PR #411, run 43641313289.
-- The docs-conventions job passed after the ticket markers were corrected.
-- The hosted Python job found seven regressions: three stale version/legacy-fixture expectations and four RDS test fixture assumptions. The branch now corrects the expected evidence version, removes new fields from the legacy v2 fixture, and uses a supported M-class fixture. A final-head run is pending.
+- GitHub Actions PR validation for PR #411, run 43641747945, on commit 48b3a99cdc0829da033099a146a28fdc952e9ae8.
+- Hosted Python passed: 1,226 tests. Secrets, policy, docs-conventions, supply-chain, and cloud-contracts also passed.
+- The hosted end-to-end job reached the OpenAPI snapshot check and failed because the snapshot differed from the generated API schema. The contract snapshot has been aligned and sorted on the branch. Hosted verification of that correction is pending.
 
 No local test commands or AWS mutation commands were executed.
 
