@@ -23,6 +23,10 @@ from davdeploy.generated_plan_policy import (
     PlanPolicyFinding,
     PlanPolicyVerdict,
 )
+from davdeploy.generated_plan_pricing import (
+    TrustedPlanPricingContext,
+    evaluate_generated_plan_pricing,
+)
 from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 from davdeploy.main import app, product_service
 from davdeploy.models import GeneratedPlanApproval, GeneratedPlanArtifact
@@ -89,7 +93,7 @@ class ArtifactStoreFixture:
             raise GeneratedPlanArtifactError("not found")
 
 
-def make_submitted_revision(service):
+def make_submitted_revision(service, *, usage_assumptions=None):
     project = service.create_project(
         founder(), "nova-artifact-project", "https://github.com/example/nova-artifact", "main"
     )
@@ -125,6 +129,10 @@ def make_submitted_revision(service):
     revision = service.create_customer_plan_review(founder(), deployment.id)
     revision.content["target"]["account_id"] = ACCOUNT_ID
     revision.content["target"]["region"] = "us-east-1"
+    if usage_assumptions is not None:
+        revision.content.setdefault("application_analysis", {}).setdefault(
+            "workload_spec", {}
+        )["pricing_usage_assumptions"] = usage_assumptions
     revision.content_digest = plan_hash(revision.content)
     service.db.commit()
     service.submit_infrastructure_plan(founder(), revision.id)
@@ -164,6 +172,46 @@ def generated_runner_result(
         requirements=WorkloadRequirements(region="us-east-1"),
     )
     proposal_digest = canonical_json_digest(proposal.model_dump(mode="json"))
+    pricing_context = TrustedPlanPricingContext.from_persisted_revision(
+        revision.content, expected_sha256=revision.content_digest
+    )
+    pricing = evaluate_generated_plan_pricing(
+        {
+            "format_version": "1.2",
+            "applyable": True,
+            "errored": False,
+            "configuration": {
+                "provider_config": {
+                    "aws": {"expressions": {"region": {"constant_value": "us-east-1"}}}
+                }
+            },
+            "planned_values": {
+                "root_module": {
+                    "resources": [
+                        {
+                            "address": "aws_s3_bucket.app_data",
+                            "mode": "managed",
+                            "type": "aws_s3_bucket",
+                            "values": {"bucket": "private-test-data"},
+                        }
+                    ]
+                }
+            },
+            "resource_changes": [
+                {
+                    "address": "aws_s3_bucket.app_data",
+                    "type": "aws_s3_bucket",
+                    "change": {
+                        "actions": ["create"],
+                        "after": {"bucket": "private-test-data"},
+                    },
+                }
+            ],
+        },
+        trusted_context=pricing_context,
+        proposal_declared_budget_minor=proposal.requirements.monthly_budget_minor,
+        proposal_declared_currency=proposal.requirements.currency,
+    )
     policy = GeneratedPlanPolicyResult(
         PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW, "generated-plan-policy-test", ()
     )
@@ -191,6 +239,7 @@ def generated_runner_result(
     generated = GeneratedTerraformPlan(
         summary=summary,
         policy=policy,
+        pricing=pricing,
         target_account_id=ACCOUNT_ID,
         region="us-east-1",
         terraform_version="1.14.7",
@@ -243,15 +292,15 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
     detail = service.generated_plan_artifact_detail(founder(), artifact.id)
 
     assert detail["state"] == "BLOCKED_NO_REMOTE_STATE"
-    assert detail["pricing"] == {
-        "status": "UNAVAILABLE",
-        "region": "us-east-1",
-        "currency": None,
-        "monthly_cost": None,
-        "reason_code": "regional_pricing_evaluator_not_integrated",
-        "evidence_complete": False,
-        "message": "Waiting for complete regional cost evidence.",
-    }
+    assert detail["pricing"]["status"] == "INCOMPLETE"
+    assert detail["pricing"]["region"] == "us-east-1"
+    assert detail["pricing"]["currency"] == "USD"
+    assert detail["pricing"]["monthly_low_minor"] is None
+    assert detail["pricing"]["monthly_high_minor"] is None
+    assert detail["pricing"]["monthly_budget_minor"] == 50_000
+    assert detail["pricing"]["reason_code"] == "s3_usage_assumptions_missing"
+    assert detail["pricing"]["evidence_complete"] is False
+    assert detail["pricing"]["lines"] == []
     assert detail["approval_allowed"] is False
     assert detail["approval_blockers"] == [
         "DURABLE_REMOTE_STATE_UNAVAILABLE",
@@ -281,7 +330,7 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
     with pytest.raises(PermissionError, match="administrator role"):
         service.approve_generated_plan_artifact(operator(), artifact.id, artifact.manifest_sha256)
 
-    with pytest.raises(ValueError, match="complete regional cost evidence is unavailable"):
+    with pytest.raises(ValueError, match="durable remote Terraform state is unavailable"):
         service.approve_generated_plan_artifact(
             administrator(), artifact.id, artifact.manifest_sha256
         )
@@ -297,37 +346,47 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
     assert store.verified == []
 
 
-def test_complete_pricing_does_not_unblock_backend_free_plan_approval(tmp_path, monkeypatch):
+def test_generated_plan_review_displays_revision_bound_usage_assumptions(tmp_path):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    usage = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+    project, _, revision = make_submitted_revision(service, usage_assumptions=usage)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+
+    artifact = service.persist_generated_plan_artifact(
+        founder(), revision.id, RUN_ID, proposal, generated
+    )
+    detail = service.generated_plan_artifact_detail(founder(), artifact.id)
+
+    assert detail["pricing"]["usage_assumptions"] == usage
+    assert detail["pricing"]["evidence_complete"] is False
+    assert detail["approval_allowed"] is False
+
+
+def test_unpriced_resource_keeps_backend_free_plan_unapprovable(tmp_path):
     store = ArtifactStoreFixture()
     service, _ = service_with_artifact_store(store)
     project, _, revision = make_submitted_revision(service)
     proposal, generated = generated_runner_result(tmp_path, revision, project)
 
-    original_manifest_builder = service_module.generated_plan_manifest
-
-    def manifest_with_complete_pricing(**kwargs):
-        manifest = original_manifest_builder(**kwargs)
-        manifest["pricing"] = {
-            "status": "COMPLETE",
-            "region": "us-east-1",
-            "currency": "USD",
-            "monthly_cost": 12.5,
-            "evidence_sha256": "d" * 64,
-            "reason_code": None,
-        }
-        return manifest
-
-    monkeypatch.setattr(service_module, "generated_plan_manifest", manifest_with_complete_pricing)
     artifact = service.persist_generated_plan_artifact(
         founder(), revision.id, RUN_ID, proposal, generated
     )
 
     detail = service.generated_plan_artifact_detail(founder(), artifact.id)
 
-    assert detail["pricing"]["evidence_complete"] is True
-    assert "approval_allowed" not in detail["pricing"]
+    assert detail["pricing"]["status"] == "INCOMPLETE"
+    assert detail["pricing"]["evidence_complete"] is False
     assert detail["approval_allowed"] is False
-    assert detail["approval_blockers"] == ["DURABLE_REMOTE_STATE_UNAVAILABLE"]
+    assert detail["approval_blockers"] == [
+        "DURABLE_REMOTE_STATE_UNAVAILABLE",
+        "COST_EVIDENCE_INCOMPLETE",
+    ]
     assert detail["state"] == "BLOCKED_NO_REMOTE_STATE"
     with pytest.raises(ValueError, match="durable remote Terraform state is unavailable"):
         service.approve_generated_plan_artifact(
@@ -353,14 +412,6 @@ def test_remote_state_plan_with_closed_boundary_cannot_be_approved(tmp_path, mon
             "state_id": "12345678-1234-4234-8234-123456789012",
             "scope_sha256": "c" * 64,
         }
-        manifest["pricing"] = {
-            "status": "COMPLETE",
-            "region": "us-east-1",
-            "currency": "USD",
-            "monthly_cost": 12.5,
-            "evidence_sha256": "d" * 64,
-            "reason_code": None,
-        }
         return manifest
 
     monkeypatch.setattr(
@@ -372,7 +423,10 @@ def test_remote_state_plan_with_closed_boundary_cannot_be_approved(tmp_path, mon
 
     detail = service.generated_plan_artifact_detail(founder(), artifact.id)
     assert detail["approval_allowed"] is False
-    assert detail["approval_blockers"] == ["PLANNING_BOUNDARY_BLOCKED"]
+    assert detail["approval_blockers"] == [
+        "PLANNING_BOUNDARY_BLOCKED",
+        "COST_EVIDENCE_INCOMPLETE",
+    ]
     with pytest.raises(ValueError, match="execution boundary does not allow approval"):
         service.approve_generated_plan_artifact(
             administrator(), artifact.id, artifact.manifest_sha256
@@ -582,7 +636,7 @@ def test_generated_plan_review_routes_are_tenant_scoped_and_admin_only(tmp_path)
                 headers={"Authorization": f"Bearer {issue_local_token('administrator')}"},
             )
             assert approval_blocked.status_code == 409
-            assert "complete regional cost evidence is unavailable" in approval_blocked.text
+            assert "durable remote Terraform state is unavailable" in approval_blocked.text
             assert (
                 service.infrastructure_plan_revision_detail(founder(), revision.id)["state"]
                 == "SUBMITTED"

@@ -23,6 +23,7 @@ from davdeploy.generated_plan_policy import (
     GeneratedPlanPolicyResult,
     PlanPolicyVerdict,
 )
+from davdeploy.generated_plan_pricing import evaluate_generated_plan_pricing
 from davdeploy.generated_terraform_plan import (
     PINNED_AWS_PROVIDER_VERSION,
     PINNED_TERRAFORM_VERSION,
@@ -68,11 +69,13 @@ def make_input_document(
     source_plan_id = f"source-{plan_id}"
     revision = {
         "target": {
+            "provider": "aws",
             "account_id": account_id,
             "region": region,
             "connection_id": connection_id,
             "environment_id": environment_id,
         },
+        "application_analysis": {"workload_spec": {"monthly_budget_usd": 500}},
         "source_deployment_plan_id": source_plan_id,
     }
     revision_sha256 = canonical_json_digest(revision)
@@ -292,6 +295,7 @@ class FakePlanRunner:
         region,
         ownership_scope,
         workspace,
+        trusted_pricing_context,
         aws_credentials,
         remote_state=None,
         plan_access_policy_version="NOT_APPLICABLE",
@@ -304,6 +308,7 @@ class FakePlanRunner:
                 "region": region,
                 "ownership_scope": ownership_scope,
                 "workspace": workspace,
+                "trusted_pricing_context": trusted_pricing_context,
                 "aws_credentials": aws_credentials,
                 "remote_state": remote_state,
                 "plan_access_policy_version": plan_access_policy_version,
@@ -340,9 +345,53 @@ class FakePlanRunner:
             drift_count=0,
             contains_sensitive_changes=False,
         )
+        pricing = evaluate_generated_plan_pricing(
+            {
+                "format_version": "1.2",
+                "applyable": True,
+                "errored": False,
+                "configuration": {
+                    "provider_config": {
+                        "aws": {"expressions": {"region": {"constant_value": region}}}
+                    }
+                },
+                "planned_values": {
+                    "root_module": {
+                        "resources": [
+                            {
+                                "address": "aws_s3_bucket.app_data",
+                                "mode": "managed",
+                                "type": "aws_s3_bucket",
+                                "values": {"bucket": "fixture-app-storage"},
+                            },
+                            {
+                                "address": "terraform_data.account_guard",
+                                "mode": "managed",
+                                "type": "terraform_data",
+                                "values": {"input": None},
+                            },
+                        ]
+                    }
+                },
+                "resource_changes": [
+                    {
+                        "address": "aws_s3_bucket.app_data",
+                        "type": "aws_s3_bucket",
+                        "change": {"actions": ["create"], "after": {"bucket": "fixture-app-storage"}},
+                    },
+                    {
+                        "address": "terraform_data.account_guard",
+                        "type": "terraform_data",
+                        "change": {"actions": ["create"], "after": {"input": None}},
+                    },
+                ],
+            },
+            trusted_context=trusted_pricing_context,
+        )
         return GeneratedTerraformPlan(
             summary=summary,
             policy=policy,
+            pricing=pricing,
             target_account_id=expected_account_id,
             region=region,
             terraform_version=PINNED_TERRAFORM_VERSION,
@@ -535,7 +584,7 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
         "state_id": state_backend.state_id,
         "scope_sha256": state_backend.scope_sha256,
     }
-    assert result_document["manifest"]["manifest_version"] == 8
+    assert result_document["manifest"]["manifest_version"] == 12
     assert result_document["manifest"]["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [],

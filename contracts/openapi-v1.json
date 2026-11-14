@@ -575,6 +575,7 @@
         "type": "object"
       },
       "InfrastructurePlanConstraintUpdateRequest": {
+        "additionalProperties": false,
         "description": "User-editable planning constraints for a new draft revision.",
         "properties": {
           "accepted_assumptions": {
@@ -635,6 +636,16 @@
             ],
             "title": "Monthly Budget Usd"
           },
+          "pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/S3PricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "public_access": {
             "anyOf": [
               {
@@ -665,6 +676,16 @@
             "maxItems": 20,
             "title": "Rejected Assumptions",
             "type": "array"
+          },
+          "sqs_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SqsPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "workload_type": {
             "anyOf": [
@@ -836,6 +857,30 @@
         "title": "MembershipRoleRequest",
         "type": "object"
       },
+      "MonthlyUsageRange": {
+        "additionalProperties": false,
+        "description": "Customer-declared inclusive range for a monthly usage quantity.",
+        "properties": {
+          "maximum": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Maximum",
+            "type": "integer"
+          },
+          "minimum": {
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
+            "title": "Minimum",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "minimum",
+          "maximum"
+        ],
+        "title": "MonthlyUsageRange",
+        "type": "object"
+      },
       "OnboardingRequest": {
         "properties": {
           "invitation_token": {
@@ -919,6 +964,62 @@
           "name"
         ],
         "title": "ProjectRequest",
+        "type": "object"
+      },
+      "S3PricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Explicit S3 Standard usage ranges; these are quantities, never prices.",
+        "properties": {
+          "monthly_get_requests": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_put_copy_post_list_requests": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_storage_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_storage_gb",
+          "monthly_put_copy_post_list_requests",
+          "monthly_get_requests",
+          "monthly_internet_egress_gb"
+        ],
+        "title": "S3PricingUsageAssumptions",
+        "type": "object"
+      },
+      "SqsPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Proposal-wide monthly billed SQS request units by queue type.",
+        "properties": {
+          "monthly_cross_region_transfer_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_fair_queue_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_fifo_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_standard_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_standard_request_units",
+          "monthly_fifo_request_units",
+          "monthly_fair_queue_request_units",
+          "monthly_cross_region_transfer_gb",
+          "monthly_internet_egress_gb"
+        ],
+        "title": "SqsPricingUsageAssumptions",
         "type": "object"
       },
       "SubscriptionRequest": {

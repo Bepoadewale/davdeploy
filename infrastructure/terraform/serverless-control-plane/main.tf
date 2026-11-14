@@ -726,6 +726,14 @@ resource "aws_iam_role_policy" "nova_plan_only" {
         Resource = "${aws_cloudwatch_log_group.nova_plan_only[0].arn}:*"
       },
       {
+        # AWS Price List queries are read-only public catalog lookups. Keep this
+        # on DavDeploy's fixed planning role; customer plan-role credentials
+        # must never be used to query or control billing APIs.
+        Effect   = "Allow"
+        Action   = ["pricing:GetProducts"]
+        Resource = "*"
+      },
+      {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:GetObjectVersion"]
         Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_scoped_input_key}"

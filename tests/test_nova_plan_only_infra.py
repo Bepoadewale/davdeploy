@@ -203,6 +203,9 @@ def test_nova_plan_only_service_role_is_scoped_to_plan_request_artifacts_and_log
     assert "aws_cloudwatch_log_group.nova_plan_only[0].arn" in policy
     assert '"s3:GetObject"' in policy
     assert '"s3:PutObject"' in policy
+    assert '"pricing:GetProducts"' in policy
+    assert '"pricing:*"' not in policy
+    assert '"ce:GetCostAndUsage"' not in policy
     assert "nova_plan_only_scoped_input_key" in policy
     assert "nova_plan_only_scoped_result_key" in policy
     assert "nova_plan_only_scoped_saved_plan_key" in policy

@@ -33,6 +33,7 @@ from davdeploy.generated_plan_artifacts import (
     policy_evidence,
 )
 from davdeploy.generated_plan_ownership import PlanOwnershipScope
+from davdeploy.generated_plan_pricing import PlanPricingError, TrustedPlanPricingContext
 from davdeploy.generated_terraform_plan import (
     PINNED_AWS_PROVIDER_VERSION,
     PINNED_TERRAFORM_VERSION,
@@ -57,7 +58,7 @@ from davdeploy.terraform_state import terraform_state_scope_digest
 
 RUN_ID_ENV = "DAVDEPLOY_NOVA_PLAN_RUN_ID"
 INPUT_CONTRACT = "davdeploy.nova-plan-request.v1"
-RESULT_CONTRACT = "davdeploy.nova-plan-result.v2"
+RESULT_CONTRACT = "davdeploy.nova-plan-result.v5"
 MAX_INPUT_BYTES = 1_000_000
 MAX_RESULT_BYTES = 1_000_000
 MAX_PLAN_BYTES = 128 * 1024 * 1024
@@ -229,6 +230,7 @@ def run_nova_plan_build(
             region=binding["region"],
             ownership_scope=binding["ownership_scope"],
             workspace=workspace,
+            trusted_pricing_context=binding["pricing_context"],
             aws_credentials=credentials,
             remote_state=remote_state,
             plan_access_policy_version=access_policy.version,
@@ -589,6 +591,14 @@ def _validate_input_document(
         or revision.get("source_deployment_plan_id") != source_plan_id
     ):
         raise NovaPlanBuildError("customer account or region does not match the revision")
+    try:
+        pricing_context = TrustedPlanPricingContext.from_persisted_revision(
+            revision, expected_sha256=revision_sha256
+        )
+    except PlanPricingError:
+        raise NovaPlanBuildError("trusted customer pricing context is invalid") from None
+    if pricing_context.region != region:
+        raise NovaPlanBuildError("trusted customer pricing region does not match the request")
     plan_role_arn = plan_role.get("arn")
     expected_role_arn = f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection_id}"
     if set(plan_role) != {"arn"} or plan_role_arn != expected_role_arn:
@@ -621,6 +631,7 @@ def _validate_input_document(
         "control_plane_run_id": control_plane_run_id,
         "revision_id": revision_id,
         "revision_sha256": revision_sha256,
+        "pricing_context": pricing_context,
         "account_id": account_id,
         "region": region,
         "connection_id": connection_id,
