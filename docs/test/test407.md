@@ -51,4 +51,4 @@ No cloud resources were created, so no AWS teardown was needed. The isolated loc
 
 ## Final boundary
 
-PR #407 is draft and not deployed. The full local clean-room lifecycle and hosted GitHub checks remain outstanding. Pricing covers only explicitly sized EBS gp3 with default performance settings; this does not establish complete application cost coverage or allow customer approval/apply.
+PR #407 is draft and not deployed. No live AWS pricing request, customer plan, or customer workload lifecycle has been performed. Pricing covers only explicitly sized EBS gp3 with default performance settings; this does not establish complete application cost coverage or allow customer approval/apply.

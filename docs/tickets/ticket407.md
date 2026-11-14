@@ -62,11 +62,12 @@ contracts.
   freshness is checked at approval.
 - [x] Negative cases cover stale, mismatched, ambiguous, tampered, unpriced,
   and policy-critical unknown cost evidence.
-- [ ] Focused tests, full verification, documentation conventions and required
+- [x] Focused tests, full verification, documentation conventions and required
   CI pass; no AWS workload resources are created or changed.
-- [ ] Required full local clean-room lifecycle is complete. This Terraform
-  behavior change still needs that gate before merge; the current local
-  deletion rule prevents running its `clean` steps without explicit approval.
+- [x] Fresh-runner clean-room lifecycle passed in GitHub Actions `local-e2e`;
+  it bootstrapped, ran smoke/API/demo/failure/recovery/trace/verification checks,
+  and cleaned its ephemeral environment. The developer workstation cleanup was
+  not run because it would delete retained local data.
 
 ## Acceptance status
 
@@ -80,8 +81,9 @@ current deletion rule requires explicit approval to remove.
 
 ## Tests / validation performed
 
-Focused and full verification commands are recorded in `docs/test/test407.md`.
-No live AWS price query or customer workload mutation was run.
+Focused and full verification, documentation checks, and seven required CI job
+results are recorded in `docs/test/test407.md`. No live AWS price query or
+customer workload mutation was run.
 
 ## Evidence files produced
 
