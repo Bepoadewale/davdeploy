@@ -1351,6 +1351,14 @@ class ProductService:
         if constraints.get("monthly_budget_usd") is not None:
             workload["monthly_budget_usd"] = constraints["monthly_budget_usd"]
             next_constraints["monthly_budget_usd"] = constraints["monthly_budget_usd"]
+        if "pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("pricing_usage_assumptions", None)
+                next_constraints.pop("pricing_usage_assumptions", None)
+            else:
+                workload["pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1394,6 +1402,10 @@ class ProductService:
             "monthly_budget_usd": (
                 before_spec.get("monthly_budget_usd"),
                 after_spec.get("monthly_budget_usd"),
+            ),
+            "pricing_usage_assumptions": (
+                before_spec.get("pricing_usage_assumptions"),
+                after_spec.get("pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),
@@ -5022,9 +5034,9 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            10
+            11
             if untagged_records
-            else 9 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 8
+            else 10 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 9
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
@@ -5546,6 +5558,9 @@ class ProductService:
             "rate_type": manifest_pricing.get("rate_type"),
             "captured_at": manifest_pricing.get("captured_at"),
             "estimate_disclaimer": manifest_pricing.get("estimate_disclaimer"),
+            "usage_assumptions": pricing_document.get("usage_assumptions")
+            if pricing_evidence_document_is_valid(pricing_document)
+            else None,
             "lines": pricing_lines,
             "findings": pricing_findings,
             "reason_code": pricing_findings[0].get("code") if pricing_findings else None,

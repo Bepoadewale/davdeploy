@@ -22,6 +22,8 @@ from typing import Any, ClassVar, Protocol
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from davdeploy.domain import S3PricingUsageAssumptions
+
 
 class PlanPricingStatus(StrEnum):
     COMPLETE = "COMPLETE"
@@ -89,6 +91,7 @@ class GeneratedPlanPricingEvidence:
     estimate_disclaimer: str
     within_budget: bool | None
     plan_json_sha256: str
+    usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -113,12 +116,13 @@ class GeneratedPlanPricingEvidence:
             "within_budget": self.within_budget,
             "captured_at": self.captured_at,
             "estimate_disclaimer": self.estimate_disclaimer,
+            "usage_assumptions": self.usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 1,
+            "version": 2,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -137,6 +141,7 @@ class GeneratedPlanPricingEvidence:
             "pricing_context_sha256": self.pricing_context_sha256,
             "within_budget": self.within_budget,
             "plan_json_sha256": self.plan_json_sha256,
+            "usage_assumptions": self.usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -182,11 +187,18 @@ class GeneratedPlanPricingEvidence:
             "proposal_declared_budget_minor", "proposal_declared_currency",
             "budget_source", "persisted_context_sha256",
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
-            "lines", "transitions", "findings", "evidence_sha256",
+            "usage_assumptions", "lines", "transitions", "findings", "evidence_sha256",
         }
-        if set(document) != expected_fields or document.get("version") != 1:
+        if set(document) != expected_fields or document.get("version") != 2:
             raise PlanPricingError("pricing evidence shape is invalid")
         try:
+            usage_assumptions = document["usage_assumptions"]
+            if usage_assumptions is not None:
+                usage_assumptions = S3PricingUsageAssumptions.model_validate(
+                    usage_assumptions
+                ).model_dump(mode="json")
+                if usage_assumptions != document["usage_assumptions"]:
+                    raise ValueError("non-canonical usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -215,6 +227,7 @@ class GeneratedPlanPricingEvidence:
                 estimate_disclaimer=document["estimate_disclaimer"],
                 within_budget=document["within_budget"],
                 plan_json_sha256=document["plan_json_sha256"],
+                usage_assumptions=usage_assumptions,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -254,6 +267,7 @@ class TrustedPlanPricingContext:
     currency: str
     monthly_budget_minor: int | None
     persisted_context_sha256: str
+    usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -263,6 +277,7 @@ class TrustedPlanPricingContext:
             self.currency,
             self.monthly_budget_minor,
             self.persisted_context_sha256,
+            self.usage_assumptions,
         )
 
     @classmethod
@@ -290,6 +305,11 @@ class TrustedPlanPricingContext:
         budget_dollars = (
             workload_spec.get("monthly_budget_usd") if isinstance(workload_spec, dict) else None
         )
+        raw_usage_assumptions = (
+            workload_spec.get("pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
         if provider != "aws":
             raise PlanPricingError("persisted customer revision is not an AWS plan")
         if not isinstance(region, str) or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
@@ -300,11 +320,23 @@ class TrustedPlanPricingContext:
             or budget_dollars < 1
         ):
             raise PlanPricingError("persisted customer revision has an invalid USD budget")
+        if raw_usage_assumptions is None:
+            usage_assumptions = None
+        else:
+            try:
+                usage_assumptions = S3PricingUsageAssumptions.model_validate(
+                    raw_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError(
+                    "persisted customer revision has invalid pricing usage assumptions"
+                ) from None
         return cls(
             region=region,
             currency="USD",
             monthly_budget_minor=None if budget_dollars is None else budget_dollars * 100,
             persisted_context_sha256=expected_sha256,
+            usage_assumptions=usage_assumptions,
         )
 
 
@@ -458,6 +490,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_budget_minor=proposal_declared_budget_minor,
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
+            usage_assumptions=trusted_context.usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -482,6 +515,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_budget_minor=proposal_declared_budget_minor,
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
+            usage_assumptions=trusted_context.usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -502,6 +536,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_budget_minor=proposal_declared_budget_minor,
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
+            usage_assumptions=trusted_context.usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -525,6 +560,7 @@ def evaluate_generated_plan_pricing(
             proposal_declared_budget_minor=proposal_declared_budget_minor,
             proposal_declared_currency=proposal_declared_currency,
             persisted_context_sha256=persisted_context_sha256,
+            usage_assumptions=trusted_context.usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -542,6 +578,7 @@ def evaluate_generated_plan_pricing(
             ),
             proposal_declared_budget_minor=proposal_declared_budget_minor,
             persisted_context_sha256=persisted_context_sha256,
+            usage_assumptions=trusted_context.usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -648,6 +685,7 @@ def evaluate_generated_plan_pricing(
         proposal_declared_budget_minor=proposal_declared_budget_minor,
         proposal_declared_currency=proposal_declared_currency,
         persisted_context_sha256=persisted_context_sha256,
+        usage_assumptions=trusted_context.usage_assumptions,
         transitions=transitions,
     )
 
@@ -695,6 +733,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "within_budget": document.get("within_budget"),
         "captured_at": document.get("captured_at"),
         "estimate_disclaimer": document.get("estimate_disclaimer"),
+        "usage_assumptions": document.get("usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -717,6 +756,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("monthly_budget_minor") != trusted_context.monthly_budget_minor
         or document.get("persisted_context_sha256") != trusted_context.persisted_context_sha256
         or document.get("pricing_context_sha256") != trusted_context.pricing_context_sha256
+        or document.get("usage_assumptions") != trusted_context.usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -1126,6 +1166,7 @@ def _evidence(
     proposal_declared_currency: str | None = None,
     persisted_context_sha256: str,
     transitions: tuple[PlanTransition, ...] = (),
+    usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -1137,10 +1178,10 @@ def _evidence(
         within_budget = high is not None and high <= budget
     plan_digest = _canonical_digest(document) if isinstance(document, (dict, list)) else "0" * 64
     pricing_context_digest = _pricing_context_digest(
-        region, currency, budget, persisted_context_sha256
+        region, currency, budget, persisted_context_sha256, usage_assumptions
     )
     payload = {
-        "version": 1,
+        "version": 2,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -1163,6 +1204,7 @@ def _evidence(
         "pricing_context_sha256": pricing_context_digest,
         "within_budget": within_budget,
         "plan_json_sha256": plan_digest,
+        "usage_assumptions": usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -1214,6 +1256,7 @@ def _evidence(
         ),
         within_budget=within_budget,
         plan_json_sha256=plan_digest,
+        usage_assumptions=usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -1227,14 +1270,19 @@ def _canonical_digest(value: Any) -> str:
 
 
 def _pricing_context_digest(
-    region: str, currency: str, monthly_budget_minor: int | None, persisted_context_sha256: str
+    region: str,
+    currency: str,
+    monthly_budget_minor: int | None,
+    persisted_context_sha256: str,
+    usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 1,
+            "version": 2,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
             "persisted_context_sha256": persisted_context_sha256,
+            "usage_assumptions": usage_assumptions,
         }
     )

@@ -135,6 +135,49 @@ def test_creator_can_create_revised_draft_from_editable_constraints():
     assert revised.content_digest == plan_hash(revised.content)
 
 
+def test_customer_usage_assumptions_are_persisted_only_in_a_new_revision():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(),
+        original.infrastructure_plan_id,
+        {"pricing_usage_assumptions": usage},
+    )
+
+    assert original.revision_number == 1
+    assert "pricing_usage_assumptions" not in original.content.get("user_constraints", {})
+    assert revised.revision_number == 2
+    assert revised.content["user_constraints"]["pricing_usage_assumptions"] == usage
+    assert (
+        revised.content["application_analysis"]["workload_spec"]["pricing_usage_assumptions"]
+        == usage
+    )
+    assert revised.content["revision_diff"]["pricing_usage_assumptions"] == {
+        "before": None,
+        "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(),
+        original.infrastructure_plan_id,
+        {"pricing_usage_assumptions": None},
+    )
+    assert cleared.revision_number == 3
+    assert "pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert (
+        "pricing_usage_assumptions"
+        not in cleared.content["application_analysis"]["workload_spec"]
+    )
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

@@ -1,15 +1,16 @@
 # ticket408 — explicit S3 cost usage assumptions
 
-PR: draft
+PR: [#408](https://github.com/Bepoadewale/davdeploy/pull/408) (draft)
 Branch: `feat/nova-pricing-usage-408`
 
 ## Problem / goal
 
 The merged Nova pricing evaluator only prices explicitly sized EBS gp3
-volumes. S3 is necessary for the first composed application and its storage
-and request costs depend on customer usage. Add a typed, bounded, revision-bound
-usage contract and deterministic S3 Standard storage/request pricing. Costs
-that depend on unsupported dimensions remain visible and block approval.
+volumes. S3 is necessary for the first composed application and its storage,
+request, and transfer costs depend on customer usage. Add a typed, bounded,
+revision-bound customer usage contract that the next pricing slice can consume.
+This PR makes assumptions inspectable and digest-bound; it does not mark S3
+costs complete.
 
 ## Current repo state
 
@@ -29,34 +30,33 @@ executed.
 
 ## Work planned for the PR
 
-- Add a strict typed usage-assumption object to the persisted workload revision for S3 Standard storage and monthly PUT/LIST and GET requests. Require explicit low/high quantities and bounded units; no model-authored prices or arbitrary fields.
-- Validate assumptions at revision update and at planner input from the digest-checked persisted revision. Bind them into the pricing context, exact plan evidence, and plan review.
-- Query exact regional AWS Price List products for storage and request dimensions. Require unambiguous USD On-Demand rates with SKU and effective/publication/retrieval provenance; never fall back to hard-coded prices.
-- Price only those explicitly declared dimensions. Missing assumptions, other S3 storage classes/features, data transfer, minimum-duration effects, and all unsupported material resources remain approval blockers.
-- Add negative tests for malformed, excessive, missing, stale, altered, mismatched, ambiguous, or unavailable assumptions/rates.
+- Add a strict typed usage-assumption object to user-editable plan constraints for monthly S3 Standard storage, write requests, read requests, and internet egress. Require bounded low/high quantities and units; accept no arbitrary fields.
+- Persist assumptions only in a new immutable draft revision. Validate at API input and again when the planner loads the integrity-checked persisted revision.
+- Bind the canonical assumptions to trusted pricing context and returned evidence; show them in plan review alongside unresolved cost findings.
+- Do not add prices or treat assumptions as approval. S3 and other unpriced material resources remain approval blockers until deterministic regional price mappings cover all applicable charge dimensions.
+- Add negative tests for malformed, excessive, missing, altered, cross-revision, and digest-mismatched assumptions.
 - Update current source/deployment status and keep PR #399's apply path gated.
 
 ## Acceptance criteria
 
-- [ ] S3 assumptions are typed, bounded, customer-visible, stored in a new immutable revision, and digest-bound to the plan price context.
-- [ ] S3 Standard storage, PUT/LIST, and GET estimates use exact regional AWS Price List data and explicit monthly ranges; missing material dimensions remain incomplete.
-- [ ] Review shows input ranges, pricing units, rate provenance/timestamps, calculated range, and exclusions without exposing raw plan data.
-- [ ] Approval revalidates the exact persisted usage-context digest and evidence freshness.
-- [ ] Negative cases fail closed; no unpriced material S3 feature appears complete.
+- [x] S3 usage assumptions are typed, bounded, customer-editable, and stored only in a new immutable plan revision.
+- [x] Planner input reconstructs assumptions only from the digest-checked persisted revision; canonical assumptions are bound into pricing context/evidence digests.
+- [x] Plan review displays the bounded assumptions and continues to show S3 cost as incomplete until its regional rates and all material dimensions are covered.
+- [x] Altered, oversized, malformed, missing, or cross-revision assumptions fail closed; old approvals cannot authorize an updated assumption set.
 - [ ] Focused tests, full verification, documentation conventions, clean-runner lifecycle, Terraform validation, and required CI pass; no AWS workload resources are created or changed.
 
 ## Acceptance status
 
-Not started. Draft bootstrap only. No implementation, live catalog request, customer plan, or workload mutation has occurred.
+The typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display are implemented and locally verified. Focused and full verification, OpenAPI snapshot, and local docs conventions pass. Required clean-runner CI is pending. No live catalog request, customer plan, or workload mutation has occurred.
 
 ## Tests / validation performed
 
-Draft creation and source/deployment reconciliation only. Focused and full validation will be added before review.
+Exact commands and results are recorded in `docs/test/test408.md`. CI and the ephemeral clean-runner lifecycle must pass before the PR is ready for review.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket408.md`
-- `docs/test/test408.md` will record final local and CI validation.
+- `docs/test/test408.md`
 
 ## Boundaries
 

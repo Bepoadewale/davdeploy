@@ -2221,7 +2221,7 @@ def revise_customer_plan_constraints(
         revision = service.revise_infrastructure_plan_constraints(
             principal,
             plan_id,
-            request.model_dump(mode="json"),
+            request.model_dump(mode="json", exclude_unset=True),
         )
         return service.infrastructure_plan_revision_detail(principal, revision.id)
     except (PermissionError, ValueError, KeyError) as error:
