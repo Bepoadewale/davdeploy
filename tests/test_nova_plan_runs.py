@@ -775,7 +775,7 @@ def test_retry_after_input_staging_uses_a_new_durable_runner_key(monkeypatch):
     assert queued.runner_run_id != queued.id
     manifest = {}
     retry_result = {
-        "contract": "davdeploy.nova-plan-result.v3",
+        "contract": "davdeploy.nova-plan-result.v4",
         "run_id": queued.runner_run_id,
         "codebuild_project": queued.codebuild_project,
         "codebuild_build_id": queued.codebuild_build_id,
@@ -1261,7 +1261,7 @@ def test_completion_rejects_result_bound_to_another_tenant():
     run = db.get(GeneratedPlanRun, request["id"])
     assert run and run.state == "BUILD_STARTED"
     result = {
-        "contract": "davdeploy.nova-plan-result.v3",
+        "contract": "davdeploy.nova-plan-result.v4",
         "run_id": run.runner_run_id,
         "codebuild_project": run.codebuild_project,
         "codebuild_build_id": run.codebuild_build_id,

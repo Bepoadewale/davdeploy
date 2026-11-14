@@ -93,7 +93,7 @@ class ArtifactStoreFixture:
             raise GeneratedPlanArtifactError("not found")
 
 
-def make_submitted_revision(service):
+def make_submitted_revision(service, *, usage_assumptions=None):
     project = service.create_project(
         founder(), "nova-artifact-project", "https://github.com/example/nova-artifact", "main"
     )
@@ -129,6 +129,10 @@ def make_submitted_revision(service):
     revision = service.create_customer_plan_review(founder(), deployment.id)
     revision.content["target"]["account_id"] = ACCOUNT_ID
     revision.content["target"]["region"] = "us-east-1"
+    if usage_assumptions is not None:
+        revision.content.setdefault("application_analysis", {}).setdefault(
+            "workload_spec", {}
+        )["pricing_usage_assumptions"] = usage_assumptions
     revision.content_digest = plan_hash(revision.content)
     service.db.commit()
     service.submit_infrastructure_plan(founder(), revision.id)
@@ -340,6 +344,28 @@ def test_submitted_generated_plan_persists_and_waits_for_cost_evidence(tmp_path)
         service.infrastructure_plan_revision_detail(founder(), revision.id)["state"] == "SUBMITTED"
     )
     assert store.verified == []
+
+
+def test_generated_plan_review_displays_revision_bound_usage_assumptions(tmp_path):
+    store = ArtifactStoreFixture()
+    service, _ = service_with_artifact_store(store)
+    usage = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+    project, _, revision = make_submitted_revision(service, usage_assumptions=usage)
+    proposal, generated = generated_runner_result(tmp_path, revision, project)
+
+    artifact = service.persist_generated_plan_artifact(
+        founder(), revision.id, RUN_ID, proposal, generated
+    )
+    detail = service.generated_plan_artifact_detail(founder(), artifact.id)
+
+    assert detail["pricing"]["usage_assumptions"] == usage
+    assert detail["pricing"]["evidence_complete"] is False
+    assert detail["approval_allowed"] is False
 
 
 def test_unpriced_resource_keeps_backend_free_plan_unapprovable(tmp_path):

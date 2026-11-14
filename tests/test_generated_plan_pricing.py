@@ -8,11 +8,14 @@ import pytest
 from botocore.exceptions import ClientError
 from davdeploy.generated_plan_pricing import (
     AwsPriceListCatalog,
+    GeneratedPlanPricingEvidence,
+    PlanPricingError,
     PlanPricingStatus,
     PriceListUnavailableError,
     TrustedPlanPricingContext,
     evaluate_generated_plan_pricing,
     pricing_evidence_document_is_valid,
+    pricing_evidence_is_approval_eligible,
     pricing_evidence_is_fresh,
 )
 
@@ -143,6 +146,7 @@ def evaluate(
     declared_currency=None,
     currency="USD",
     context_digest=PERSISTED_CONTEXT_SHA256,
+    usage_assumptions=None,
 ):
     client = client or FakePriceList()
     return (
@@ -153,6 +157,7 @@ def evaluate(
                 currency=currency,
                 monthly_budget_minor=budget,
                 persisted_context_sha256=context_digest,
+                usage_assumptions=usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -254,10 +259,19 @@ def test_absent_nova_budget_does_not_override_trusted_persisted_budget():
 
 
 def test_trusted_pricing_context_is_extracted_only_from_integrity_checked_revision():
+    usage = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
     revision = {
         "target": {"provider": "aws", "region": REGION},
         "application_analysis": {
-            "workload_spec": {"monthly_budget_usd": 500},
+            "workload_spec": {
+                "monthly_budget_usd": 500,
+                "pricing_usage_assumptions": usage,
+            },
         },
     }
     revision_sha256 = hashlib.sha256(
@@ -272,6 +286,7 @@ def test_trusted_pricing_context_is_extracted_only_from_integrity_checked_revisi
     assert context.currency == "USD"
     assert context.monthly_budget_minor == 50_000
     assert context.persisted_context_sha256 == revision_sha256
+    assert context.usage_assumptions == usage
     with pytest.raises(ValueError, match="integrity check"):
         TrustedPlanPricingContext.from_persisted_revision(
             {**revision, "target": {"provider": "aws", "region": "eu-west-1"}},
@@ -536,6 +551,46 @@ def test_pricing_evidence_manifest_digest_rejects_changed_cost_or_context():
     assert pricing_evidence_document_is_valid(None) is False
 
 
+def test_usage_assumptions_are_carried_in_digest_bound_pricing_evidence():
+    assumptions = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+    document = plan(
+        extra_resources=(resource("aws_s3_bucket.store", "aws_s3_bucket", {"bucket": "store"}),)
+    )
+    result, _ = evaluate(document, budget=500, usage_assumptions=assumptions)
+    manifest = result.as_manifest_document()
+    changed_context = TrustedPlanPricingContext(
+        REGION,
+        "USD",
+        500,
+        PERSISTED_CONTEXT_SHA256,
+        {**assumptions, "monthly_get_requests": {"minimum": 300, "maximum": 401}},
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.usage_assumptions == assumptions
+    assert manifest["usage_assumptions"] == assumptions
+    assert pricing_evidence_document_is_valid(manifest)
+    assert result.safe_summary()["usage_assumptions"] == assumptions
+    parsed = GeneratedPlanPricingEvidence.from_manifest_document(manifest)
+    assert parsed.usage_assumptions == assumptions
+    assert not pricing_evidence_is_approval_eligible(
+        manifest, trusted_context=changed_context, now=CAPTURED_AT
+    )
+
+    malformed = {**manifest, "usage_assumptions": {**assumptions, "unit_price_usd": "0"}}
+    unsigned = {key: value for key, value in malformed.items() if key != "evidence_sha256"}
+    malformed["evidence_sha256"] = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    ).hexdigest()
+    with pytest.raises(PlanPricingError, match="pricing evidence fields are invalid"):
+        GeneratedPlanPricingEvidence.from_manifest_document(malformed)
+
+
 def test_pricing_evidence_digest_is_bound_to_trusted_context_digest():
     original, _ = evaluate(budget=500)
     changed_context, _ = evaluate(budget=500, context_digest="b" * 64)
@@ -557,6 +612,27 @@ def test_trusted_context_digest_binds_region_currency_budget_and_source_digest()
         context.pricing_context_sha256 != original.pricing_context_sha256
         for context in changed_contexts
     )
+
+
+def test_trusted_context_digest_binds_usage_assumptions():
+    baseline = {
+        "monthly_storage_gb": {"minimum": 10, "maximum": 20},
+        "monthly_put_copy_post_list_requests": {"minimum": 100, "maximum": 200},
+        "monthly_get_requests": {"minimum": 300, "maximum": 400},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
+    }
+    original = TrustedPlanPricingContext(
+        REGION, "USD", 50_000, PERSISTED_CONTEXT_SHA256, baseline
+    )
+    changed = {
+        **baseline,
+        "monthly_storage_gb": {"minimum": 10, "maximum": 21},
+    }
+    updated = TrustedPlanPricingContext(
+        REGION, "USD", 50_000, PERSISTED_CONTEXT_SHA256, changed
+    )
+
+    assert original.pricing_context_sha256 != updated.pricing_context_sha256
 
 
 def test_non_usd_budget_is_not_compared_against_usd_prices():

@@ -152,7 +152,7 @@ def test_read_result_binds_exact_run_build_build_arn_and_object_version():
     build_id = f"{PROJECT}:{RUN_ID}"
     build_arn = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}"
     result = {
-        "contract": "davdeploy.nova-plan-result.v3",
+        "contract": "davdeploy.nova-plan-result.v4",
         "run_id": RUN_ID,
         "codebuild_project": PROJECT,
         "codebuild_build_id": build_id,
@@ -177,7 +177,7 @@ def test_read_result_rejects_tampered_identity_digest_or_missing_version(tamper)
     build_id = f"{PROJECT}:{RUN_ID}"
     build_arn = f"arn:aws:codebuild:us-east-1:{OWNER}:build/{build_id}"
     result = {
-        "contract": "davdeploy.nova-plan-result.v3",
+        "contract": "davdeploy.nova-plan-result.v4",
         "run_id": RUN_ID,
         "codebuild_project": PROJECT,
         "codebuild_build_id": build_id,

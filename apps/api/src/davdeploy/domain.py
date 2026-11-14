@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 from davdeploy.contracts import EvidenceRef
 
@@ -96,6 +96,40 @@ class CloudInventorySnapshot(BaseModel):
     pricing_evidence: dict[str, Any] = Field(default_factory=dict)
 
 
+class MonthlyUsageRange(BaseModel):
+    """Customer-declared inclusive range for a monthly usage quantity."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    minimum: int = Field(ge=0, le=1_000_000_000_000)
+    maximum: int = Field(ge=0, le=1_000_000_000_000)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> MonthlyUsageRange:
+        if self.minimum > self.maximum:
+            raise ValueError("monthly usage minimum cannot exceed maximum")
+        return self
+
+
+class S3PricingUsageAssumptions(BaseModel):
+    """Explicit S3 Standard usage ranges; these are quantities, never prices."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_storage_gb: MonthlyUsageRange
+    monthly_put_copy_post_list_requests: MonthlyUsageRange
+    monthly_get_requests: MonthlyUsageRange
+    monthly_internet_egress_gb: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_storage_and_transfer_bounds(self) -> S3PricingUsageAssumptions:
+        if self.monthly_storage_gb.maximum > 1_000_000_000:
+            raise ValueError("monthly S3 storage usage exceeds the supported bound")
+        if self.monthly_internet_egress_gb.maximum > 1_000_000_000:
+            raise ValueError("monthly S3 transfer usage exceeds the supported bound")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -104,6 +138,7 @@ class WorkloadSpec(BaseModel):
     average_rps: int | None = Field(default=None, ge=0)
     peak_rps: int | None = Field(default=None, ge=0)
     monthly_budget_usd: int | None = Field(default=None, ge=1)
+    pricing_usage_assumptions: S3PricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -497,6 +532,8 @@ class InfrastructurePlanRevisionRequest(BaseModel):
 class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     """User-editable planning constraints for a new draft revision."""
 
+    model_config = ConfigDict(extra="forbid")
+
     monthly_budget_usd: int | None = Field(default=None, ge=1)
     region: str | None = Field(default=None, pattern=r"^[a-z]{2}-[a-z]+-\d$")
     environment: list[EnvironmentName] | None = None
@@ -506,6 +543,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     public_access: bool | None = None
     accepted_assumptions: list[str] = Field(default_factory=list, max_length=20)
     rejected_assumptions: list[str] = Field(default_factory=list, max_length=20)
+    pricing_usage_assumptions: S3PricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):
