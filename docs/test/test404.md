@@ -3,13 +3,14 @@
 Date: 2026-11-14
 Execution type: source-policy tests and isolated local fixture proof
 Customer repository: none
-Commit: `97a0c7550cb0178caf5eabe6074515c2668566da` (implementation)
+Commit: `97a0c7550cb0178caf5eabe6074515c2668566da` (implementation);
+`5572fab546e777f4adc38cfad99ede9b0290e89a` (merged main)
 AWS account: none
 AWS region: none
 
-Status: locally verified; final-head hosted CI is pending. This change is source
-policy only; it does not enable or deploy EKS planning or execution. No AWS
-resources have been created or changed.
+Status: merged source, locally verified, and all required CI passed. This
+change is source policy only; it does not enable or deploy EKS planning or
+execution. No AWS resources have been created or changed.
 
 ## Scope
 
@@ -43,6 +44,10 @@ health. The test plan fixtures are synthetic; no customer EKS plan was run.
 - Documentation convention and final diff checks pass. All seven required
   final-head GitHub Actions jobs passed for implementation commit `97a0c75` in
   [run `43529880000`](https://github.com/Bepoadewale/davdeploy/actions/runs/43529880000).
+- All seven required checks passed for final PR head `199461e` in
+  [run `43530471001`](https://github.com/Bepoadewale/davdeploy/actions/runs/43530471001).
+- PR #404 merged as `5572fab`; merged-main CI passed all seven jobs in
+  [run `43563520542`](https://github.com/Bepoadewale/davdeploy/actions/runs/43563520542).
 
 No AWS/Bedrock calls, deployments, Terraform plans/applies, or workload
 mutations occurred.
@@ -74,7 +79,8 @@ fixture proof passed smoke, API/CORS contract, customer-plan lifecycle,
 seeding, traces, and full verification. Docs convention and diff checks pass.
 All seven required final-head GitHub Actions jobs passed for implementation
 commit `97a0c75` in run `43529880000`. One existing Starlette/httpx
-deprecation warning remains.
+deprecation warning remains. Final PR-head run `43530471001` and merged-main
+run `43563520542` also passed all seven jobs.
 
 ## Final boundary
 

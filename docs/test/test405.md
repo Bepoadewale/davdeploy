@@ -3,7 +3,7 @@
 Date: 2026-11-14
 Execution type: documentation review only
 Customer repository: none
-Commit: pending
+Commit: pending docs implementation
 AWS account: none
 AWS region: none
 
@@ -13,11 +13,14 @@ None. No application or cloud resources were created or changed.
 
 ## Commands executed
 
-Pending.
+- `GITHUB_PR_NUMBER=405 .venv-pr399/bin/python scripts/check_doc_conventions.py`
+- `git diff --check`
 
 ## Observed result
 
-Pending documentation convention, diff, and GitHub CI checks.
+Documentation convention checks and `git diff --check` passed. Final-head
+GitHub CI is pending. Backend source snapshot `5572fab` passed all seven
+merged-main CI jobs in run `43563520542`. No AWS or Bedrock calls occurred.
 
 ## Final boundary
 

@@ -21,6 +21,9 @@ only and has not been deployed or exercised on a customer EKS plan.
 - `docs/product/EXECUTION_READINESS_MATRIX.md`
 - `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
 - `docs/IMPLEMENTATION_STATUS.md`
+- `CODEX_BACKLOG.md`
+- `docs/tickets/ticket404.md`
+- `docs/test/test404.md`
 - `docs/tickets/ticket404.md`
 - `docs/test/test404.md`
 
@@ -29,24 +32,30 @@ only and has not been deployed or exercised on a customer EKS plan.
 - Update the current backend source snapshot in the readiness and capability
   matrices.
 - Record #404 as merged source in implementation status and its ticket/evidence.
+- Record the source-only policy status in the durable backlog.
 - Preserve the distinction between source policy, deployment, and customer
   EKS plan/lifecycle proof.
 
 ## Acceptance criteria
 
-- [ ] All current status documents identify backend `5572fab` and PR #404 as
+- [x] All current status documents identify backend `5572fab` and PR #404 as
   merged source.
-- [ ] The bounded policy behavior and remaining EKS limitations are accurate.
-- [ ] No deployment, customer EKS plan, or workload readiness is claimed.
-- [ ] Documentation conventions, diff checks, and all required CI pass.
+- [x] The bounded policy behavior and remaining EKS limitations are accurate.
+- [x] No deployment, customer EKS plan, or workload readiness is claimed.
+- [x] Documentation conventions and diff checks pass.
+- [ ] All required final-head CI passes.
 
 ## Acceptance status
 
-In progress.
+The capability matrix, execution readiness matrix, implementation status,
+backlog, PR #404 ticket, and PR #404 evidence now reflect the merged-source
+state and preserved deployment/customer-plan limitations. Documentation
+conventions and `git diff --check` pass. Final-head CI is pending.
 
 ## Tests / validation performed
 
-Pending documentation convention, diff, and GitHub CI checks.
+`GITHUB_PR_NUMBER=405 .venv-pr399/bin/python scripts/check_doc_conventions.py`
+and `git diff --check` pass. Final-head GitHub CI is pending.
 
 ## Evidence files produced
 
