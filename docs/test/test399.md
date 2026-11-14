@@ -1,5 +1,12 @@
 # test399 — isolated local apply-state authorization groundwork
 
+## Base synchronization — 2026-11-14
+
+PR #399 was merged with current `main` at commit
+`af1c19356b3d93df3ca35431771c9e0e7c119521`. All seven required CI jobs passed
+for that head in run `43576086458`. This CI result confirms source integration;
+it does not exercise a Nova apply dispatcher or execute a customer workload.
+
 Date: 2026-11-13
 Execution type: two isolated local Docker and fixture proofs only
 Customer repository: `Bepoadewale/davdeploy`
