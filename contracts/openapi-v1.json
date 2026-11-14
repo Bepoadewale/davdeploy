@@ -388,7 +388,7 @@
           "budget_ceiling_usd": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -627,7 +627,7 @@
           "monthly_budget_usd": {
             "anyOf": [
               {
-                "minimum": 1.0,
+                "minimum": 1,
                 "type": "integer"
               },
               {
@@ -699,6 +699,16 @@
               }
             ],
             "title": "Workload Type"
+          },
+          "rds_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RdsPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "InfrastructurePlanConstraintUpdateRequest",
@@ -862,14 +872,14 @@
         "description": "Customer-declared inclusive range for a monthly usage quantity.",
         "properties": {
           "maximum": {
-            "maximum": 1000000000000.0,
-            "minimum": 0.0,
+            "maximum": 1000000000000,
+            "minimum": 0,
             "title": "Maximum",
             "type": "integer"
           },
           "minimum": {
-            "maximum": 1000000000000.0,
-            "minimum": 0.0,
+            "maximum": 1000000000000,
+            "minimum": 0,
             "title": "Minimum",
             "type": "integer"
           }
@@ -1201,6 +1211,20 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "RdsPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Customer-declared monthly RDS backup storage usage range.",
+        "properties": {
+          "monthly_backup_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_backup_storage_gb_month"
+        ],
+        "title": "RdsPricingUsageAssumptions",
         "type": "object"
       }
     }
