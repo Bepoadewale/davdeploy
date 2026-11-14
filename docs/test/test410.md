@@ -3,7 +3,7 @@
 Date: 2026-11-14
 Execution type: Local deterministic unit and integration tests
 Customer repository: None; no customer workload was created
-Commit: `ead02fbc8f84c2783edc1a637431040e051a2241`
+Commit: `f8baf998a6de437270b1420128c046d09fbba6ec`
 AWS account: None; catalog evidence is read-only price-list data
 AWS region: `us-east-1` for product match; local tests do not access AWS
 
@@ -58,7 +58,8 @@ Results: focused lifecycle/pricing checks passed; Ruff passed; `make verify`
 passed 1,215 tests, configuration checks, OpenAPI snapshot validation, and
 Docker Compose configuration; documentation conventions and whitespace checks
 passed. One pre-existing Starlette/httpx deprecation warning was emitted by the
-test suite. The merge gate is the required GitHub Actions checks on PR #410.
+test suite. GitHub CI run `43597637102` passed all seven checks on the prior
+head; checks on the sparse-plan correction head are pending.
 
 ## Observed result
 
@@ -82,3 +83,6 @@ worktree and its `.venv` under the current local-file retention instructions.
 
 This PR improves source-only pricing evidence. It does not deploy the code,
 enable customer apply, or demonstrate a Nova-generated customer application.
+The repository-required full local clean-room cycle was not run because its
+cleanup target removes `.venv`, `.local`, and Compose volumes; this gate remains
+unmet pending explicit authorization for the isolated cleanup targets.
