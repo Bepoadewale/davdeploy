@@ -36,7 +36,7 @@ Backend source main is PR #409 merge `024a7b1fe4ea53f8fadcc921575e9716ab92da94`.
 - [x] Unknown, malformed, unsupported, missing, stale, or tampered queue usage or pricing evidence blocks approval.
 - [x] Multiple queues of the same type use proposal-wide usage assumptions once, without duplicating total costs.
 - [x] Focused tests, full `make verify`, and documentation conventions pass.
-- [ ] Required GitHub CI passes on the corrected sparse-plan head.
+- [x] All seven required GitHub CI checks pass on the corrected sparse-plan head (run `43598366789`).
 - [ ] Repository-required full local clean-room lifecycle passes; not run because its `clean-local` target deletes local `.venv`/`.local` and Compose volumes.
 - [x] Source status, deployed status, read-only catalog evidence, and workload boundaries are recorded truthfully.
 
@@ -47,7 +47,7 @@ Backend source main is PR #409 merge `024a7b1fe4ea53f8fadcc921575e9716ab92da94`.
 
 ## Acceptance status
 
-Implemented and locally verified. A corrective plan-format change is awaiting GitHub CI, and the repository-required local clean-room lifecycle remains outstanding. No SQS customer workload or AWS resource has been created.
+Implemented and locally verified; all seven checks passed in run `43598366789`. The repository-required local clean-room lifecycle remains outstanding. No SQS customer workload or AWS resource has been created.
 
 ## Evidence files produced
 

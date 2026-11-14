@@ -58,8 +58,8 @@ Results: focused lifecycle/pricing checks passed; Ruff passed; `make verify`
 passed 1,215 tests, configuration checks, OpenAPI snapshot validation, and
 Docker Compose configuration; documentation conventions and whitespace checks
 passed. One pre-existing Starlette/httpx deprecation warning was emitted by the
-test suite. GitHub CI run `43597637102` passed all seven checks on the prior
-head; checks on the sparse-plan correction head are pending.
+test suite. GitHub CI run [43598366789](https://github.com/Bepoadewale/davdeploy/actions/runs/43598366789)
+passed all seven checks on the sparse-plan correction head.
 
 ## Observed result
 
