@@ -28,7 +28,7 @@ The implementation records the exact matching Price List product digest, SKU, pu
 - `uv run python -m ruff check apps/api/src/davdeploy/generated_plan_pricing.py apps/api/src/davdeploy/nova_plan_codebuild.py apps/api/src/davdeploy/nova_plan_dispatch.py apps/api/src/davdeploy/generated_plan_artifacts.py apps/api/src/davdeploy/service.py tests/test_generated_plan_pricing.py tests/test_nova_plan_dispatch.py tests/test_nova_plan_runs.py tests/test_nova_plan_codebuild.py` — passed.
 - `make verify PYTHON=python3.14` — passed: 1,200 tests, Ruff, action configuration, OpenAPI snapshot, and Docker Compose configuration (one existing Starlette/httpx deprecation warning).
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Required GitHub CI: pending.
+- GitHub Actions run [43594267261](https://github.com/Bepoadewale/davdeploy/actions/runs/43594267261) on PR head `b3afe7f` — all seven jobs passed. `local-e2e` ran the fresh-runner lifecycle; `cloud-contracts` validated Terraform and Kubernetes contracts.
 
 ## Observed result
 
