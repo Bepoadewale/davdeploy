@@ -517,6 +517,57 @@ class AwsPriceListCatalog:
             "Requests",
         )
 
+    def rds_mysql_instance_rate(self, region: str, instance_class: str) -> CatalogRate:
+        if not isinstance(instance_class, str) or not re.fullmatch(
+            r"db\.(?:m|r)[0-9]+[a-z]?\.[a-z0-9]+", instance_class
+        ):
+            raise PlanPricingError("RDS instance class is unsupported for bounded pricing")
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            f"rds-mysql-instance-single-az-{instance_class}",
+            [
+                ("productFamily", "Database Instance"),
+                ("databaseEngine", "MySQL"),
+                ("instanceType", instance_class),
+                ("licenseModel", "No license required"),
+                ("deploymentOption", "Single-AZ"),
+                ("usagetype", f"InstanceUsage:{instance_class}"),
+                ("regionCode", region),
+            ],
+            "Hrs",
+        )
+
+    def rds_mysql_gp3_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            "rds-mysql-gp3-storage-single-az",
+            [
+                ("productFamily", "Database Storage"),
+                ("databaseEngine", "MySQL"),
+                ("deploymentOption", "Single-AZ"),
+                ("usagetype", "RDS:GP3-Storage"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def rds_mysql_backup_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            "rds-mysql-backup-storage",
+            [
+                ("productFamily", "Storage Snapshot"),
+                ("databaseEngine", "MySQL"),
+                ("deploymentOption", "Single-AZ"),
+                ("usagetype", "RDS:ChargedBackupUsage"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
     def aws_internet_egress_rate(self, region: str) -> CatalogRate:
         rate = self._regional_rate(
             "AWSDataTransfer",
@@ -684,6 +735,7 @@ def evaluate_generated_plan_pricing(
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -710,6 +762,7 @@ def evaluate_generated_plan_pricing(
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -732,6 +785,7 @@ def evaluate_generated_plan_pricing(
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -757,6 +811,7 @@ def evaluate_generated_plan_pricing(
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -776,6 +831,7 @@ def evaluate_generated_plan_pricing(
             persisted_context_sha256=persisted_context_sha256,
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -787,6 +843,7 @@ def evaluate_generated_plan_pricing(
     unavailable = False
     s3_buckets: list[dict[str, Any]] = []
     sqs_queues: list[dict[str, Any]] = []
+    rds_instances: list[dict[str, Any]] = []
     for resource in resources:
         address = resource["address"]
         resource_type = resource["type"]
@@ -798,6 +855,9 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_sqs_queue":
             sqs_queues.append(resource)
+            continue
+        if resource_type == "aws_db_instance":
+            rds_instances.append(resource)
             continue
         if resource_type != "aws_ebs_volume":
             findings.append(
@@ -1075,6 +1135,151 @@ def evaluate_generated_plan_pricing(
                                 "DavDeploy could not identify one exact regional SQS request price.",
                             ))
 
+    if rds_instances:
+        usage_document = trusted_context.rds_usage_assumptions
+        if usage_document is None:
+            findings.append(
+                PlanPricingFinding(
+                    "rds_usage_assumptions_missing",
+                    rds_instances[0]["address"],
+                    "Monthly RDS backup storage usage assumptions are required.",
+                )
+            )
+        else:
+            try:
+                usage = RdsPricingUsageAssumptions.model_validate(usage_document)
+            except (TypeError, ValueError):
+                findings.append(
+                    PlanPricingFinding(
+                        "rds_usage_assumptions_invalid",
+                        rds_instances[0]["address"],
+                        "Persisted RDS backup storage assumptions are invalid.",
+                    )
+                )
+            else:
+                invalid_instance = next(
+                    (
+                        (instance, error)
+                        for instance in rds_instances
+                        if (
+                            error := _validate_rds_instance(
+                                instance["values"], changes.get(instance["address"])
+                            )
+                        )
+                        is not None
+                    ),
+                    None,
+                )
+                if invalid_instance:
+                    instance, error = invalid_instance
+                    findings.append(
+                        PlanPricingFinding(error[0], instance["address"], error[1])
+                    )
+                elif any(
+                    instance["values"].get("backup_retention_period", 0) > 0
+                    for instance in rds_instances
+                ) and usage.monthly_backup_storage_gb_month.maximum == 0:
+                    findings.append(
+                        PlanPricingFinding(
+                            "rds_backup_usage_assumption_mismatch",
+                            rds_instances[0]["address"],
+                            "Enabled RDS backups require a nonzero backup storage usage ceiling.",
+                        )
+                    )
+                else:
+                    try:
+                        if pricing_catalog is None:
+                            pricing_catalog = AwsPriceListCatalog()
+                        for instance in rds_instances:
+                            values = instance["values"]
+                            address = instance["address"]
+                            instance_rate = pricing_catalog.rds_mysql_instance_rate(
+                                region, values["instance_class"]
+                            )
+                            storage_rate = pricing_catalog.rds_mysql_gp3_storage_rate(region)
+                            for description, quantity, unit, rate in (
+                                (
+                                    "Amazon RDS for MySQL Single-AZ instance hours",
+                                    730,
+                                    "Hrs",
+                                    instance_rate,
+                                ),
+                                (
+                                    "Amazon RDS for MySQL GP3 storage",
+                                    values["allocated_storage"],
+                                    "GB-Mo",
+                                    storage_rate,
+                                ),
+                            ):
+                                monthly_minor = int(
+                                    (
+                                        Decimal(rate.unit_price_usd)
+                                        * quantity
+                                        * 100
+                                    ).quantize(Decimal(1), rounding=ROUND_CEILING)
+                                )
+                                lines.append(
+                                    PlanCostLine(
+                                        address=address,
+                                        resource_type="aws_db_instance",
+                                        description=description,
+                                        quantity=quantity,
+                                        unit=unit,
+                                        unit_price_usd=rate.unit_price_usd,
+                                        monthly_cost_minor=monthly_minor,
+                                        catalog_sku=rate.sku,
+                                        catalog_product_sha256=rate.product_digest,
+                                        catalog_published_at=rate.published_at,
+                                        catalog_effective_at=rate.effective_at,
+                                    )
+                                )
+                        backup_max = usage.monthly_backup_storage_gb_month.maximum
+                        if backup_max:
+                            backup_rate = pricing_catalog.rds_mysql_backup_storage_rate(region)
+                            backup_high = int(
+                                (
+                                    Decimal(backup_rate.unit_price_usd)
+                                    * backup_max
+                                    * 100
+                                ).quantize(Decimal(1), rounding=ROUND_CEILING)
+                            )
+                            lines.append(
+                                PlanCostLine(
+                                    address="usage_assumptions.rds",
+                                    resource_type="aws_db_instance",
+                                    description="RDS MySQL backup storage (before account-level free allowance)",
+                                    quantity=0,
+                                    quantity_max=backup_max,
+                                    unit="GB-Mo",
+                                    unit_price_usd=backup_rate.unit_price_usd,
+                                    monthly_cost_minor=0,
+                                    monthly_cost_max_minor=backup_high,
+                                    unit_price_low_usd=backup_rate.unit_price_usd,
+                                    low_cost_quantity=0,
+                                    catalog_sku=backup_rate.sku,
+                                    catalog_product_sha256=backup_rate.product_digest,
+                                    catalog_published_at=backup_rate.published_at,
+                                    catalog_effective_at=backup_rate.effective_at,
+                                )
+                            )
+                    except PriceListUnavailableError:
+                        unavailable = True
+                        findings.append(
+                            PlanPricingFinding(
+                                "regional_price_lookup_unavailable",
+                                rds_instances[0]["address"],
+                                "DavDeploy could not verify current regional RDS prices.",
+                            )
+                        )
+                    except PlanPricingError:
+                        findings.append(
+                            PlanPricingFinding(
+                                "regional_price_ambiguous",
+                                rds_instances[0]["address"],
+                                "DavDeploy could not identify exact regional RDS prices.",
+                            )
+                        )
+
     total_max_minor = sum(
         item.monthly_cost_minor
         if item.monthly_cost_max_minor is None
@@ -1113,6 +1318,7 @@ def evaluate_generated_plan_pricing(
         persisted_context_sha256=persisted_context_sha256,
         usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
         transitions=transitions,
     )
 
@@ -1162,6 +1368,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "estimate_disclaimer": document.get("estimate_disclaimer"),
         "usage_assumptions": document.get("usage_assumptions"),
         "sqs_usage_assumptions": document.get("sqs_usage_assumptions"),
+        "rds_usage_assumptions": document.get("rds_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -1186,6 +1393,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("pricing_context_sha256") != trusted_context.pricing_context_sha256
         or document.get("usage_assumptions") != trusted_context.usage_assumptions
         or document.get("sqs_usage_assumptions") != trusted_context.sqs_usage_assumptions
+        or document.get("rds_usage_assumptions") != trusted_context.rds_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -1278,6 +1486,14 @@ def pricing_evidence_is_approval_eligible(
     if low != line_total or high != line_max_total:
         return False
     s3_lines = [line for line in lines if line.get("resource_type") == "aws_s3_bucket"]
+    rds_lines = [line for line in lines if line.get("resource_type") == "aws_db_instance"]
+    if rds_lines:
+        if trusted_context.rds_usage_assumptions is None:
+            return False
+        try:
+            RdsPricingUsageAssumptions.model_validate(trusted_context.rds_usage_assumptions)
+        except (TypeError, ValueError):
+            return False
     if s3_lines:
         if trusted_context.usage_assumptions is None:
             return False
@@ -1376,6 +1592,72 @@ def pricing_evidence_is_approval_eligible(
         else high <= trusted_context.monthly_budget_minor
     )
     return document.get("within_budget") is expected_within_budget
+
+
+def _validate_rds_instance(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "rds_plan_change_metadata_missing", "The RDS plan lacks resource-level pricing metadata."
+    change_document = change["change"]
+    after = change_document.get("after")
+    unknown = change_document.get("after_unknown")
+    required = (
+        "engine", "instance_class", "storage_type", "allocated_storage", "multi_az",
+        "publicly_accessible", "backup_retention_period", "engine_lifecycle_support",
+        "performance_insights_enabled", "monitoring_interval",
+    )
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+    ):
+        return "rds_configuration_unknown", "The RDS plan lacks known final pricing and safety values."
+    optional_cost_fields = (
+        "max_allocated_storage", "iops", "storage_throughput", "kms_key_id",
+        "enabled_cloudwatch_logs_exports", "replicate_source_db", "license_model",
+    )
+    if any(
+        key in values and key in after and values[key] != after[key]
+        for key in optional_cost_fields
+    ):
+        return "rds_plan_final_values_mismatch", "RDS pricing values do not match the final planned resource."
+    cost_drivers = required + optional_cost_fields
+    if any(_path_contains_unknown(unknown, (key,)) for key in cost_drivers):
+        return "rds_cost_driver_unknown", "A price-driving or surcharge setting is unknown in this plan."
+    if values.get("engine") != "mysql":
+        return "rds_engine_unpriced", "Only RDS for MySQL has a verified price mapping in this release."
+    instance_class = values.get("instance_class")
+    if not isinstance(instance_class, str) or not re.fullmatch(
+        r"db\.(?:m|r)[0-9]+[a-z]?\.[a-z0-9]+", instance_class
+    ):
+        return "rds_instance_class_unpriced", "Only non-burstable RDS M and R classes are priced in this release."
+    if values.get("storage_type") != "gp3":
+        return "rds_storage_type_unpriced", "Only RDS GP3 storage is priced in this release."
+    if values.get("multi_az") is not False or values.get("publicly_accessible") is not False:
+        return "rds_deployment_unpriced", "Only private Single-AZ RDS instances are priced in this release."
+    if values.get("engine_lifecycle_support") != "open-source-rds-extended-support-disabled":
+        return "rds_extended_support_unpriced", "RDS extended support must be explicitly disabled for this estimate."
+    if values.get("performance_insights_enabled") is not False or values.get("monitoring_interval") != 0:
+        return "rds_monitoring_unpriced", "RDS Performance Insights and Enhanced Monitoring are not priced."
+    if values.get("enabled_cloudwatch_logs_exports") not in (None, []):
+        return "rds_logs_unpriced", "RDS CloudWatch log exports have unpriced ingestion and retention costs."
+    if values.get("kms_key_id") not in (None, ""):
+        return "rds_customer_kms_unpriced", "Customer-managed RDS KMS keys are not priced in this estimate."
+    if values.get("license_model") not in (None, "general-public-license"):
+        return "rds_license_unpriced", "Only the RDS MySQL license model is priced in this release."
+    if values.get("max_allocated_storage") not in (None, 0):
+        return "rds_storage_autoscaling_unpriced", "RDS storage autoscaling is not priced in this release."
+    if values.get("iops") not in (None, 0, 3000) or values.get("storage_throughput") not in (None, 0, 125):
+        return "rds_storage_performance_unpriced", "Custom RDS GP3 IOPS or throughput is not priced."
+    size = values.get("allocated_storage")
+    if isinstance(size, bool) or not isinstance(size, int) or not 20 <= size <= 65_536:
+        return "rds_storage_size_unknown", "RDS GP3 allocated storage is missing or unsupported."
+    retention = values.get("backup_retention_period")
+    if isinstance(retention, bool) or not isinstance(retention, int) or not 0 <= retention <= 35:
+        return "rds_backup_retention_unknown", "RDS backup retention is missing or unsupported."
+    return None
 
 
 def _validate_gp3_volume(
