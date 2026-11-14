@@ -206,6 +206,36 @@ def test_customer_sqs_usage_assumptions_are_persisted_and_cleared_by_new_revisio
     assert "sqs_pricing_usage_assumptions" not in cleared.content["application_analysis"]["workload_spec"]
 
 
+
+def test_customer_rds_backup_usage_assumptions_are_persisted_and_cleared_by_new_revisions():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {"monthly_backup_storage_gb_month": {"minimum": 2, "maximum": 20}}
+
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(),
+        original.infrastructure_plan_id,
+        {"rds_pricing_usage_assumptions": usage},
+    )
+
+    assert revised.revision_number == 2
+    assert revised.content["user_constraints"]["rds_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"]["rds_pricing_usage_assumptions"] == usage
+    assert revised.content["revision_diff"]["rds_pricing_usage_assumptions"] == {
+        "before": None,
+        "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(),
+        original.infrastructure_plan_id,
+        {"rds_pricing_usage_assumptions": None},
+    )
+    assert "rds_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "rds_pricing_usage_assumptions" not in cleared.content["application_analysis"]["workload_spec"]
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)
