@@ -27,7 +27,7 @@ PERSISTED_CONTEXT_SHA256 = "a" * 64
 def rds_values(**overrides):
     values = {
         "engine": "mysql",
-        "instance_class": "db.t4g.micro",
+        "instance_class": "db.m6g.large",
         "storage_type": "gp3",
         "allocated_storage": 20,
         "multi_az": False,
@@ -370,6 +370,8 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     result, _ = evaluate(budget=400)
     legacy = result.as_manifest_document()
     legacy["version"] = 2
+    legacy.pop("sqs_usage_assumptions")
+    legacy.pop("rds_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -884,7 +886,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 4
+    assert manifest["version"] == 5
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,
