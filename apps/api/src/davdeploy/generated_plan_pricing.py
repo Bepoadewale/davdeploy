@@ -2199,7 +2199,7 @@ def _evidence(
         sqs_usage_assumptions,
     )
     payload = {
-        "version": 4,
+        "version": 5,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -2307,7 +2307,7 @@ def _pricing_context_digest(
 ) -> str:
     return _canonical_digest(
         {
-            "version": 3,
+            "version": 4,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
