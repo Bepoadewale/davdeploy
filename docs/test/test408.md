@@ -17,7 +17,7 @@ No AWS resources or customer workload resources were created.
 - `make verify` — passed: action configuration check, Ruff lint, 1,193 tests, OpenAPI snapshot check, and `docker compose config --quiet` (one existing Starlette/httpx deprecation warning).
 - `make openapi-update` — updated `contracts/openapi-v1.json`; the following `make verify` confirmed the snapshot matches the application.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- GitHub required CI and fresh-runner clean-room lifecycle — pending implementation commit.
+- GitHub required CI — run [43590712160](https://github.com/Bepoadewale/davdeploy/actions/runs/43590712160), all seven jobs passed. Its `local-e2e` job bootstrapped a fresh runner, ran smoke/API/demo/failure/recovery/trace/verification and MCP checks, and cleaned its ephemeral environment; `cloud-contracts` passed Terraform validation and Kubernetes rendering.
 
 ## Observed result
 

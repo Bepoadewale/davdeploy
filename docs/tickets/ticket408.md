@@ -43,15 +43,15 @@ executed.
 - [x] Planner input reconstructs assumptions only from the digest-checked persisted revision; canonical assumptions are bound into pricing context/evidence digests.
 - [x] Plan review displays the bounded assumptions and continues to show S3 cost as incomplete until its regional rates and all material dimensions are covered.
 - [x] Altered, oversized, malformed, missing, or cross-revision assumptions fail closed; old approvals cannot authorize an updated assumption set.
-- [ ] Focused tests, full verification, documentation conventions, clean-runner lifecycle, Terraform validation, and required CI pass; no AWS workload resources are created or changed.
+- [x] Focused tests, full verification, documentation conventions, clean-runner lifecycle, Terraform validation, and required CI pass; no AWS workload resources are created or changed.
 
 ## Acceptance status
 
-Implementation commit `5cb1108dcd624da021cab9637004eaa458e9ac29` adds the typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display. Focused tests (222), full verification (1,193 tests), OpenAPI snapshot, and local docs conventions pass. Required clean-runner CI is pending. No live catalog request, customer plan, or workload mutation has occurred.
+Implementation commit `5cb1108dcd624da021cab9637004eaa458e9ac29` adds the typed usage contract, immutable revision flow, pricing-context/evidence binding, and review display. Focused tests (222), full verification (1,193 tests), OpenAPI snapshot, and local docs conventions pass. GitHub Actions run [43590712160](https://github.com/Bepoadewale/davdeploy/actions/runs/43590712160) passed all seven jobs, including fresh-runner lifecycle, Terraform/Kubernetes contracts, and docs conventions. No live catalog request, customer plan, or workload mutation has occurred.
 
 ## Tests / validation performed
 
-Exact commands and results are recorded in `docs/test/test408.md`. CI and the ephemeral clean-runner lifecycle must pass before the PR is ready for review.
+Exact commands and results are recorded in `docs/test/test408.md`.
 
 ## Evidence files produced
 
