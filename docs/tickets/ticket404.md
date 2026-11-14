@@ -14,10 +14,10 @@ same-deployment launch template with IMDSv2 required.
 
 ## Current repo state
 
-Backend `main` includes PR #403 at `0e07f6b`. The existing policy covers
-`aws_instance`, `aws_launch_template`, `aws_launch_configuration`, and
-regional metadata defaults, but does not associate EKS managed node groups
-with a launch template. Pricing remains held; hosted customer apply, health,
+Backend `main` is merge commit `5572fab` after PR #404; merged-main CI run
+`43563520542` passed all seven jobs. PR #404 is merged source. The hosted
+control-plane package remains PR #390, so the policy is not deployed or
+exercised on a customer EKS plan. Pricing remains held; hosted apply, health,
 recovery, teardown, and composed execution remain unproven.
 
 ## Research / references used
@@ -80,16 +80,19 @@ visible in this plan. Nested configuration resources are traversed according
 to Terraform's `module_calls` plan format. Policy version is
 `nova-generated-plan-2026-11-14.4`. Focused policy tests, full local
 verification, isolated fixture proof, documentation convention checks, and
-diff checks pass. Final-head CI is pending. The check is synthetic/source-only
-and has not been deployed or exercised on a customer plan.
+diff checks pass. All seven final-head PR checks passed for evidence commit
+`199461e` in run `43530471001`; merged-main CI passed for `5572fab` in run
+`43563520542`. The check is synthetic/source-only and has not been deployed or
+exercised on a customer plan.
 
 ## Acceptance status
 
 The policy code, focused tests, full local verification, isolated fixture
 proof, documentation convention checks, diff checks, and capability-matrix
-update are implemented. All seven required checks pass for implementation
-commit `97a0c75` in run `43529880000`. No hosted EKS plan or customer workload
-is claimed.
+update are implemented. All seven required checks passed for implementation
+commit `97a0c75` in run `43529880000`, evidence commit `199461e` in run
+`43530471001`, and merged main `5572fab` in run `43563520542`. PR #404 merged
+as `5572fab`. No hosted EKS plan or customer workload is claimed.
 
 ## Tests / validation performed
 
@@ -110,6 +113,5 @@ Kubernetes workload health.
 
 ## Follow-up work
 
-Complete local documentation/diff checks and final-head CI. Separately close
-the held pricing direction, exact-plan hosted apply, and EKS/customer lifecycle
-acceptance in the private goal ledger.
+Separately close the held pricing direction, exact-plan hosted apply, and
+EKS/customer lifecycle acceptance in the private goal ledger.
