@@ -1,27 +1,58 @@
-# Ticket 411: bounded RDS plan pricing
+# ticket411
+PR: #411
+Branch: feat/nova-rds-instance-pricing-411
 
-## Status
+## Problem / goal
 
-In progress. The implementation and focused regression cases are on draft PR #411. Hosted CI has not yet been reconciled. This PR does not deploy workloads or make the exact-plan apply runner operational.
+Add conservative monthly pricing for a bounded RDS for MySQL configuration using live regional AWS Price List data. Bind backup usage assumptions from the integrity-checked customer revision into generated-plan pricing evidence and approval checks.
 
-## Objective
+## Current repo state
 
-Price a narrow, explicitly supported RDS configuration from the initialized Terraform plan and current AWS regional price catalog, using usage assumptions stored in the integrity-checked customer revision. Bind those assumptions into the price evidence and approval check.
+PR #411 is a draft based on main commit 01895d6b6ceb7d69837187e3c19c0a5cd5033830. The plan-only Nova runner exists. Exact-plan apply remains fail-closed and unwired under draft PR #399.
 
-## Scope
+## Research / references used
 
-- Support RDS for MySQL on non-burstable M/R instance classes, private Single-AZ deployment, GP3 storage, and declared monthly backup storage range.
-- Price instance hours and allocated storage from AWS Price List. Report backup cost as a range from zero to the full declared usage because account-level backup allowance is shared.
-- Reject unsupported or unknown material RDS cost/safety settings.
-- Persist assumptions through the customer revision flow and expose them in the OpenAPI contract.
-- Preserve prior pricing evidence parsing formats.
+- AWS Price List API / Botocore price catalog interface used by the existing pricing implementation.
+- AWS RDS pricing: https://aws.amazon.com/rds/pricing/
+- RDS automated backup storage: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_WorkingWithAutomatedBackups.html
+- RDS storage options: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_Storage.html
 
-## Evidence required
+## Work planned for the PR
 
-- Hosted focused and full required CI pass on the final PR head.
-- Review that approval eligibility checks the persisted assumptions and their digest.
-- No AWS workload apply is part of this PR. The exact-plan apply path remains fail-closed and unwired as documented in PR #399.
+- Price RDS MySQL M/R non-burstable, private Single-AZ, GP3 instance/storage configurations.
+- Require explicit monthly backup storage usage bounds and report a range that reflects the shared account-level free allowance.
+- Reject unsupported or unknown price-driving and safety fields.
+- Persist assumptions through customer revisions and expose the input in the API contract.
+- Bind assumptions into approval context digests and add hosted regression coverage.
+- Verify with required GitHub Actions checks; do not run or claim a workload apply.
 
-## Limitations
+## Acceptance criteria
 
-This does not price multi-AZ, burstable classes, customer-managed keys, monitoring, log exports, restore operations, data transfer, or every RDS option. Backup storage charges depend on account-wide usage and free allowance. The estimate is not a bill forecast or a hard spend cap.
+- A supported RDS plan has complete instance, storage, and backup price evidence from exact regional catalog mappings.
+- Missing usage assumptions, unsupported settings, and material unknown values block approval before price lookup.
+- Changing persisted RDS assumptions invalidates approval eligibility.
+- OpenAPI includes the persisted constraint.
+- Hosted required CI passes on final PR head.
+
+## Acceptance status
+
+In progress. Implementation is present on the branch. Required hosted CI is still running or being corrected. No workload apply has been performed.
+
+## Tests / validation performed
+
+- Added tests for pricing ranges, persisted-context extraction, digest binding, unsupported configurations, and missing assumptions.
+- GitHub Actions run 43641000322 failed the docs convention check because required ticket markers were missing; this file has been corrected on the branch.
+- Full hosted CI for the corrected final head is pending.
+- No local test commands or AWS workload commands were run.
+
+## Evidence files produced
+
+- docs/test/test411.md
+
+## Boundaries
+
+Supports only RDS MySQL non-burstable M/R, private Single-AZ, GP3 storage with explicit usage bounds. Backup charge is estimated from zero to full declared usage due to account-level allowance. This does not cover multi-AZ, burstable instances, customer-managed KMS, monitoring, log exports, restore, transfer, or every RDS configuration. Estimates are not a bill forecast or spend cap.
+
+## Follow-up work
+
+Complete required hosted validation, then continue actual-plan policy, protected saved-plan storage, and generic hosted worker wiring. Do not enable the apply boundary or claim customer lifecycle certification.
