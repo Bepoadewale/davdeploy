@@ -1397,13 +1397,13 @@ def _validate_sqs_queue(
         return "sqs_plan_change_metadata_missing", "The SQS plan lacks resource-level queue metadata."
     after = change["change"].get("after")
     unknown = change["change"].get("after_unknown")
-    if not isinstance(after, dict) or not isinstance(unknown, dict):
+    if not isinstance(after, dict) or not isinstance(unknown, dict) or not _valid_unknown_tree(unknown):
         return "sqs_configuration_unknown", "The planned SQS queue configuration is unknown."
-    if unknown.get("fifo_queue") is not False or not isinstance(after.get("fifo_queue"), bool):
+    if unknown.get("fifo_queue") is True or not isinstance(after.get("fifo_queue"), bool):
         return "sqs_configuration_unknown", "The planned SQS queue type is unknown."
     if after.get("kms_master_key_id") not in (None, ""):
         return "sqs_kms_unpriced", "Customer-managed SQS encryption keys are not priced by this estimate."
-    if unknown.get("kms_master_key_id") is not False:
+    if unknown.get("kms_master_key_id") is True:
         return "sqs_configuration_unknown", "The planned SQS encryption configuration is unknown."
     if values.get("fifo_queue") != after.get("fifo_queue"):
         return "sqs_configuration_unknown", "The SQS queue type does not match the final planned resource."

@@ -64,7 +64,8 @@ test suite. The merge gate is the required GitHub Actions checks on PR #410.
 
 Local deterministic checks passed. The pricing evidence remains an estimate
 based on stated usage, not an AWS bill or measured customer traffic. The tests
-cover exact regional Standard/FIFO catalog filters and provenance, bounded
+cover Terraform's sparse `after_unknown` representation, exact regional
+Standard/FIFO catalog filters and provenance, bounded
 request, Fair Queue, and transfer assumptions, immutable revision persistence
 and clearing, unknown or mismatched queue type, customer-managed KMS, missing
 or ambiguous prices, the single lower-estimate allowance, high-cost budget

@@ -36,9 +36,7 @@ def queue_plan(*, fifo=False, kms=None, unknown_fifo=False, also_standard=False,
         "fifo_queue": fifo,
         "kms_master_key_id": kms,
     }
-    after_unknown = {key: False for key in values}
-    if unknown_fifo:
-        after_unknown["fifo_queue"] = True
+    after_unknown = {"fifo_queue": True} if unknown_fifo else {}
     resources = [
         {"address": "aws_sqs_queue.work", "mode": "managed", "type": "aws_sqs_queue", "values": values},
         {"address": "terraform_data.account_guard", "mode": "managed", "type": "terraform_data", "values": {"input": None}},
@@ -48,7 +46,7 @@ def queue_plan(*, fifo=False, kms=None, unknown_fifo=False, also_standard=False,
     if duplicate_standard:
         resources.insert(2, {"address": "aws_sqs_queue.standard_extra", "mode": "managed", "type": "aws_sqs_queue", "values": {**values, "fifo_queue": False}})
     changes = [
-        {"address": item["address"], "type": item["type"], "change": {"actions": ["create"], "after": item["values"], "after_unknown": (after_unknown if item["address"] == "aws_sqs_queue.work" else {key: False for key in item["values"]}) if item["type"] == "aws_sqs_queue" else {"input": False}}}
+        {"address": item["address"], "type": item["type"], "change": {"actions": ["create"], "after": item["values"], "after_unknown": (after_unknown if item["address"] == "aws_sqs_queue.work" else {}) if item["type"] == "aws_sqs_queue" else {"input": False}}}
         for item in resources
     ]
     return {
