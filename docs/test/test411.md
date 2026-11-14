@@ -12,9 +12,9 @@ None. No AWS workload resources were created, modified, or destroyed.
 
 ## Commands executed
 
-- GitHub Actions PR validation for PR #411, run 43641000322.
-- The docs-conventions job reported that required ticket markers were absent. The ticket has since been updated to meet the repository convention.
-- Hosted Python, supply-chain, cloud-contract, policy, and end-to-end jobs were in progress at last inspection. A new run is expected after the documentation correction.
+- GitHub Actions PR validation for PR #411, run 43641313289.
+- The docs-conventions job passed after the ticket markers were corrected.
+- The hosted Python job found seven regressions: three stale version/legacy-fixture expectations and four RDS test fixture assumptions. The branch now corrects the expected evidence version, removes new fields from the legacy v2 fixture, and uses a supported M-class fixture. A final-head run is pending.
 
 No local test commands or AWS mutation commands were executed.
 
