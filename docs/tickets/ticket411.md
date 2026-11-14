@@ -36,12 +36,12 @@ PR #411 is a draft based on main commit 01895d6b6ceb7d69837187e3c19c0a5cd5033830
 
 ## Acceptance status
 
-Implementation is present and all seven hosted CI checks passed on commit 4aeb2fdbcf3c2906eb5a915642b667777ffea748 (run 43643826938). A documentation-only update records that evidence; final-head CI for the evidence update is in progress. No workload apply has been performed.
+Implementation and API contract are verified by hosted CI. Run 43644240047 passed all seven checks on commit ad64375d179c5586dd16bda37747b8818a0999b5. No AWS workload was applied.
 
 ## Tests / validation performed
 
 - Added tests for pricing ranges, persisted-context extraction, digest binding, unsupported configurations, and missing assumptions.
-- GitHub Actions run 43643826938 passed all seven required checks on commit 4aeb2fdbcf3c2906eb5a915642b667777ffea748.
+- GitHub Actions runs 43643826938 and 43644240047 passed all seven required checks (latest recorded commit ad64375d179c5586dd16bda37747b8818a0999b5).
 - The hosted Python job passed 1,226 tests; hosted end-to-end verification including API contract and OpenAPI checks passed.
 - An earlier docs convention failure was corrected before the passing run.
 - No local test commands or AWS workload commands were run.
