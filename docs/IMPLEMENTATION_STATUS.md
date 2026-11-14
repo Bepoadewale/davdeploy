@@ -1,7 +1,8 @@
 # Implementation Status
 
-Current backend `main` is commit `aebc5f6c2d35826f864ae7eff15c475db6fcc0f9`
-(PR #407). The deployed control-plane release remains PR #405, source commit
+Current backend source `main` is commit `aa8d3d0ee1329da14f5fea32053e8a0970049bee`
+(PR #408); PR #409 is open for regional S3 pricing. The deployed
+control-plane release remains PR #405, source commit
 `74016e70aa7a702ebf3338cf1fbb43d4f563a838`, applied using protected plan
 [43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292)
 and exact saved-plan apply [43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945).
@@ -17,10 +18,12 @@ saved plan before approval. PRs #393, #395 and #397 are merged source; #401/#402
 add network ACL and EC2 metadata checks, and #404 adds bounded EKS managed-node
 IMDSv2 validation when a same-plan launch template is visible. These policy
 checks are deployed but have not been exercised on a customer plan. Merged
-PR #407 adds trusted regional price evidence, currently pricing only explicitly
-sized EBS gp3 with default performance settings. Draft PR #408 adds typed,
-revision-bound S3 usage assumptions but does not price S3; unpriced material
-resources and usage still block approval. The customer apply path remains
+PR #407 adds trusted regional EBS gp3 price evidence. Merged PR #408 adds
+typed, immutable-revision-bound S3 Standard storage, request, and internet
+egress usage assumptions. Draft PR #409 prices proposal-wide aggregate S3 usage across plain buckets
+using regional AWS catalog rates and conservative upper unit prices; unsupported
+S3 settings remain incomplete. Other unpriced material
+resources still block approval. The customer apply path remains
 unimplemented, and no customer workload probes or health observations have
 executed.
 
@@ -32,7 +35,7 @@ executed.
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
 | Nova intent scope boundary | PR #377 adds typed infrastructure/out-of-scope classification. Unrelated requests receive a fixed HTTP 422 explanation before a workload intent is stored; deploying financial-domain software remains in scope. The code is deployed with backend `40439ab6b493a40c522102fa88de1c48043b4177` via protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048). Two bounded synthetic model checks passed for stock advice and a stockbroking-app deployment, but this is not broad classification-quality evidence and no authenticated customer API journey was exercised. |
-| Nova proposal policy and execution boundary | Source includes the strict generated graph, provider-schema checks, bounded proposal repair, actual-plan security/ownership/retention policy, network ACL and EC2 metadata checks (#401–#402), bounded EKS managed-node IMDSv2 validation (#404) when a same-plan launch template is visible, isolated plan-only runner, plan-review and tenant-state APIs, customer plan-role checks, proposal verification requirements (#393), typed bounded health assertions (#395), and exact plan-time workspace persistence/approval verification (#397). Backend main `74016e7` was deployed using plan [43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292) and exact apply [43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945); the policy checks and runner, broker, role-verification, state and plan-review gates are live, while hosted certification is disabled. PR #397 does not add or enable customer apply. Merged PR #407 adds EBS gp3 price evidence; it does not enable customer plan approval because all other material costs remain unknown. Draft PR #408 adds immutable, user-editable S3 usage assumptions and displays them with incomplete cost evidence; it does not price S3 or make plans approvable. No authenticated customer request has produced a hosted Terraform plan, no customer role has been fully permission-verified, and no Nova workload has been applied. No probes or health observations have executed; recovery and teardown remain incomplete. See `docs/test/test391.md`, `docs/test/test393.md`, `docs/test/test395.md`, `docs/test/test397.md`, `docs/test/test401.md`, `docs/test/test402.md`, `docs/test/test404.md`, and `docs/test/test406.md`. |
+| Nova proposal policy and execution boundary | Source includes the strict generated graph, provider-schema checks, bounded proposal repair, actual-plan security/ownership/retention policy, network ACL and EC2 metadata checks (#401–#402), bounded EKS managed-node IMDSv2 validation (#404) when a same-plan launch template is visible, isolated plan-only runner, plan-review and tenant-state APIs, customer plan-role checks, proposal verification requirements (#393), typed bounded health assertions (#395), and exact plan-time workspace persistence/approval verification (#397). Backend main `74016e7` was deployed using plan [43565505292](https://github.com/Bepoadewale/davdeploy/actions/runs/43565505292) and exact apply [43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945); the policy checks and runner, broker, role-verification, state and plan-review gates are live, while hosted certification is disabled. PR #397 does not add or enable customer apply. Merged PR #407 adds EBS gp3 price evidence; it does not enable customer plan approval because all other material costs remain unknown. Merged PR #408 adds immutable, user-editable S3 usage assumptions. Draft PR #409 adds regional price evidence for supported S3 usage; it does not make plans approvable while other material costs remain unknown. No authenticated customer request has produced a hosted Terraform plan, no customer role has been fully permission-verified, and no Nova workload has been applied. No probes or health observations have executed; recovery and teardown remain incomplete. See `docs/test/test391.md`, `docs/test/test393.md`, `docs/test/test395.md`, `docs/test/test397.md`, `docs/test/test401.md`, `docs/test/test402.md`, `docs/test/test404.md`, and `docs/test/test406.md`. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |

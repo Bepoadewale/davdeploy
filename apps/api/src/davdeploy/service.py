@@ -5034,9 +5034,9 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            11
+            12
             if untagged_records
-            else 10 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 9
+            else 11 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 10
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")

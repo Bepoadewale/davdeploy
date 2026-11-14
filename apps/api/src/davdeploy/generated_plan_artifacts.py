@@ -553,7 +553,7 @@ def generated_plan_manifest(
     pricing_summary = pricing_evidence_safe_summary(pricing_document)
     manifest = {
         "manifest_version": (
-            (11 if untagged_resources else 10 if remote_state is not None else 9)
+            (12 if untagged_resources else 11 if remote_state is not None else 10)
             if pricing_document is not None
             else (9 if untagged_resources else 8 if remote_state is not None else 7)
         ),
