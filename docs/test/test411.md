@@ -1,23 +1,31 @@
-# Test evidence for PR 411
+# test411
+Date: 2026-11-14
+Execution type: Hosted GitHub Actions validation; no customer workload test
+Customer repository: Bepoadewale/davdeploy (implementation repository)
+Commit: ac9945f4cb4cf84bd215831095e99641e08b4e90
+AWS account: Not accessed for workload testing
+AWS region: us-east-1 is the implementation's price lookup input; no workload resources were created
 
-## Status
+## Resources created
 
-Pending GitHub Actions on the final PR head. No local test commands were run; this change is being validated through hosted CI.
+None. No AWS workload resources were created, modified, or destroyed.
 
-## Automated coverage added
+## Commands executed
 
-- RDS instance, GP3 storage, and backup cost-range calculation.
-- Approval-context binding for persisted RDS backup assumptions.
-- Missing backup assumptions and unsupported public, multi-AZ, burstable, customer-managed KMS, and unknown storage values fail closed before price lookup.
-- Integrity-checked revision extraction for RDS assumptions.
-- Existing generated-plan pricing tests continue to cover prior evidence formats, budgets, price catalog validation, and other priced resources.
+- GitHub Actions PR validation for PR #411, run 43641000322.
+- The docs-conventions job reported that required ticket markers were absent. The ticket has since been updated to meet the repository convention.
+- Hosted Python, supply-chain, cloud-contract, policy, and end-to-end jobs were in progress at last inspection. A new run is expected after the documentation correction.
 
-## Cloud activity
+No local test commands or AWS mutation commands were executed.
 
-No AWS workload was created, applied, or destroyed for this PR. Price lookups in the application use the AWS public Price List API. The apply runner remains unwired and disabled under PR #399.
+## Observed result
 
-## Hosted CI
+RDS pricing and context-binding tests were added. The first hosted run identified a documentation convention failure. Final-head automated results are pending, so implementation acceptance is not yet established.
 
-- Final PR head: pending.
-- Run ID and job outcomes: pending.
-- Hosted focused/full verification: pending.
+## Teardown
+
+Not applicable. No cloud resources were created.
+
+## Final boundary
+
+This file records CI activity only. It does not prove a hosted customer deployment, an AWS workload apply, or lifecycle acceptance. PR #399's apply worker remains unwired and disabled.
