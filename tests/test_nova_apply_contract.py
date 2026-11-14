@@ -9,6 +9,7 @@ from davdeploy.generated_plan_artifacts import (
     S3GeneratedPlanArtifactStore,
     canonical_json_digest,
 )
+from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
 from davdeploy.nova_apply_contract import (
     NovaApplyContractError,
     validate_nova_apply_request,
@@ -49,6 +50,18 @@ def _request_document(*, now: datetime | None = None) -> dict:
         "size_bytes": 1024,
         "sha256": "b" * 64,
     }
+    pricing_evidence = _evidence(
+        status=PlanPricingStatus.COMPLETE,
+        region="us-east-1",
+        currency="USD",
+        captured_at=current.isoformat(),
+        budget=100_000,
+        document={},
+        lines=(),
+        findings=(),
+        persisted_context_sha256="d" * 64,
+    )
+    pricing_document = pricing_evidence.as_manifest_document()
     manifest = {
         "tenant": {
             "organization_id": organization_id,
@@ -70,17 +83,17 @@ def _request_document(*, now: datetime | None = None) -> dict:
         "digests": {
             "saved_plan_sha256": plan["sha256"],
             "workspace_sha256": workspace["sha256"],
+            "pricing_evidence_sha256": pricing_document["evidence_sha256"],
+            "pricing_context_sha256": pricing_document["pricing_context_sha256"],
+            "plan_json_sha256": pricing_document["plan_json_sha256"],
         },
         "policy": {
             "verdict": "REVIEW_REQUIRED",
             "human_approval_required": True,
         },
         "planning_boundary": {"approval_allowed": True, "execution_allowed": True},
-        "pricing": {
-            "status": "COMPLETE",
-            "region": "us-east-1",
-            "evidence_sha256": "c" * 64,
-        },
+        "pricing": pricing_evidence.safe_summary(),
+        "pricing_evidence": pricing_document,
         "artifact": {key: value for key, value in plan.items() if key != "sha256"},
         "execution_workspace": workspace,
     }
