@@ -71,13 +71,13 @@ contracts.
 
 ## Acceptance status
 
-Five implementation criteria are satisfied locally. Focused and full
-verification passed. The docs convention check failed once because required headings were missing;
-the headings are fixed and `python3 scripts/check_doc_conventions.py` now passes.
-GitHub CI for the implementation commit is still running; push the doc fix after
-that run finishes so the required checks cover the corrected evidence. The required full local clean-room cycle is outstanding
-because its clean steps delete local volumes and `.local` files, which the
-current deletion rule requires explicit approval to remove.
+All implementation, local verification, documentation, and CI acceptance
+criteria pass on PR head `e8bbb8bb8c60ddbee64322e582a4ebe66ab857cd` in run
+[43588493743](https://github.com/Bepoadewale/davdeploy/actions/runs/43588493743).
+The first CI run failed only the documentation marker check; required headings
+were corrected and the fresh run passed all seven jobs. Its `local-e2e` job
+completed the lifecycle on an ephemeral runner. No workstation cleanup or AWS
+workload mutation was performed.
 
 ## Tests / validation performed
 
