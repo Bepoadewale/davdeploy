@@ -388,7 +388,7 @@
           "budget_ceiling_usd": {
             "anyOf": [
               {
-                "minimum": 1,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -627,7 +627,7 @@
           "monthly_budget_usd": {
             "anyOf": [
               {
-                "minimum": 1,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
@@ -872,8 +872,8 @@
         "description": "Customer-declared inclusive range for a monthly usage quantity.",
         "properties": {
           "maximum": {
-            "maximum": 1000000000000,
-            "minimum": 0,
+            "maximum": 1000000000000.0,
+            "minimum": 0.0,
             "title": "Maximum",
             "type": "integer"
           },
