@@ -22,6 +22,11 @@ from davdeploy.generated_plan_ownership import (
     UntaggedResourceOwnershipRecord,
 )
 from davdeploy.generated_plan_policy import GeneratedPlanPolicyResult
+from davdeploy.generated_plan_pricing import (
+    pricing_evidence_document_is_valid,
+    pricing_evidence_is_fresh,
+    pricing_evidence_safe_summary,
+)
 from davdeploy.generated_terraform_plan import (
     MAX_EXECUTION_WORKSPACE_BYTES,
     GeneratedTerraformPlan,
@@ -542,8 +547,16 @@ def generated_plan_manifest(
         raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
     if len({item.address for item in untagged_resources}) != len(untagged_resources):
         raise GeneratedPlanArtifactError("untaggable resource ownership evidence is malformed")
+    pricing_document = (
+        plan.pricing.as_manifest_document() if plan.pricing is not None else None
+    )
+    pricing_summary = pricing_evidence_safe_summary(pricing_document)
     manifest = {
-        "manifest_version": 9 if untagged_resources else 8 if remote_state is not None else 7,
+        "manifest_version": (
+            (10 if untagged_resources else 9 if remote_state is not None else 8)
+            if pricing_document is not None
+            else (9 if untagged_resources else 8 if remote_state is not None else 7)
+        ),
         "tenant": {
             "organization_id": organization_id,
             "project_id": project_id,
@@ -629,6 +642,17 @@ def generated_plan_manifest(
         },
         "created_at": created_at,
     }
+    if pricing_document is not None:
+        manifest["digests"].update(
+            {
+                "pricing_evidence_sha256": plan.pricing.evidence_sha256,
+                "pricing_context_sha256": plan.pricing.pricing_context_sha256,
+                "plan_json_sha256": plan.pricing.plan_json_sha256,
+            }
+        )
+        manifest["summary"]["pricing"] = pricing_summary
+        manifest["pricing"] = pricing_summary
+        manifest["pricing_evidence"] = pricing_document
     if remote_state is not None:
         manifest["remote_state"] = remote_state
     if untagged_resources:
@@ -644,16 +668,21 @@ def generated_plan_manifest(
 
 
 def has_complete_pricing_evidence(manifest: dict[str, Any]) -> bool:
-    """Require a region-bound digest before an exact plan can be approved."""
-    pricing = manifest.get("pricing")
+    """Require intact, fresh, region-bound evidence before plan approval/apply."""
+    pricing = manifest.get("pricing_evidence")
     target = manifest.get("target")
+    digests = manifest.get("digests")
     return (
-        isinstance(pricing, dict)
+        pricing_evidence_document_is_valid(pricing)
         and pricing.get("status") == "COMPLETE"
         and isinstance(target, dict)
         and pricing.get("region") == target.get("region")
-        and isinstance(pricing.get("evidence_sha256"), str)
-        and bool(re.fullmatch(r"[a-f0-9]{64}", pricing["evidence_sha256"]))
+        and manifest.get("pricing") == pricing_evidence_safe_summary(pricing)
+        and isinstance(digests, dict)
+        and digests.get("pricing_evidence_sha256") == pricing.get("evidence_sha256")
+        and digests.get("pricing_context_sha256") == pricing.get("pricing_context_sha256")
+        and digests.get("plan_json_sha256") == pricing.get("plan_json_sha256")
+        and pricing_evidence_is_fresh(pricing.get("captured_at"))
     )
 
 

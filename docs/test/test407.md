@@ -1,0 +1,37 @@
+# PR #407 — trusted regional pricing evidence
+
+## Scope and execution type
+
+This is local implementation and static infrastructure validation. No live AWS
+pricing request, customer plan, workload apply, or AWS resource mutation was
+performed. The pricing tests use injected AWS Price List Query API responses.
+
+Repository: `Bepoadewale/davdeploy`  
+Branch: `feat/nova-regional-pricing-evidence`  
+Base source: backend `main` PR #406, commit
+`a6fff370479657a85949d59a82acee048cb46121`  
+Deployed source remains PR #405, commit
+`74016e70aa7a702ebf3338cf1fbb43d4f563a838`.
+
+## Validation
+
+- `uv run --locked --extra dev pytest -q tests/test_generated_plan_pricing.py tests/test_generated_terraform_plan.py tests/test_generated_plan_artifacts.py tests/test_generated_plan_review.py tests/test_nova_plan_codebuild.py tests/test_nova_plan_runs.py tests/test_nova_plan_dispatch.py tests/test_nova_plan_only_infra.py` — 232 passed.
+- `uv run --locked --extra dev ruff check apps/api/src/davdeploy/generated_plan_artifacts.py apps/api/src/davdeploy/generated_terraform_plan.py apps/api/src/davdeploy/generated_plan_pricing.py apps/api/src/davdeploy/nova_plan_codebuild.py apps/api/src/davdeploy/nova_plan_dispatch.py apps/api/src/davdeploy/service.py tests/test_generated_plan_pricing.py tests/test_generated_plan_review.py tests/test_generated_terraform_plan.py tests/test_nova_plan_codebuild.py tests/test_nova_plan_dispatch.py tests/test_nova_plan_only_infra.py tests/test_nova_plan_runs.py` — passed.
+- `terraform fmt -check -recursive infrastructure/terraform/serverless-control-plane` — passed.
+- `git diff --check` — passed.
+- `make verify` — passed: action configuration check, Ruff, 1,181 tests, OpenAPI snapshot check, and `docker compose config --quiet` (one existing Starlette/httpx deprecation warning).
+- Full local clean-room lifecycle — not run. The prescribed `clean-local` command deletes local volumes and `.local` data, which requires explicit approval under the current local deletion rule. CI remains the clean integration proof.
+- GitHub required checks — pending implementation commit and push.
+
+## Evidence and limits
+
+The isolated Nova plan CodeBuild role is granted `pricing:GetProducts`; the
+planner queries the public AWS price catalog with fixed service filters. The
+only material resource currently priced is explicitly sized EBS gp3 with
+default IOPS and throughput. Unsupported material resource types, custom
+storage settings, internet transfer, or unknown usage remain incomplete and
+block approval. The result is a list-price estimate, not a complete bill or a
+spending limit. No customer plan or workload is approved by this evidence.
+
+PR #407 implementation commit and final test results will be added here before
+the PR is marked ready for review.

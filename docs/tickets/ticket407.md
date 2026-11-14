@@ -1,6 +1,6 @@
 # ticket407 — trusted regional pricing for Nova saved plans
 
-PR: draft
+PR: [#407](https://github.com/Bepoadewale/davdeploy/pull/407) (draft)
 Branch: `feat/nova-regional-pricing-evidence`
 
 ## Goal
@@ -15,23 +15,33 @@ spending cap.
 ## Current state
 
 Backend `main` is `a6fff370479657a85949d59a82acee048cb46121` (PR #406), with
-all seven merged-main CI jobs passing and the control-plane release evidence
-recorded in `docs/test/test406.md`. Nova actual-plan policy and exact saved-plan
-plus workspace storage exist. Approval remains blocked because no trusted
-regional pricing evaluator is wired. Closed PR #318 added unmerged prototype
-code; this PR will review and reuse safe parts only where they fit the current
-contracts. The user's resumed goal specifies timestamped regional prices and
-usage assumptions.
+all seven merged-main CI jobs passing. The deployed control-plane release
+remains PR #405, documented in `docs/test/test406.md`. Nova actual-plan policy
+and exact saved-plan plus workspace storage exist. PR #407 is a draft source
+implementation based on #406; it is not merged or deployed. Closed PR #318
+contains an earlier prototype. This implementation reuses its reviewed price
+mapping concepts while binding them to the current runner and manifest
+contracts.
+
+## Research
+
+- [AWS Price List Query API: GetProducts](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html) — filters return matching catalog products and their product/price metadata; results can be paginated.
+- [Calling AWS services and prices using the AWS Price List](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/price-changes.html) — Query API prices are SKU-level planning data, do not include Savings Plans prices, and are informational; AWS service pricing pages govern billing when they differ.
 
 ## Work planned
 
 - Map supported Terraform plan resource types and material cost dimensions to
   explicit trusted price lookups and bounded usage assumptions.
-- Resolve current prices from an AWS-published source with region, currency,
-  service/SKU, effective/publication time, retrieval time, and provenance.
-- Calculate transparent monthly ranges and identify unknown or unsupported
-  costs. Avoid claims of completeness when supporting resources or usage are
-  not priced.
+- Resolve current USD prices from the AWS Price List Query API, checking the
+  requested product and workload region. Record service/SKU, effective and
+  publication timestamps, retrieval time, product digest, and provenance.
+- Price EBS gp3 storage only when size and default IOPS/throughput are explicit.
+  Keep explicit no-direct-charge resource types on a fixed allowlist. Other
+  material resources, custom storage settings, internet transfer, and unknown
+  usage are marked incomplete and block approval.
+- Report exact low/high monthly values for supported, explicitly sized items,
+  assumptions, and limitations. Never imply these estimates cover a complete
+  bill, discount, taxes, data transfer, or an AWS spending cap.
 - Bind canonical price evidence and policy version into the immutable plan
   manifest; recheck freshness and context at approval and apply preflight.
 - Keep external pricing access bounded, time-limited, cached with provenance,
@@ -41,25 +51,35 @@ usage assumptions.
 
 ## Acceptance criteria
 
-- [ ] Prices are bound to the planned AWS region and use trusted source data.
-- [ ] Every material planned resource is priced or explicitly marked unknown;
+- [x] Prices are bound to the planned AWS region and use trusted AWS Price List
+  Query API results.
+- [x] Every material planned resource is priced or explicitly marked unknown;
   critical unknowns block approval.
-- [ ] Monthly ranges expose units, usage assumptions, supporting costs,
+- [x] Monthly estimates expose units, explicit usage assumptions, known
+  supporting costs, and unknown costs,
   currency, timestamps, source and limitations.
-- [ ] Evidence is canonical, digest-bound to the immutable manifest, and
+- [x] Evidence is canonical, digest-bound to the immutable manifest, and
   freshness is checked at approval.
-- [ ] Negative cases cover stale, mismatched, ambiguous, tampered, unpriced,
+- [x] Negative cases cover stale, mismatched, ambiguous, tampered, unpriced,
   and policy-critical unknown cost evidence.
 - [ ] Focused tests, full verification, documentation conventions and required
   CI pass; no AWS workload resources are created or changed.
+- [ ] Required full local clean-room lifecycle is complete. This Terraform
+  behavior change still needs that gate before merge; the current local
+  deletion rule prevents running its `clean` steps without explicit approval.
 
 ## Evidence and boundaries
 
-This PR will use price response fixtures and injected clients. Any live price
-catalog request will be read-only and must not require customer workload
-permissions. No plan is applied and no spending or billing claim is made.
-`docs/test/test407.md` will record runtime validation when implementation
-begins.
+The planner's dedicated CodeBuild role receives only `pricing:GetProducts` for
+the fixed read-only catalog lookup; customer workload credentials are passed
+only to Terraform subprocesses. Tests use price response fixtures and injected
+clients. No live AWS catalog request, plan apply, workload mutation, or billing
+claim occurred. The currently supported price mapping is narrow, so most
+composed applications remain unapprovable until their material costs and usage
+models are added.
+
+Focused and full local verification are recorded in `docs/test/test407.md`.
+Required GitHub CI is pending. The clean-room lifecycle remains outstanding.
 
 ## Follow-up
 
