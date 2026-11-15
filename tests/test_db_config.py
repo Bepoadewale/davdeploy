@@ -55,7 +55,7 @@ def test_execution_module_instance_migration_is_safe_for_existing_database():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 35
+            == 36
         )
     columns = {
         column["name"] for column in inspect(engine).get_columns("cloud_execution_module_instances")
@@ -94,7 +94,7 @@ def test_terraform_state_migration_adds_only_state_tables_to_v32_database():
         version = connection.execute(
             text("SELECT MAX(version) FROM schema_migrations")
         ).scalar_one()
-    assert version == 35
+    assert version == 36
     engine.dispose()
 
 
@@ -122,7 +122,7 @@ def test_exact_plan_apply_state_migration_adds_apply_run_binding_to_existing_cre
     assert "apply_run_id" in columns
     assert inspect(engine).has_table("generated_plan_apply_runs")
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 35
+        assert connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one() == 36
     engine.dispose()
 
 
@@ -147,7 +147,7 @@ def test_cloud_execution_worker_lease_migration_upgrades_version_23_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 35
+            == 36
         )
     engine.dispose()
 
@@ -193,7 +193,7 @@ def test_module_runner_build_identity_migration_upgrades_version_24_idempotently
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 35
+            == 36
         )
         connection.execute(
             text(
@@ -325,7 +325,7 @@ def test_nova_plan_queue_migration_adds_persisted_request_and_lease_fields():
     with engine.connect() as connection:
         assert (
             connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
-            == 35
+            == 36
         )
     engine.dispose()
 
@@ -372,7 +372,7 @@ def test_plan_role_migration_upgrades_version_31_with_only_plan_role_columns():
                 "plan_role_arn, plan_role_setup_state FROM cloud_connections WHERE id = 'connection-1'"
             )
         ).one()
-    assert version == 35
+    assert version == 36
     assert existing == (
         "123456789012",
         "arn:discovery",
@@ -395,4 +395,49 @@ def test_plan_role_migration_fails_closed_if_cloud_connections_is_missing():
     with engine.connect() as connection:
         version = connection.execute(text("SELECT MAX(version) FROM schema_migrations")).scalar_one()
     assert version == 31
+    engine.dispose()
+
+
+
+def test_generated_plan_apply_worker_lease_migration_upgrades_v35_idempotently():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)"))
+        connection.execute(text("INSERT INTO schema_migrations(version) VALUES (35)"))
+        connection.execute(
+            text(
+                "CREATE TABLE generated_plan_apply_runs ("
+                "id VARCHAR(36) PRIMARY KEY, state VARCHAR(40))"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO generated_plan_apply_runs(id, state) VALUES ('apply-1', 'QUEUED')")
+        )
+
+    db.run_migrations(engine)
+    db.run_migrations(engine)
+
+    columns = {
+        column["name"] for column in inspect(engine).get_columns("generated_plan_apply_runs")
+    }
+    assert {
+        "worker_claim_version",
+        "worker_lease_token",
+        "worker_lease_expires_at",
+    } <= columns
+    indexes = {
+        index["name"] for index in inspect(engine).get_indexes("generated_plan_apply_runs")
+    }
+    assert "ix_generated_plan_apply_runs_worker_lease_expires_at" in indexes
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT MAX(version) FROM schema_migrations")
+        ).scalar_one() == 36
+        row = connection.execute(
+            text(
+                "SELECT worker_claim_version, worker_lease_token, worker_lease_expires_at "
+                "FROM generated_plan_apply_runs WHERE id = 'apply-1'"
+            )
+        ).one()
+    assert row == (0, None, None)
     engine.dispose()
