@@ -168,3 +168,13 @@ Execution type: GitHub-hosted CI only; no customer workload or AWS apply.
 Hosted run `43697213134` passed all seven required CI jobs. This run includes the new fixed CodeBuild dispatcher tests. The tests validate only request construction and build identity handling with test doubles; they do not start a real CodeBuild project.
 
 No AWS resources were created by this change. No apply run was dispatched. The worker integration and real hosted lifecycle proof remain outstanding.
+
+## 2026-11-15 request and worker dispatch evidence
+
+- Code commit: 4a8ee3d32ac3fdc407f37e2170a2775c06549e9c.
+- Hosted CI: run 43767690333, all seven jobs passed, including Python, local end-to-end, OpenAPI contract, policy, supply-chain, and cloud-contract checks.
+- Added tests verify the apply request is rejected while runner readiness is closed and the worker does not claim apply work while readiness is false.
+- The worker implementation uses the fixed CodeBuild dispatcher, durable idempotency token, atomic claim/version lease, and direct build lookup/status checks. Expired or uncertain dispatches are held for reconciliation; failed apply builds are not retried automatically.
+- No CodeBuild apply was started and no AWS resources were created or changed by this test run.
+- Limitations: the CodeBuild apply buildspec still exits before Terraform; no hosted callback, real apply, application health, update/recovery, destroy, or independent absence evidence exists. The readiness gate remains closed.
+

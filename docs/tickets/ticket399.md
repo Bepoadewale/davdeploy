@@ -235,3 +235,17 @@ update, recovery, destroy and independent absence through the hosted API.
 Added `NovaExactPlanApplyDispatcher` and focused tests for fixed-project CodeBuild starts, the sole durable run-ID override, exact project/build/ARN identity, bounded lookup, ambiguous matches, and uncertain start outcomes. Hosted CI run `43697213134` passed all seven required jobs on commit `498e5cae8989a8ac2547e133fe2b96b2b11a768b`.
 
 The dispatcher is not connected to a durable apply queue yet. The API worker still does not create/reconcile apply builds, and the CodeBuild buildspec remains fail-closed. The feature flag remains disabled.
+
+## 2026-11-15 exact-plan request and worker dispatch
+
+Status: in progress; the request and dispatch foundation is implemented and CI verified.
+
+- Added an administrator-only, idempotent apply request bound to the approved manifest, current approved revision, target account/region, saved-plan digest, and execution-workspace digest.
+- Added durable worker lease claiming for queued apply runs. The worker dispatches only to the configured fixed CodeBuild project with the durable run ID and idempotency token.
+- Added direct CodeBuild status reconciliation. Ambiguous dispatches and failed builds enter RECONCILIATION_REQUIRED; a successful build is APPLIED_UNVERIFIED, not healthy.
+- The readiness gate remains disabled until the executable apply buildspec and full lifecycle verification are complete.
+- Hosted CI run 43767690333 passed all seven jobs for code commit 4a8ee3d32ac3fdc407f37e2170a2775c06549e9c.
+- No AWS apply was run. This is not evidence of a deployed worker or a Nova-generated workload.
+
+Next: implement and verify the executable fixed-project buildspec, then prove credential issuance, callback reconciliation, and controlled recovery in the hosted path.
+
