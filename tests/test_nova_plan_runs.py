@@ -23,6 +23,7 @@ from davdeploy.main import app, product_service
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
     AuditEvent,
+    GeneratedPlanApproval,
     GeneratedPlanApplyRun,
     GeneratedPlanArtifact,
     GeneratedPlanRun,
@@ -2326,3 +2327,126 @@ def test_plan_credential_broker_marks_exact_build_input_publication_as_retryable
     finally:
         app.dependency_overrides.pop(api_main.session, None)
         db.close()
+
+
+def _approval_ready_artifact(service, db, revision):
+    service._wake_worker = lambda *_args: None
+    queued = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-approval-test-key-0001"
+    )
+    run = db.get(GeneratedPlanRun, queued["id"])
+    assert run is not None
+    artifact_id = str(uuid.uuid4())
+    run.state = "PLAN_READY_REVIEW_ONLY"
+    run.result_metadata = {"artifact_id": artifact_id}
+    manifest = {
+        "tenant": {
+            "organization_id": run.organization_id,
+            "project_id": run.project_id,
+            "revision_id": revision.id,
+        },
+        "target": {"account_id": ACCOUNT_ID, "region": "us-east-1"},
+        "digests": {
+            "customer_revision_sha256": revision.content_digest,
+            "proposal_sha256": "a" * 64,
+            "context_sha256": "b" * 64,
+            "configuration_sha256": "c" * 64,
+            "saved_plan_sha256": "d" * 64,
+            "policy_sha256": "e" * 64,
+        },
+    }
+    artifact = GeneratedPlanArtifact(
+        id=artifact_id,
+        organization_id=run.organization_id,
+        project_id=run.project_id,
+        revision_id=revision.id,
+        run_id=run.id,
+        target_account_id=ACCOUNT_ID,
+        region="us-east-1",
+        terraform_version="1.14.7",
+        aws_provider_version="6.0.0",
+        provider_lockfile_sha256="f" * 64,
+        proposal_sha256="a" * 64,
+        context_sha256="b" * 64,
+        configuration_sha256="c" * 64,
+        saved_plan_sha256="d" * 64,
+        policy_sha256="e" * 64,
+        manifest_sha256=canonical_json_digest(manifest),
+        manifest=manifest,
+        policy_version="test-policy-v1",
+        policy_verdict="REVIEW_REQUIRED",
+        policy_human_approval_required=True,
+        policy_findings=[
+            {
+                "code": "REVIEW_ONLY",
+                "severity": "review",
+                "address": None,
+                "message": "Review the proposed resource.",
+            }
+        ],
+        safe_summary={},
+        artifact_bucket="plan-artifacts",
+        artifact_key="plans/review/saved.tfplan",
+        artifact_version_id="saved-plan-version",
+        artifact_size_bytes=64,
+        workspace_artifact_bucket="plan-artifacts",
+        workspace_artifact_key="plans/review/workspace.tar.gz",
+        workspace_artifact_version_id="workspace-version",
+        workspace_artifact_size_bytes=64,
+        workspace_sha256="9" * 64,
+        created_by_subject=run.requester_subject,
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    db.add(artifact)
+    db.commit()
+    return run, artifact
+
+
+def test_exact_plan_approval_is_admin_only_digest_bound_and_idempotent(monkeypatch):
+    from davdeploy import service as service_module
+
+    service, db, _, _ = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    _, artifact = _approval_ready_artifact(service, db, revision)
+    monkeypatch.setattr(service_module, "has_complete_pricing_evidence", lambda _manifest: True)
+
+    approval = service.approve_generated_plan_artifact(
+        founder(), artifact.id, artifact.manifest_sha256
+    )
+    duplicate = service.approve_generated_plan_artifact(
+        founder(), artifact.id, artifact.manifest_sha256
+    )
+
+    assert approval["approval_id"] == duplicate["approval_id"]
+    assert approval["artifact_id"] == artifact.id
+    assert approval["manifest_sha256"] == artifact.manifest_sha256
+    assert approval["is_self_approval"] is True
+    assert "No infrastructure apply has started" in approval["execution_boundary"]
+    stored = db.query(GeneratedPlanApproval).filter_by(artifact_id=artifact.id).one()
+    assert stored.approver_subject == founder().subject
+    assert stored.approved_manifest_sha256 == artifact.manifest_sha256
+    assert stored.authorization_policy == "workspace-administrator-self-approval-allowed"
+    db.close()
+
+
+def test_exact_plan_approval_rejects_stale_digest_non_admin_and_incomplete_pricing(monkeypatch):
+    from davdeploy import service as service_module
+
+    service, db, _, _ = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    _, artifact = _approval_ready_artifact(service, db, revision)
+    monkeypatch.setattr(service_module, "has_complete_pricing_evidence", lambda _manifest: True)
+
+    with pytest.raises(ValueError, match="manifest digest"):
+        service.approve_generated_plan_artifact(founder(), artifact.id, "0" * 64)
+    with pytest.raises(PermissionError, match="administrator"):
+        service.approve_generated_plan_artifact(
+            Principal("developer-subject", founder().organization_id, "developer"),
+            artifact.id,
+            artifact.manifest_sha256,
+        )
+    monkeypatch.setattr(service_module, "has_complete_pricing_evidence", lambda _manifest: False)
+    with pytest.raises(ValueError, match="stale, incomplete"):
+        service.approve_generated_plan_artifact(founder(), artifact.id, artifact.manifest_sha256)
+    assert db.query(GeneratedPlanApproval).filter_by(artifact_id=artifact.id).count() == 0
+    db.close()
