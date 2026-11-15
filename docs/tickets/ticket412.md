@@ -59,9 +59,9 @@ resources. Exact-plan apply remains disabled and unwired in draft PR #399.
 
 ## Acceptance status
 
-Locally implemented and verified on the PR branch. The review draft remains open
-while hosted CI and PR review are pending. This pricing package does not wire or
-enable the hosted apply path.
+Implemented and verified locally and in hosted CI. The draft remains open until the
+final evidence commit has passing checks and the PR is reviewed. This pricing
+package does not wire or enable the hosted apply path.
 
 ## Tests / validation performed
 
@@ -89,9 +89,9 @@ regional rates and bounded usage models.
 
 ## Status ledger
 
-- Status: locally verified; hosted PR checks pending.
+- Status: locally and hosted CI verified; final evidence commit checks pending.
 - Source: branch `feat/nova-lambda-api-pricing-412`, implementation commit `4252a88171c2478b00ce60ef424969dec5ac1952`, draft PR #412.
 - Deployed version: none; no deployment or AWS workload mutation was performed.
-- Current operation: hosted PR checks and review.
+- Current operation: push hosted evidence update, then run required checks on the final PR head.
 - Next command: `gh pr checks 412 --watch --interval 120` after pushing the final evidence commit.
 - Blockers: none known locally; do not enable apply from this PR.

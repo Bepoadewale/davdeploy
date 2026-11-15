@@ -42,4 +42,5 @@ No Nova-generated AWS workload was applied. No hosted deployment, application he
 
 ## Hosted evidence
 
-Pending. Add exact GitHub Actions run IDs and terminal results after the PR branch is pushed.
+- GitHub Actions run `43703297346` on commit `937df00` passed all seven checks: `docs-conventions`, `python`, `secrets`, `policy`, `cloud-contracts`, `supply-chain`, and fresh-runner `local-e2e`.
+- This verifies CI and integration behavior for the code commit. It is not a Nova workload deployment or lifecycle certification.
