@@ -6,7 +6,7 @@ Customer repository: `Bepoadewale/davdeploy`
 AWS account: `654654474502` (read-only catalog access only)
 AWS region: `us-east-1`
 Branch: `feat/nova-dynamodb-plan-pricing-414`
-Commit: implementation commit to be recorded after final local checks.
+Commit: `da41107` (`feat: price bounded DynamoDB on-demand plans`)
 Starting source: PR #413 merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`
 PR branch base: `3368a432823beed62498935b0204913fbe740d51`
 Deployed backend: PR #411; PR #414 is not merged or deployed.

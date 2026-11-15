@@ -112,6 +112,7 @@ Only then continue the separately gated exact-plan apply and lifecycle proof.
 - Status: draft; implementation and local verification complete, documentation
   and hosted CI pending.
 - Source: branch `feat/nova-dynamodb-plan-pricing-414` from PR #413 merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`.
+- Implementation commit: `da41107` (`feat: price bounded DynamoDB on-demand plans`).
 - Deployed version: none.
 - Current operation: complete the evidence and docs checks, push the reviewed
   source to this draft PR, and wait for required GitHub checks.
