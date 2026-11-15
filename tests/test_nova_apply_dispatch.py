@@ -31,7 +31,7 @@ def build(*, run_id=RUN_ID, project=PROJECT, build_id=BUILD_ID, arn=BUILD_ARN, s
 
 class FakeCodeBuild:
     def __init__(self, response=None, builds=None, pages=None):
-        self.response = response or {"build": build()}
+        self.response = {"build": build()} if response is None else response
         self.builds = builds if builds is not None else [build()]
         self.pages = pages or [{"ids": [BUILD_ID]}]
         self.calls = []
@@ -78,6 +78,7 @@ def test_start_build_uses_only_fixed_project_and_durable_run_override():
     [
         {},
         {"build": build(run_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")},
+        {"build": build(run_id=None)},
         {"build": build(project="wrong-project")},
         {"build": build(arn="arn:aws:codebuild:us-east-1:654654474502:build/wrong:token")},
     ],
@@ -118,8 +119,17 @@ def test_reconcile_build_requires_exact_project_and_run_identity():
 
 
 def test_find_build_by_run_id_is_bounded_and_rejects_ambiguous_matches():
-    codebuild = FakeCodeBuild(builds=[build(), build(build_id=f"{PROJECT}:other",
-        arn=f"arn:aws:codebuild:us-east-1:654654474502:build/{PROJECT}:other")])
+    other_build_id = f"{PROJECT}:other"
+    codebuild = FakeCodeBuild(
+        builds=[
+            build(),
+            build(
+                build_id=other_build_id,
+                arn=f"arn:aws:codebuild:us-east-1:654654474502:build/{other_build_id}",
+            ),
+        ],
+        pages=[{"ids": [BUILD_ID, other_build_id]}],
+    )
     dispatcher = NovaExactPlanApplyDispatcher(project_name=PROJECT, codebuild_client=codebuild)
 
     with pytest.raises(NovaApplyDispatchError, match="multiple"):

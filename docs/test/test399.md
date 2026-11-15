@@ -92,6 +92,41 @@ This records local fixture evidence only. It does not claim hosted customer
 apply, health, recovery, or teardown readiness.
 
 
+## Fixed dispatcher validation — 2026-11-15
+
+PR #399 head `d239e37` adds a disabled-by-default CodeBuild dispatcher that
+starts only the configured apply project with a durable run ID, and can locate
+an existing build for reconciliation. It is currently an isolated source
+component: no service route calls it, no apply-run is created by user action,
+and the fixed CodeBuild buildspec exits before Terraform. No AWS API, Terraform,
+or customer workload was invoked.
+
+The hosted CI run `43696075794` failed in Ruff on the new dispatcher and the
+downstream `local-e2e` job, which reached the same lint failure. The
+follow-up fixes those lint findings, rejects non-canonical uppercase UUIDs,
+and repairs test fixtures that previously hid empty responses and omitted a
+second build from the lookup page.
+
+Local checks on the follow-up source:
+
+- `.venv/bin/pytest -q tests/test_nova_apply_dispatch.py`: 11 passed.
+- `.venv/bin/ruff check apps/api/src/davdeploy/nova_apply_dispatch.py tests/test_nova_apply_dispatch.py`: passed.
+- `make verify`: 1,260 passed; Actions configuration, Ruff, OpenAPI snapshot,
+  and Compose configuration passed. One existing Starlette/httpx deprecation
+  warning.
+- `git diff --check`: passed.
+
+An isolated full local clean-room cycle was attempted in
+`/private/tmp/davdeploy-pr399-cleanroom`. It stopped at the initial
+`make clean-local`: Docker Compose returned HTTP 500 from the local Docker
+socket while listing containers. No stack was brought up and the command did
+not proceed to bootstrap. This is an environment limitation; the hosted
+fresh-runner `local-e2e` result for the follow-up commit is still pending.
+
+No AWS account or region was used. No resources were created, changed, or
+deleted. This is source and local-test evidence only, not proof of hosted
+apply, health, recovery, destroy, or independent absence.
+
 ## Hosted branch verification — 2026-11-14
 
 After GitHub updated this PR branch to the latest mainline, run

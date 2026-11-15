@@ -113,6 +113,18 @@ protected untracked `--only-show-errors` file must remain untouched.
   visibility, bounded cursors, and a fixed safe field projection. No route
   creates or dispatches apply runs; these routes have no real customer
   execution data until dispatch and lifecycle observation are implemented.
+- The latest PR head (`d239e37`, 2026-11-15) adds a fixed-project CodeBuild
+  dispatcher with run-ID-only overrides, bounded build reconciliation, and
+  explicit uncertain outcomes. It is not called by the product service and
+  does not create durable apply-run rows. The apply buildspec remains
+  fail-closed; no Terraform apply is executable through this path.
+- Hosted CI run `43696075794` failed in Ruff and consequently in `local-e2e`.
+  The follow-up corrects the reported exception-type lint findings, rejects
+  non-canonical uppercase run IDs, and fixes two dispatcher-test fixture
+  defects. The dispatcher tests now pass locally (11); full `make verify`
+  passes (1,260 tests). A clean-room attempt in a new temporary worktree could
+  not start because Docker Compose returned HTTP 500 on its initial cleanup
+  command. The fresh-runner hosted `local-e2e` check remains required.
 
 ## Tests / validation performed
 

@@ -189,7 +189,7 @@ class NovaExactPlanApplyDispatcher:
         )
         try:
             run_id = _canonical_run_id(run_id)
-        except ValueError:
+        except (TypeError, ValueError):
             raise ValueError("Nova apply build has no durable run identity") from None
         if expected_run_id is not None and run_id != expected_run_id:
             raise NovaApplyDispatchError(
