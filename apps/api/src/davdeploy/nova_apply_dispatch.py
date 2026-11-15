@@ -117,15 +117,15 @@ class NovaExactPlanApplyDispatcher:
                 page = self.codebuild.list_builds_for_project(**request)
                 ids = page.get("ids", []) if isinstance(page, dict) else []
                 if not isinstance(ids, list):
-                    raise ValueError
+                    raise TypeError
                 for offset in range(0, len(ids), 100):
                     batch = self.codebuild.batch_get_builds(ids=ids[offset : offset + 100])
                     builds = batch.get("builds", []) if isinstance(batch, dict) else []
                     if not isinstance(builds, list):
-                        raise ValueError
+                        raise TypeError
                     for build in builds:
                         if not isinstance(build, dict):
-                            raise ValueError
+                            raise TypeError
                         try:
                             parsed = self._parse_build(build)
                         except ValueError:
@@ -163,10 +163,12 @@ class NovaExactPlanApplyDispatcher:
         build_arn = build.get("arn")
         if build.get("projectName") != self.project_name:
             raise ValueError("Nova apply build project did not match")
-        if not isinstance(build_id, str) or not build_id.startswith(f"{self.project_name}:"):
+        if not isinstance(build_id, str):
+            raise TypeError("Nova apply build ID is invalid")
+        if not build_id.startswith(f"{self.project_name}:"):
             raise ValueError("Nova apply build ID did not match")
         if not isinstance(build_arn, str):
-            raise ValueError("Nova apply build ARN is missing")
+            raise TypeError("Nova apply build ARN is invalid")
         match = re.fullmatch(
             r"arn:aws(?:-us-gov|-cn)?:codebuild:[a-z0-9-]+:\d{12}:build/([A-Za-z0-9_-]+):([A-Za-z0-9-]+)",
             build_arn,
@@ -203,7 +205,7 @@ class NovaExactPlanApplyDispatcher:
 
 def _canonical_run_id(value: object) -> str:
     if not isinstance(value, str):
-        raise ValueError("Nova apply run ID is invalid")
+        raise TypeError("Nova apply run ID is invalid")
     try:
         canonical = str(UUID(value))
     except (AttributeError, TypeError, ValueError):
