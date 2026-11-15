@@ -43,4 +43,5 @@ No Nova-generated AWS workload was applied. No hosted deployment, application he
 ## Hosted evidence
 
 - GitHub Actions run `43703297346` on commit `937df00` passed all seven checks: `docs-conventions`, `python`, `secrets`, `policy`, `cloud-contracts`, `supply-chain`, and fresh-runner `local-e2e`.
-- This verifies CI and integration behavior for the code commit. It is not a Nova workload deployment or lifecycle certification.
+- Final-head run `43703675890` on commit `5185ef1` passed all seven required checks, including the fresh-runner `local-e2e`.
+- These runs verify CI and integration behavior. They are not a Nova workload deployment or lifecycle certification.
