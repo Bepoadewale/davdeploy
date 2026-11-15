@@ -236,6 +236,7 @@ def test_dynamodb_on_demand_and_pitr_costs_use_exact_regional_products():
     [
         (None, None, "dynamodb_usage_assumptions_missing"),
         (None, usage(pitr=(0, 0)), "dynamodb_pitr_usage_assumption_mismatch"),
+        (None, usage(pitr=(0, 2)), "dynamodb_pitr_usage_assumption_mismatch"),
         (table_plan(table_class="STANDARD_INFREQUENT_ACCESS"), usage(), "dynamodb_table_class_unpriced"),
         (table_plan(unknown={"billing_mode": True}), usage(), "dynamodb_configuration_unknown"),
     ],

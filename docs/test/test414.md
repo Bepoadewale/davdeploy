@@ -39,8 +39,8 @@ catalog result is an estimate input, not a bill or billing cap.
 ## Validation
 
 - `./.venv/bin/python -m pytest -q tests/test_dynamodb_plan_pricing.py tests/test_pricing_usage_assumptions.py tests/test_sqs_plan_pricing.py` — 31 passed.
-- `./.venv/bin/python -m pytest -q tests/test_generated_plan_pricing.py tests/test_dynamodb_plan_pricing.py tests/test_pricing_usage_assumptions.py tests/test_sqs_plan_pricing.py` — 120 passed.
-- `make verify` — passed: 1,252 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration. One existing Starlette/httpx deprecation warning was emitted.
+- `./.venv/bin/python -m pytest -q tests/test_generated_plan_pricing.py tests/test_dynamodb_plan_pricing.py tests/test_pricing_usage_assumptions.py tests/test_sqs_plan_pricing.py` — 121 passed.
+- `make verify` — passed: 1,253 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration. One existing Starlette/httpx deprecation warning was emitted.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
 - Required GitHub CI — pending.
 
@@ -57,7 +57,9 @@ catalog result is an estimate input, not a bill or billing cap.
 The source adds digest-bound, per-table ranges for billed read request units,
 write request units, table storage, and PITR storage. It estimates only
 single-region Standard `PAY_PER_REQUEST` tables without indexes, replicas,
-streams, or customer-managed KMS keys. It uses the exact regional Price List
+streams, or customer-managed KMS keys. PITR and table-storage ranges must match
+because AWS bases PITR charges on the size of the PITR-enabled table. It uses
+the exact regional Price List
 products, conservative published rates, and cent rounding. Missing or stale
 assumptions, unknown cost-driving values, unsupported settings, mismatched
 tables, and unavailable or ambiguous prices keep approval blocked. Pricing

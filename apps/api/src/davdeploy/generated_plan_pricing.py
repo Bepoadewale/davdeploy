@@ -1835,8 +1835,8 @@ def evaluate_generated_plan_pricing(
                                 )
                                 or (
                                     address in pitr_addresses
-                                    and assumptions.monthly_pitr_storage_gb_month.maximum
-                                    < assumptions.monthly_storage_gb_month.maximum
+                                    and assumptions.monthly_pitr_storage_gb_month
+                                    != assumptions.monthly_storage_gb_month
                                 )
                             ),
                             None,
@@ -1846,7 +1846,7 @@ def evaluate_generated_plan_pricing(
                                 PlanPricingFinding(
                                     "dynamodb_pitr_usage_assumption_mismatch",
                                     usage_mismatch,
-                                    "PITR storage bounds must cover table storage when recovery is enabled and be zero when disabled.",
+                                    "PITR storage bounds must match table storage when recovery is enabled and be zero when disabled.",
                                 )
                             )
                         else:

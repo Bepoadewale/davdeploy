@@ -45,6 +45,8 @@ does not infer application traffic or use model-authored prices.
 - Price only a single-region, Standard-class `PAY_PER_REQUEST` table without
   global secondary indexes, replicas, streams, customer-managed KMS keys, or
   other unsupported charge-driving features.
+- Require PITR storage bounds to match table storage bounds because AWS bills
+  PITR from the size of the PITR-enabled table.
 - Match exact current regional AWS Price List products for request units,
   storage, and PITR. Ignore free allowances and use the highest published
   applicable unit price for the conservative upper estimate.
@@ -85,8 +87,8 @@ GitHub CI are the remaining gates before review.
 ## Tests / validation performed
 
 - Focused DynamoDB/SQS/usage tests — 31 passed.
-- Generated-plan pricing plus DynamoDB/SQS/usage tests — 120 passed.
-- `make verify` — passed: 1,252 tests, Ruff, Actions configuration, OpenAPI
+- Generated-plan pricing plus DynamoDB/SQS/usage tests — 121 passed.
+- `make verify` — passed: 1,253 tests, Ruff, Actions configuration, OpenAPI
   snapshot, and Compose configuration; one existing dependency deprecation
   warning.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
@@ -117,6 +119,6 @@ Only then continue the separately gated exact-plan apply and lifecycle proof.
 - Current operation: complete the evidence and docs checks, push the reviewed
   source to this draft PR, and wait for required GitHub checks.
 - Customer workload execution: none.
-- Local verification: focused pricing suites passed (120 tests); `make verify`
-  passed (1,252 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose
+- Local verification: focused pricing suites passed (121 tests); `make verify`
+  passed (1,253 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose
   configuration; one existing Starlette/httpx deprecation warning).
