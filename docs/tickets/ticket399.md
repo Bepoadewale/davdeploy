@@ -221,3 +221,10 @@ update, recovery, destroy and independent absence through the hosted API.
 - Keep this PR in draft until the exact-plan worker is wired and the pricing,
   policy, and hosted lifecycle gates in the Nova goal are met. No local checks
   were run for this update.
+
+
+## Hosted dispatcher adapter progress — 2026-11-15
+
+Added `NovaExactPlanApplyDispatcher` and focused tests for fixed-project CodeBuild starts, the sole durable run-ID override, exact project/build/ARN identity, bounded lookup, ambiguous matches, and uncertain start outcomes. Hosted CI run `43697213134` passed all seven required jobs on commit `498e5cae8989a8ac2547e133fe2b96b2b11a768b`.
+
+The dispatcher is not connected to a durable apply queue yet. The API worker still does not create/reconcile apply builds, and the CodeBuild buildspec remains fail-closed. The feature flag remains disabled.
