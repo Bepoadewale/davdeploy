@@ -108,12 +108,13 @@ application, update/recovery and cleanup evidence before changing their status.
 
 ## Status ledger
 
-- Status: in progress.
+- Status: locally verified; hosted CI and review pending.
 - Source commit: `017e53e329ff7c9be41f7a30e3c6c3451b3e4387`.
 - PR: #413 draft; implementation not started.
 - Deployed version: backend `a9c5ca127e8e93845b215c795dd6755e6683869f` (PR #411),
   apply run `43685318088`; PR #412 is source-only.
-- Current operation: commit and push the coverage matrix and evidence, then
+- Implementation commit: `ce7d0f375771cac408e411e93fb69144632468a5`.
+- Current operation: push the coverage matrix and evidence, then
   complete review and CI.
 - Next command: `gh pr checks 413 --watch --interval 120` after pushing the
   final PR commit.
