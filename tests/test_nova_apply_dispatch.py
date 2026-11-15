@@ -3,7 +3,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from botocore.exceptions import ClientError
 from davdeploy.nova_apply_dispatch import (
     NovaApplyDispatchError,
     NovaExactPlanApplyDispatcher,
