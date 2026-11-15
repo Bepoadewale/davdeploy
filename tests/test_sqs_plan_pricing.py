@@ -184,7 +184,7 @@ def test_sqs_usage_and_price_are_bound_into_revision_pricing_context_and_manifes
     assert context.pricing_context_sha256 != changed.pricing_context_sha256
     result, _ = evaluate(doc=queue_plan(fifo=False), usage=usage)
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 6
+    assert manifest["version"] == 7
     assert manifest["sqs_usage_assumptions"] == usage
     assert manifest["lines"][0]["catalog_product_sha256"]
 

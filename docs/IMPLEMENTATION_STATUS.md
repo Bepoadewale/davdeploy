@@ -1,7 +1,7 @@
 # Implementation Status
 
 Current backend source `main` is commit
-`017e53e329ff7c9be41f7a30e3c6c3451b3e4387` (PR #412). The hosted control plane
+`de873ef9e22a96ec38aa4650741b42ff73f053f1` (PR #413). The hosted control plane
 is on PR #411 commit `a9c5ca127e8e93845b215c795dd6755e6683869f`, applied by
 protected Terraform apply run
 [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
@@ -21,6 +21,12 @@ applied, operated, or certified. This summary records source and control-plane
 state only; it is not customer execution evidence. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the 26-entry / 30-root acceptance and evidence crosswalk.
+
+Draft PR #414 adds a source-only, bounded DynamoDB on-demand pricing model for
+Standard single-region tables, with explicit read/write, storage, and PITR
+usage assumptions. It is not merged or deployed; unsupported DynamoDB costs
+remain approval blockers, and it does not establish a customer Nova plan or
+workload.
 
 ## Executed locally
 

@@ -256,6 +256,48 @@ class ServerlessPricingUsageAssumptions(BaseModel):
         return self
 
 
+class DynamoDbTablePricingUsageAssumptions(BaseModel):
+    """Billed monthly quantities for one exact DynamoDB table address."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_read_request_units: MonthlyUsageRange
+    monthly_write_request_units: MonthlyUsageRange
+    monthly_storage_gb_month: MonthlyUsageRange
+    monthly_pitr_storage_gb_month: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_usage_bounds(self) -> DynamoDbTablePricingUsageAssumptions:
+        if (
+            self.monthly_read_request_units.maximum > 1_000_000_000_000
+            or self.monthly_write_request_units.maximum > 1_000_000_000_000
+            or self.monthly_storage_gb_month.maximum > 1_000_000_000
+            or self.monthly_pitr_storage_gb_month.maximum > 1_000_000_000
+        ):
+            raise ValueError("monthly DynamoDB usage exceeds the supported bound")
+        return self
+
+
+class DynamoDbPricingUsageAssumptions(BaseModel):
+    """Strict monthly cost quantities keyed by exact planned table address."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    tables: dict[str, DynamoDbTablePricingUsageAssumptions] = Field(
+        min_length=1, max_length=40
+    )
+
+    @model_validator(mode="after")
+    def validate_table_addresses(self) -> DynamoDbPricingUsageAssumptions:
+        pattern = re.compile(
+            r"^(?:module\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?\.)*"
+            r"aws_dynamodb_table\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?$"
+        )
+        if any(not pattern.fullmatch(address) for address in self.tables):
+            raise ValueError("DynamoDB usage assumption has an invalid table address")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -268,6 +310,7 @@ class WorkloadSpec(BaseModel):
     sqs_pricing_usage_assumptions: SqsPricingUsageAssumptions | None = None
     rds_pricing_usage_assumptions: RdsPricingUsageAssumptions | None = None
     serverless_pricing_usage_assumptions: ServerlessPricingUsageAssumptions | None = None
+    dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -676,6 +719,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     sqs_pricing_usage_assumptions: SqsPricingUsageAssumptions | None = None
     rds_pricing_usage_assumptions: RdsPricingUsageAssumptions | None = None
     serverless_pricing_usage_assumptions: ServerlessPricingUsageAssumptions | None = None
+    dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):

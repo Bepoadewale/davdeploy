@@ -1383,6 +1383,14 @@ class ProductService:
             else:
                 workload["serverless_pricing_usage_assumptions"] = usage_assumptions
                 next_constraints["serverless_pricing_usage_assumptions"] = usage_assumptions
+        if "dynamodb_pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["dynamodb_pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("dynamodb_pricing_usage_assumptions", None)
+                next_constraints.pop("dynamodb_pricing_usage_assumptions", None)
+            else:
+                workload["dynamodb_pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["dynamodb_pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1442,6 +1450,10 @@ class ProductService:
             "serverless_pricing_usage_assumptions": (
                 before_spec.get("serverless_pricing_usage_assumptions"),
                 after_spec.get("serverless_pricing_usage_assumptions"),
+            ),
+            "dynamodb_pricing_usage_assumptions": (
+                before_spec.get("dynamodb_pricing_usage_assumptions"),
+                after_spec.get("dynamodb_pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),

@@ -55,17 +55,18 @@ does not infer application traffic or use model-authored prices.
 
 ## Acceptance criteria
 
-- [ ] Strict, price-free monthly assumptions validate and bind to each exact
+- [x] Strict, price-free monthly assumptions validate and bind to each exact
       Terraform table address.
-- [ ] Supported on-demand Standard tables are priced with exact regional
+- [x] Supported on-demand Standard tables are priced with exact regional
       request, storage, and enabled-PITR catalog evidence.
-- [ ] Monthly low/high totals use conservative price tiers and cent rounding;
+- [x] Monthly low/high totals use conservative price tiers and cent rounding;
       no Free Tier, discount, or credit is assumed.
-- [ ] Missing, stale, mismatched, unknown, or unsupported pricing evidence
+- [x] Missing, stale, mismatched, unknown, or unsupported pricing evidence
       prevents approval.
-- [ ] Existing pricing evidence remains readable and is correctly versioned.
+- [x] Existing pricing evidence remains readable and is correctly versioned.
 - [ ] Focused tests, full verification, documentation checks, and required
-      hosted CI pass.
+      hosted CI pass. Local tests and full verification pass; documentation
+      checks and hosted CI remain pending.
 - [ ] No hosted runtime flags, Terraform deployment, customer workload, or
       Nova apply path is enabled by this PR.
 
@@ -73,6 +74,23 @@ does not infer application traffic or use model-authored prices.
 
 - `docs/tickets/ticket414.md`
 - `docs/test/test414.md`
+
+## Acceptance status
+
+The bounded assumptions, regional product matching, conservative cost math,
+approval blockers, evidence-version compatibility, focused tests, and full
+local verification are complete. Final documentation checks and required
+GitHub CI are the remaining gates before review.
+
+## Tests / validation performed
+
+- Focused DynamoDB/SQS/usage tests — 31 passed.
+- Generated-plan pricing plus DynamoDB/SQS/usage tests — 120 passed.
+- `make verify` — passed: 1,252 tests, Ruff, Actions configuration, OpenAPI
+  snapshot, and Compose configuration; one existing dependency deprecation
+  warning.
+- `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- Required GitHub CI — pending.
 
 ## Boundaries
 
@@ -91,9 +109,13 @@ Only then continue the separately gated exact-plan apply and lifecycle proof.
 
 ## Status ledger
 
-- Status: draft; implementation not started.
+- Status: draft; implementation and local verification complete, documentation
+  and hosted CI pending.
 - Source: branch `feat/nova-dynamodb-plan-pricing-414` from PR #413 merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`.
 - Deployed version: none.
-- Current operation: implement strict assumptions and regional catalog-backed
-  pricing, then verify the evidence and gates above.
+- Current operation: complete the evidence and docs checks, push the reviewed
+  source to this draft PR, and wait for required GitHub checks.
 - Customer workload execution: none.
+- Local verification: focused pricing suites passed (120 tests); `make verify`
+  passed (1,252 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose
+  configuration; one existing Starlette/httpx deprecation warning).

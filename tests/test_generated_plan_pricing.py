@@ -415,6 +415,7 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     legacy.pop("sqs_usage_assumptions")
     legacy.pop("rds_usage_assumptions")
     legacy.pop("serverless_usage_assumptions")
+    legacy.pop("dynamodb_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -954,7 +955,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 6
+    assert manifest["version"] == 7
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,
