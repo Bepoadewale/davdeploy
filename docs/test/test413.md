@@ -21,6 +21,11 @@ AWS region: `us-east-1`
 - `git diff --check` — passed.
 - Inventory comparison script — all 26 architecture IDs and all 30 root IDs
   match their respective acceptance crosswalks exactly.
+- GitHub Actions run [43766999267](https://github.com/Bepoadewale/davdeploy/actions/runs/43766999267)
+  passed `docs-conventions`, `python`, `secrets`, `policy`,
+  `cloud-contracts`, `supply-chain`, and `local-e2e` on PR head
+  `d2caf0ea69861dde735607b67338b7eb3438925f`. A final-head run is required
+  after this evidence update.
 
 ## Resources created
 

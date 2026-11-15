@@ -74,7 +74,9 @@ evidence.
 ## Acceptance status
 
 The current-source status and per-entry acceptance crosswalk are complete and
-locally checked. Required hosted CI and PR review/merge remain pending.
+locally checked. Hosted CI passed on implementation commit
+`ce7d0f375771cac408e411e93fb69144632468a5`; final-head CI and PR review/merge
+remain pending.
 
 ## Tests / validation performed
 
@@ -82,7 +84,10 @@ locally checked. Required hosted CI and PR review/merge remain pending.
 - `git diff --check` — passed.
 - Inventory comparison script — all 26 architecture IDs and 30 root IDs match
   their acceptance crosswalks exactly.
-- Required GitHub CI remains the merge gate. Reconciliation was read-only:
+- GitHub CI run [43766999267](https://github.com/Bepoadewale/davdeploy/actions/runs/43766999267)
+  passed all seven checks on PR head `d2caf0e` before this evidence-only update;
+  final-head CI remains the merge gate.
+- Reconciliation was read-only:
   `gh` PR/workflow/deployment queries, AWS `sts:GetCallerIdentity`, Lambda code
   identity, and HTTPS health only. No customer workload, resource mutation,
   test fixture, or teardown was part of this PR.
@@ -108,7 +113,7 @@ application, update/recovery and cleanup evidence before changing their status.
 
 ## Status ledger
 
-- Status: locally verified; hosted CI and review pending.
+- Status: locally verified; an earlier PR head passed CI; final-head CI and review pending.
 - Source commit: `017e53e329ff7c9be41f7a30e3c6c3451b3e4387`.
 - PR: #413 draft; implementation not started.
 - Deployed version: backend `a9c5ca127e8e93845b215c795dd6755e6683869f` (PR #411),
