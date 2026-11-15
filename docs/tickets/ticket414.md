@@ -66,9 +66,10 @@ does not infer application traffic or use model-authored prices.
 - [x] Missing, stale, mismatched, unknown, or unsupported pricing evidence
       prevents approval.
 - [x] Existing pricing evidence remains readable and is correctly versioned.
-- [ ] Focused tests, full verification, documentation checks, and required
-      hosted CI pass. Local tests and full verification pass; documentation
-      checks and hosted CI remain pending.
+- [x] Focused tests, full verification, documentation checks, and required
+      hosted CI pass. The code revision passed all seven required jobs in run
+      `43773735458`; the final documentation-only head also requires its
+      standard PR checks before merge.
 - [ ] No hosted runtime flags, Terraform deployment, customer workload, or
       Nova apply path is enabled by this PR.
 
@@ -80,9 +81,10 @@ does not infer application traffic or use model-authored prices.
 ## Acceptance status
 
 The bounded assumptions, regional product matching, conservative cost math,
-approval blockers, evidence-version compatibility, focused tests, and full
-local verification are complete. Final documentation checks and required
-GitHub CI are the remaining gates before review.
+approval blockers, evidence-version compatibility, focused tests, full local
+verification, documentation checks, and CI on the complete code revision are
+complete. The final documentation-only revision's PR checks remain the merge
+gate.
 
 ## Tests / validation performed
 
@@ -92,7 +94,9 @@ GitHub CI are the remaining gates before review.
   snapshot, and Compose configuration; one existing dependency deprecation
   warning.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Required GitHub CI — pending.
+- Required GitHub CI — all seven jobs passed in run
+  [43773735458](https://github.com/Bepoadewale/davdeploy/actions/runs/43773735458)
+  on code head `c09313d`; the final docs-only head is pending its checks.
 
 ## Boundaries
 
@@ -111,13 +115,13 @@ Only then continue the separately gated exact-plan apply and lifecycle proof.
 
 ## Status ledger
 
-- Status: draft; implementation and local verification complete, documentation
-  and hosted CI pending.
+- Status: draft; implementation and local verification complete, full code
+  revision passed CI; final documentation-only checks pending.
 - Source: branch `feat/nova-dynamodb-plan-pricing-414` from PR #413 merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`.
 - Implementation commits: `da41107` (`feat: price bounded DynamoDB on-demand plans`) and `fdd05ff` (`fix: bind PITR pricing to table storage bounds`).
 - Deployed version: none.
-- Current operation: complete the evidence and docs checks, push the reviewed
-  source to this draft PR, and wait for required GitHub checks.
+- Current operation: push the final PR evidence update and wait for its required
+  checks before marking the PR ready for review.
 - Customer workload execution: none.
 - Local verification: focused pricing suites passed (121 tests); `make verify`
   passed (1,253 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose
