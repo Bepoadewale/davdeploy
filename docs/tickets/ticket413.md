@@ -67,16 +67,17 @@ evidence.
       results or fixtures as hosted customer proof.
 - [x] Unassigned, unsupported, missing-renderer, unpriced, and unverified entries
       remain visible and unpromoted.
-- [ ] Documentation conventions and diff checks pass; required hosted CI passes.
+- [x] Documentation conventions and diff checks pass; required hosted CI
+      passed for the full-content PR revision.
 - [x] No runtime behavior, deployment permission, or customer execution gate is
       changed by this documentation PR.
 
 ## Acceptance status
 
 The current-source status and per-entry acceptance crosswalk are complete and
-locally checked. Hosted CI passed on implementation commit
-`ce7d0f375771cac408e411e93fb69144632468a5`; final-head CI and PR review/merge
-remain pending.
+locally checked. Hosted CI run `43767479485` passed all seven required checks
+on commit `4af292aa017e3f664900268dc81cd392c4b221eb`. The PR status rollup is
+the merge gate for this final evidence-only update.
 
 ## Tests / validation performed
 
@@ -84,9 +85,9 @@ remain pending.
 - `git diff --check` — passed.
 - Inventory comparison script — all 26 architecture IDs and 30 root IDs match
   their acceptance crosswalks exactly.
-- GitHub CI run [43766999267](https://github.com/Bepoadewale/davdeploy/actions/runs/43766999267)
-  passed all seven checks on PR head `d2caf0e` before this evidence-only update;
-  final-head CI remains the merge gate.
+- GitHub CI run [43767479485](https://github.com/Bepoadewale/davdeploy/actions/runs/43767479485)
+  passed all seven checks on the full-content PR head `4af292a`; the current
+  PR status rollup remains the merge gate after this evidence-only update.
 - Reconciliation was read-only:
   `gh` PR/workflow/deployment queries, AWS `sts:GetCallerIdentity`, Lambda code
   identity, and HTTPS health only. No customer workload, resource mutation,
@@ -113,14 +114,13 @@ application, update/recovery and cleanup evidence before changing their status.
 
 ## Status ledger
 
-- Status: locally verified; an earlier PR head passed CI; final-head CI and review pending.
+- Status: locally and hosted-CI verified; review-ready, merge pending.
 - Source commit: `017e53e329ff7c9be41f7a30e3c6c3451b3e4387`.
 - PR: #413 draft; implementation not started.
 - Deployed version: backend `a9c5ca127e8e93845b215c795dd6755e6683869f` (PR #411),
   apply run `43685318088`; PR #412 is source-only.
 - Implementation commit: `ce7d0f375771cac408e411e93fb69144632468a5`.
-- Current operation: push the coverage matrix and evidence, then
-  complete review and CI.
-- Next command: `gh pr checks 413 --watch --interval 120` after pushing the
-  final PR commit.
+- Current operation: finish the final PR status check and merge.
+- Next command: `gh pr ready 413` after final PR checks pass, then merge after
+  confirming a clean review state.
 - Blockers: none known.

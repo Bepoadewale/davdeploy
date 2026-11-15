@@ -26,6 +26,11 @@ AWS region: `us-east-1`
   `cloud-contracts`, `supply-chain`, and `local-e2e` on PR head
   `d2caf0ea69861dde735607b67338b7eb3438925f`. A final-head run is required
   after this evidence update.
+- GitHub Actions run [43767479485](https://github.com/Bepoadewale/davdeploy/actions/runs/43767479485)
+  passed all seven required checks on PR head
+  `4af292aa017e3f664900268dc81cd392c4b221eb`, which contains the complete
+  matrix, status, ticket, and reconciliation evidence. The PR status rollup
+  remains the authority for its final evidence-only commit.
 
 ## Resources created
 
