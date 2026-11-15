@@ -101,11 +101,13 @@ component: no service route calls it, no apply-run is created by user action,
 and the fixed CodeBuild buildspec exits before Terraform. No AWS API, Terraform,
 or customer workload was invoked.
 
-The hosted CI run `43696075794` failed in Ruff on the new dispatcher and the
-downstream `local-e2e` job, which reached the same lint failure. The
-follow-up fixes those lint findings, rejects non-canonical uppercase UUIDs,
-and repairs test fixtures that previously hid empty responses and omitted a
-second build from the lookup page.
+Hosted CI run `43696075794` failed in Ruff on the new dispatcher and the
+downstream `local-e2e` job, which reached the same lint failure. The next head
+fixed lint but run `43696455615` exposed three dispatcher test failures: the
+fake swallowed an empty response, omitted a second build from its lookup page,
+and allowed a non-canonical uppercase UUID through. The current follow-up
+fixes response-type handling, rejects non-canonical UUIDs, and repairs those
+fixtures.
 
 Local checks on the follow-up source:
 

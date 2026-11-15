@@ -119,12 +119,15 @@ protected untracked `--only-show-errors` file must remain untouched.
   does not create durable apply-run rows. The apply buildspec remains
   fail-closed; no Terraform apply is executable through this path.
 - Hosted CI run `43696075794` failed in Ruff and consequently in `local-e2e`.
-  The follow-up corrects the reported exception-type lint findings, rejects
-  non-canonical uppercase run IDs, and fixes two dispatcher-test fixture
-  defects. The dispatcher tests now pass locally (11); full `make verify`
-  passes (1,260 tests). A clean-room attempt in a new temporary worktree could
-  not start because Docker Compose returned HTTP 500 on its initial cleanup
-  command. The fresh-runner hosted `local-e2e` check remains required.
+  The next head fixed lint but run `43696455615` then exposed three dispatcher
+  test failures: the fake swallowed an empty response, omitted a second build
+  from its lookup page, and allowed a non-canonical uppercase UUID through.
+  The current follow-up corrects the response-type handling, enforces canonical
+  run IDs, and repairs those fixtures. Dispatcher tests pass locally (11);
+  full `make verify` passes (1,260 tests). A clean-room attempt in a new
+  temporary worktree could not start because Docker Compose returned HTTP 500
+  on its initial cleanup command. Fresh-runner hosted `local-e2e` remains
+  required.
 
 ## Tests / validation performed
 
