@@ -113,7 +113,7 @@ protected untracked `--only-show-errors` file must remain untouched.
   visibility, bounded cursors, and a fixed safe field projection. No route
   creates or dispatches apply runs; these routes have no real customer
   execution data until dispatch and lifecycle observation are implemented.
-- The latest PR head (`d239e37`, 2026-11-15) adds a fixed-project CodeBuild
+- PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and
   does not create durable apply-run rows. The apply buildspec remains
@@ -128,6 +128,13 @@ protected untracked `--only-show-errors` file must remain untouched.
   temporary worktree could not start because Docker Compose returned HTTP 500
   on its initial cleanup command. Fresh-runner hosted `local-e2e` remains
   required.
+- Integrated follow-up head `4d81b7e` passed all seven required GitHub CI jobs
+  in run `43696947968`, including the fresh-runner `local-e2e` clean-room
+  workflow. This validates source integration and tests; it does not execute
+  the disabled apply worker or a customer workload.
+- Current PR head `498e5ca` adds explicit regressions for empty CodeBuild
+  responses and ambiguous build lookup. All seven required checks passed in
+  run `43697213134`, including the fresh-runner `local-e2e` job.
 
 ## Tests / validation performed
 

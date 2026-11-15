@@ -129,6 +129,16 @@ No AWS account or region was used. No resources were created, changed, or
 deleted. This is source and local-test evidence only, not proof of hosted
 apply, health, recovery, destroy, or independent absence.
 
+The integrated PR head `4d81b7e` passed all seven required GitHub CI jobs in
+run `43696947968`, including `local-e2e` on a fresh runner. This is clean-room
+source verification only; the apply buildspec still exits before Terraform,
+and no customer workload was applied.
+
+The current PR head `498e5ca` adds explicit tests for empty CodeBuild responses
+and ambiguous run lookup. All seven required checks passed in run
+`43697213134`, including the fresh-runner `local-e2e` job. This still does not
+execute the disabled apply worker or a customer workload.
+
 ## Hosted branch verification — 2026-11-14
 
 After GitHub updated this PR branch to the latest mainline, run
