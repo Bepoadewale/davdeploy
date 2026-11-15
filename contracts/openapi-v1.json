@@ -520,6 +520,52 @@
         "title": "DesiredStatePublicationStateRequest",
         "type": "object"
       },
+      "DynamoDbPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Strict monthly cost quantities keyed by exact planned table address.",
+        "properties": {
+          "tables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DynamoDbTablePricingUsageAssumptions"
+            },
+            "maxProperties": 40,
+            "minProperties": 1,
+            "title": "Tables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tables"
+        ],
+        "title": "DynamoDbPricingUsageAssumptions",
+        "type": "object"
+      },
+      "DynamoDbTablePricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Billed monthly quantities for one exact DynamoDB table address.",
+        "properties": {
+          "monthly_pitr_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_read_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_write_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_read_request_units",
+          "monthly_write_request_units",
+          "monthly_storage_gb_month",
+          "monthly_pitr_storage_gb_month"
+        ],
+        "title": "DynamoDbTablePricingUsageAssumptions",
+        "type": "object"
+      },
       "EnvironmentName": {
         "enum": [
           "staging",
@@ -651,6 +697,16 @@
               }
             ],
             "title": "Data Classification"
+          },
+          "dynamodb_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DynamoDbPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "environment": {
             "anyOf": [

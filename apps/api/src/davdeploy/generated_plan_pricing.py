@@ -24,6 +24,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from davdeploy.domain import (
+    DynamoDbPricingUsageAssumptions,
     RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
     ServerlessPricingUsageAssumptions,
@@ -106,6 +107,7 @@ class GeneratedPlanPricingEvidence:
     sqs_usage_assumptions: dict[str, Any] | None
     rds_usage_assumptions: dict[str, Any] | None
     serverless_usage_assumptions: dict[str, Any] | None
+    dynamodb_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -134,12 +136,13 @@ class GeneratedPlanPricingEvidence:
             "sqs_usage_assumptions": self.sqs_usage_assumptions,
             "rds_usage_assumptions": self.rds_usage_assumptions,
             "serverless_usage_assumptions": self.serverless_usage_assumptions,
+            "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 6,
+            "version": 7,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -162,6 +165,7 @@ class GeneratedPlanPricingEvidence:
             "sqs_usage_assumptions": self.sqs_usage_assumptions,
             "rds_usage_assumptions": self.rds_usage_assumptions,
             "serverless_usage_assumptions": self.serverless_usage_assumptions,
+            "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -213,15 +217,17 @@ class GeneratedPlanPricingEvidence:
             "budget_source", "persisted_context_sha256",
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
             "usage_assumptions", "sqs_usage_assumptions", "rds_usage_assumptions",
-            "serverless_usage_assumptions",
+            "serverless_usage_assumptions", "dynamodb_usage_assumptions",
             "lines", "transitions", "findings", "evidence_sha256",
         }
         version = document.get("version")
-        version_5_fields = expected_fields - {"serverless_usage_assumptions"}
+        version_6_fields = expected_fields - {"dynamodb_usage_assumptions"}
+        version_5_fields = version_6_fields - {"serverless_usage_assumptions"}
         version_4_fields = version_5_fields - {"rds_usage_assumptions"}
         legacy_fields = version_4_fields - {"sqs_usage_assumptions"}
         valid_shape = (
-            version == 6 and set(document) == expected_fields
+            version == 7 and set(document) == expected_fields
+            or version == 6 and set(document) == version_6_fields
             or version == 5 and set(document) == version_5_fields
             or version == 4 and set(document) == version_4_fields
             or version in {2, 3} and set(document) == legacy_fields
@@ -258,6 +264,16 @@ class GeneratedPlanPricingEvidence:
             )
             if serverless_usage != raw_serverless_usage:
                 raise ValueError("non-canonical serverless usage assumptions")
+            raw_dynamodb_usage = document.get("dynamodb_usage_assumptions")
+            dynamodb_usage = (
+                None
+                if raw_dynamodb_usage is None
+                else DynamoDbPricingUsageAssumptions.model_validate(
+                    raw_dynamodb_usage
+                ).model_dump(mode="json")
+            )
+            if dynamodb_usage != raw_dynamodb_usage:
+                raise ValueError("non-canonical DynamoDB usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -290,6 +306,7 @@ class GeneratedPlanPricingEvidence:
                 sqs_usage_assumptions=sqs_usage,
                 rds_usage_assumptions=rds_usage,
                 serverless_usage_assumptions=serverless_usage,
+                dynamodb_usage_assumptions=dynamodb_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -297,7 +314,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 6 and result.as_manifest_document() != document:
+        if document.get("version") == 7 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -335,6 +352,7 @@ class TrustedPlanPricingContext:
     sqs_usage_assumptions: dict[str, Any] | None = None
     rds_usage_assumptions: dict[str, Any] | None = None
     serverless_usage_assumptions: dict[str, Any] | None = None
+    dynamodb_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -348,6 +366,7 @@ class TrustedPlanPricingContext:
             self.sqs_usage_assumptions,
             self.rds_usage_assumptions,
             self.serverless_usage_assumptions,
+            self.dynamodb_usage_assumptions,
         )
 
     @classmethod
@@ -392,6 +411,11 @@ class TrustedPlanPricingContext:
         )
         raw_serverless_usage_assumptions = (
             workload_spec.get("serverless_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
+        raw_dynamodb_usage_assumptions = (
+            workload_spec.get("dynamodb_pricing_usage_assumptions")
             if isinstance(workload_spec, dict)
             else None
         )
@@ -443,6 +467,15 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json")
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid serverless pricing usage assumptions") from None
+        if raw_dynamodb_usage_assumptions is None:
+            dynamodb_usage_assumptions = None
+        else:
+            try:
+                dynamodb_usage_assumptions = DynamoDbPricingUsageAssumptions.model_validate(
+                    raw_dynamodb_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid DynamoDB pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -452,6 +485,7 @@ class TrustedPlanPricingContext:
             sqs_usage_assumptions=sqs_usage_assumptions,
             rds_usage_assumptions=rds_usage_assumptions,
             serverless_usage_assumptions=serverless_usage_assumptions,
+            dynamodb_usage_assumptions=dynamodb_usage_assumptions,
         )
 
 
@@ -598,6 +632,58 @@ class AwsPriceListCatalog:
                 ("databaseEngine", "MySQL"),
                 ("deploymentOption", "Single-AZ"),
                 ("usagetype", "RDS:ChargedBackupUsage"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def dynamodb_read_request_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-on-demand-standard-read-request-units",
+            [
+                ("productFamily", "Amazon DynamoDB PayPerRequest Throughput"),
+                ("group", "DDB-ReadUnits"),
+                ("regionCode", region),
+            ],
+            "ReadRequestUnits",
+        )
+
+    def dynamodb_write_request_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-on-demand-standard-write-request-units",
+            [
+                ("productFamily", "Amazon DynamoDB PayPerRequest Throughput"),
+                ("group", "DDB-WriteUnits"),
+                ("regionCode", region),
+            ],
+            "WriteRequestUnits",
+        )
+
+    def dynamodb_standard_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-standard-table-storage",
+            [
+                ("productFamily", "Database Storage"),
+                ("volumeType", "Amazon DynamoDB - Indexed DataStore"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def dynamodb_pitr_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-pitr-backup-storage",
+            [
+                ("productFamily", "Database Storage"),
+                ("volumeType", "Amazon DynamoDB - Point-In-Time-Restore (PITR) Backup Storage"),
                 ("regionCode", region),
             ],
             "GB-Mo",
@@ -850,6 +936,7 @@ def evaluate_generated_plan_pricing(
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -878,6 +965,7 @@ def evaluate_generated_plan_pricing(
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -902,6 +990,7 @@ def evaluate_generated_plan_pricing(
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -929,6 +1018,7 @@ def evaluate_generated_plan_pricing(
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -950,6 +1040,7 @@ def evaluate_generated_plan_pricing(
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -962,6 +1053,7 @@ def evaluate_generated_plan_pricing(
     s3_buckets: list[dict[str, Any]] = []
     sqs_queues: list[dict[str, Any]] = []
     rds_instances: list[dict[str, Any]] = []
+    dynamodb_tables: list[dict[str, Any]] = []
     lambda_functions: list[dict[str, Any]] = []
     http_apis: list[dict[str, Any]] = []
     lambda_log_groups: list[dict[str, Any]] = []
@@ -979,6 +1071,9 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_db_instance":
             rds_instances.append(resource)
+            continue
+        if resource_type == "aws_dynamodb_table":
+            dynamodb_tables.append(resource)
             continue
         if resource_type == "aws_lambda_function":
             lambda_functions.append(resource)
@@ -1674,6 +1769,200 @@ def evaluate_generated_plan_pricing(
                             )
                         )
 
+    dynamodb_document = trusted_context.dynamodb_usage_assumptions
+    if dynamodb_tables:
+        if dynamodb_document is None:
+            findings.append(
+                PlanPricingFinding(
+                    "dynamodb_usage_assumptions_missing",
+                    dynamodb_tables[0]["address"],
+                    "Per-table request, storage, and PITR usage bounds are required for DynamoDB.",
+                )
+            )
+        else:
+            try:
+                dynamodb_usage = DynamoDbPricingUsageAssumptions.model_validate(
+                    dynamodb_document
+                )
+            except (TypeError, ValueError):
+                findings.append(
+                    PlanPricingFinding(
+                        "dynamodb_usage_assumptions_invalid",
+                        dynamodb_tables[0]["address"],
+                        "Persisted DynamoDB usage assumptions are invalid.",
+                    )
+                )
+            else:
+                tables_by_address = {item["address"]: item for item in dynamodb_tables}
+                if set(dynamodb_usage.tables) != set(tables_by_address):
+                    findings.append(
+                        PlanPricingFinding(
+                            "dynamodb_usage_resource_mismatch",
+                            dynamodb_tables[0]["address"],
+                            "Usage bounds must cover every planned DynamoDB table exactly once.",
+                        )
+                    )
+                else:
+                    invalid_table = next(
+                        (
+                            (address, error)
+                            for address, item in tables_by_address.items()
+                            if (
+                                error := _validate_dynamodb_table(
+                                    item["values"], changes.get(address)
+                                )
+                            )
+                            is not None
+                        ),
+                        None,
+                    )
+                    if invalid_table:
+                        address, error = invalid_table
+                        findings.append(PlanPricingFinding(error[0], address, error[1]))
+                    else:
+                        pitr_addresses = {
+                            address
+                            for address, item in tables_by_address.items()
+                            if _dynamodb_pitr_enabled(item["values"])
+                        }
+                        usage_mismatch = next(
+                            (
+                                address
+                                for address, assumptions in dynamodb_usage.tables.items()
+                                if (
+                                    address not in pitr_addresses
+                                    and assumptions.monthly_pitr_storage_gb_month.maximum > 0
+                                )
+                                or (
+                                    address in pitr_addresses
+                                    and assumptions.monthly_pitr_storage_gb_month
+                                    != assumptions.monthly_storage_gb_month
+                                )
+                            ),
+                            None,
+                        )
+                        if usage_mismatch:
+                            findings.append(
+                                PlanPricingFinding(
+                                    "dynamodb_pitr_usage_assumption_mismatch",
+                                    usage_mismatch,
+                                    "PITR storage bounds must match table storage when recovery is enabled and be zero when disabled.",
+                                )
+                            )
+                        else:
+                            try:
+                                if pricing_catalog is None:
+                                    pricing_catalog = AwsPriceListCatalog()
+                                rates = {
+                                    "read": pricing_catalog.dynamodb_read_request_rate(region),
+                                    "write": pricing_catalog.dynamodb_write_request_rate(region),
+                                    "storage": pricing_catalog.dynamodb_standard_storage_rate(region),
+                                }
+                                if pitr_addresses:
+                                    rates["pitr"] = pricing_catalog.dynamodb_pitr_storage_rate(region)
+                                for address, assumptions in dynamodb_usage.tables.items():
+                                    for description, quantity, rate in (
+                                        (
+                                            "Amazon DynamoDB on-demand read request units",
+                                            assumptions.monthly_read_request_units,
+                                            rates["read"],
+                                        ),
+                                        (
+                                            "Amazon DynamoDB on-demand write request units",
+                                            assumptions.monthly_write_request_units,
+                                            rates["write"],
+                                        ),
+                                        (
+                                            "Amazon DynamoDB Standard table storage",
+                                            assumptions.monthly_storage_gb_month,
+                                            rates["storage"],
+                                        ),
+                                    ):
+                                        unit_price = Decimal(rate.unit_price_usd)
+                                        lines.append(
+                                            PlanCostLine(
+                                                address=address,
+                                                resource_type="aws_dynamodb_table",
+                                                description=description,
+                                                quantity=quantity.minimum,
+                                                quantity_max=quantity.maximum,
+                                                unit=rate.unit,
+                                                unit_price_usd=rate.unit_price_usd,
+                                                monthly_cost_minor=int(
+                                                    (unit_price * quantity.minimum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_FLOOR
+                                                    )
+                                                ),
+                                                monthly_cost_max_minor=int(
+                                                    (unit_price * quantity.maximum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_CEILING
+                                                    )
+                                                ),
+                                                unit_price_low_usd=rate.unit_price_usd,
+                                                low_cost_quantity=quantity.minimum,
+                                                catalog_sku=rate.sku,
+                                                catalog_product_sha256=rate.product_digest,
+                                                catalog_published_at=rate.published_at,
+                                                catalog_effective_at=rate.effective_at,
+                                            )
+                                        )
+                                    if address in pitr_addresses:
+                                        quantity = assumptions.monthly_pitr_storage_gb_month
+                                        rate = rates["pitr"]
+                                        unit_price = Decimal(rate.unit_price_usd)
+                                        lines.append(
+                                            PlanCostLine(
+                                                address=address,
+                                                resource_type="aws_dynamodb_table",
+                                                description="Amazon DynamoDB point-in-time recovery storage",
+                                                quantity=quantity.minimum,
+                                                quantity_max=quantity.maximum,
+                                                unit=rate.unit,
+                                                unit_price_usd=rate.unit_price_usd,
+                                                monthly_cost_minor=int(
+                                                    (unit_price * quantity.minimum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_FLOOR
+                                                    )
+                                                ),
+                                                monthly_cost_max_minor=int(
+                                                    (unit_price * quantity.maximum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_CEILING
+                                                    )
+                                                ),
+                                                unit_price_low_usd=rate.unit_price_usd,
+                                                low_cost_quantity=quantity.minimum,
+                                                catalog_sku=rate.sku,
+                                                catalog_product_sha256=rate.product_digest,
+                                                catalog_published_at=rate.published_at,
+                                                catalog_effective_at=rate.effective_at,
+                                            )
+                                        )
+                            except PriceListUnavailableError:
+                                unavailable = True
+                                findings.append(
+                                    PlanPricingFinding(
+                                        "regional_price_lookup_unavailable",
+                                        dynamodb_tables[0]["address"],
+                                        "DavDeploy could not verify current regional DynamoDB prices.",
+                                    )
+                                )
+                            except PlanPricingError:
+                                findings.append(
+                                    PlanPricingFinding(
+                                        "regional_price_ambiguous",
+                                        dynamodb_tables[0]["address"],
+                                        "DavDeploy could not identify exact regional DynamoDB prices.",
+                                    )
+                                )
+    elif dynamodb_document is not None:
+        findings.append(
+            PlanPricingFinding(
+                "dynamodb_usage_assumptions_stale",
+                None,
+                "DynamoDB usage assumptions do not match any table in this plan.",
+            )
+        )
+
     total_max_minor = sum(
         item.monthly_cost_minor
         if item.monthly_cost_max_minor is None
@@ -1714,6 +2003,7 @@ def evaluate_generated_plan_pricing(
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         transitions=transitions,
     )
 
@@ -1765,6 +2055,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "sqs_usage_assumptions": document.get("sqs_usage_assumptions"),
         "rds_usage_assumptions": document.get("rds_usage_assumptions"),
         "serverless_usage_assumptions": document.get("serverless_usage_assumptions"),
+        "dynamodb_usage_assumptions": document.get("dynamodb_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -1791,6 +2082,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("sqs_usage_assumptions") != trusted_context.sqs_usage_assumptions
         or document.get("rds_usage_assumptions") != trusted_context.rds_usage_assumptions
         or document.get("serverless_usage_assumptions") != trusted_context.serverless_usage_assumptions
+        or document.get("dynamodb_usage_assumptions") != trusted_context.dynamodb_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -2353,6 +2645,85 @@ def _validate_sqs_queue(
     return None
 
 
+def _dynamodb_pitr_enabled(values: dict[str, Any]) -> bool | None:
+    raw = values.get("point_in_time_recovery")
+    if raw in (None, [], {}):
+        return False
+    if isinstance(raw, dict):
+        enabled = raw.get("enabled")
+    elif isinstance(raw, list) and len(raw) == 1 and isinstance(raw[0], dict):
+        enabled = raw[0].get("enabled")
+    else:
+        return None
+    return enabled if isinstance(enabled, bool) else None
+
+
+def _validate_dynamodb_table(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "dynamodb_plan_change_metadata_missing", "The DynamoDB plan lacks table-level cost metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    required = (
+        "billing_mode",
+        "table_class",
+        "global_secondary_index",
+        "local_secondary_index",
+        "replica",
+        "point_in_time_recovery",
+        "stream_enabled",
+        "stream_view_type",
+        "server_side_encryption",
+    )
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+        or any(_path_contains_unknown(unknown, (key,)) for key in required)
+    ):
+        return "dynamodb_configuration_unknown", "The DynamoDB plan lacks known final cost-driving settings."
+    if values.get("billing_mode") != "PAY_PER_REQUEST":
+        return "dynamodb_capacity_mode_unpriced", "Only DynamoDB on-demand capacity tables are priced."
+    if values.get("table_class") != "STANDARD":
+        return "dynamodb_table_class_unpriced", "Only DynamoDB Standard tables are priced."
+    for key, code, message in (
+        (
+            "global_secondary_index",
+            "dynamodb_global_secondary_index_unpriced",
+            "DynamoDB global secondary index usage is not included in this estimate.",
+        ),
+        (
+            "local_secondary_index",
+            "dynamodb_local_secondary_index_unpriced",
+            "DynamoDB local secondary index usage is not included in this estimate.",
+        ),
+        (
+            "replica",
+            "dynamodb_global_table_unpriced",
+            "DynamoDB global table replicas are not included in this estimate.",
+        ),
+    ):
+        if values.get(key) not in (None, [], {}):
+            return code, message
+    if values.get("stream_enabled") is True or values.get("stream_view_type") not in (None, ""):
+        return "dynamodb_stream_unpriced", "DynamoDB Streams charges are not included in this estimate."
+    pitr_enabled = _dynamodb_pitr_enabled(values)
+    if pitr_enabled is None:
+        return "dynamodb_pitr_configuration_unknown", "The DynamoDB PITR setting is not known."
+    encryption = values.get("server_side_encryption")
+    if encryption not in (None, [], {}):
+        if isinstance(encryption, list) and len(encryption) == 1:
+            encryption = encryption[0]
+        if not isinstance(encryption, dict) or encryption.get("enabled") is not True:
+            return "dynamodb_encryption_configuration_unknown", "DynamoDB server-side encryption settings are not supported."
+        if encryption.get("kms_key_arn") not in (None, "") or encryption.get("kms_key_id") not in (None, ""):
+            return "dynamodb_customer_kms_unpriced", "Customer-managed DynamoDB encryption keys are not priced."
+    return None
+
+
 def _validate_s3_bucket(
     values: dict[str, Any], change: dict[str, Any] | None
 ) -> tuple[str, str] | None:
@@ -2799,6 +3170,7 @@ def _evidence(
     sqs_usage_assumptions: dict[str, Any] | None = None,
     rds_usage_assumptions: dict[str, Any] | None = None,
     serverless_usage_assumptions: dict[str, Any] | None = None,
+    dynamodb_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -2818,9 +3190,10 @@ def _evidence(
     pricing_context_digest = _pricing_context_digest(
         region, currency, budget, persisted_context_sha256, usage_assumptions,
         sqs_usage_assumptions, rds_usage_assumptions, serverless_usage_assumptions,
+        dynamodb_usage_assumptions,
     )
     payload = {
-        "version": 6,
+        "version": 7,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -2847,6 +3220,7 @@ def _evidence(
         "sqs_usage_assumptions": sqs_usage_assumptions,
         "rds_usage_assumptions": rds_usage_assumptions,
         "serverless_usage_assumptions": serverless_usage_assumptions,
+        "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -2907,6 +3281,7 @@ def _evidence(
         sqs_usage_assumptions=sqs_usage_assumptions,
         rds_usage_assumptions=rds_usage_assumptions,
         serverless_usage_assumptions=serverless_usage_assumptions,
+        dynamodb_usage_assumptions=dynamodb_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -2928,10 +3303,11 @@ def _pricing_context_digest(
     sqs_usage_assumptions: dict[str, Any] | None = None,
     rds_usage_assumptions: dict[str, Any] | None = None,
     serverless_usage_assumptions: dict[str, Any] | None = None,
+    dynamodb_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 5,
+            "version": 6,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
@@ -2940,5 +3316,6 @@ def _pricing_context_digest(
             "sqs_usage_assumptions": sqs_usage_assumptions,
             "rds_usage_assumptions": rds_usage_assumptions,
             "serverless_usage_assumptions": serverless_usage_assumptions,
+            "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
         }
     )
