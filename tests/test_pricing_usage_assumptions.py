@@ -4,6 +4,7 @@ from davdeploy.domain import (
     MonthlyUsageRange,
     RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
+    ServerlessPricingUsageAssumptions,
     SqsPricingUsageAssumptions,
 )
 from pydantic import ValidationError
@@ -129,3 +130,58 @@ def test_rds_backup_usage_assumptions_are_bounded_and_constraint_input_is_strict
                 **usage, "unknown_price": "0.10"
             }
         })
+
+
+def test_serverless_usage_assumptions_bind_bounded_quantities_to_resource_addresses():
+    value = {
+        "lambda_functions": {
+            "aws_lambda_function.api": {
+                "monthly_invocations": {"minimum": 100, "maximum": 200},
+                "average_billed_duration_ms": {"minimum": 25, "maximum": 80},
+                "monthly_internet_egress_gb": {"minimum": 0, "maximum": 2},
+                "monthly_cloudwatch_log_ingestion_gb": {"minimum": 0, "maximum": 1},
+                "monthly_log_storage_gb_month": {"minimum": 0, "maximum": 1},
+            }
+        },
+        "http_apis": {
+            "aws_apigatewayv2_api.http": {
+                "monthly_requests": {"minimum": 100, "maximum": 200},
+                "monthly_internet_egress_gb": {"minimum": 0, "maximum": 2},
+            }
+        },
+    }
+    assert ServerlessPricingUsageAssumptions.model_validate(value).model_dump(mode="json") == value
+    request = InfrastructurePlanConstraintUpdateRequest.model_validate(
+        {"serverless_pricing_usage_assumptions": value}
+    )
+    assert request.serverless_pricing_usage_assumptions is not None
+    assert InfrastructurePlanConstraintUpdateRequest.model_validate(
+        {"serverless_pricing_usage_assumptions": None}
+    ).model_dump(mode="json", exclude_unset=True) == {
+        "serverless_pricing_usage_assumptions": None
+    }
+    invalid = {**value, "lambda_functions": {"aws_lambda_function.api;destroy": value["lambda_functions"]["aws_lambda_function.api"]}}
+    with pytest.raises(ValidationError):
+        ServerlessPricingUsageAssumptions.model_validate(invalid)
+    bad_duration = {**value, "lambda_functions": {"aws_lambda_function.api": {
+        **value["lambda_functions"]["aws_lambda_function.api"],
+        "average_billed_duration_ms": {"minimum": 100, "maximum": 10},
+    }}}
+    with pytest.raises(ValidationError):
+        ServerlessPricingUsageAssumptions.model_validate(bad_duration)
+    over_transfer = {
+        **value,
+        "lambda_functions": {
+            "aws_lambda_function.api": {
+                **value["lambda_functions"]["aws_lambda_function.api"],
+                "monthly_internet_egress_gb": {
+                    "minimum": 0,
+                    "maximum": 500_001,
+                },
+                "monthly_cloudwatch_log_ingestion_gb": {"minimum": 0, "maximum": 1},
+                "monthly_log_storage_gb_month": {"minimum": 0, "maximum": 1},
+            }
+        },
+    }
+    with pytest.raises(ValidationError):
+        ServerlessPricingUsageAssumptions.model_validate(over_transfer)
