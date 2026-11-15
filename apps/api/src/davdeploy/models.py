@@ -1011,6 +1011,11 @@ class GeneratedPlanApplyRun(Base):
     codebuild_project: Mapped[str] = mapped_column(String(255))
     codebuild_build_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     codebuild_build_arn: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    worker_claim_version: Mapped[int] = mapped_column(default=0)
+    worker_lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    worker_lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
     state: Mapped[str] = mapped_column(String(40), default="QUEUED", index=True)
     request_document: Mapped[dict] = mapped_column(JSON)
     result_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -1029,4 +1034,8 @@ class GeneratedPlanApplyRun(Base):
             name="uq_generated_plan_apply_run_org_idempotency",
         ),
         Index("ix_generated_plan_apply_run_tenant_revision", "organization_id", "revision_id"),
+        Index(
+            "ix_generated_plan_apply_runs_worker_lease_expires_at",
+            "worker_lease_expires_at",
+        ),
     )
