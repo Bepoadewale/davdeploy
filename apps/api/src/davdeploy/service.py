@@ -4438,6 +4438,225 @@ class ProductService:
             "revision_number": revision_number,
         }
 
+    def approve_generated_plan_artifact(
+        self, principal: Principal, artifact_id: str, manifest_sha256: str
+    ) -> dict[str, Any]:
+        """Record an administrator decision for one exact, reviewable saved plan."""
+        if not self._is_workspace_administrator(principal):
+            raise PermissionError("workspace administrator role required for exact-plan approval")
+        try:
+            canonical_id = str(uuid.UUID(artifact_id))
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("generated plan artifact identifier is invalid") from None
+        if (
+            not isinstance(manifest_sha256, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", manifest_sha256)
+        ):
+            raise ValueError("generated plan manifest digest is invalid")
+
+        artifact = self.db.scalar(
+            select(GeneratedPlanArtifact).where(
+                GeneratedPlanArtifact.id == canonical_id,
+                GeneratedPlanArtifact.organization_id == principal.organization_id,
+            )
+        )
+        if artifact is None:
+            raise PermissionError("generated plan artifact not found in this organization")
+        try:
+            actual_manifest_sha256 = canonical_json_digest(artifact.manifest)
+        except (TypeError, ValueError):
+            raise ValueError("generated plan manifest is invalid") from None
+        if (
+            manifest_sha256 != artifact.manifest_sha256
+            or actual_manifest_sha256 != artifact.manifest_sha256
+        ):
+            raise ValueError("generated plan manifest digest does not match the saved plan")
+
+        run = self.db.get(GeneratedPlanRun, artifact.run_id)
+        revision = self.db.get(InfrastructurePlanRevision, artifact.revision_id)
+        plan = (
+            self.db.get(InfrastructurePlan, revision.infrastructure_plan_id)
+            if revision is not None
+            else None
+        )
+        latest = (
+            self.db.scalar(
+                select(InfrastructurePlanRevision)
+                .where(
+                    InfrastructurePlanRevision.infrastructure_plan_id
+                    == revision.infrastructure_plan_id,
+                    InfrastructurePlanRevision.organization_id == principal.organization_id,
+                )
+                .order_by(InfrastructurePlanRevision.revision_number.desc())
+                .limit(1)
+            )
+            if revision is not None
+            else None
+        )
+        manifest = artifact.manifest if isinstance(artifact.manifest, dict) else {}
+        tenant = manifest.get("tenant")
+        target = manifest.get("target")
+        digests = manifest.get("digests")
+        expiry = artifact.expires_at
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        now = datetime.now(UTC)
+        if (
+            run is None
+            or revision is None
+            or plan is None
+            or latest is None
+            or run.state != "PLAN_READY_REVIEW_ONLY"
+            or run.result_metadata.get("artifact_id") != artifact.id
+            or run.organization_id != principal.organization_id
+            or run.project_id != artifact.project_id
+            or run.revision_id != artifact.revision_id
+            or revision.organization_id != principal.organization_id
+            or plan.organization_id != principal.organization_id
+            or plan.project_id != artifact.project_id
+            or revision.content_digest != plan_hash(revision.content)
+            or latest.id != revision.id
+            or revision.state
+            not in {InfrastructurePlanState.SUBMITTED, InfrastructurePlanState.APPROVED}
+            or expiry is None
+            or expiry <= now
+            or not isinstance(tenant, dict)
+            or tenant.get("organization_id") != artifact.organization_id
+            or tenant.get("project_id") != artifact.project_id
+            or tenant.get("revision_id") != artifact.revision_id
+            or not isinstance(target, dict)
+            or target.get("account_id") != artifact.target_account_id
+            or target.get("region") != artifact.region
+            or not isinstance(digests, dict)
+            or digests.get("customer_revision_sha256") != revision.content_digest
+            or digests.get("proposal_sha256") != artifact.proposal_sha256
+            or digests.get("context_sha256") != artifact.context_sha256
+            or digests.get("configuration_sha256") != artifact.configuration_sha256
+            or digests.get("saved_plan_sha256") != artifact.saved_plan_sha256
+            or digests.get("policy_sha256") != artifact.policy_sha256
+            or not artifact.artifact_version_id
+            or artifact.artifact_version_id == "null"
+            or not artifact.workspace_artifact_bucket
+            or not artifact.workspace_artifact_key
+            or not artifact.workspace_artifact_version_id
+            or artifact.workspace_artifact_version_id == "null"
+            or not artifact.workspace_sha256
+            or not has_complete_pricing_evidence(manifest)
+        ):
+            raise ValueError(
+                "generated plan is stale, incomplete, or not eligible for administrator approval"
+            )
+
+        try:
+            findings_data = artifact.policy_findings
+            if not isinstance(findings_data, list):
+                raise ValueError
+            findings = tuple(
+                PlanPolicyFinding(
+                    code=item["code"],
+                    severity=item["severity"],
+                    address=item.get("address"),
+                    message=item["message"],
+                )
+                for item in findings_data
+                if isinstance(item, dict)
+                and isinstance(item.get("code"), str)
+                and isinstance(item.get("severity"), str)
+                and (item.get("address") is None or isinstance(item.get("address"), str))
+                and isinstance(item.get("message"), str)
+            )
+            if len(findings) != len(findings_data):
+                raise ValueError
+            policy = GeneratedPlanPolicyResult(
+                verdict=PlanPolicyVerdict(artifact.policy_verdict),
+                policy_version=artifact.policy_version,
+                findings=findings,
+                human_approval_required=artifact.policy_human_approval_required,
+            )
+        except (TypeError, ValueError):
+            raise ValueError("generated plan policy evidence is invalid") from None
+        if not policy_allows_human_review(policy):
+            raise ValueError("generated plan policy does not permit human approval")
+
+        existing = self.db.scalar(
+            select(GeneratedPlanApproval).where(
+                GeneratedPlanApproval.artifact_id == artifact.id
+            )
+        )
+        if existing is not None:
+            if (
+                existing.organization_id == principal.organization_id
+                and existing.approved_manifest_sha256 == artifact.manifest_sha256
+            ):
+                return self._generated_plan_approval_payload(existing)
+            raise ValueError("generated plan artifact already has a different approval")
+
+        approval = GeneratedPlanApproval(
+            artifact_id=artifact.id,
+            organization_id=artifact.organization_id,
+            project_id=artifact.project_id,
+            revision_id=artifact.revision_id,
+            approved_manifest_sha256=artifact.manifest_sha256,
+            approver_subject=principal.subject,
+            creator_subject=artifact.created_by_subject,
+            is_self_approval=principal.subject == artifact.created_by_subject,
+            authorization_policy=(
+                "workspace-administrator-self-approval-allowed"
+                if principal.subject == artifact.created_by_subject
+                else "workspace-administrator"
+            ),
+            decided_at=now,
+        )
+        self.db.add(approval)
+        self.db.flush()
+        self.audit(
+            principal,
+            "generated_plan_artifact.approved",
+            "generated_plan_artifact",
+            artifact.id,
+            {
+                "approval_id": approval.id,
+                "manifest_sha256": artifact.manifest_sha256,
+                "revision_id": revision.id,
+                "policy_version": artifact.policy_version,
+                "is_self_approval": approval.is_self_approval,
+                "authorization_policy": approval.authorization_policy,
+            },
+        )
+        try:
+            self.db.commit()
+        except IntegrityError:
+            self.db.rollback()
+            existing = self.db.scalar(
+                select(GeneratedPlanApproval).where(
+                    GeneratedPlanApproval.artifact_id == artifact.id
+                )
+            )
+            if (
+                existing is not None
+                and existing.organization_id == principal.organization_id
+                and existing.approved_manifest_sha256 == artifact.manifest_sha256
+            ):
+                return self._generated_plan_approval_payload(existing)
+            raise ValueError("generated plan approval could not be recorded safely") from None
+        return self._generated_plan_approval_payload(approval)
+
+    @staticmethod
+    def _generated_plan_approval_payload(approval: GeneratedPlanApproval) -> dict[str, Any]:
+        return {
+            "artifact_id": approval.artifact_id,
+            "approval_id": approval.id,
+            "manifest_sha256": approval.approved_manifest_sha256,
+            "approver_subject": approval.approver_subject,
+            "is_self_approval": approval.is_self_approval,
+            "authorization_policy": approval.authorization_policy,
+            "decided_at": approval.decided_at.isoformat() if approval.decided_at else None,
+            "execution_boundary": (
+                "Approval binds this exact saved-plan manifest. No infrastructure apply "
+                "has started."
+            ),
+        }
+
     def generated_plan_apply_run_detail(
         self, principal: Principal, apply_run_id: str
     ) -> dict[str, Any]:
