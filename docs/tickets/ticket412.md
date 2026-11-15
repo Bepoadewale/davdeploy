@@ -90,7 +90,7 @@ regional rates and bounded usage models.
 ## Status ledger
 
 - Status: locally verified; hosted PR checks pending.
-- Source: branch `feat/nova-lambda-api-pricing-412`, draft PR #412.
+- Source: branch `feat/nova-lambda-api-pricing-412`, implementation commit `4252a88171c2478b00ce60ef424969dec5ac1952`, draft PR #412.
 - Deployed version: none; no deployment or AWS workload mutation was performed.
 - Current operation: hosted PR checks and review.
 - Next command: `gh pr checks 412 --watch --interval 120` after pushing the final evidence commit.
