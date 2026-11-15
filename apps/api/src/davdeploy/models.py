@@ -794,7 +794,7 @@ class CloudExecutionRun(Base):
     worker_claim_version: Mapped[int] = mapped_column(default=0)
     worker_lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     worker_lease_expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True, index=True
+        DateTime(timezone=True), nullable=True
     )
     command: Mapped[dict] = mapped_column(JSON, default=dict)
     evidence: Mapped[dict] = mapped_column(JSON, default=dict)
