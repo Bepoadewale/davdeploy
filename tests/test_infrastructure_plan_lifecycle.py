@@ -236,6 +236,40 @@ def test_customer_rds_backup_usage_assumptions_are_persisted_and_cleared_by_new_
     assert "rds_pricing_usage_assumptions" not in cleared.content["application_analysis"]["workload_spec"]
 
 
+def test_customer_serverless_usage_assumptions_are_persisted_and_cleared_by_new_revisions():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "lambda_functions": {
+            "aws_lambda_function.api": {
+                "monthly_invocations": {"minimum": 10, "maximum": 20},
+                "average_billed_duration_ms": {"minimum": 15, "maximum": 25},
+                "monthly_internet_egress_gb": {"minimum": 0, "maximum": 1},
+                "monthly_cloudwatch_log_ingestion_gb": {"minimum": 0, "maximum": 1},
+                "monthly_log_storage_gb_month": {"minimum": 0, "maximum": 1},
+            }
+        },
+        "http_apis": {},
+    }
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"serverless_pricing_usage_assumptions": usage},
+    )
+    assert revised.content["user_constraints"]["serverless_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"]["serverless_pricing_usage_assumptions"] == usage
+    assert revised.content["revision_diff"]["serverless_pricing_usage_assumptions"] == {
+        "before": None, "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"serverless_pricing_usage_assumptions": None},
+    )
+    assert "serverless_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "serverless_pricing_usage_assumptions" not in cleared.content["application_analysis"]["workload_spec"]
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

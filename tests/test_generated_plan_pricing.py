@@ -103,6 +103,46 @@ class FakeRdsPriceList:
         return {"PriceList": [json.dumps(product)]}
 
 
+class FakeServerlessPriceList:
+    def get_products(self, **kwargs):
+        filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        service = kwargs["ServiceCode"]
+        family = filters["productFamily"]
+        if service == "AWSLambda":
+            group = filters["group"]
+            unit = "Requests" if "Requests" in group else "Lambda-GB-Second"
+            price = "0.0000002" if unit == "Requests" else "0.0000166667"
+        elif service == "AmazonApiGateway":
+            unit, price = "Requests", "0.000001"
+        elif service == "AmazonCloudWatch":
+            if family == "Data Payload":
+                unit, price = "GB", "0.50"
+            elif family == "Storage Snapshot":
+                unit, price = "GB-Mo", "0.03"
+            else:
+                raise AssertionError("unexpected CloudWatch price family")
+        elif service == "AWSDataTransfer":
+            unit, price = "GB", "0.09"
+        else:
+            raise AssertionError(f"unexpected Price List service {service}")
+        attributes = {**filters}
+        sku = f"{service}-{filters.get('group', filters.get('operation', 'egress'))}"
+        product = {
+            "product": {"sku": sku, "productFamily": family, "attributes": attributes},
+            "serviceCode": service,
+            "publicationDate": "2026-11-13T12:00:00Z",
+            "terms": {"OnDemand": {"offer": {
+                "sku": sku,
+                "effectiveDate": "2026-11-01T00:00:00Z",
+                "priceDimensions": {"dimension": {
+                    "beginRange": "0", "endRange": "Inf", "unit": unit,
+                    "pricePerUnit": {"USD": price},
+                }},
+            }}},
+        }
+        return {"PriceList": [json.dumps(product)]}
+
+
 def ebs_values(**overrides):
     values = {
         "type": "gp3",
@@ -298,6 +338,7 @@ def evaluate(
     usage_assumptions=None,
     sqs_usage_assumptions=None,
     rds_usage_assumptions=None,
+    serverless_usage_assumptions=None,
     catalog_client=None,
 ):
     client = catalog_client or client or FakePriceList()
@@ -312,6 +353,7 @@ def evaluate(
                 usage_assumptions=usage_assumptions,
                 sqs_usage_assumptions=sqs_usage_assumptions,
                 rds_usage_assumptions=rds_usage_assumptions,
+                serverless_usage_assumptions=serverless_usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -372,6 +414,7 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     legacy["version"] = 2
     legacy.pop("sqs_usage_assumptions")
     legacy.pop("rds_usage_assumptions")
+    legacy.pop("serverless_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -540,6 +583,31 @@ def test_rds_usage_is_extracted_from_integrity_checked_customer_revision():
                 **revision,
                 "application_analysis": {"workload_spec": {}},
             },
+            expected_sha256=revision_sha256,
+        )
+
+
+def test_serverless_usage_is_extracted_and_bound_to_trusted_revision_digest():
+    usage = serverless_usage()
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"serverless_pricing_usage_assumptions": usage}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.serverless_usage_assumptions == usage
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256
+    ).pricing_context_sha256
+    with pytest.raises(ValueError, match="integrity check"):
+        TrustedPlanPricingContext.from_persisted_revision(
+            {**revision, "application_analysis": {"workload_spec": {}}},
             expected_sha256=revision_sha256,
         )
 
@@ -836,7 +904,7 @@ def test_usage_assumptions_are_carried_in_digest_bound_pricing_evidence():
     egress_line = next(line for line in result.lines if "transfer out" in line.description)
     assert egress_line.unit_price_usd == "0.09"
     assert egress_line.unit_price_low_usd == "0.05"
-    assert egress_line.unit_price_low_source_url == "https://aws.amazon.com/s3/pricing/"
+    assert egress_line.unit_price_low_source_url == "https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer"
     assert egress_line.low_cost_quantity == 0
     assert pricing_evidence_is_approval_eligible(
         manifest,
@@ -886,7 +954,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 5
+    assert manifest["version"] == 6
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,
@@ -1157,7 +1225,7 @@ def test_rds_mysql_price_includes_instance_gp3_and_backup_range_bound_to_context
     assert {line.description for line in result.lines} == {
         "Amazon RDS for MySQL Single-AZ instance hours",
         "Amazon RDS for MySQL GP3 storage",
-        "RDS MySQL backup storage (before account-level free allowance)",
+        "RDS MySQL backup storage",
     }
     assert pricing_evidence_is_approval_eligible(
         result.as_manifest_document(),
@@ -1228,3 +1296,217 @@ def test_rds_backup_assumption_tampering_invalidates_approval_context():
         ),
         now=CAPTURED_AT,
     )
+
+
+def serverless_usage():
+    return {
+        "lambda_functions": {
+            "aws_lambda_function.api": {
+                "monthly_invocations": {"minimum": 1_000_000, "maximum": 2_000_000},
+                "average_billed_duration_ms": {"minimum": 80, "maximum": 150},
+                "monthly_internet_egress_gb": {"minimum": 0, "maximum": 3},
+                "monthly_cloudwatch_log_ingestion_gb": {"minimum": 0, "maximum": 2},
+                "monthly_log_storage_gb_month": {"minimum": 0, "maximum": 5},
+            }
+        },
+        "http_apis": {
+            "aws_apigatewayv2_api.http": {
+                "monthly_requests": {"minimum": 1_000_000, "maximum": 2_000_000},
+                "monthly_internet_egress_gb": {"minimum": 2, "maximum": 5},
+            }
+        },
+    }
+
+
+def serverless_plan(*, lambda_overrides=None, unknown_key=None, additional_resources=()):
+    lambda_values = {
+        "function_name": "example-api",
+        "package_type": "Zip",
+        "architectures": ["arm64"],
+        "memory_size": 512,
+        "ephemeral_storage": {"size": 512},
+        "timeout": 30,
+        "snap_start": None,
+        "vpc_config": {"subnet_ids": [], "security_group_ids": []},
+        "reserved_concurrent_executions": -1,
+        "logging_config": [],
+    }
+    lambda_values.update(lambda_overrides or {})
+    api_values = {"protocol_type": "HTTP", "disable_execute_api_endpoint": False}
+    result = plan(
+        resource_type="terraform_data",
+        resource_values={"input": None},
+        extra_resources=(
+            resource("aws_lambda_function.api", "aws_lambda_function", lambda_values),
+            resource("aws_apigatewayv2_api.http", "aws_apigatewayv2_api", api_values),
+            resource(
+                "aws_cloudwatch_log_group.lambda",
+                "aws_cloudwatch_log_group",
+                {
+                    "name": "/aws/lambda/example-api",
+                    "retention_in_days": 30,
+                    "log_group_class": "STANDARD",
+                    "kms_key_id": None,
+                },
+            ),
+            *additional_resources,
+        ),
+    )
+    if unknown_key:
+        item = next(
+            item for item in result["resource_changes"]
+            if item["type"] == "aws_lambda_function"
+        )
+        item["change"]["after_unknown"][unknown_key] = True
+    return result
+
+
+def test_lambda_and_http_api_use_regional_prices_and_explicit_usage_ranges():
+    usage = serverless_usage()
+    AwsPriceListCatalog._cache.clear()
+    result, _ = evaluate(
+        serverless_plan(),
+        budget=100_000,
+        serverless_usage_assumptions=usage,
+        catalog_client=FakeServerlessPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert len(result.lines) == 7
+    assert result.monthly_high_minor > result.monthly_low_minor
+    assert result.serverless_usage_assumptions == usage
+    assert pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", 100_000, PERSISTED_CONTEXT_SHA256,
+            serverless_usage_assumptions=usage,
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "unknown_key", "expected"),
+    [
+        ({"package_type": "Image"}, None, "lambda_artifact_type_unpriced"),
+        ({"memory_size": 16_384}, None, "lambda_memory_unpriced"),
+        ({"vpc_config": {"subnet_ids": ["subnet-123"], "security_group_ids": []}}, None, "lambda_vpc_transfer_unpriced"),
+        ({}, "memory_size", "lambda_cost_driver_unknown"),
+    ],
+)
+def test_unsupported_lambda_settings_block_before_price_lookup(overrides, unknown_key, expected):
+    client = FakeServerlessPriceList()
+    AwsPriceListCatalog._cache.clear()
+    result, _ = evaluate(
+        serverless_plan(lambda_overrides=overrides, unknown_key=unknown_key),
+        serverless_usage_assumptions=serverless_usage(),
+        catalog_client=client,
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert expected in {finding.code for finding in result.findings}
+
+
+def test_serverless_usage_bounds_and_resource_addresses_are_approval_bound():
+    usage = serverless_usage()
+    result, _ = evaluate(
+        serverless_plan(), serverless_usage_assumptions=usage,
+        catalog_client=FakeServerlessPriceList(),
+    )
+    changed = {**usage, "lambda_functions": {
+        "aws_lambda_function.api": {
+            **usage["lambda_functions"]["aws_lambda_function.api"],
+            "monthly_invocations": {"minimum": 1_000_000, "maximum": 3_000_000},
+        }
+    }}
+    assert not pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256,
+            serverless_usage_assumptions=changed,
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+@pytest.mark.parametrize(
+    ("resource_type", "values", "expected"),
+    [
+        (
+            "aws_apigatewayv2_stage",
+            {
+                "access_log_settings": {"destination_arn": "arn:example", "format": "{}"},
+                "default_route_settings": {"detailed_metrics_enabled": False},
+                "route_settings": [],
+            },
+            "http_api_access_logs_unpriced",
+        ),
+        (
+            "aws_apigatewayv2_integration",
+            {"connection_type": "VPC_LINK", "connection_id": "link-1"},
+            "http_api_vpc_link_unpriced",
+        ),
+    ],
+)
+def test_http_api_stage_and_integration_surcharges_fail_closed(resource_type, values, expected):
+    extra = resource(f"{resource_type}.optional", resource_type, values)
+    result, _ = evaluate(
+        serverless_plan(additional_resources=(extra,)),
+        serverless_usage_assumptions=serverless_usage(),
+        catalog_client=FakeServerlessPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert expected in {finding.code for finding in result.findings}
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "unknown", "expected"),
+    [
+        ("retention_in_days", None, False, "lambda_log_retention_unbounded"),
+        ("log_group_class", "INFREQUENT_ACCESS", False, "lambda_log_class_unpriced"),
+        ("kms_key_id", "arn:aws:kms:us-east-1:654654474502:key/example", False, "lambda_log_kms_unpriced"),
+        ("retention_in_days", 30, True, "lambda_log_group_unknown"),
+    ],
+)
+def test_lambda_log_group_requires_bounded_standard_retention(field, value, unknown, expected):
+    document = serverless_plan()
+    group = next(
+        item for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_cloudwatch_log_group"
+    )
+    group_change = next(
+        item for item in document["resource_changes"]
+        if item["type"] == "aws_cloudwatch_log_group"
+    )
+    group["values"][field] = value
+    group_change["change"]["after"][field] = value
+    if unknown:
+        group_change["change"]["after_unknown"][field] = True
+    result, _ = evaluate(
+        document,
+        serverless_usage_assumptions=serverless_usage(),
+        catalog_client=FakeServerlessPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert expected in {finding.code for finding in result.findings}
+
+
+def test_cloudwatch_log_group_without_priced_lambda_blocks_approval():
+    log_group = resource(
+        "aws_cloudwatch_log_group.orphan",
+        "aws_cloudwatch_log_group",
+        {
+            "name": "/aws/lambda/unpriced",
+            "retention_in_days": 30,
+            "log_group_class": "STANDARD",
+            "kms_key_id": None,
+        },
+    )
+    result, _ = evaluate(
+        plan(
+            resource_type="terraform_data",
+            resource_values={"input": None},
+            extra_resources=(log_group,),
+        )
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "cloudwatch_log_group_unpriced" in {finding.code for finding in result.findings}
