@@ -659,3 +659,11 @@ def test_generated_plan_apply_request_is_closed_until_runner_is_ready(tmp_path, 
         )
 
     assert db.scalar(select(GeneratedPlanApplyRun.id)) is None
+
+
+def test_generated_plan_apply_worker_stays_inert_until_runner_is_ready(monkeypatch):
+    store = ArtifactStoreFixture()
+    service, _db = service_with_artifact_store(store)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false")
+
+    assert service.run_next_generated_plan_apply_run() is False

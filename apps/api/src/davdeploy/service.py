@@ -103,6 +103,7 @@ from davdeploy.invitation_email import (
     configured_invitation_sender,
 )
 from davdeploy.model_gateway import ModelGatewayUnavailable
+from davdeploy.nova_apply_dispatch import NovaApplyDispatchError, NovaExactPlanApplyDispatcher
 from davdeploy.models import (
     ApiCredential,
     Approval,
@@ -183,6 +184,7 @@ CLOUD_EXECUTION_WORKER_LEASE_SECONDS = 900
 CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS = 60
 CLOUD_EXECUTION_LEASE_SCAN_SECONDS = 30
 NOVA_PLAN_PREPARATION_LEASE_SECONDS = 180
+NOVA_APPLY_WORKER_LEASE_SECONDS = 900
 NOVA_PLAN_WORKER_HEARTBEAT_SECONDS = 30
 NOVA_PLAN_MAX_EXPLICIT_RETRIES = 3
 NOVA_PLAN_UNCERTAIN_ERROR_CODES = frozenset(
@@ -9547,6 +9549,272 @@ class ProductService:
         # the bounded worker can claim the newly queued run without polling.
         self._wake_worker("cloud_execution", run.id)
         return self._cloud_execution_run_payload(run)
+
+    def run_next_generated_plan_apply_run(self) -> bool:
+        """Dispatch one approved saved plan through the fixed CodeBuild project."""
+        if os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true":
+            return False
+        dispatcher = NovaExactPlanApplyDispatcher.from_environment()
+        if dispatcher is None:
+            return False
+        self._reconcile_expired_generated_plan_apply_leases()
+        claim = self._claim_next_generated_plan_apply_run()
+        if claim is None:
+            return False
+        run, lease_token = claim
+        if (
+            run.codebuild_project != dispatcher.project_name
+            or run.request_sha256 != canonical_json_digest(run.request_document)
+            or run.request_document.get("manifest_sha256") != run.manifest_sha256
+            or run.request_document.get("artifact_id") != run.artifact_id
+        ):
+            self._finish_generated_plan_apply_dispatch(
+                run.id,
+                lease_token,
+                None,
+                error_code="APPLY_REQUEST_BINDING_INVALID",
+                error_summary="durable apply request failed integrity validation",
+            )
+            return True
+        try:
+            build = dispatcher.find_build_by_run_id(run.runner_run_id)
+            if build is None:
+                build = dispatcher.start_build(
+                    run.runner_run_id, run.codebuild_idempotency_token
+                )
+        except NovaApplyDispatchError as error:
+            self._finish_generated_plan_apply_dispatch(
+                run.id,
+                lease_token,
+                None,
+                error_code="APPLY_BUILD_OUTCOME_UNCERTAIN",
+                error_summary=f"CodeBuild {error.phase or 'dispatch'} outcome requires reconciliation",
+            )
+            return True
+        if (
+            build.project_name != run.codebuild_project
+            or build.run_id != run.runner_run_id
+        ):
+            self._finish_generated_plan_apply_dispatch(
+                run.id,
+                lease_token,
+                None,
+                error_code="APPLY_BUILD_IDENTITY_UNCONFIRMED",
+                error_summary="CodeBuild identity did not match the durable apply request",
+            )
+            return True
+        self._finish_generated_plan_apply_dispatch(run.id, lease_token, build)
+        return True
+
+    def _claim_next_generated_plan_apply_run(
+        self,
+    ) -> tuple[GeneratedPlanApplyRun, str] | None:
+        """Atomically claim one queued apply and assign an expiring worker lease."""
+        candidate = self.db.scalar(
+            select(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.state == "QUEUED")
+            .order_by(GeneratedPlanApplyRun.created_at, GeneratedPlanApplyRun.id)
+            .limit(1)
+        )
+        if candidate is None:
+            return None
+        now = datetime.now(UTC)
+        lease_token = secrets.token_hex(32)
+        claimed = self.db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(
+                GeneratedPlanApplyRun.id == candidate.id,
+                GeneratedPlanApplyRun.organization_id == candidate.organization_id,
+                GeneratedPlanApplyRun.project_id == candidate.project_id,
+                GeneratedPlanApplyRun.request_sha256 == candidate.request_sha256,
+                GeneratedPlanApplyRun.state == "QUEUED",
+                GeneratedPlanApplyRun.worker_claim_version == candidate.worker_claim_version,
+            )
+            .values(
+                state="DISPATCHING",
+                worker_claim_version=GeneratedPlanApplyRun.worker_claim_version + 1,
+                worker_lease_token=lease_token,
+                worker_lease_expires_at=now
+                + timedelta(seconds=NOVA_APPLY_WORKER_LEASE_SECONDS),
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        run = self.db.scalar(
+            select(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.id == candidate.id)
+            .execution_options(populate_existing=True)
+        )
+        return (run, lease_token) if run is not None else None
+
+    def _reconcile_expired_generated_plan_apply_leases(self) -> None:
+        now = datetime.now(UTC)
+        expired_ids = self.db.scalars(
+            select(GeneratedPlanApplyRun.id).where(
+                GeneratedPlanApplyRun.state == "DISPATCHING",
+                GeneratedPlanApplyRun.worker_lease_expires_at <= now,
+            )
+        ).all()
+        for run_id in expired_ids:
+            self.db.execute(
+                update(GeneratedPlanApplyRun)
+                .where(
+                    GeneratedPlanApplyRun.id == run_id,
+                    GeneratedPlanApplyRun.state == "DISPATCHING",
+                    GeneratedPlanApplyRun.worker_lease_expires_at <= now,
+                )
+                .values(
+                    state="RECONCILIATION_REQUIRED",
+                    worker_lease_token=None,
+                    worker_lease_expires_at=None,
+                    error_code="APPLY_DISPATCH_LEASE_EXPIRED",
+                    error_summary="worker lease expired; build outcome must be reconciled",
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+        if expired_ids:
+            self.db.commit()
+
+    def _finish_generated_plan_apply_dispatch(
+        self,
+        run_id: str,
+        lease_token: str,
+        build,
+        *,
+        error_code: str | None = None,
+        error_summary: str | None = None,
+    ) -> None:
+        now = datetime.now(UTC)
+        state = "RECONCILIATION_REQUIRED"
+        result_metadata = None
+        finished_at = now
+        if build is not None:
+            result_metadata = {
+                "codebuild_status": build.status,
+                "codebuild_build_arn": build.build_arn,
+            }
+            finished_at = None
+            if build.status == "SUCCEEDED":
+                state = "APPLIED_UNVERIFIED"
+                finished_at = now
+                error_code = None
+                error_summary = None
+            elif build.status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
+                error_code = "APPLY_BUILD_FAILED"
+                error_summary = (
+                    "Terraform apply build failed; inspect state before any repair or retry"
+                )
+                finished_at = now
+            else:
+                state = "BUILD_STARTED"
+                error_code = None
+                error_summary = None
+        changed = self.db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(
+                GeneratedPlanApplyRun.id == run_id,
+                GeneratedPlanApplyRun.state == "DISPATCHING",
+                GeneratedPlanApplyRun.worker_lease_token == lease_token,
+                GeneratedPlanApplyRun.worker_lease_expires_at > now,
+            )
+            .values(
+                state=state,
+                codebuild_build_id=build.build_id if build is not None else None,
+                codebuild_build_arn=build.build_arn if build is not None else None,
+                worker_lease_token=None,
+                worker_lease_expires_at=None,
+                result_metadata=result_metadata,
+                error_code=error_code,
+                error_summary=error_summary,
+                started_at=now if build is not None else None,
+                finished_at=finished_at,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if changed.rowcount == 1:
+            self.db.commit()
+        else:
+            self.db.rollback()
+
+    def reconcile_generated_plan_apply_build(self, build_id: str) -> bool:
+        """Reconcile an event by querying the fixed CodeBuild project, never its payload."""
+        project = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "").strip()
+        if not project:
+            return False
+        try:
+            dispatcher = NovaExactPlanApplyDispatcher(project_name=project)
+            build = dispatcher.describe_build(build_id)
+        except (NovaApplyDispatchError, ValueError):
+            return False
+        run = self.db.scalar(
+            select(GeneratedPlanApplyRun).where(
+                GeneratedPlanApplyRun.runner_run_id == build.run_id
+            )
+        )
+        if (
+            run is None
+            or run.codebuild_project != project
+            or (run.codebuild_build_id and run.codebuild_build_id != build.build_id)
+            or (run.codebuild_build_arn and run.codebuild_build_arn != build.build_arn)
+            or run.state
+            not in {"DISPATCHING", "BUILD_STARTED", "RECONCILIATION_REQUIRED"}
+        ):
+            return False
+        now = datetime.now(UTC)
+        state = "BUILD_STARTED"
+        error_code = None
+        error_summary = None
+        finished_at = None
+        if build.status == "SUCCEEDED":
+            state = "APPLIED_UNVERIFIED"
+            finished_at = now
+        elif build.status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
+            state = "RECONCILIATION_REQUIRED"
+            error_code = "APPLY_BUILD_FAILED"
+            error_summary = "Terraform apply build failed; inspect state before any repair or retry"
+            finished_at = now
+        changed = self.db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(
+                GeneratedPlanApplyRun.id == run.id,
+                GeneratedPlanApplyRun.runner_run_id == build.run_id,
+                GeneratedPlanApplyRun.state.in_(
+                    {"DISPATCHING", "BUILD_STARTED", "RECONCILIATION_REQUIRED"}
+                ),
+                or_(
+                    GeneratedPlanApplyRun.codebuild_build_id.is_(None),
+                    GeneratedPlanApplyRun.codebuild_build_id == build.build_id,
+                ),
+            )
+            .values(
+                state=state,
+                codebuild_build_id=build.build_id,
+                codebuild_build_arn=build.build_arn,
+                worker_lease_token=None,
+                worker_lease_expires_at=None,
+                result_metadata={
+                    "codebuild_status": build.status,
+                    "codebuild_build_arn": build.build_arn,
+                },
+                error_code=error_code,
+                error_summary=error_summary,
+                started_at=run.started_at or now,
+                finished_at=finished_at,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if changed.rowcount == 1:
+            self.db.commit()
+            return True
+        self.db.rollback()
+        return False
 
     def run_next_cloud_execution(self) -> bool:
         """Claim and process one queued run without permitting duplicate owners."""
