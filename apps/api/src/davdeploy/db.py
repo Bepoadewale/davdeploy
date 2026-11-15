@@ -551,6 +551,26 @@ def run_migrations(target: Engine | None = None) -> None:
                 {"apply_run_id": "VARCHAR(36)"},
             )
             connection.execute(text("INSERT INTO schema_migrations(version) VALUES (35)"))
+            version = 35
+        if version < 36:
+            Base.metadata.create_all(bind=connection)
+            _add_columns_if_missing(
+                connection,
+                "generated_plan_apply_runs",
+                {
+                    "worker_claim_version": "INTEGER NOT NULL DEFAULT 0",
+                    "worker_lease_token": "VARCHAR(64)",
+                    "worker_lease_expires_at": "TIMESTAMP WITH TIME ZONE",
+                },
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_generated_plan_apply_runs_worker_lease_expires_at "
+                    "ON generated_plan_apply_runs(worker_lease_expires_at)"
+                )
+            )
+            connection.execute(text("INSERT INTO schema_migrations(version) VALUES (36)"))
+            version = 36
         _install_generated_plan_immutability(connection)
 
 
