@@ -210,6 +210,6 @@ def _canonical_run_id(value: object) -> str:
         canonical = str(UUID(value))
     except (AttributeError, TypeError, ValueError):
         raise ValueError("Nova apply run ID is invalid") from None
-    if canonical != value.lower():
+    if canonical != value:
         raise ValueError("Nova apply run ID is not canonical")
     return canonical
