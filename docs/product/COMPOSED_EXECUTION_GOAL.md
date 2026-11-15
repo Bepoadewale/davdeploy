@@ -1,31 +1,36 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-11. This checklist tracks the goal in the private execution
-specification. It is not a launch-readiness claim. “Implemented” means code
-exists; only “AWS verified” and “deployed” records those stronger states.
+Updated: 2026-11-15. This status summary tracks the Nova-led infrastructure
+workflow without claiming launch readiness. Code, control-plane deployment,
+customer plan, application behavior, and lifecycle evidence are distinct states.
 
-## Current deployed status — 2026-11-10
+## Current source and hosted status — 2026-11-15
 
-Backend `main` commit `f0c6f3af36a0ab14a5dafb9a1684c41140da7eef` was deployed
-by protected plan run [42902031985](https://github.com/Bepoadewale/davdeploy/actions/runs/42902031985)
-and apply run [42902934302](https://github.com/Bepoadewale/davdeploy/actions/runs/42902934302).
-The saved plan reported 6 additions, 8 in-place changes, and 0 destroys;
-migrations passed. The deployed API returned HTTP 200 from `/healthz`; its
-unauthenticated plan-history route returned HTTP 401. PRs #333 and #334 are
-deployed, so exact-revision plan history is available behind authentication.
-An authenticated customer history journey remains unverified. Nova plan
-reviews, plan-runner readiness, role verification, and the state API remain
-disabled; no state bucket is configured. No Nova-generated customer workload
-has been applied, health-checked, recovered, or destroyed. Costed exact-plan
-approval, customer apply, application health, recovery, teardown, and composed
-certification remain incomplete.
+Backend `main` is `017e53e329ff7c9be41f7a30e3c6c3451b3e4387` (PR #412). The
+hosted control plane is PR #411 source `a9c5ca127e8e93845b215c795dd6755e6683869f`,
+applied by [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
+after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
+Read-only checks confirmed matching Lambda package identities and `/healthz`
+HTTP 200. PR #412 adds bounded cost evidence in source but is not deployed.
+Open draft PR #399 has passing CI, but no Nova customer apply path is wired or
+enabled. No Nova customer plan or workload has been applied, health-checked,
+updated, recovered, or destroyed.
 
-The ordered checklist below preserves the 2026-11-04 baseline as historical
-evidence. Where it says PR #303 was not deployed or describes the prior hosted
-release as current, use this dated status and the readiness matrix instead.
+The product path remains Nova proposal -> deterministic schema/policy and
+preflight -> isolated saved plan -> plan-level policy and cost -> authorized
+human approval -> exact-plan execution -> observed application health and
+lifecycle evidence. Model output cannot authorize execution. Current gaps
+include complete cost evidence, durable customer state/artifacts, hosted plan
+and approval journey, exact-plan apply integration, health/recovery/cleanup,
+and full scenario coverage. The [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
+tracks all 26 architecture entries and 30 implementation roots with explicit
+acceptance cases and honest evidence status.
 
-Allowed status values: `not started`, `in progress`, `implemented`,
-`locally verified`, `AWS verified`, `deployed`.
+## Historical renderer-oriented checklist — superseded by the Nova-led path
+
+The following 2026-11-04 checklist preserves earlier implementation evidence.
+Its renderer-by-renderer sequencing is historical and is not the active
+execution strategy. Dated release details below remain historical records.
 
 ## Ordered execution checklist — historical baseline 2026-11-04
 
