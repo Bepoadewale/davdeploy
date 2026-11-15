@@ -147,3 +147,14 @@ started. The saved-plan apply worker remains intentionally unwired and
 fail-closed, and PR #399 remains a draft because material pricing and hosted
 lifecycle acceptance are incomplete. The earlier local fixture evidence above
 is historical and is not a substitute for hosted AWS execution evidence.
+
+
+## Hosted dispatcher validation — 2026-11-15
+
+Repository: `Bepoadewale/davdeploy`
+Commit: `498e5cae8989a8ac2547e133fe2b96b2b11a768b`
+Execution type: GitHub-hosted CI only; no customer workload or AWS apply.
+
+Hosted run `43697213134` passed all seven required CI jobs. This run includes the new fixed CodeBuild dispatcher tests. The tests validate only request construction and build identity handling with test doubles; they do not start a real CodeBuild project.
+
+No AWS resources were created by this change. No apply run was dispatched. The worker integration and real hosted lifecycle proof remain outstanding.
