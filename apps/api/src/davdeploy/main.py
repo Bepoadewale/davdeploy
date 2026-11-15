@@ -2348,6 +2348,34 @@ def approve_generated_plan_artifact(
         translate(error)
 
 
+@app.post("/api/v1/generated-plan-artifacts/{artifact_id}/apply", status_code=202)
+def create_generated_plan_apply_run(
+    artifact_id: str,
+    request: GeneratedPlanArtifactApprovalRequest,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    principal: Principal = Depends(verify_token),
+    service: ProductService = Depends(product_service),
+):
+    """Queue an exact-plan apply request tied to an existing admin approval."""
+    REQUESTS.labels("generated_plan_artifacts.apply").inc()
+    if principal.role != "administrator":
+        raise HTTPException(403, "workspace administrator role required for exact-plan apply")
+    if (
+        os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true"
+        or not os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "").strip()
+    ):
+        raise HTTPException(503, "Nova exact-plan apply runner is not ready")
+    try:
+        return service.create_generated_plan_apply_run(
+            principal,
+            artifact_id,
+            request.manifest_sha256,
+            idempotency_key,
+        )
+    except (PermissionError, ValueError, KeyError) as error:
+        translate(error)
+
+
 @app.post("/api/v1/deployment-plans/{plan_id}/customer-review", status_code=201)
 def create_customer_plan_review(
     plan_id: str,

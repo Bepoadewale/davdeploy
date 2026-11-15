@@ -4438,6 +4438,201 @@ class ProductService:
             "revision_number": revision_number,
         }
 
+    def create_generated_plan_apply_run(
+        self,
+        principal: Principal,
+        artifact_id: str,
+        provided_manifest_sha256: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Queue one exact saved-plan apply request after its immutable approval."""
+        if principal.role != "administrator":
+            raise PermissionError("workspace administrator role required for exact-plan apply")
+        if os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true":
+            raise ValueError("Nova exact-plan apply runner is not ready")
+        project = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{1,254}", project):
+            raise ValueError("Nova exact-plan apply project is not configured")
+        if not isinstance(idempotency_key, str) or not re.fullmatch(
+            r"[A-Za-z0-9._:-]{16,128}", idempotency_key
+        ):
+            raise ValueError("apply idempotency key is invalid")
+
+        artifact = self.db.scalar(
+            select(GeneratedPlanArtifact)
+            .where(
+                GeneratedPlanArtifact.id == artifact_id,
+                GeneratedPlanArtifact.organization_id == principal.organization_id,
+            )
+            .with_for_update()
+        )
+        if artifact is None:
+            raise PermissionError("generated plan artifact not found in this organization")
+        if artifact.manifest_sha256 != provided_manifest_sha256:
+            raise ValueError("generated plan apply digest does not match this artifact")
+        manifest = artifact.manifest
+        if canonical_json_digest(manifest) != artifact.manifest_sha256:
+            raise ValueError("generated plan manifest failed integrity verification")
+        approval = self.db.scalar(
+            select(GeneratedPlanApproval)
+            .where(
+                GeneratedPlanApproval.artifact_id == artifact.id,
+                GeneratedPlanApproval.organization_id == principal.organization_id,
+            )
+            .with_for_update()
+        )
+        source_run = self.db.get(GeneratedPlanRun, artifact.run_id)
+        revision = self.db.get(InfrastructurePlanRevision, artifact.revision_id)
+        plan = self.db.get(InfrastructurePlan, revision.infrastructure_plan_id) if revision else None
+        tenant = manifest.get("tenant") or {}
+        target = manifest.get("target") or {}
+        boundary = manifest.get("planning_boundary") or {}
+        digests = manifest.get("digests") or {}
+        if (
+            approval is None
+            or source_run is None
+            or revision is None
+            or plan is None
+            or approval.approved_manifest_sha256 != artifact.manifest_sha256
+            or approval.project_id != artifact.project_id
+            or approval.revision_id != artifact.revision_id
+            or approval.creator_subject != artifact.created_by_subject
+            or source_run.organization_id != artifact.organization_id
+            or source_run.project_id != artifact.project_id
+            or source_run.revision_id != artifact.revision_id
+            or revision.organization_id != artifact.organization_id
+            or revision.state != "APPROVED"
+            or revision.content_digest != digests.get("customer_revision_sha256")
+            or revision.content_digest != plan_hash(revision.content)
+            or plan.organization_id != artifact.organization_id
+            or plan.project_id != artifact.project_id
+            or tenant.get("organization_id") != artifact.organization_id
+            or tenant.get("project_id") != artifact.project_id
+            or tenant.get("revision_id") != artifact.revision_id
+            or target.get("account_id") != artifact.target_account_id
+            or target.get("region") != artifact.region
+            or boundary.get("approval_allowed") is not True
+            or boundary.get("execution_allowed") is not True
+            or not has_complete_pricing_evidence(manifest)
+        ):
+            raise ValueError("current exact-plan approval and execution bindings are required")
+        if artifact.expires_at <= datetime.now(UTC):
+            raise ValueError("generated plan artifact has expired")
+        if not all(
+            (
+                artifact.artifact_bucket,
+                artifact.artifact_key,
+                artifact.artifact_version_id,
+                artifact.saved_plan_sha256,
+                artifact.workspace_artifact_bucket,
+                artifact.workspace_artifact_key,
+                artifact.workspace_artifact_version_id,
+                artifact.workspace_sha256,
+            )
+        ):
+            raise ValueError("stored saved plan and execution workspace are required")
+
+        request_document = {
+            "contract_version": 1,
+            "organization_id": artifact.organization_id,
+            "project_id": artifact.project_id,
+            "revision_id": artifact.revision_id,
+            "revision_sha256": revision.content_digest,
+            "source_plan_run_id": source_run.id,
+            "artifact_id": artifact.id,
+            "approval_id": approval.id,
+            "manifest_sha256": artifact.manifest_sha256,
+            "target": {
+                "account_id": artifact.target_account_id,
+                "region": artifact.region,
+            },
+            "digests": digests,
+            "saved_plan": {
+                "bucket": artifact.artifact_bucket,
+                "key": artifact.artifact_key,
+                "version_id": artifact.artifact_version_id,
+                "size_bytes": artifact.artifact_size_bytes,
+                "sha256": artifact.saved_plan_sha256,
+            },
+            "execution_workspace": {
+                "bucket": artifact.workspace_artifact_bucket,
+                "key": artifact.workspace_artifact_key,
+                "version_id": artifact.workspace_artifact_version_id,
+                "size_bytes": artifact.workspace_artifact_size_bytes,
+                "sha256": artifact.workspace_sha256,
+            },
+            "requester_subject": principal.subject,
+        }
+        request_sha256 = canonical_json_digest(request_document)
+        idempotency_sha256 = hashlib.sha256(idempotency_key.encode()).hexdigest()
+        existing = self.db.scalar(
+            select(GeneratedPlanApplyRun).where(
+                GeneratedPlanApplyRun.organization_id == artifact.organization_id,
+                GeneratedPlanApplyRun.idempotency_key_sha256 == idempotency_sha256,
+            )
+        )
+        if existing is None:
+            existing = self.db.scalar(
+                select(GeneratedPlanApplyRun).where(
+                    GeneratedPlanApplyRun.artifact_id == artifact.id
+                )
+            )
+        if existing is not None:
+            if existing.request_sha256 != request_sha256:
+                raise ValueError("apply request conflicts with an existing exact-plan run")
+            return self.generated_plan_apply_run_detail(principal, existing.id)
+
+        run_id = str(uuid.uuid4())
+        run = GeneratedPlanApplyRun(
+            id=run_id,
+            organization_id=artifact.organization_id,
+            project_id=artifact.project_id,
+            revision_id=artifact.revision_id,
+            source_plan_run_id=source_run.id,
+            artifact_id=artifact.id,
+            approval_id=approval.id,
+            requester_subject=principal.subject,
+            idempotency_key_sha256=idempotency_sha256,
+            request_sha256=request_sha256,
+            manifest_sha256=artifact.manifest_sha256,
+            runner_run_id=run_id,
+            codebuild_idempotency_token=hashlib.sha256(
+                f"davdeploy:nova-exact-plan-apply:{run_id}".encode()
+            ).hexdigest(),
+            codebuild_project=project,
+            state="QUEUED",
+            request_document=request_document,
+        )
+        self.db.add(run)
+        self.audit(
+            principal,
+            "generated_plan_apply.requested",
+            "generated_plan_apply_run",
+            run_id,
+            {
+                "artifact_id": artifact.id,
+                "approval_id": approval.id,
+                "manifest_sha256": artifact.manifest_sha256,
+                "request_sha256": request_sha256,
+                "target_account_id": artifact.target_account_id,
+                "region": artifact.region,
+            },
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            existing = self.db.scalar(
+                select(GeneratedPlanApplyRun).where(
+                    GeneratedPlanApplyRun.organization_id == artifact.organization_id,
+                    GeneratedPlanApplyRun.artifact_id == artifact.id,
+                )
+            )
+            if existing is None or existing.request_sha256 != request_sha256:
+                raise ValueError("apply request could not be queued once") from error
+            return self.generated_plan_apply_run_detail(principal, existing.id)
+        return self.generated_plan_apply_run_detail(principal, run.id)
+
     def generated_plan_apply_run_detail(
         self, principal: Principal, apply_run_id: str
     ) -> dict[str, Any]:

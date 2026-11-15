@@ -29,7 +29,7 @@ from davdeploy.generated_plan_pricing import (
 )
 from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 from davdeploy.main import app, product_service
-from davdeploy.models import GeneratedPlanApproval, GeneratedPlanArtifact
+from davdeploy.models import GeneratedPlanApplyRun, GeneratedPlanApproval, GeneratedPlanArtifact
 from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
@@ -643,3 +643,19 @@ def test_generated_plan_review_routes_are_tenant_scoped_and_admin_only(tmp_path)
             )
     finally:
         app.dependency_overrides.pop(product_service, None)
+
+
+def test_generated_plan_apply_request_is_closed_until_runner_is_ready(tmp_path, monkeypatch):
+    store = ArtifactStoreFixture()
+    service, db = service_with_artifact_store(store)
+    monkeypatch.delenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", raising=False)
+
+    with pytest.raises(ValueError, match="runner is not ready"):
+        service.create_generated_plan_apply_run(
+            administrator(),
+            "missing-artifact",
+            "a" * 64,
+            "request-key-for-apply-001",
+        )
+
+    assert db.scalar(select(GeneratedPlanApplyRun.id)) is None
