@@ -42,9 +42,10 @@ catalog result is an estimate input, not a bill or billing cap.
 - `./.venv/bin/python -m pytest -q tests/test_generated_plan_pricing.py tests/test_dynamodb_plan_pricing.py tests/test_pricing_usage_assumptions.py tests/test_sqs_plan_pricing.py` — 121 passed.
 - `make verify` — passed: 1,253 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose configuration. One existing Starlette/httpx deprecation warning was emitted.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Required GitHub Actions run [43773735458](https://github.com/Bepoadewale/davdeploy/actions/runs/43773735458)
-  passed all seven jobs on code head `c09313d`, including `local-e2e` and
-  `cloud-contracts`. The final evidence-only PR head requires its standard CI.
+- GitHub Actions runs [43773735458](https://github.com/Bepoadewale/davdeploy/actions/runs/43773735458)
+  and [43774188730](https://github.com/Bepoadewale/davdeploy/actions/runs/43774188730)
+  passed all seven required jobs on code head `c09313d` and evidence head
+  `2118185`, including `local-e2e` and `cloud-contracts`.
 
 ## Commands executed
 
