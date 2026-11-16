@@ -51,23 +51,27 @@ strict validation and value redaction.
 - [x] Hyphenated names in single and list named `{name, policy}` values are
       summarized correctly.
 - [ ] Existing list and direct document shapes continue to work.
-- [ ] Malformed shapes fail closed without exposing raw policy values.
-- [ ] Focused tests, full verification, docs conventions, diff checks, and
-      final-head GitHub CI pass.
+- [x] Malformed shapes fail closed without exposing raw policy values.
+- [x] Focused tests, full verification, docs conventions, diff checks, and
+      implementation-head GitHub CI pass.
 - [x] No apply, deployment, runtime gate change, AWS resource mutation, or
       customer workload execution is part of this PR.
 
 ## Acceptance status
 
 Policy names now use a bounded IAM-specific allowlist that supports hyphens;
-the rest of the summary remains value-redacted and fail-closed. Focused tests
-pass; full verification, docs checks, and final-head CI are pending. The last
-protected plan published no plan and dispatched no apply.
+the summary handles single and list named policy objects while remaining
+value-redacted and fail-closed. Focused/full verification, documentation
+checks, and all seven CI jobs pass for implementation commit `54c7029`. The
+last protected plan published no plan and dispatched no apply.
 
 ## Tests / validation performed
 
 - `tests/test_terraform_plan_summary.py` — 31 passed.
-- Focused Ruff and `git diff --check` — passed.
+- `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` — 1,261
+  passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks
+  passed (one existing Starlette/httpx deprecation warning).
+- Documentation conventions and `git diff --check` — passed.
 
 ## Evidence files produced
 
