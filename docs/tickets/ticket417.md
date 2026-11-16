@@ -58,8 +58,8 @@ values or secrets.
       allowlisted boolean values.
 - [x] Output changes show names, actions, and sensitivity without values.
 - [x] Malformed, unexpected, oversized, or unknown shapes fail closed.
-- [ ] Focused tests, full `make verify`, docs conventions, diff checks, and
-      final-head GitHub CI pass.
+- [x] Focused tests, full `make verify`, docs conventions, diff checks, and
+      implementation-head GitHub CI pass.
 - [x] No apply, deployment, runtime gate change, or AWS resource mutation is
       part of this PR.
 
@@ -72,8 +72,8 @@ output names/actions/sensitivity. It never emits condition values, output
 values, or arbitrary environment values. Review found and closed a redaction
 gap for bare 12-digit AWS account IDs in principal values. Focused and full
 verification plus documentation checks pass; final-head GitHub CI remains
-pending for the redaction fix. No AWS apply or runtime configuration change
-has occurred.
+passed all seven jobs for implementation commit `64fc288`. No AWS apply or
+runtime configuration change has occurred.
 
 ## Tests / validation performed
 
