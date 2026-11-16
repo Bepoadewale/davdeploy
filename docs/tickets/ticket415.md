@@ -83,6 +83,8 @@ checks are complete; hosted CI remains pending.
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
 - GitHub Actions run [43957339117](https://github.com/Bepoadewale/davdeploy/actions/runs/43957339117)
   passed all seven jobs on implementation head `b5624a8`.
+- GitHub Actions run [43958132046](https://github.com/Bepoadewale/davdeploy/actions/runs/43958132046)
+  passed all seven jobs on final PR head `7a74f2b`.
 
 ## Evidence files produced
 
@@ -106,12 +108,12 @@ implemented and verified.
 
 ## Status ledger
 
-- Status: draft; lifecycle verification, status reconciliation, local checks,
-  and CI on implementation head passed. The current PR status rollup remains
-  the merge gate.
+- Status: merged and CI verified; no runtime behavior changed.
 - Source: branch `fix/dynamodb-pricing-assumption-lifecycle-415` from
   `main` commit `373b82a7011a54b046820f7990065bcfc017beac`.
 - Deployed version: none; control plane remains PR #411.
-- Current operation: push the final validation ledger, verify its PR checks,
-  then mark ready and merge after confirming the review state is clear.
+- PR #415 merged as `2b78e0a97940179bac0654cf005f04df00949995` after all seven
+  jobs passed on the final PR head.
+- Current operation: PR #416 exposes all validated pricing assumptions in the
+  generated-plan review response.
 - Customer workload execution: none.

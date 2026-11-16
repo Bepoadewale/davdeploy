@@ -1,6 +1,6 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `373b82a` (PR #414), 2026-11-16. The hosted
+Status snapshot: backend `main` at `2b78e0a` (PR #415), 2026-11-16. The hosted
 control plane is on PR #411 commit `a9c5ca1`, applied by exact saved-plan run
 [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
 after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
@@ -10,7 +10,8 @@ This verifies control-plane source and health only. PRs #412 and #414 add
 source-only pricing and are not deployed; neither establishes a Nova customer
 workload journey. PR #414 covers bounded DynamoDB on-demand request units,
 table storage, and PITR. Unsupported DynamoDB settings remain unpriced and
-approval-blocking.
+approval-blocking. Draft PR #416 adds assumption visibility to the local
+generated-plan review contract; it is not deployed.
 
 This document joins the checked-in architecture catalogue, Terraform
 implementation registry, scenario catalogue and existing evidence. A catalogue
