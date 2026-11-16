@@ -60,7 +60,7 @@ status after PRs #413 and #414 merged.
       revision contents.
 - [x] Current source, hosted control-plane, PR #399, PR #413, PR #414, and AWS
       evidence status is documented accurately.
-- [ ] Focused tests, `make verify`, documentation conventions, diff checks,
+- [x] Focused tests, `make verify`, documentation conventions, diff checks,
       and required GitHub CI pass.
 - [x] No hosted runtime flags, customer workload, control-plane deployment, or
       Nova apply permission is changed.
@@ -81,7 +81,8 @@ checks are complete; hosted CI remains pending.
 - `make verify` — passed: 1,254 tests, Ruff, Actions configuration, OpenAPI
   snapshot, and Compose configuration (one existing deprecation warning).
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Required GitHub CI — pending.
+- GitHub Actions run [43957339117](https://github.com/Bepoadewale/davdeploy/actions/runs/43957339117)
+  passed all seven jobs on implementation head `b5624a8`.
 
 ## Evidence files produced
 
@@ -105,11 +106,12 @@ implemented and verified.
 
 ## Status ledger
 
-- Status: draft; lifecycle verification, status reconciliation, and local checks
-  complete; hosted CI pending.
+- Status: draft; lifecycle verification, status reconciliation, local checks,
+  and CI on implementation head passed. The current PR status rollup remains
+  the merge gate.
 - Source: branch `fix/dynamodb-pricing-assumption-lifecycle-415` from
   `main` commit `373b82a7011a54b046820f7990065bcfc017beac`.
 - Deployed version: none; control plane remains PR #411.
-- Current operation: wait for required GitHub checks, then update the acceptance
-  status before marking the PR ready.
+- Current operation: push the final validation ledger, verify its PR checks,
+  then mark ready and merge after confirming the review state is clear.
 - Customer workload execution: none.
