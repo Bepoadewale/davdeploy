@@ -346,6 +346,45 @@ def test_iam_policy_summary_preserves_aws_policy_variable_placeholders():
     assert "plans/${codebuild:buildArn}/*" in summary
 
 
+def test_iam_policy_summary_accepts_named_inline_policy_objects():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "s3:GetObjectVersion",
+                "Resource": "arn:aws:s3:::davdeploy-artifacts/plans/*",
+            }
+        ],
+    }
+    inline_policy = {
+        "name": "legacy-plan-policy",
+        "policy": json.dumps(policy),
+    }
+    for before_value in (inline_policy, [inline_policy]):
+        plan = _plan()
+        plan["resource_changes"].append(
+            {
+                "address": "aws_iam_role.nova_plan_only",
+                "type": "aws_iam_role",
+                "change": {
+                    "actions": ["update"],
+                    "before": {"inline_policy": before_value},
+                    "after": {"inline_policy": None},
+                },
+            }
+        )
+
+        summary = "\n".join(summarize_plan(plan))
+
+        assert (
+            "policy_detail address=aws_iam_role.nova_plan_only side=before "
+            "name=legacy-plan-policy" in summary
+        )
+        assert "s3:GetObjectVersion" in summary
+        assert "davdeploy-artifacts/plans/*" in summary
+
+
 def test_malformed_aws_policy_variable_fails_closed_without_echoing_value(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ):
