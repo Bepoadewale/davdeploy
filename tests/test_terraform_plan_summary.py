@@ -222,7 +222,14 @@ def test_summary_reports_drift_and_output_counts_without_values():
             },
         }
     ]
-    plan["output_changes"] = {"private_endpoint": {"after": "sensitive-endpoint-value"}}
+    plan["output_changes"] = {
+        "private_endpoint": {
+            "actions": ["update"],
+            "before_sensitive": False,
+            "after_sensitive": True,
+            "after": "sensitive-endpoint-value",
+        }
+    }
 
     summary = "\n".join(summarize_plan(plan))
 
@@ -234,6 +241,163 @@ def test_summary_reports_drift_and_output_counts_without_values():
     assert "old-sensitive-name" not in summary
     assert "new-sensitive-name" not in summary
     assert "sensitive-endpoint-value" not in summary
+    assert (
+        "output_change name=private_endpoint actions=update "
+        "sensitive_before=false sensitive_after=true" in summary
+    )
+
+
+def test_iam_policy_summary_exposes_scope_shape_but_not_condition_values():
+    plan = _plan()
+    before_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": ["s3:GetObjectVersion", "execute-api:Invoke"],
+                "Resource": [
+                    "arn:aws:s3:::davdeploy-artifacts/plans/*",
+                    "arn:aws:execute-api:us-east-1:654654474502:api/*/POST/terraform-state",
+                ],
+                "Principal": {
+                    "Service": "codebuild.amazonaws.com",
+                    "AWS": "654654474502",
+                },
+                "Condition": {
+                    "ArnLike": {
+                        "codebuild:BuildArn": "private-condition-value"
+                    }
+                },
+            }
+        ],
+    }
+    after_policy = json.loads(json.dumps(before_policy))
+    after_policy["Statement"].append(
+        {
+            "Effect": "Deny",
+            "Action": "s3:DeleteObject",
+            "Resource": "arn:aws:s3:::davdeploy-artifacts/plans/*",
+            "Condition": {
+                "StringEquals": {"aws:SourceAccount": "654654474502"}
+            },
+        }
+    )
+    plan["resource_changes"].append(
+        {
+            "address": "aws_iam_role_policy.nova_plan_only",
+            "type": "aws_iam_role_policy",
+            "change": {
+                "actions": ["update"],
+                "before": {"policy": json.dumps(before_policy)},
+                "after": {"policy": json.dumps(after_policy)},
+            },
+        }
+    )
+
+    summary = "\n".join(summarize_plan(plan))
+
+    assert "policy_detail address=aws_iam_role_policy.nova_plan_only side=after" in summary
+    assert "effects=Allow,Deny" in summary
+    assert "s3:GetObjectVersion" in summary
+    assert "s3:DeleteObject" in summary
+    assert "arn:aws:execute-api:us-east-1:ACCOUNT:" in summary
+    assert "principals=ACCOUNT,codebuild.amazonaws.com" in summary
+    assert "codebuild:BuildArn" in summary
+    assert "private-condition-value" not in summary
+    assert "654654474502" not in summary
+
+
+def test_codebuild_environment_summary_redacts_values_and_reports_fixed_boolean_flags():
+    plan = _plan()
+    plan["resource_changes"].append(
+        {
+            "address": "aws_codebuild_project.nova_plan_only",
+            "type": "aws_codebuild_project",
+            "change": {
+                "actions": ["update"],
+                "before": {
+                    "environment": {
+                        "environment_variable": [
+                            {
+                                "name": "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL",
+                                "value": "https://old-sensitive-endpoint",
+                            },
+                            {
+                                "name": "TF_VAR_enable_nova_exact_plan_apply_runner",
+                                "value": "true",
+                            },
+                        ]
+                    }
+                },
+                "after": {
+                    "environment": {
+                        "environment_variable": [
+                            {
+                                "name": "DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL",
+                                "value": "https://new-sensitive-endpoint",
+                            },
+                            {
+                                "name": "TF_VAR_enable_nova_exact_plan_apply_runner",
+                                "value": "false",
+                            },
+                        ]
+                    }
+                },
+            },
+        }
+    )
+
+    summary = "\n".join(summarize_plan(plan))
+
+    assert (
+        "codebuild_environment name=DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_URL "
+        "value=redacted" in summary
+    )
+    assert (
+        "codebuild_environment name=TF_VAR_enable_nova_exact_plan_apply_runner "
+        "value=false" in summary
+    )
+    assert "old-sensitive-endpoint" not in summary
+    assert "new-sensitive-endpoint" not in summary
+
+
+def test_malformed_iam_policy_fails_with_fixed_error_without_echoing_input(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["resource_changes"].append(
+        {
+            "address": "aws_iam_role_policy.nova_plan_only",
+            "type": "aws_iam_role_policy",
+            "change": {
+                "actions": ["update"],
+                "before": {"policy": "{}"},
+                "after": {"policy": "private-policy-value"},
+            },
+        }
+    )
+
+    result, output = _run_main(monkeypatch, capsys, json.dumps(plan).encode())
+
+    assert result == 2
+    assert "reason=invalid_policy_summary" in output.err
+    assert "private-policy-value" not in output.err
+
+
+def test_malformed_output_change_actions_fail_closed_without_echoing_value(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    plan["output_changes"] = {
+        "endpoint": {"actions": ["private-action"], "after": "private-output-value"}
+    }
+
+    result, output = _run_main(monkeypatch, capsys, json.dumps(plan).encode())
+
+    assert result == 2
+    assert "reason=invalid_output_actions" in output.err
+    assert "private-action" not in output.err
+    assert "private-output-value" not in output.err
 
 
 def test_invalid_drift_actions_fail_with_fixed_reason_without_echoing_values(

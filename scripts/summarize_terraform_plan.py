@@ -11,11 +11,31 @@ from typing import Any
 MAX_PLAN_JSON_BYTES = 64 * 1024 * 1024
 MAX_SUMMARY_RESOURCES = 250
 MAX_CHANGED_FIELDS = 64
+MAX_POLICY_DETAILS = 128
+MAX_POLICY_TEXT = 4096
+MAX_OUTPUT_DETAILS = 128
 SAFE_ADDRESS = re.compile(r"[A-Za-z0-9_.\[\]-]{1,512}\Z")
 SAFE_RESOURCE_TYPE = re.compile(r"[A-Za-z0-9_]{1,128}\Z")
 SAFE_FIELD = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}\Z")
+SAFE_VARIABLE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,127}\Z")
+SAFE_OUTPUT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,127}\Z")
+SAFE_POLICY_ACTION = re.compile(r"[A-Za-z0-9-]+:[A-Za-z0-9*]+\Z")
+SAFE_POLICY_VALUE = re.compile(r"[A-Za-z0-9:_./*?+=,-]{1,512}\Z")
+SAFE_POLICY_KEY = re.compile(r"[A-Za-z0-9:_./-]{1,256}\Z")
+SAFE_POLICY_OPERATOR = re.compile(r"[A-Za-z0-9:_-]{1,128}\Z")
 SAFE_TERRAFORM_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?\Z")
 ALLOWED_ACTIONS = {"create", "read", "update", "delete", "no-op"}
+CODEBUILD_BOOLEAN_VARIABLES = {
+    "TF_VAR_enable_nova_plan_reviews",
+    "TF_VAR_enable_nova_plan_role_verification",
+    "TF_VAR_enable_nova_plan_credential_broker",
+    "TF_VAR_enable_nova_plan_only_runner",
+    "TF_VAR_enable_nova_terraform_state_storage",
+    "TF_VAR_enable_nova_terraform_state_api",
+    "TF_VAR_enable_nova_exact_plan_apply_runner",
+    "TF_VAR_enable_serverless_api_hosted_certification",
+    "TF_VAR_enable_customer_cloud_execution",
+}
 FLAG_NAMES = (
     "DAVDEPLOY_NOVA_PLAN_RUNNER_READY",
     "DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED",
@@ -48,6 +68,9 @@ SAFE_FAILURE_CODES = {
     "invalid resource action metadata": "invalid_resource_actions",
     "resource drift metadata is invalid": "invalid_resource_drift",
     "output change metadata is invalid": "invalid_output_changes",
+    "output change action metadata is invalid": "invalid_output_actions",
+    "plan policy summary metadata is invalid": "invalid_policy_summary",
+    "CodeBuild environment summary metadata is invalid": "invalid_codebuild_environment_summary",
     "runtime feature gate is not a literal boolean": "runtime_gate_not_boolean",
     "required runtime feature gates are missing": "runtime_gates_missing",
     "runtime feature gates disagree across functions": "runtime_gate_disagreement",
@@ -104,6 +127,249 @@ def _changed_fields(change: dict[str, Any]) -> list[str]:
         if isinstance(key, str) and SAFE_FIELD.fullmatch(key) and before.get(key) != after.get(key)
     ]
     return sorted(fields)[:MAX_CHANGED_FIELDS]
+
+
+def _policy_entries(value: Any) -> list[tuple[str, Any]]:
+    """Extract IAM policy documents without returning their raw values."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            return [("", json.loads(value))]
+        except (json.JSONDecodeError, RecursionError):
+            raise PlanSummaryError("plan policy summary metadata is invalid") from None
+    if isinstance(value, dict):
+        return [("", value)]
+    if isinstance(value, list):
+        if len(value) > MAX_POLICY_DETAILS:
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        entries: list[tuple[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict) or "policy" not in item:
+                raise PlanSummaryError("plan policy summary metadata is invalid")
+            name = item.get("name", "")
+            if name and (not isinstance(name, str) or not SAFE_VARIABLE_NAME.fullmatch(name)):
+                raise PlanSummaryError("plan policy summary metadata is invalid")
+            nested = _policy_entries(item.get("policy"))
+            entries.extend((name, policy) for _, policy in nested)
+        return entries
+    raise PlanSummaryError("plan policy summary metadata is invalid")
+
+
+def _policy_values(value: Any, *, field: str) -> list[str]:
+    if value is None:
+        return []
+    items = [value] if isinstance(value, str) else value
+    if not isinstance(items, list) or len(items) > MAX_POLICY_DETAILS:
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    pattern = SAFE_POLICY_ACTION if field.endswith("Action") else SAFE_POLICY_VALUE
+    result = []
+    for item in items:
+        if not isinstance(item, str) or not pattern.fullmatch(item):
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        if field.endswith("Resource"):
+            item = _redact_account_ids(item)
+        result.append(item)
+    return sorted(set(result))
+
+
+def _redact_account_ids(value: str) -> str:
+    """Hide 12-digit AWS account IDs, including bare principal IDs."""
+    return re.sub(r"(?<!\d)\d{12}(?!\d)", "ACCOUNT", value)
+
+
+def _principal_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, dict):
+        values = []
+        for key, nested in value.items():
+            if not isinstance(key, str) or not SAFE_FIELD.fullmatch(key):
+                raise PlanSummaryError("plan policy summary metadata is invalid")
+            values.extend([nested] if isinstance(nested, str) else nested if isinstance(nested, list) else [])
+            if not isinstance(nested, (str, list)):
+                raise PlanSummaryError("plan policy summary metadata is invalid")
+    elif isinstance(value, list):
+        values = value
+    else:
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    if len(values) > MAX_POLICY_DETAILS:
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    result = []
+    for item in values:
+        if not isinstance(item, str) or not SAFE_POLICY_VALUE.fullmatch(item):
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        result.append(_redact_account_ids(item))
+    return sorted(set(result))
+
+
+def _condition_keys(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, dict) or len(value) > MAX_POLICY_DETAILS:
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    result = []
+    for operator, conditions in value.items():
+        if not isinstance(operator, str) or not SAFE_POLICY_OPERATOR.fullmatch(operator):
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        if not isinstance(conditions, dict) or len(conditions) > MAX_POLICY_DETAILS:
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        for key in conditions:
+            if not isinstance(key, str) or not SAFE_POLICY_KEY.fullmatch(key):
+                raise PlanSummaryError("plan policy summary metadata is invalid")
+            result.append(f"{operator}:{key}")
+    return sorted(set(result))
+
+
+def _policy_line(address: str, side: str, name: str, document: Any) -> str:
+    if not isinstance(document, dict):
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    statements = document.get("Statement")
+    if isinstance(statements, dict):
+        statements = [statements]
+    if not isinstance(statements, list) or len(statements) > MAX_POLICY_DETAILS:
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    effects: set[str] = set()
+    actions: set[str] = set()
+    resources: set[str] = set()
+    principals: set[str] = set()
+    condition_keys: set[str] = set()
+    for statement in statements:
+        if not isinstance(statement, dict):
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        effect = statement.get("Effect")
+        if effect not in {"Allow", "Deny"}:
+            raise PlanSummaryError("plan policy summary metadata is invalid")
+        effects.add(effect)
+        for field, destination in (
+            ("Action", actions),
+            ("NotAction", actions),
+            ("Resource", resources),
+            ("NotResource", resources),
+        ):
+            destination.update(_policy_values(statement.get(field), field=field))
+        principals.update(_principal_values(statement.get("Principal")))
+        principals.update(_principal_values(statement.get("NotPrincipal")))
+        condition_keys.update(_condition_keys(statement.get("Condition")))
+    parts = [
+        f"policy_detail address={address} side={side}",
+        f"name={name or 'unnamed'}",
+        f"statements={len(statements)}",
+        "effects=" + (",".join(sorted(effects)) if effects else "none"),
+        "actions=" + (",".join(sorted(actions)) if actions else "none"),
+        "resources=" + (",".join(sorted(resources)) if resources else "none"),
+        "principals=" + (",".join(sorted(principals)) if principals else "none"),
+        "condition_keys=" + (",".join(sorted(condition_keys)) if condition_keys else "none"),
+    ]
+    line = " ".join(parts)
+    if len(line) > MAX_POLICY_TEXT:
+        raise PlanSummaryError("plan policy summary metadata is invalid")
+    return line
+
+
+def _policy_lines(item: dict[str, Any], change: dict[str, Any]) -> list[str]:
+    resource_type = item.get("type")
+    if not isinstance(resource_type, str) or not resource_type.startswith("aws_iam_"):
+        return []
+    address = _safe_address(item.get("address"))
+    before = change.get("before")
+    after = change.get("after")
+    before = before if isinstance(before, dict) else {}
+    after = after if isinstance(after, dict) else {}
+    lines = []
+    for field in ("policy", "assume_role_policy", "inline_policy"):
+        if before.get(field) == after.get(field):
+            continue
+        for side, values in (("before", before.get(field)), ("after", after.get(field))):
+            for name, document in _policy_entries(values):
+                lines.append(_policy_line(address, side, name, document))
+    return lines
+
+
+def _codebuild_environment_lines(item: dict[str, Any], change: dict[str, Any]) -> list[str]:
+    if item.get("type") != "aws_codebuild_project":
+        return []
+
+    def variables(value: Any) -> dict[str, Any]:
+        if value is None:
+            return {}
+        if not isinstance(value, list) or len(value) > MAX_POLICY_DETAILS:
+            raise PlanSummaryError("CodeBuild environment summary metadata is invalid")
+        result = {}
+        for environment in value:
+            if not isinstance(environment, dict):
+                raise PlanSummaryError("CodeBuild environment summary metadata is invalid")
+            name = environment.get("name")
+            if not isinstance(name, str) or not SAFE_VARIABLE_NAME.fullmatch(name):
+                raise PlanSummaryError("CodeBuild environment summary metadata is invalid")
+            if name in result:
+                raise PlanSummaryError("CodeBuild environment summary metadata is invalid")
+            result[name] = environment.get("value")
+        return result
+
+    before = change.get("before") if isinstance(change.get("before"), dict) else {}
+    after = change.get("after") if isinstance(change.get("after"), dict) else {}
+    before_environment = before.get("environment")
+    after_environment = after.get("environment")
+    if isinstance(before_environment, list):
+        before_environment = before_environment[0] if before_environment else {}
+    if isinstance(after_environment, list):
+        after_environment = after_environment[0] if after_environment else {}
+    if before_environment is None:
+        before_environment = {}
+    if after_environment is None:
+        after_environment = {}
+    if not isinstance(before_environment, dict) or not isinstance(after_environment, dict):
+        raise PlanSummaryError("CodeBuild environment summary metadata is invalid")
+    before_variables = variables(before_environment.get("environment_variable"))
+    after_variables = variables(after_environment.get("environment_variable"))
+    changed = sorted(
+        name
+        for name in before_variables.keys() | after_variables.keys()
+        if before_variables.get(name) != after_variables.get(name)
+    )
+    lines = []
+    for name in changed[:MAX_POLICY_DETAILS]:
+        value = after_variables.get(name)
+        if name in CODEBUILD_BOOLEAN_VARIABLES:
+            if isinstance(value, bool):
+                safe_value = str(value).lower()
+            elif isinstance(value, str) and value.lower() in {"true", "false"}:
+                safe_value = value.lower()
+            else:
+                raise PlanSummaryError("CodeBuild environment summary metadata is invalid")
+        else:
+            safe_value = "redacted"
+        lines.append(f"codebuild_environment name={name} value={safe_value}")
+    if len(changed) > MAX_POLICY_DETAILS:
+        lines.append("codebuild_environment_details=truncated")
+    return lines
+
+
+def _output_lines(output_changes: dict[str, Any]) -> list[str]:
+    if len(output_changes) > MAX_OUTPUT_DETAILS:
+        raise PlanSummaryError("output change metadata is invalid")
+    lines = []
+    for name, change in sorted(output_changes.items()):
+        safe_name = name if isinstance(name, str) and SAFE_OUTPUT_NAME.fullmatch(name) else "redacted-output"
+        if not isinstance(change, dict):
+            raise PlanSummaryError("output change metadata is invalid")
+        try:
+            actions = _resource_actions(change)
+        except PlanSummaryError:
+            raise PlanSummaryError("output change action metadata is invalid") from None
+        before_sensitive = change.get("before_sensitive", False)
+        after_sensitive = change.get("after_sensitive", change.get("sensitive", False))
+        if type(before_sensitive) is not bool or type(after_sensitive) is not bool:
+            raise PlanSummaryError("output change metadata is invalid")
+        lines.append(
+            f"output_change name={safe_name} actions={','.join(actions)}"
+            f" sensitive_before={str(before_sensitive).lower()}"
+            f" sensitive_after={str(after_sensitive).lower()}"
+        )
+    return lines
 
 
 def _module_resources(module: Any):
@@ -255,6 +521,7 @@ def summarize_plan(plan: Any) -> list[str]:
         raise PlanSummaryError("output change metadata is invalid")
     counts = {"add": 0, "change": 0, "destroy": 0, "replace": 0, "other": 0}
     details: list[tuple[str, str, list[str], list[str]]] = []
+    structural_details: list[str] = []
     for item in resource_changes:
         if not isinstance(item, dict):
             raise PlanSummaryError("invalid resource change entry")
@@ -264,6 +531,8 @@ def summarize_plan(plan: Any) -> list[str]:
         actions = _resource_actions(change)
         if actions in (["no-op"], ["read"]):
             continue
+        structural_details.extend(_policy_lines(item, change))
+        structural_details.extend(_codebuild_environment_lines(item, change))
         if "create" in actions and "delete" in actions:
             category = "replace"
         elif actions == ["create"]:
@@ -298,6 +567,7 @@ def summarize_plan(plan: Any) -> list[str]:
         if not isinstance(change, dict):
             raise PlanSummaryError("resource drift metadata is invalid")
         actions = _resource_actions(change)
+        structural_details.extend(_policy_lines(item, change))
         resource_type = item.get("type")
         if not isinstance(resource_type, str) or not SAFE_RESOURCE_TYPE.fullmatch(resource_type):
             resource_type = "redacted-type"
@@ -338,6 +608,10 @@ def summarize_plan(plan: Any) -> list[str]:
             f"drift address={address} type={resource_type}"
             f" actions={action_text} changed_fields={field_text}"
         )
+    lines.extend(structural_details[:MAX_SUMMARY_RESOURCES * 4])
+    if len(structural_details) > MAX_SUMMARY_RESOURCES * 4:
+        lines.append("structural_details=truncated")
+    lines.extend(_output_lines(output_changes))
     if sum(counts.values()) > MAX_SUMMARY_RESOURCES:
         lines.append("resource_details=truncated")
     if len(resource_drift) > MAX_SUMMARY_RESOURCES:
