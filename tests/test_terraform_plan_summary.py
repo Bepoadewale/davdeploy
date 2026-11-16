@@ -453,7 +453,17 @@ def test_malformed_iam_policy_fails_with_fixed_error_without_echoing_input(
             "type": "aws_iam_role_policy",
             "change": {
                 "actions": ["update"],
-                "before": {"policy": "{}"},
+                "before": {
+                    "policy": json.dumps(
+                        {
+                            "Statement": {
+                                "Effect": "Allow",
+                                "Action": "s3:GetObject",
+                                "Resource": "arn:aws:s3:::bucket/*",
+                            }
+                        }
+                    )
+                },
                 "after": {"policy": "private-policy-value"},
             },
         }
@@ -463,6 +473,10 @@ def test_malformed_iam_policy_fails_with_fixed_error_without_echoing_input(
 
     assert result == 2
     assert "reason=invalid_policy_summary" in output.err
+    assert (
+        "policy_resource=aws_iam_role_policy.nova_plan_only "
+        "policy_side=after policy_field=policy" in output.err
+    )
     assert "private-policy-value" not in output.err
 
 

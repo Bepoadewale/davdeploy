@@ -89,11 +89,13 @@ class PlanSummaryError(ValueError):
         missing_gates: tuple[str, ...] = (),
         gate_shape: tuple[tuple[str, int], ...] = (),
         gate_names: tuple[tuple[str, tuple[str, ...]], ...] = (),
+        policy_context: tuple[str, str, str] = (),
     ):
         super().__init__(message)
         self.missing_gates = missing_gates
         self.gate_shape = gate_shape
         self.gate_names = gate_names
+        self.policy_context = policy_context
 
 
 def _safe_address(value: Any) -> str:
@@ -285,8 +287,14 @@ def _policy_lines(item: dict[str, Any], change: dict[str, Any]) -> list[str]:
         if before.get(field) == after.get(field):
             continue
         for side, values in (("before", before.get(field)), ("after", after.get(field))):
-            for name, document in _policy_entries(values):
-                lines.append(_policy_line(address, side, name, document))
+            try:
+                for name, document in _policy_entries(values):
+                    lines.append(_policy_line(address, side, name, document))
+            except PlanSummaryError:
+                raise PlanSummaryError(
+                    "plan policy summary metadata is invalid",
+                    policy_context=(address, side, field),
+                ) from None
     return lines
 
 
@@ -644,6 +652,7 @@ def main() -> int:
         missing_gates = ()
         gate_shape = ()
         gate_names = ()
+        policy_context = ()
         if isinstance(error, PlanSummaryError) and reason == "runtime_gates_missing":
             candidates = error.missing_gates
             if (
@@ -686,6 +695,19 @@ def main() -> int:
                 )
             ):
                 gate_names = name_candidates
+        if isinstance(error, PlanSummaryError) and reason == "invalid_policy_summary":
+            candidates = error.policy_context
+            if (
+                isinstance(candidates, tuple)
+                and len(candidates) == 3
+                and isinstance(candidates[0], str)
+                and SAFE_ADDRESS.fullmatch(candidates[0])
+                and isinstance(candidates[1], str)
+                and candidates[1] in {"before", "after"}
+                and isinstance(candidates[2], str)
+                and candidates[2] in {"policy", "assume_role_policy", "inline_policy"}
+            ):
+                policy_context = candidates
         detail = f" missing_gates={','.join(missing_gates)}" if missing_gates else ""
         if gate_shape:
             detail += " gate_shape=" + ",".join(f"{name}:{count}" for name, count in gate_shape)
@@ -693,6 +715,9 @@ def main() -> int:
             detail += " gate_names=" + ";".join(
                 f"{source}:{','.join(names) if names else 'none'}" for source, names in gate_names
             )
+        if policy_context:
+            address, side, field = policy_context
+            detail += f" policy_resource={address} policy_side={side} policy_field={field}"
         print(
             "Terraform plan summary failed closed; "
             f"reason={reason};{detail} raw plan output was suppressed.",
