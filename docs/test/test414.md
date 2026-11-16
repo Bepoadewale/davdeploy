@@ -9,7 +9,8 @@ Branch: `feat/nova-dynamodb-plan-pricing-414`
 Commit: `fdd05ff` (`fix: bind PITR pricing to table storage bounds`)
 Starting source: PR #413 merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`
 PR branch base: `3368a432823beed62498935b0204913fbe740d51`
-Deployed backend: PR #411; PR #414 is not merged or deployed.
+Merged as `373b82a7011a54b046820f7990065bcfc017beac`; deployed backend remains
+PR #411, so PR #414 is not deployed.
 
 ## Read-only AWS Price List evidence
 
@@ -46,6 +47,8 @@ catalog result is an estimate input, not a bill or billing cap.
   and [43774188730](https://github.com/Bepoadewale/davdeploy/actions/runs/43774188730)
   passed all seven required jobs on code head `c09313d` and evidence head
   `2118185`, including `local-e2e` and `cloud-contracts`.
+- GitHub Actions run [43774616215](https://github.com/Bepoadewale/davdeploy/actions/runs/43774616215)
+  passed all seven required jobs on final PR head `880fe6b`.
 
 ## Commands executed
 
@@ -72,6 +75,8 @@ This is a partial plan estimate. Provisioned capacity, Standard-IA, indexes,
 replicas, streams, exports, on-demand backups, customer-managed key costs,
 cross-region transfer, and other unsupported charges remain unpriced and
 approval-blocking. No Nova customer plan was generated, applied, or certified.
+PR #414 is merged into backend source; this does not deploy it to the hosted
+control plane.
 
 ## Resources created
 
