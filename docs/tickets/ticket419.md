@@ -49,8 +49,8 @@ values or arbitrary exception text.
 - [x] Failure reports a validated IAM address, before/after side, and
       allowlisted policy field.
 - [x] Malformed policy sentinels and arbitrary exception text never appear.
-- [ ] Focused tests, full verification, docs conventions, diff checks, and
-      final-head GitHub CI pass.
+- [x] Focused tests, full verification, docs conventions, diff checks, and
+      implementation-head GitHub CI pass.
 - [x] No apply, deployment, runtime gate change, AWS resource mutation, or
       customer workload execution is part of this PR.
 
@@ -59,8 +59,9 @@ values or arbitrary exception text.
 The failure path now reports only validated resource address, side, and policy
 field metadata. Regression coverage verifies malformed policy input appears
 only as the fixed reason and safe context, never as raw text. Focused/full
-verification and documentation checks pass; final-head CI is pending. Both
-failed plans published no saved plan and dispatched no apply.
+verification and documentation checks pass, and all seven CI jobs passed for
+implementation commit `59b3c5c`. Both failed plans published no saved plan
+and dispatched no apply.
 
 ## Tests / validation performed
 
