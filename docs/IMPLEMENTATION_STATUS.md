@@ -1,7 +1,7 @@
 # Implementation Status
 
 Current backend source `main` is commit
-`373b82a7011a54b046820f7990065bcfc017beac` (PR #414). The hosted control plane
+`2b78e0a97940179bac0654cf005f04df00949995` (PR #415). The hosted control plane
 is on PR #411 commit `a9c5ca127e8e93845b215c795dd6755e6683869f`, applied by
 protected Terraform apply run
 [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
@@ -24,9 +24,11 @@ applied, operated, or certified. This summary records source and control-plane
 state only; it is not customer execution evidence. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the 26-entry / 30-root acceptance and evidence crosswalk.
-PR #414 is source-only and not deployed. Unsupported DynamoDB costs remain
-approval blockers; its pricing evidence does not establish a customer Nova
-plan or workload.
+PR #414 is source-only and not deployed. PR #415 adds regression coverage for
+its immutable pricing assumptions; PR #416 is changing the generated-plan
+review response to show all validated pricing assumptions. Unsupported
+DynamoDB costs remain approval blockers. None of these source changes
+establishes a customer Nova plan or workload.
 
 ## Executed locally
 

@@ -126,9 +126,9 @@ Only then continue the separately gated exact-plan apply and lifecycle proof.
 - Deployed version: none.
 - PR: #414 merged as `373b82a7011a54b046820f7990065bcfc017beac` after all seven
   required checks passed.
-- Current operation: add lifecycle regression coverage for the new pricing
-  assumption field in PR #415, then continue toward the authenticated customer
-  plan journey and comprehensive cost evidence.
+- PR #415 adds lifecycle regression coverage for immutable DynamoDB assumption
+  persistence. Draft PR #416 exposes the validated assumptions in the generated
+  plan review response, which advances the customer plan journey.
 - Customer workload execution: none.
 - Local verification: focused pricing suites passed (121 tests); `make verify`
   passed (1,253 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose

@@ -5569,9 +5569,15 @@ class ProductService:
         if approval:
             approval_blockers.append("ALREADY_APPROVED")
         approval_allowed = not approval_blockers
+        pricing_document = artifact.manifest.get("pricing_evidence")
+        pricing_document_valid = pricing_evidence_document_is_valid(pricing_document)
+        if pricing_document_valid:
+            try:
+                GeneratedPlanPricingEvidence.from_manifest_document(pricing_document)
+            except PlanPricingError:
+                pricing_document_valid = False
         manifest_pricing = artifact.manifest.get("pricing")
         manifest_pricing = manifest_pricing if isinstance(manifest_pricing, dict) else {}
-        pricing_document = artifact.manifest.get("pricing_evidence")
         pricing_lines = (
             [
                 {
@@ -5585,13 +5591,13 @@ class ProductService:
                 for line in pricing_document.get("lines", [])
                 if isinstance(line, dict)
             ]
-            if pricing_evidence_document_is_valid(pricing_document)
+            if pricing_document_valid
             and isinstance(pricing_document.get("lines"), list)
             else []
         )
         pricing_findings = (
             [item for item in pricing_document.get("findings", []) if isinstance(item, dict)]
-            if pricing_evidence_document_is_valid(pricing_document)
+            if pricing_document_valid
             and isinstance(pricing_document.get("findings"), list)
             else []
         )
@@ -5607,7 +5613,23 @@ class ProductService:
             "captured_at": manifest_pricing.get("captured_at"),
             "estimate_disclaimer": manifest_pricing.get("estimate_disclaimer"),
             "usage_assumptions": pricing_document.get("usage_assumptions")
-            if pricing_evidence_document_is_valid(pricing_document)
+            if pricing_document_valid
+            else None,
+            "sqs_usage_assumptions": pricing_document.get("sqs_usage_assumptions")
+            if pricing_document_valid
+            else None,
+            "rds_usage_assumptions": pricing_document.get("rds_usage_assumptions")
+            if pricing_document_valid
+            else None,
+            "serverless_usage_assumptions": pricing_document.get(
+                "serverless_usage_assumptions"
+            )
+            if pricing_document_valid
+            else None,
+            "dynamodb_usage_assumptions": pricing_document.get(
+                "dynamodb_usage_assumptions"
+            )
+            if pricing_document_valid
             else None,
             "lines": pricing_lines,
             "findings": pricing_findings,

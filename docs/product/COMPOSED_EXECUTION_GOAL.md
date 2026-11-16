@@ -6,7 +6,7 @@ customer plan, application behavior, and lifecycle evidence are distinct states.
 
 ## Current source and hosted status — 2026-11-16
 
-Backend `main` is `373b82a7011a54b046820f7990065bcfc017beac` (PR #414). The
+Backend `main` is `2b78e0a97940179bac0654cf005f04df00949995` (PR #415). The
 hosted control plane is PR #411 source `a9c5ca127e8e93845b215c795dd6755e6683869f`,
 applied by [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
 after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
@@ -14,7 +14,9 @@ Read-only checks confirmed matching Lambda package identities and `/healthz`
 HTTP 200. PRs #412 and #414 add bounded cost evidence in source but are not
 deployed. PR #414 prices single-region Standard DynamoDB on-demand reads,
 writes, table storage, and PITR from explicit revision-bound assumptions.
-Unmodeled DynamoDB settings remain approval blockers.
+PR #415 adds lifecycle regression coverage without changing runtime behavior.
+Draft PR #416 exposes the revision-bound pricing inputs in generated-plan
+review output. Unmodeled DynamoDB settings remain approval blockers.
 Open draft PR #399 has passing CI, but its apply worker and credential broker
 are incomplete and Nova customer apply remains disabled. No Nova customer plan
 or workload has been applied, health-checked,
