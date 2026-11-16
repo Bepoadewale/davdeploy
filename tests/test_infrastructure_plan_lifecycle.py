@@ -270,6 +270,64 @@ def test_customer_serverless_usage_assumptions_are_persisted_and_cleared_by_new_
     assert "serverless_pricing_usage_assumptions" not in cleared.content["application_analysis"]["workload_spec"]
 
 
+def test_customer_dynamodb_usage_assumptions_are_revision_bound_and_cleared():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "tables": {
+            "aws_dynamodb_table.records": {
+                "monthly_read_request_units": {"minimum": 1_000, "maximum": 2_000},
+                "monthly_write_request_units": {"minimum": 300, "maximum": 600},
+                "monthly_storage_gb_month": {"minimum": 1, "maximum": 4},
+                "monthly_pitr_storage_gb_month": {"minimum": 1, "maximum": 4},
+            }
+        }
+    }
+
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(),
+        original.infrastructure_plan_id,
+        {"dynamodb_pricing_usage_assumptions": usage},
+    )
+
+    assert original.revision_number == 1
+    assert "dynamodb_pricing_usage_assumptions" not in original.content.get(
+        "user_constraints", {}
+    )
+    assert revised.revision_number == 2
+    assert revised.content["user_constraints"]["dynamodb_pricing_usage_assumptions"] == usage
+    assert (
+        revised.content["application_analysis"]["workload_spec"][
+            "dynamodb_pricing_usage_assumptions"
+        ]
+        == usage
+    )
+    assert revised.content["revision_diff"]["dynamodb_pricing_usage_assumptions"] == {
+        "before": None,
+        "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(),
+        original.infrastructure_plan_id,
+        {"dynamodb_pricing_usage_assumptions": None},
+    )
+
+    assert cleared.revision_number == 3
+    assert "dynamodb_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "dynamodb_pricing_usage_assumptions" not in cleared.content[
+        "application_analysis"
+    ]["workload_spec"]
+    assert cleared.content["revision_diff"]["dynamodb_pricing_usage_assumptions"] == {
+        "before": usage,
+        "after": None,
+    }
+    assert cleared.content_digest == plan_hash(cleared.content)
+    assert revised.content["user_constraints"]["dynamodb_pricing_usage_assumptions"] == usage
+    assert revised.content_digest == plan_hash(revised.content)
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

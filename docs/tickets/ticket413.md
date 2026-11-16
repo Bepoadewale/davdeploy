@@ -15,16 +15,19 @@ evidence.
 
 ## Current repo state
 
-- Source `main` is `017e53e329ff7c9be41f7a30e3c6c3451b3e4387` (merged PR #412).
+- Source `main` is `373b82a7011a54b046820f7990065bcfc017beac` (merged PR #414).
 - Open draft PR #399 (`feat/nova-exact-plan-apply-399`) is a separate exact-plan
-  apply boundary. Its latest head `1085da7faf67e10d70bfa7fa64abf1819e6ec6f9`
-  has all seven CI checks passing; it remains draft, unwired, and apply is not
-  enabled for Nova customer workloads.
+  apply boundary. Its latest head is `8dbd08976940e1747e28be4a9fcbfe53d68b6844`
+  and all seven checks passed in run `43768260780`; its apply worker and broker
+  are incomplete and apply is not enabled for Nova customer workloads.
 - The latest hosted backend source is `a9c5ca127e8e93845b215c795dd6755e6683869f`
   (PR #411), applied by Terraform apply run `43685318088` after plan run
   `43664906950`. Apply and migration steps passed. All six backend Lambda
   packages reported the same code hash on 2026-11-15; public `/healthz` returned
   HTTP 200. PR #412 source is not deployed.
+- PR #413 merged as `de873ef9e22a96ec38aa4650741b42ff73f053f1` after all seven
+  checks passed. PR #414 adds source-only bounded DynamoDB pricing and merged
+  as `373b82a7011a54b046820f7990065bcfc017beac`; it is not deployed.
 - No Nova customer plan or workload has been applied, observed, recovered, or
   destroyed. The coverage inventory is not a readiness or launch claim.
 
@@ -74,10 +77,11 @@ evidence.
 
 ## Acceptance status
 
-The current-source status and per-entry acceptance crosswalk are complete and
-locally checked. Hosted CI run `43767479485` passed all seven required checks
-on commit `4af292aa017e3f664900268dc81cd392c4b221eb`. The PR status rollup is
-the merge gate for this final evidence-only update.
+The current-source status and per-entry acceptance crosswalk passed
+documentation checks and CI run `43767479485`. PR #413 merged as
+`de873ef9e22a96ec38aa4650741b42ff73f053f1`. PR #414 then added bounded
+DynamoDB pricing as source-only evidence while keeping hosted state and
+customer execution distinct.
 
 ## Tests / validation performed
 
@@ -114,13 +118,14 @@ application, update/recovery and cleanup evidence before changing their status.
 
 ## Status ledger
 
-- Status: locally and hosted-CI verified; review-ready, merge pending.
+- Status: merged and CI verified.
 - Source commit: `017e53e329ff7c9be41f7a30e3c6c3451b3e4387`.
-- PR: #413 draft; implementation not started.
+- PR: #413 merged as `de873ef9e22a96ec38aa4650741b42ff73f053f1`.
 - Deployed version: backend `a9c5ca127e8e93845b215c795dd6755e6683869f` (PR #411),
   apply run `43685318088`; PR #412 is source-only.
 - Implementation commit: `ce7d0f375771cac408e411e93fb69144632468a5`.
-- Current operation: finish the final PR status check and merge.
-- Next command: `gh pr ready 413` after final PR checks pass, then merge after
-  confirming a clean review state.
+- Current operation: use the coverage ledger to select the next dependency-ready
+  implementation package.
+- Follow-up: PR #414 merged bounded DynamoDB pricing into source; it is not
+  deployed or customer-workload evidence.
 - Blockers: none known.

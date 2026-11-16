@@ -13,13 +13,15 @@ or unmodeled material cost must continue to block approval.
 
 ## Current repo state
 
-- Backend `main` is `de873ef9e22a96ec38aa4650741b42ff73f053f1` (PR #413 merged).
+- Backend `main` is `373b82a7011a54b046820f7990065bcfc017beac` (PR #414 merged).
 - Pricing currently supports selected EBS, S3, SQS, RDS MySQL, ZIP Lambda,
   HTTP API, CloudWatch Standard logs, and modeled egress.
-- DynamoDB remains unpriced. The existing customer workload table uses
-  `PAY_PER_REQUEST` and enables point-in-time recovery (PITR).
-- Open draft PR #399 contains a separate exact-plan apply boundary. Its
-  executable Terraform worker and credential-broker path are incomplete.
+- Merged PR #414 prices a bounded DynamoDB `PAY_PER_REQUEST` Standard table
+  with point-in-time recovery (PITR); unsupported configurations remain
+  approval-blocking. The pricing source is not deployed.
+- Open draft PR #399 at `8dbd08976940e1747e28be4a9fcbfe53d68b6844` contains a
+  separate exact-plan apply boundary. Its executable Terraform worker and
+  credential-broker path are incomplete.
 - No Nova customer plan or workload has been applied or certified.
 
 ## Research / references used
@@ -68,8 +70,9 @@ does not infer application traffic or use model-authored prices.
 - [x] Existing pricing evidence remains readable and is correctly versioned.
 - [x] Focused tests, full verification, documentation checks, and required
       hosted CI pass. All seven required jobs passed in run `43773735458` on
-      the code revision and run `43774188730` on PR head `2118185`.
-- [ ] No hosted runtime flags, Terraform deployment, customer workload, or
+      the code revision, run `43774188730` on evidence head `2118185`, and run
+      `43774616215` on final PR head `880fe6b`.
+- [x] No hosted runtime flags, Terraform deployment, customer workload, or
       Nova apply path is enabled by this PR.
 
 ## Evidence files produced
@@ -81,9 +84,9 @@ does not infer application traffic or use model-authored prices.
 
 The bounded assumptions, regional product matching, conservative cost math,
 approval blockers, evidence-version compatibility, focused tests, full local
-verification, documentation checks, and all seven hosted CI jobs on the code
-and evidence revisions are complete. The latest PR status rollup remains the
-merge gate.
+verification, documentation checks, and all seven hosted CI jobs are complete.
+PR #414 merged as `373b82a7011a54b046820f7990065bcfc017beac`; it is not
+deployed and establishes no customer execution evidence.
 
 ## Tests / validation performed
 
@@ -97,6 +100,8 @@ merge gate.
   [run 43773735458](https://github.com/Bepoadewale/davdeploy/actions/runs/43773735458)
   and on evidence head `2118185` in
   [run 43774188730](https://github.com/Bepoadewale/davdeploy/actions/runs/43774188730).
+  All seven jobs also passed on final PR head `880fe6b` in
+  [run 43774616215](https://github.com/Bepoadewale/davdeploy/actions/runs/43774616215).
 
 ## Boundaries
 
@@ -115,13 +120,15 @@ Only then continue the separately gated exact-plan apply and lifecycle proof.
 
 ## Status ledger
 
-- Status: ready-for-review; implementation, local verification, documentation,
-  and hosted CI passed. Merge awaits the latest PR status rollup.
+- Status: merged and CI verified.
 - Source: branch `feat/nova-dynamodb-plan-pricing-414` from PR #413 merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`.
 - Implementation commits: `da41107` (`feat: price bounded DynamoDB on-demand plans`) and `fdd05ff` (`fix: bind PITR pricing to table storage bounds`).
 - Deployed version: none.
-- Current operation: verify the final PR status rollup, mark ready, and merge
-  after confirming the review state is clear.
+- PR: #414 merged as `373b82a7011a54b046820f7990065bcfc017beac` after all seven
+  required checks passed.
+- Current operation: add lifecycle regression coverage for the new pricing
+  assumption field in PR #415, then continue toward the authenticated customer
+  plan journey and comprehensive cost evidence.
 - Customer workload execution: none.
 - Local verification: focused pricing suites passed (121 tests); `make verify`
   passed (1,253 tests, Ruff, Actions configuration, OpenAPI snapshot and Compose

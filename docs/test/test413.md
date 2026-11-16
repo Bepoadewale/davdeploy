@@ -3,7 +3,7 @@
 Date: 2026-11-15
 Execution type: read-only source, GitHub, AWS control-plane identity, and HTTPS health verification; documentation-only PR
 Customer repository: None
-Commit: implementation `ce7d0f375771cac408e411e93fb69144632468a5`; final evidence follow-up commit follows
+Commit: evidence head `4af292aa017e3f664900268dc81cd392c4b221eb`; PR merge `de873ef9e22a96ec38aa4650741b42ff73f053f1`
 AWS account: `654654474502`
 AWS region: `us-east-1`
 
@@ -42,11 +42,13 @@ Not applicable. No resource was created, and no local or cloud resource was dele
 
 ## Observed result
 
-The source snapshot is PR #412, while the hosted package is PR #411. This confirms
-control-plane version and availability only. It does not confirm pricing for
-PR #412 is deployed, an authenticated customer plan has run, or any Nova
-customer workload has been applied, operated, observed, recovered, or destroyed.
-No AWS resources were created or changed during this reconciliation.
+The final PR #413 source was PR #412, while the hosted package was PR #411.
+PR #413 merged as `de873ef9e22a96ec38aa4650741b42ff73f053f1`; PR #414 later
+merged bounded DynamoDB pricing as `373b82a7011a54b046820f7990065bcfc017beac`.
+Neither source change is deployed. The control-plane result confirms service
+version and availability only. It does not show an authenticated customer plan
+or a Nova workload applied, operated, observed, recovered, or destroyed. No AWS
+resources were created or changed during the reconciliation.
 
 ## Limitations
 
@@ -56,5 +58,6 @@ cleanup, or pricing evidence.
 
 ## Final boundary
 
-This documentation update neither enables apply nor advances any capability's
-execution status. Customer execution and lifecycle remain unproven.
+PR #413 was merged after all required checks passed. The documentation update
+neither enabled apply nor advanced any capability's execution status. Customer
+execution and lifecycle remain unproven.
