@@ -48,8 +48,8 @@ resource values, and keep arbitrary values redacted or rejected.
 
 - [x] The exact `${codebuild:buildArn}` resource form is summarized.
 - [x] Malformed placeholder syntax still fails closed without echoing values.
-- [ ] Focused tests, full verification, docs conventions, diff checks, and
-      final-head GitHub CI pass.
+- [x] Focused tests, full verification, docs conventions, diff checks, and
+      implementation-head GitHub CI pass.
 - [x] No apply, deployment, runtime gate change, AWS resource mutation, or
       customer workload execution is part of this PR.
 
@@ -58,8 +58,9 @@ resource values, and keep arbitrary values redacted or rejected.
 The parser now accepts only bounded `${...}` tokens in policy values, including
 the fixed `${codebuild:buildArn}` resource pattern. Malformed placeholder
 syntax still fails closed without echoing the value. Focused and full local
-verification pass; final-head GitHub CI is pending. The failed protected plan
-published no saved plan and dispatched no apply.
+verification pass, and all seven CI jobs passed for implementation commit
+`0388970`. The failed protected plan published no saved plan and dispatched no
+apply.
 
 ## Tests / validation performed
 
