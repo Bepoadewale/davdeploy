@@ -307,6 +307,88 @@ def test_iam_policy_summary_exposes_scope_shape_but_not_condition_values():
     assert "654654474502" not in summary
 
 
+def test_iam_policy_summary_preserves_aws_policy_variable_placeholders():
+    plan = _plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "s3:GetObject",
+                "Resource": "arn:aws:s3:::davdeploy-artifacts/plans/${codebuild:buildArn}/*",
+            }
+        ],
+    }
+    plan["resource_changes"].append(
+        {
+            "address": "aws_iam_role_policy.nova_plan_only",
+            "type": "aws_iam_role_policy",
+            "change": {
+                "actions": ["update"],
+                "before": {
+                    "policy": json.dumps(
+                        {
+                            "Statement": {
+                                "Effect": "Allow",
+                                "Action": "s3:GetObject",
+                                "Resource": "arn:aws:s3:::davdeploy-artifacts/plans/*",
+                            }
+                        }
+                    )
+                },
+                "after": {"policy": json.dumps(policy)},
+            },
+        }
+    )
+
+    summary = "\n".join(summarize_plan(plan))
+
+    assert "plans/${codebuild:buildArn}/*" in summary
+
+
+def test_malformed_aws_policy_variable_fails_closed_without_echoing_value(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+):
+    plan = _plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Action": "s3:GetObject",
+                "Resource": "arn:aws:s3:::bucket/${private account id}",
+            }
+        ],
+    }
+    plan["resource_changes"].append(
+        {
+            "address": "aws_iam_role_policy.nova_plan_only",
+            "type": "aws_iam_role_policy",
+            "change": {
+                "actions": ["update"],
+                "before": {
+                    "policy": json.dumps(
+                        {
+                            "Statement": {
+                                "Effect": "Allow",
+                                "Action": "s3:GetObject",
+                                "Resource": "arn:aws:s3:::bucket/*",
+                            }
+                        }
+                    )
+                },
+                "after": {"policy": json.dumps(policy)},
+            },
+        }
+    )
+
+    result, output = _run_main(monkeypatch, capsys, json.dumps(plan).encode())
+
+    assert result == 2
+    assert "reason=invalid_policy_summary" in output.err
+    assert "private account id" not in output.err
+
+
 def test_codebuild_environment_summary_redacts_values_and_reports_fixed_boolean_flags():
     plan = _plan()
     plan["resource_changes"].append(
