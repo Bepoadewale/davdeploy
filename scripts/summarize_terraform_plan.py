@@ -168,9 +168,14 @@ def _policy_values(value: Any, *, field: str) -> list[str]:
         if not isinstance(item, str) or not pattern.fullmatch(item):
             raise PlanSummaryError("plan policy summary metadata is invalid")
         if field.endswith("Resource"):
-            item = re.sub(r"(?<=:)\d{12}(?=:)", "ACCOUNT", item)
+            item = _redact_account_ids(item)
         result.append(item)
     return sorted(set(result))
+
+
+def _redact_account_ids(value: str) -> str:
+    """Hide 12-digit AWS account IDs, including bare principal IDs."""
+    return re.sub(r"(?<!\d)\d{12}(?!\d)", "ACCOUNT", value)
 
 
 def _principal_values(value: Any) -> list[str]:
@@ -196,7 +201,7 @@ def _principal_values(value: Any) -> list[str]:
     for item in values:
         if not isinstance(item, str) or not SAFE_POLICY_VALUE.fullmatch(item):
             raise PlanSummaryError("plan policy summary metadata is invalid")
-        result.append(re.sub(r"(?<=:)\d{12}(?=:)", "ACCOUNT", item))
+        result.append(_redact_account_ids(item))
     return sorted(set(result))
 
 

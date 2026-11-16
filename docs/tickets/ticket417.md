@@ -69,13 +69,15 @@ Implementation and focused regression coverage are complete. The summary now
 shows IAM policy actions/resources/principal/condition-key structure, changed
 CodeBuild environment names with only fixed boolean values exposed, and
 output names/actions/sensitivity. It never emits condition values, output
-values, or arbitrary environment values. Focused and full verification plus
-documentation checks pass; final-head GitHub CI remains pending. No AWS apply
-or runtime configuration change has occurred.
+values, or arbitrary environment values. Review found and closed a redaction
+gap for bare 12-digit AWS account IDs in principal values. Focused and full
+verification plus documentation checks pass; final-head GitHub CI remains
+pending for the redaction fix. No AWS apply or runtime configuration change
+has occurred.
 
 ## Tests / validation performed
 
-- `tests/test_terraform_plan_summary.py` — 28 passed.
+- `tests/test_terraform_plan_summary.py` — 28 passed after account-ID fix.
 - `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` — 1,258
   passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks
   passed (one existing Starlette/httpx deprecation warning).

@@ -259,7 +259,10 @@ def test_iam_policy_summary_exposes_scope_shape_but_not_condition_values():
                     "arn:aws:s3:::davdeploy-artifacts/plans/*",
                     "arn:aws:execute-api:us-east-1:654654474502:api/*/POST/terraform-state",
                 ],
-                "Principal": {"Service": "codebuild.amazonaws.com"},
+                "Principal": {
+                    "Service": "codebuild.amazonaws.com",
+                    "AWS": "654654474502",
+                },
                 "Condition": {
                     "ArnLike": {
                         "codebuild:BuildArn": "private-condition-value"
@@ -298,6 +301,7 @@ def test_iam_policy_summary_exposes_scope_shape_but_not_condition_values():
     assert "s3:GetObjectVersion" in summary
     assert "s3:DeleteObject" in summary
     assert "arn:aws:execute-api:us-east-1:ACCOUNT:" in summary
+    assert "principals=ACCOUNT,codebuild.amazonaws.com" in summary
     assert "codebuild:BuildArn" in summary
     assert "private-condition-value" not in summary
     assert "654654474502" not in summary
