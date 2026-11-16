@@ -13,16 +13,16 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `0e07f6b1886f84f3c0c6e8397d1105430e574fd4` after PR #403;
-merged-main CI run `43525834890` passed all seven jobs. PRs #401/#402 add
-merged-source network ACL and EC2 metadata checks; PR #403 reconciles their
-status and limitations. This branch includes those changes through merge
-commit `3ad0086`; combined `make verify` passes with 1,144 tests. PR #397
-persists the encrypted/versioned workspace artifact beside the exact saved
-plan. Generated-plan approval still fails closed because complete trusted
-regional pricing is unavailable; PR #318 remains closed and held for
-account-owner direction. No Nova customer workload has been applied. The
-protected untracked `--only-show-errors` file must remain untouched.
+Backend `main` is now `f89a4018b31c14e8a060065045169644dc422c57` after PR #416;
+merged-main CI run `43961573351` passed all seven jobs. Mainline adds bounded
+regional price evidence for supported S3, SQS, RDS MySQL, Lambda/API, and
+DynamoDB configurations, plus lifecycle-bound review assumptions. This is
+still partial coverage: material unsupported or unpriced resources block
+approval, and PR #318 remains closed/held. The latest documented hosted
+control-plane release is PR #411 (apply run `43685318088`); this PR remains
+source-only, disabled, and not applied. No Nova customer workload has been
+applied. The protected untracked `--only-show-errors` and `.venv-pr399/` must
+remain untouched.
 
 ## Research / references used
 
@@ -248,4 +248,23 @@ Status: in progress; the request and dispatch foundation is implemented and CI v
 - No AWS apply was run. This is not evidence of a deployed worker or a Nova-generated workload.
 
 Next: implement and verify the executable fixed-project buildspec, then prove credential issuance, callback reconciliation, and controlled recovery in the hosted path.
+
+## 2026-11-16 mainline synchronization
+
+- Synchronized the remote PR branch with current `main` using merge commit
+  `d801793ebffe8ccbdd59af13bd49e7852551e1c2`. The merge is conflict-free and
+  includes PRs #412–#416; the PR remains a draft and the apply gate remains
+  disabled.
+- Focused tests for apply contracts, dispatch, workspace restore, run history,
+  Terraform state, and generated-plan review: 119 passed.
+- `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399`: 1,291
+  passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks
+  passed. Documentation conventions and `git diff --check` passed.
+- `make terraform-validate` passed seven roots, then stopped because Terraform
+  could not reach `registry.terraform.io` while initializing the next provider.
+  This is an incomplete local validation; fresh-runner CI remains required.
+- A full local clean-room cycle was not run. It would require cleaning its
+  generated `.venv`, `.local`, Compose containers, network, and volume; those
+  deletions are not approved. No AWS call, deployment, apply, or customer
+  workload action occurred.
 
