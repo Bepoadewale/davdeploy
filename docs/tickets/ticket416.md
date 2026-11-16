@@ -58,7 +58,7 @@ estimate before deciding on the plan.
       existing pricing review behavior.
 - [x] Current source, hosted control-plane and PR #399 state is documented
       accurately.
-- [ ] Focused tests, `make verify`, documentation conventions, diff checks,
+- [x] Focused tests, `make verify`, documentation conventions, diff checks,
       and required GitHub CI pass.
 - [x] No hosted deployment, customer workload, runtime flag, or Nova apply
       permission is changed.
@@ -69,8 +69,8 @@ The review response now returns all supported assumption fields from
 digest-validated pricing evidence; the regression test also mutates the stored
 DynamoDB assumptions and verifies the untrusted values are hidden and approval
 remains blocked. Documentation reflects PR #415 as merged and PR #416 as
-source-only. Full verification and documentation checks pass; required hosted
-CI remains pending.
+source-only. Full verification, documentation checks, and all seven required
+GitHub checks pass.
 
 ## Tests / validation performed
 
@@ -79,7 +79,8 @@ CI remains pending.
 - `make verify` — passed: 1,254 tests, Ruff, Actions configuration, OpenAPI
   snapshot, and Compose configuration (one existing deprecation warning).
 - `python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
-- Required GitHub CI — pending.
+- Required GitHub CI run [`43960105968`](https://github.com/Bepoadewale/davdeploy/actions/runs/43960105968)
+  — all seven jobs passed on implementation commit `393ed6912d65ee3d2c3df9113352bee2be8480fa`.
 
 ## Evidence files produced
 
@@ -101,10 +102,11 @@ the separate worker, broker and lifecycle requirements.
 
 ## Status ledger
 
-- Status: draft; implementation, focused tests, full verification, and
-  documentation checks complete; hosted CI pending.
+- Status: draft; implementation, focused tests, full verification,
+  documentation checks, and required CI complete; final evidence update
+  awaiting current-head CI before merge.
 - Source: branch `feat/plan-review-pricing-assumptions-416` from
   `main` commit `2b78e0a97940179bac0654cf005f04df00949995`.
 - Deployed version: none; control plane remains PR #411.
-- Current operation: implement safe projection and regression coverage.
+- Current operation: record final-head evidence and complete the reviewed merge.
 - Customer workload execution: none.
