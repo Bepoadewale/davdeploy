@@ -20,7 +20,9 @@ SAFE_FIELD = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}\Z")
 SAFE_VARIABLE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,127}\Z")
 SAFE_OUTPUT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,127}\Z")
 SAFE_POLICY_ACTION = re.compile(r"[A-Za-z0-9-]+:[A-Za-z0-9*]+\Z")
-SAFE_POLICY_VALUE = re.compile(r"[A-Za-z0-9:_./*?+=,-]{1,512}\Z")
+SAFE_POLICY_VALUE = re.compile(
+    r"(?:[A-Za-z0-9:_./*?+=,-]|\$\{[A-Za-z0-9:_-]+\}){1,512}\Z"
+)
 SAFE_POLICY_KEY = re.compile(r"[A-Za-z0-9:_./-]{1,256}\Z")
 SAFE_POLICY_OPERATOR = re.compile(r"[A-Za-z0-9:_-]{1,128}\Z")
 SAFE_TERRAFORM_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?\Z")
@@ -165,7 +167,7 @@ def _policy_values(value: Any, *, field: str) -> list[str]:
     pattern = SAFE_POLICY_ACTION if field.endswith("Action") else SAFE_POLICY_VALUE
     result = []
     for item in items:
-        if not isinstance(item, str) or not pattern.fullmatch(item):
+        if not isinstance(item, str) or len(item) > 512 or not pattern.fullmatch(item):
             raise PlanSummaryError("plan policy summary metadata is invalid")
         if field.endswith("Resource"):
             item = _redact_account_ids(item)
@@ -199,7 +201,7 @@ def _principal_values(value: Any) -> list[str]:
         raise PlanSummaryError("plan policy summary metadata is invalid")
     result = []
     for item in values:
-        if not isinstance(item, str) or not SAFE_POLICY_VALUE.fullmatch(item):
+        if not isinstance(item, str) or len(item) > 512 or not SAFE_POLICY_VALUE.fullmatch(item):
             raise PlanSummaryError("plan policy summary metadata is invalid")
         result.append(_redact_account_ids(item))
     return sorted(set(result))
