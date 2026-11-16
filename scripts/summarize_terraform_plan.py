@@ -18,6 +18,7 @@ SAFE_ADDRESS = re.compile(r"[A-Za-z0-9_.\[\]-]{1,512}\Z")
 SAFE_RESOURCE_TYPE = re.compile(r"[A-Za-z0-9_]{1,128}\Z")
 SAFE_FIELD = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}\Z")
 SAFE_VARIABLE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,127}\Z")
+SAFE_POLICY_NAME = re.compile(r"[A-Za-z0-9+=,.@_-]{1,128}\Z")
 SAFE_OUTPUT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,127}\Z")
 SAFE_POLICY_ACTION = re.compile(r"[A-Za-z0-9-]+:[A-Za-z0-9*]+\Z")
 SAFE_POLICY_VALUE = re.compile(
@@ -143,6 +144,12 @@ def _policy_entries(value: Any) -> list[tuple[str, Any]]:
         except (json.JSONDecodeError, RecursionError):
             raise PlanSummaryError("plan policy summary metadata is invalid") from None
     if isinstance(value, dict):
+        if "policy" in value:
+            name = value.get("name", "")
+            if name and (not isinstance(name, str) or not SAFE_POLICY_NAME.fullmatch(name)):
+                raise PlanSummaryError("plan policy summary metadata is invalid")
+            nested = _policy_entries(value["policy"])
+            return [(name, policy) for _, policy in nested]
         return [("", value)]
     if isinstance(value, list):
         if len(value) > MAX_POLICY_DETAILS:
@@ -152,7 +159,7 @@ def _policy_entries(value: Any) -> list[tuple[str, Any]]:
             if not isinstance(item, dict) or "policy" not in item:
                 raise PlanSummaryError("plan policy summary metadata is invalid")
             name = item.get("name", "")
-            if name and (not isinstance(name, str) or not SAFE_VARIABLE_NAME.fullmatch(name)):
+            if name and (not isinstance(name, str) or not SAFE_POLICY_NAME.fullmatch(name)):
                 raise PlanSummaryError("plan policy summary metadata is invalid")
             nested = _policy_entries(item.get("policy"))
             entries.extend((name, policy) for _, policy in nested)
