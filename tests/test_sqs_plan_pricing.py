@@ -105,19 +105,19 @@ def test_sqs_assumptions_require_bounded_integer_ranges_and_forbid_prices():
         SqsPricingUsageAssumptions.model_validate(assumptions((0, 1_000_000_000_001)))
 
 
-def test_sqs_pricing_uses_exact_regional_products_conservative_budget_and_single_free_allowance():
+def test_sqs_pricing_uses_exact_regional_products_without_free_tier_subtraction():
     usage = assumptions((600_000, 800_000), (600_000, 700_000))
     result, client = evaluate(doc=queue_plan(fifo=True, also_standard=True, duplicate_standard=True), usage=usage, budget=70)
 
     assert result.status == PlanPricingStatus.COMPLETE
-    assert result.monthly_low_minor == 4  # shared 1M requests applied once, FIFO first
+    assert result.monthly_low_minor == 35
     assert result.monthly_high_minor == 67  # highest published rates, with conservative cent rounding
     assert result.within_budget is True
     assert {call["ServiceCode"] for call in client.calls} == {"AWSQueueService"}
     assert len(client.calls) == 2
     lines = {line.description: line for line in result.lines}
-    assert lines["Amazon SQS FIFO requests"].low_cost_quantity == 0
-    assert lines["Amazon SQS Standard requests"].low_cost_quantity == 200_000
+    assert lines["Amazon SQS FIFO requests"].low_cost_quantity == 600_000
+    assert lines["Amazon SQS Standard requests"].low_cost_quantity == 600_000
     assert sum(line.resource_type == "aws_sqs_queue" for line in result.lines) == 2
     assert lines["Amazon SQS FIFO requests"].catalog_sku == "fifo-sku"
     assert pricing_evidence_is_approval_eligible(
@@ -184,7 +184,7 @@ def test_sqs_usage_and_price_are_bound_into_revision_pricing_context_and_manifes
     assert context.pricing_context_sha256 != changed.pricing_context_sha256
     result, _ = evaluate(doc=queue_plan(fifo=False), usage=usage)
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 5
+    assert manifest["version"] == 7
     assert manifest["sqs_usage_assumptions"] == usage
     assert manifest["lines"][0]["catalog_product_sha256"]
 

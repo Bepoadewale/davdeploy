@@ -39,6 +39,30 @@
         "title": "ApprovalRequest",
         "type": "object"
       },
+      "AverageDurationRange": {
+        "additionalProperties": false,
+        "description": "Customer-declared average billed Lambda duration in milliseconds.",
+        "properties": {
+          "maximum": {
+            "maximum": 900000.0,
+            "minimum": 1.0,
+            "title": "Maximum",
+            "type": "integer"
+          },
+          "minimum": {
+            "maximum": 900000.0,
+            "minimum": 1.0,
+            "title": "Minimum",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "minimum",
+          "maximum"
+        ],
+        "title": "AverageDurationRange",
+        "type": "object"
+      },
       "AwsConnectionVerificationRequest": {
         "properties": {
           "region": {
@@ -496,6 +520,52 @@
         "title": "DesiredStatePublicationStateRequest",
         "type": "object"
       },
+      "DynamoDbPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Strict monthly cost quantities keyed by exact planned table address.",
+        "properties": {
+          "tables": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DynamoDbTablePricingUsageAssumptions"
+            },
+            "maxProperties": 40,
+            "minProperties": 1,
+            "title": "Tables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tables"
+        ],
+        "title": "DynamoDbPricingUsageAssumptions",
+        "type": "object"
+      },
+      "DynamoDbTablePricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Billed monthly quantities for one exact DynamoDB table address.",
+        "properties": {
+          "monthly_pitr_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_read_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_write_request_units": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_read_request_units",
+          "monthly_write_request_units",
+          "monthly_storage_gb_month",
+          "monthly_pitr_storage_gb_month"
+        ],
+        "title": "DynamoDbTablePricingUsageAssumptions",
+        "type": "object"
+      },
       "EnvironmentName": {
         "enum": [
           "staging",
@@ -574,6 +644,24 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HttpApiPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Usage bounds for one API Gateway v2 HTTP API address.",
+        "properties": {
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_requests": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_requests",
+          "monthly_internet_egress_gb"
+        ],
+        "title": "HttpApiPricingUsageAssumptions",
+        "type": "object"
+      },
       "InfrastructurePlanConstraintUpdateRequest": {
         "additionalProperties": false,
         "description": "User-editable planning constraints for a new draft revision.",
@@ -609,6 +697,16 @@
               }
             ],
             "title": "Data Classification"
+          },
+          "dynamodb_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DynamoDbPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "environment": {
             "anyOf": [
@@ -686,6 +784,16 @@
             "maxItems": 20,
             "title": "Rejected Assumptions",
             "type": "array"
+          },
+          "serverless_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServerlessPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sqs_pricing_usage_assumptions": {
             "anyOf": [
@@ -836,6 +944,36 @@
           "email"
         ],
         "title": "InvitationRequest",
+        "type": "object"
+      },
+      "LambdaFunctionPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Usage bounds for one exact planned Lambda function address.",
+        "properties": {
+          "average_billed_duration_ms": {
+            "$ref": "#/components/schemas/AverageDurationRange"
+          },
+          "monthly_cloudwatch_log_ingestion_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_invocations": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_log_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_invocations",
+          "average_billed_duration_ms",
+          "monthly_internet_egress_gb",
+          "monthly_cloudwatch_log_ingestion_gb",
+          "monthly_log_storage_gb_month"
+        ],
+        "title": "LambdaFunctionPricingUsageAssumptions",
         "type": "object"
       },
       "LocalLoginRequest": {
@@ -1014,6 +1152,30 @@
           "monthly_internet_egress_gb"
         ],
         "title": "S3PricingUsageAssumptions",
+        "type": "object"
+      },
+      "ServerlessPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Explicit per-resource quantities for bounded Lambda and HTTP API pricing.",
+        "properties": {
+          "http_apis": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HttpApiPricingUsageAssumptions"
+            },
+            "maxProperties": 40,
+            "title": "Http Apis",
+            "type": "object"
+          },
+          "lambda_functions": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LambdaFunctionPricingUsageAssumptions"
+            },
+            "maxProperties": 40,
+            "title": "Lambda Functions",
+            "type": "object"
+          }
+        },
+        "title": "ServerlessPricingUsageAssumptions",
         "type": "object"
       },
       "SqsPricingUsageAssumptions": {

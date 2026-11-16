@@ -1,10 +1,17 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `74016e7` (PR #405), deployed on
-2026-11-14 by exact saved-plan apply
-[43566319945](https://github.com/Bepoadewale/davdeploy/actions/runs/43566319945).
-Deployment evidence is in [`test406.md`](../test/test406.md). This control-plane
-deployment does not establish a Nova customer workload journey.
+Status snapshot: backend `main` at `2b78e0a` (PR #415), 2026-11-16. The hosted
+control plane is on PR #411 commit `a9c5ca1`, applied by exact saved-plan run
+[43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
+after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
+Read-only post-apply checks found all six backend Lambdas on package hash
+`DN7QMWh1lCNtB9bK8AA0uWHRyMTEVwF7qKTmzB/JbhU=`, with `/healthz` HTTP 200.
+This verifies control-plane source and health only. PRs #412 and #414 add
+source-only pricing and are not deployed; neither establishes a Nova customer
+workload journey. PR #414 covers bounded DynamoDB on-demand request units,
+table storage, and PITR. Unsupported DynamoDB settings remain unpriced and
+approval-blocking. Draft PR #416 adds assumption visibility to the local
+generated-plan review contract; it is not deployed.
 
 This document joins the checked-in architecture catalogue, Terraform
 implementation registry, scenario catalogue and existing evidence. A catalogue
@@ -38,10 +45,112 @@ customer.
 |---|---|---|
 | Proposal/schema checks | `generated_provider_validation.py` checks generated resource types and arguments against the initialized, locked AWS provider schema. [`ticket309.md`](../tickets/ticket309.md) records a synthetic S3 schema check; [`test311.md`](../test/test311.md) records the later authenticated S3 saved-plan run with the locked provider schema. | This verifies Terraform schema shape, not service semantics, customer security, cost, or lifecycle behavior. There is no per-module schema-version/evidence binding in either registry. |
 | Generated-plan policy | `generated_plan_policy.py` binds trusted account/region and proposal inventory; reviews destructive and sensitive changes; checks policy-critical unknowns for a finite list of Terraform types; and contains S3, IAM, security-group/network-ACL ingress, EC2 metadata, relational-database, and bounded EKS node IMDSv2 rules. PRs #401/#402/#404 are merged and deployed to the control plane; [`test401.md`](../test/test401.md), [`test402.md`](../test/test402.md), and [`test404.md`](../test/test404.md) record synthetic/local tests and hosted CI. | Partial shared rules only. The EKS node rule applies only when the plan binds a node group to exactly one same-plan launch template whose metadata settings are visible to policy. It does not establish pod metadata isolation, Kubernetes/RBAC or cluster endpoint security. Unknown-value checks cover only paths in `POLICY_CRITICAL_UNKNOWN_PATHS`. ACL association, route/egress reachability, and a complete deterministic policy map for all 26 modules or 30 roots are not established. No customer plan has exercised these checks. See the resource-family table below. |
-| Cost | `evidence.py` has `FixturePricingCatalog` profile ranges. `integrations.py` can capture a sample AWS Pricing API query and historical Cost Explorer totals during discovery. | No independent, resource-by-resource regional quote for a Nova generated plan, no complete usage model for requests/storage/transfer/idle resources, and no verified hard budget cap. All rows below therefore say **not evidenced** for plan pricing. |
+| Cost | `generated_plan_pricing.py` has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PRs #407–#414 are merged source; #412 and #414 are not deployed. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
 | Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. Some isolated AWS evidence below records real service requests or traffic. | The scenario declarations are not proof that the hosted worker ran the probes. The current `CertificationEvidence` is five booleans (apply, destroy, readiness, rollback, cleanup); it does not record update, controlled failure, cost, source/artifact digest, or evidence link. |
 | Update/recovery/cleanup | Some service-level evidence records create and destroy; the scenario declarations include rollback and cleanup descriptions. | No complete Nova-hosted composed application evidence for update, injected failure, recovery, exact ownership-based destroy, and independent absence verification. A scenario label is not an observed result. |
 | Hosted execution | The repository records an App Runner customer workload pilot in [`test42.md`](../test/test42.md). PR #314 added durable saved-plan storage and administrator approval; its ticket states the hosted worker has no caller and apply/destroy are unavailable on this path. | The App Runner pilot is a separate legacy renderer, not Nova-generated composed execution. No Nova-hosted plan-to-apply customer workload is evidenced here. Hosted control-plane health is not workload health. |
+
+## Acceptance record required for every entry
+
+The two inventories below remain separate: 26 architecture capabilities and 30
+Terraform roots. A semantic candidate root is not an executable binding. Every
+row must eventually satisfy the evidence fields in the acceptance crosswalk
+below before it can be described as hosted-supported. An explicit additional
+test means the existing eight scenario names do not fully exercise that entry.
+
+For each planned case, preserve the Nova proposal/model/prompt/context digests,
+source commit and generated artifact digest; validated Terraform configuration,
+provider lock and version, exact saved-plan digest, versioned policy result and
+regional cost inputs/source timestamp; tenant/account/region ownership record;
+build artifact and typed outputs; timestamped probe result/log reference;
+update and injected-failure/recovery outcome; and destroy manifest plus an
+independent absence result or named retained data. Keep sensitive plan/state
+values encrypted and out of this index. A cost record must identify usage
+assumptions and supporting costs; unknown or unsupported material usage stays
+unpriced and blocks approval. The current source evaluator's existence does not
+mean that each row has a price or that approval/apply is enabled.
+
+## Architecture-entry acceptance crosswalk — all 26
+
+These are required future acceptance cases, not claims that the factory or
+hosted executor currently runs them. Each row needs its own cost/unknown-cost
+record and the common evidence bundle above. All rows currently have **no
+Nova-hosted plan, lifecycle, or cleanup proof**.
+
+| Architecture entry | Scenario or additional acceptance test | Policy and observed behavior required | Cost and artifact evidence required |
+|---|---|---|---|
+| `aws-observability` | Additional observability/recovery: emit a controlled signal and prove alarm delivery and recovery. | Bind project log/metric destinations, enforce retention and prevent secret logging; observe alarm transition. | Log/metric/alarm/notification rates and retention; alarm configuration and delivery timestamps. |
+| `aws-secrets-config` | Additional secret lifecycle: resolve a typed reference, rotate, verify new use and revoked old use. | Reject literals/unbound IDs; prove values are absent from Nova, plan, state and logs and access is scoped. | Secret/KMS/request/rotation rates; redacted ARN/version and access-denial evidence. |
+| `aws-edge-https` | `multi-region` plus domain/TLS validation and failover. | Bind domain/certificate ownership and approved origins; probe hostname, certificate, primary and secondary endpoints. | DNS/certificate/health-check/request/transfer rates; domain, certificate and probe evidence. |
+| `aws-static-web` | `web-application`: build, fetch over HTTPS, update content, verify new version and origin privacy. | Require private bucket/origin and safe cache policy; prove expected content and no stale response after update. | Storage/request/CDN/transfer rates; source/build digest, object version and HTTP probe. |
+| `aws-serverless-api` | `web-application` plus `saas-backend`: authenticated API write/read and queue processing. | Check route auth, scoped function role, secret references, exposure and bounded egress; invoke allow/deny paths. | Invocation/duration/API/log/transfer assumptions; source/package digest, route IDs and traces. |
+| `aws-managed-application` | `saas-backend`: build/serve app, write/read data, upload file, process job, update. | Bind immutable image, task role, ingress, secret references and dependencies; probe every dependency. | Compute/image/log/request/data/transfer rates; image digest, service outputs and probe logs. |
+| `aws-container-service` | Additional ECS/Fargate API-worker case with update, injected task failure and recovery. | Enforce image digest, least-privilege task roles, private ingress, capacity bounds and health checks. | vCPU/memory, load balancer, image, log, storage and transfer assumptions; task and target-health records. |
+| `aws-virtual-machine-service` | Additional VM case: launch, serve request, patch/update, fail/recover and destroy. | Require IMDSv2, approved AMI, encrypted disks, scoped profile and restricted ingress; probe guest health. | Instance/EBS/snapshot/network rates; AMI/template/instance IDs and patch/probe evidence. |
+| `aws-kubernetes-platform` | `kubernetes`: deploy, invoke service, update, fail pod, recover and clean up. | Check endpoint/RBAC, node metadata, image provenance, network policy and workload identity; probe readiness. | Control-plane/node/LB/storage/log/transfer costs; cluster/image/deployment manifest and observations. |
+| `aws-identity` | `web-application` plus identity: sign in, authorize, revoke and prove subsequent denial. | Check issuer/client/redirect ownership, MFA/session requirements and tenant authorization. | Active-user/auth/SMS/email/log rates; redacted allow/deny flow and auth-policy digest. |
+| `aws-relational-data` | `saas-backend`: SQL insert/read/update plus restore and checksum comparison. | Require private/encrypted DB, bounded retention, deletion protection and safe final snapshot. | Instance/storage/I/O/backup/transfer/secret rates; migration/query/restore IDs and checksum. |
+| `aws-nosql-data` | `saas-backend`: put/get/update plus point-in-time restore and item comparison. | Require encryption, scoped access, recovery and deletion settings; inspect exact restored item. | Capacity/request/storage/backup/replication rates; table/key schema, request and restore records. |
+| `aws-file-storage` | `web-application` and `ai-rag`: authorized upload/download/update and unauthorized denial. | Require private storage, encryption, scoped access and retention; compare checksum and owner/non-owner access. | Storage-class/request/retrieval/egress rates; object version/checksum and access result. |
+| `aws-jobs-events` | `saas-backend` and `async-data`: enqueue, process, retry, DLQ, redrive and idempotency. | Bind event source, consumer, encryption, retry/DLQ and duplicate behavior; observe every message transition. | Queue/event/workflow/compute/log/transfer rates; event IDs, attempts and DLQ evidence. |
+| `aws-realtime` | Additional WebSocket/AppSync case: connect, publish, receive, reconnect and revoke. | Authorize connection/subscription, isolate tenant channels and enforce message limits; assert cross-tenant denial. | Connection-minute/message/resolver/log/transfer rates; redacted connection/message trace. |
+| `aws-search` | `ai-rag` plus search: index, query, update/delete and prove tenant isolation. | Require private access, encryption and document-level authorization; test allowed and denied query. | Node/OCU/storage/ingest/query/backup rates; index digest and query trace. |
+| `aws-payments-webhooks` | Additional signed synthetic webhook, replay rejection and idempotent processing; never simulate settlement. | Check signature age, replay, secret reference, data minimization and least privilege; observe accept/reject outcomes. | API/compute/queue/secret/log/network assumptions; redacted request IDs and dedupe record. |
+| `aws-ai-retrieval` | `ai-rag`: ingest synthetic document, return grounded application result, deny cross-tenant access, update/delete. | Bind model/guardrail/data permissions, private ingestion and tenant corpus; test grounded and denied response. | Tokens/embedding/index/storage/request/log/transfer rates; model/prompt/corpus and trace digests. |
+| `aws-managed-ml` | `machine-learning`: invoke meaningful synthetic input, update model, recover and destroy. | Verify artifact provenance, endpoint auth/network, quota, encryption and redaction; assert output contract. | Instance-hours/storage/requests/data/log/transfer rates; model and endpoint digests plus invocation. |
+| `aws-cpu-inference` | Additional CPU inference: invoke representative input, validate output/latency, update and recover. | Enforce model/image digest, compute bounds, endpoint access and scaling cap; redact sensitive input. | CPU/memory/scaling/storage/request/log/transfer assumptions; invocation and latency record. |
+| `aws-gpu-inference` | Additional GPU inference: real synthetic invocation, output/latency, update, recovery and destroy. | Verify accelerator, artifact, quota and maximum capacity/spend before plan review. | GPU-hours/storage/transfer/idle cost; quota result, model/image digest and invocation evidence. |
+| `aws-data-analytics` | `async-data` plus analytics: ingest partition, run query/job, compare output, retry failure. | Scope data/catalog/job role, encrypt results and protect query output; verify row count/checksum. | Storage/requests/scanned bytes/job/log/transfer rates; input/output digests and query/job IDs. |
+| `aws-stream-processing` | `async-data` plus stream: publish, consume, checkpoint, fail/replay and check ordering. | Bound retention, encryption, producer/consumer access, throughput and checkpoint policy. | Shard/throughput/retention/consumer/storage/log/transfer rates; event IDs, offsets and replay results. |
+| `aws-media` | Additional media pipeline: upload, transcode, validate, deliver HTTPS, update and delete. | Bind source/output, transcode role/profile, private origin, access and retention. | Storage/transcode/CDN/egress/log rates; checksums, job ID and playback probe. |
+| `aws-private-connectivity` | `hybrid-network`: disposable peer, encrypted routed traffic, break/restore route. | Check peer, tunnel crypto, routes, ACL/SG, egress and ownership; probe only approved private addresses. | VPN/TGW/endpoint hours and processed/cross-AZ/egress traffic; peer/route manifest and probe timestamps. |
+| `aws-backup-recovery` | `multi-region` plus backup case: create recovery point, restore, compare app data, measure RPO/RTO. | Enforce vault scope, retention, encryption, restore role and explicit retained-data behavior. | Protected GB-month, requests, restore and regional transfer; recovery-point IDs, checksum and RPO/RTO record. |
+
+## Terraform-root acceptance crosswalk — all 30
+
+Each root is independently gated even where a candidate architecture mapping
+exists. Every case must use Nova proposal, schema/policy checks, isolated saved
+planning, and eventually the hosted executor. No root currently has Nova-hosted
+plan, lifecycle, or independent cleanup evidence. The common artifact bundle
+above applies to every row.
+
+| Root | Scenario or targeted acceptance test | Root-specific policy/health and cost evidence required |
+|---|---|---|
+| `aws-dns-zone` | `multi-region` plus domain ownership case | Reject unowned/unsafe targets; resolve expected record and failover; price zone, query, health check and transfer. |
+| `aws-acm-certificate` | `web-application` TLS case | Bind domain and service region; verify issuance and HTTPS hostname; record certificate, DNS validation and linked edge costs. |
+| `aws-kms-key` | Additional key-consumer rotation/recovery | Check policy, rotation and deletion window; encrypt/decrypt then safely rotate/disable; price key-month and requests. |
+| `aws-parameter-config` | `aws-secrets-config` rotation | Bound name/tier/type/access; runtime update/retrieval and revoked denial; price tier, API, KMS and logs. |
+| `aws-feature-flags` | Additional AppConfig rollout | Bind app/profile/deployment strategy; observe staged flag and rollback; price config, deployment, fetch and monitoring. |
+| `aws-s3-private-storage` | `web-application` / `ai-rag` object case | Check public access, encryption, ownership, policy and retention; checksum upload/read/update/delete; price storage/request/retrieval/egress. |
+| `aws-cloudfront-delivery` | `web-application` HTTPS/private-origin update | Check origin/TLS/cache/access; fetch, update/invalidate and compare versions; price requests, transfer, functions and origin. |
+| `aws-api-gateway-http` | `web-application` API case | Review route auth, stage, throttling and integration; invoke allowed/denied requests; price API, data, logs and authorizer. |
+| `aws-lambda-service` | `web-application` / `saas-backend` function case | Bound runtime/memory/time/concurrency, role, references and artifact; invoke and inspect redacted output; price requests/duration/logs/VPC/egress. |
+| `aws-ecr-image` | Additional image provenance case | Require immutable digest, approved source/build, scan and scoped pull; run exact image; price storage, transfer, scan and requests. |
+| `aws-aurora-postgres` | `saas-backend` relational case | Require private encryption, backups/deletion and secret contract; query/restore/checksum; price instances, storage, I/O, backup, network and secret. |
+| `aws-dynamodb-table` | `saas-backend` NoSQL case | Require encryption, PITR, deletion protection and ownership; put/get/restore; price capacity or request mode, storage, backup and streams. Merged source PR #414 prices single-region Standard on-demand request units, table storage and PITR; it is not deployed. Provisioned capacity, indexes, replicas, streams and other omitted charges remain blockers. |
+| `aws-elasticache-redis` | Additional cache case | Require private encrypted/authenticated access and failover; set/get/reconnect; price node-hours, backup, storage and transfer. |
+| `aws-opensearch` | `ai-rag` search case | Check private access, encryption, scoped index permissions and capacity; query/update/delete plus tenant denial; price OCU/node, storage, ingest/query. |
+| `aws-efs-shared-storage` | Additional shared-file case | Check encryption, mount security, access point identity and retention; authorized clients read/write, other denied; price storage, throughput, backup, transfer. |
+| `aws-sqs-queue` | `saas-backend` / `async-data` worker | Check encryption, queue policy, visibility/DLQ/retry and consumer role; process/retry/redrive/idempotency; price requests, transfer and compute. |
+| `aws-eventbridge-bus` | `async-data` routing | Restrict bus/rules/target/account; prove only intended target receives event; price events, archive/replay, invocation and transfer. |
+| `aws-step-functions` | `async-data` workflow | Restrict state role, tasks, retries and logged inputs; execute success and injected retry/failure; price transitions, duration, logs, integrations. |
+| `aws-sns-notifications` | Additional notification delivery | Restrict topic/subscription and require confirmation; deliver to real approved endpoint; price publish, protocol, delivery and transfer. |
+| `aws-ses-email` | Additional email case with verified domain and real recipient | Enforce identity, recipient, suppression and secret controls; record actual delivery/bounce; price sends/data/compute. |
+| `aws-bedrock-runtime` | `ai-rag` model invocation | Bind model/region/guardrail and data boundary; invoke synthetic prompt and observe response; price input/output tokens, guardrail and retrieval. |
+| `aws-bedrock-knowledge-base` | `ai-rag` ingest/retrieval | Restrict source/role/vector store/tenant corpus; ingest, retrieve grounded result and delete; price embedding, tokens, storage, index, requests. |
+| `aws-sagemaker-endpoint` | `machine-learning` invocation | Verify artifact, endpoint access, accelerator quota/cap and data encryption; meaningful inference; price instance/GPU hours, storage and transfer. |
+| `aws-kinesis-stream` | `async-data` stream | Bound encryption, retention, capacity and consumer; publish/consume/checkpoint/replay; price throughput, shard, retention, fan-out and transfer. |
+| `aws-batch-compute` | `async-data` job | Restrict queue, image, role, retries, capacity and egress; run/fail/retry/compare result; price vCPU/memory/GPU, storage, logs and transfer. |
+| `aws-eks-cluster` | `kubernetes` service | Check endpoint, IAM/RBAC, IMDSv2, image, network and quota; deploy/invoke/fail/recover; price cluster/nodes/LB/storage/logs/transfer. |
+| `aws-ec2-autoscaling` | Additional VM/scaling case | Require IMDSv2, AMI, encrypted disks, scoped role and max capacity; serve and observe bounded scale/recovery; price instances/EBS/LB/network. |
+| `aws-vpc-private-network` | `hybrid-network` and private app path | Check CIDR, routes, ACL associations/precedence, SG, egress, endpoints and ownership; allow/deny probes; price NAT/endpoints/addresses/cross-AZ/traffic. |
+| `aws-site-to-site-vpn` | `hybrid-network` VPN | Bind peer, tunnel and routes; observe encrypted probe, outage and restoration; price tunnel-hours, processing, addresses and transfer. |
+| `aws-multi-region-dns` | `multi-region` failover | Bind approved regions/endpoints; fail primary and probe secondary service, then restore; price zone, checks, queries, regional copies and transfer. |
+
+For roots with no executable pricing model, the required cost outcome is an
+explicit **unpriced / approval blocked** result until regional products and
+usage assumptions are implemented and independently checked. Row-level cost
+design does not mean that a rate is currently available.
 
 ### Resource families checked by the current generated-plan policy
 
@@ -57,9 +166,10 @@ customer.
 
 `Candidate roots` are semantic references only; there is no authoritative
 catalogue-to-root dispatch binding. The policy column refers to the shared
-checks above and names the closest implemented resource-family checks. All
-rows have **no plan price evidence** and **no Nova-hosted lifecycle evidence**
-unless the limitation says otherwise.
+checks above and names the closest implemented resource-family checks. The
+source evaluator has local regional price evidence for a bounded subset of
+resources; this matrix has **no hosted customer plan-price evidence** and **no
+Nova-hosted lifecycle evidence** unless the limitation says otherwise.
 
 | Architecture module | Existing scenario | Candidate implementation roots | Shared policy evidence / gap | Service-level evidence (not hosted Nova proof) | Remaining health/lifecycle evidence |
 |---|---|---|---|---|---|
@@ -94,10 +204,10 @@ unless the limitation says otherwise.
 
 The `catalogue candidate` column is descriptive only; the implementation
 registry does not declare these relationships. The `policy` column lists only
-current generated-plan checks that apply by resource type. Every row has **no
-independent generated-plan price evidence** and **no Nova-hosted lifecycle
-proof**. Linked tests are isolated AWS service/root evidence, not hosted
-customer execution.
+current generated-plan checks that apply by resource type. Source-level
+regional price evidence exists for a bounded subset; no root has **hosted
+customer plan-price evidence** or **Nova-hosted lifecycle proof**. Linked tests
+are isolated AWS service/root evidence, not hosted customer execution.
 
 | Implementation ID | Terraform root | Catalogue candidate / existing scenario | Current applicable plan-policy checks | Existing service-level evidence |
 |---|---|---|---|---|

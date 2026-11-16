@@ -24,8 +24,10 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from davdeploy.domain import (
+    DynamoDbPricingUsageAssumptions,
     RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
+    ServerlessPricingUsageAssumptions,
     SqsPricingUsageAssumptions,
 )
 
@@ -104,6 +106,8 @@ class GeneratedPlanPricingEvidence:
     usage_assumptions: dict[str, Any] | None
     sqs_usage_assumptions: dict[str, Any] | None
     rds_usage_assumptions: dict[str, Any] | None
+    serverless_usage_assumptions: dict[str, Any] | None
+    dynamodb_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -131,12 +135,14 @@ class GeneratedPlanPricingEvidence:
             "usage_assumptions": self.usage_assumptions,
             "sqs_usage_assumptions": self.sqs_usage_assumptions,
             "rds_usage_assumptions": self.rds_usage_assumptions,
+            "serverless_usage_assumptions": self.serverless_usage_assumptions,
+            "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 5,
+            "version": 7,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -158,6 +164,8 @@ class GeneratedPlanPricingEvidence:
             "usage_assumptions": self.usage_assumptions,
             "sqs_usage_assumptions": self.sqs_usage_assumptions,
             "rds_usage_assumptions": self.rds_usage_assumptions,
+            "serverless_usage_assumptions": self.serverless_usage_assumptions,
+            "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -209,13 +217,18 @@ class GeneratedPlanPricingEvidence:
             "budget_source", "persisted_context_sha256",
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
             "usage_assumptions", "sqs_usage_assumptions", "rds_usage_assumptions",
+            "serverless_usage_assumptions", "dynamodb_usage_assumptions",
             "lines", "transitions", "findings", "evidence_sha256",
         }
-        version_4_fields = expected_fields - {"rds_usage_assumptions"}
-        legacy_fields = expected_fields - {"sqs_usage_assumptions", "rds_usage_assumptions"}
         version = document.get("version")
+        version_6_fields = expected_fields - {"dynamodb_usage_assumptions"}
+        version_5_fields = version_6_fields - {"serverless_usage_assumptions"}
+        version_4_fields = version_5_fields - {"rds_usage_assumptions"}
+        legacy_fields = version_4_fields - {"sqs_usage_assumptions"}
         valid_shape = (
-            version == 5 and set(document) == expected_fields
+            version == 7 and set(document) == expected_fields
+            or version == 6 and set(document) == version_6_fields
+            or version == 5 and set(document) == version_5_fields
             or version == 4 and set(document) == version_4_fields
             or version in {2, 3} and set(document) == legacy_fields
         )
@@ -241,6 +254,26 @@ class GeneratedPlanPricingEvidence:
             )
             if rds_usage != raw_rds_usage:
                 raise ValueError("non-canonical RDS usage assumptions")
+            raw_serverless_usage = document.get("serverless_usage_assumptions")
+            serverless_usage = (
+                None
+                if raw_serverless_usage is None
+                else ServerlessPricingUsageAssumptions.model_validate(
+                    raw_serverless_usage
+                ).model_dump(mode="json")
+            )
+            if serverless_usage != raw_serverless_usage:
+                raise ValueError("non-canonical serverless usage assumptions")
+            raw_dynamodb_usage = document.get("dynamodb_usage_assumptions")
+            dynamodb_usage = (
+                None
+                if raw_dynamodb_usage is None
+                else DynamoDbPricingUsageAssumptions.model_validate(
+                    raw_dynamodb_usage
+                ).model_dump(mode="json")
+            )
+            if dynamodb_usage != raw_dynamodb_usage:
+                raise ValueError("non-canonical DynamoDB usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -272,6 +305,8 @@ class GeneratedPlanPricingEvidence:
                 usage_assumptions=usage_assumptions,
                 sqs_usage_assumptions=sqs_usage,
                 rds_usage_assumptions=rds_usage,
+                serverless_usage_assumptions=serverless_usage,
+                dynamodb_usage_assumptions=dynamodb_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -279,7 +314,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 5 and result.as_manifest_document() != document:
+        if document.get("version") == 7 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -316,6 +351,8 @@ class TrustedPlanPricingContext:
     usage_assumptions: dict[str, Any] | None = None
     sqs_usage_assumptions: dict[str, Any] | None = None
     rds_usage_assumptions: dict[str, Any] | None = None
+    serverless_usage_assumptions: dict[str, Any] | None = None
+    dynamodb_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -328,6 +365,8 @@ class TrustedPlanPricingContext:
             self.usage_assumptions,
             self.sqs_usage_assumptions,
             self.rds_usage_assumptions,
+            self.serverless_usage_assumptions,
+            self.dynamodb_usage_assumptions,
         )
 
     @classmethod
@@ -370,6 +409,16 @@ class TrustedPlanPricingContext:
             if isinstance(workload_spec, dict)
             else None
         )
+        raw_serverless_usage_assumptions = (
+            workload_spec.get("serverless_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
+        raw_dynamodb_usage_assumptions = (
+            workload_spec.get("dynamodb_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
         if provider != "aws":
             raise PlanPricingError("persisted customer revision is not an AWS plan")
         if not isinstance(region, str) or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
@@ -409,6 +458,24 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json")
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid RDS pricing usage assumptions") from None
+        if raw_serverless_usage_assumptions is None:
+            serverless_usage_assumptions = None
+        else:
+            try:
+                serverless_usage_assumptions = ServerlessPricingUsageAssumptions.model_validate(
+                    raw_serverless_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid serverless pricing usage assumptions") from None
+        if raw_dynamodb_usage_assumptions is None:
+            dynamodb_usage_assumptions = None
+        else:
+            try:
+                dynamodb_usage_assumptions = DynamoDbPricingUsageAssumptions.model_validate(
+                    raw_dynamodb_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid DynamoDB pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -417,6 +484,8 @@ class TrustedPlanPricingContext:
             usage_assumptions=usage_assumptions,
             sqs_usage_assumptions=sqs_usage_assumptions,
             rds_usage_assumptions=rds_usage_assumptions,
+            serverless_usage_assumptions=serverless_usage_assumptions,
+            dynamodb_usage_assumptions=dynamodb_usage_assumptions,
         )
 
 
@@ -568,6 +637,134 @@ class AwsPriceListCatalog:
             "GB-Mo",
         )
 
+    def dynamodb_read_request_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-on-demand-standard-read-request-units",
+            [
+                ("productFamily", "Amazon DynamoDB PayPerRequest Throughput"),
+                ("group", "DDB-ReadUnits"),
+                ("regionCode", region),
+            ],
+            "ReadRequestUnits",
+        )
+
+    def dynamodb_write_request_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-on-demand-standard-write-request-units",
+            [
+                ("productFamily", "Amazon DynamoDB PayPerRequest Throughput"),
+                ("group", "DDB-WriteUnits"),
+                ("regionCode", region),
+            ],
+            "WriteRequestUnits",
+        )
+
+    def dynamodb_standard_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-standard-table-storage",
+            [
+                ("productFamily", "Database Storage"),
+                ("volumeType", "Amazon DynamoDB - Indexed DataStore"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def dynamodb_pitr_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonDynamoDB",
+            region,
+            "dynamodb-pitr-backup-storage",
+            [
+                ("productFamily", "Database Storage"),
+                ("volumeType", "Amazon DynamoDB - Point-In-Time-Restore (PITR) Backup Storage"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def lambda_request_rate(self, region: str, architecture: str) -> CatalogRate:
+        if architecture not in {"x86_64", "arm64"}:
+            raise PlanPricingError("Lambda architecture is unsupported for bounded pricing")
+        suffix = "-ARM" if architecture == "arm64" else ""
+        return self._regional_rate(
+            "AWSLambda",
+            region,
+            f"lambda-requests-{architecture}",
+            [
+                ("productFamily", "Serverless"),
+                ("group", f"AWS-Lambda-Requests{suffix}"),
+                ("regionCode", region),
+            ],
+            "Requests",
+        )
+
+    def lambda_duration_rate(self, region: str, architecture: str) -> CatalogRate:
+        if architecture not in {"x86_64", "arm64"}:
+            raise PlanPricingError("Lambda architecture is unsupported for bounded pricing")
+        suffix = "-ARM" if architecture == "arm64" else ""
+        return self._regional_rate(
+            "AWSLambda",
+            region,
+            f"lambda-duration-{architecture}",
+            [
+                ("productFamily", "Serverless"),
+                ("group", f"AWS-Lambda-Duration{suffix}"),
+                ("regionCode", region),
+            ],
+            "Lambda-GB-Second",
+        )
+
+    def cloudwatch_log_ingestion_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonCloudWatch",
+            region,
+            "cloudwatch-standard-log-ingestion",
+            [
+                ("productFamily", "Data Payload"),
+                ("group", "Ingested Logs"),
+                ("groupDescription", "Existing system, application, and custom log files"),
+                ("version", "Current"),
+                ("operation", "PutLogEvents"),
+                ("logsDestination", "Amazon CloudWatch Logs"),
+                ("regionCode", region),
+            ],
+            "GB",
+        )
+
+    def cloudwatch_standard_log_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonCloudWatch",
+            region,
+            "cloudwatch-standard-log-storage",
+            [
+                ("productFamily", "Storage Snapshot"),
+                ("groupDescription", "Amazon CloudWatch Logs Storage Current version"),
+                ("version", "Current"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def http_api_request_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonApiGateway",
+            region,
+            "api-gateway-http-api-requests",
+            [
+                ("productFamily", "API Calls"),
+                ("operation", "ApiGatewayHttpApi"),
+                ("regionCode", region),
+            ],
+            "Requests",
+        )
+
     def aws_internet_egress_rate(self, region: str) -> CatalogRate:
         rate = self._regional_rate(
             "AWSDataTransfer",
@@ -593,7 +790,7 @@ class AwsPriceListCatalog:
             rate.published_at,
             rate.product_digest,
             low_unit_price_usd="0.05",
-            low_rate_source_url="https://aws.amazon.com/s3/pricing/",
+            low_rate_source_url="https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer",
         )
 
     def _regional_rate(
@@ -661,6 +858,8 @@ ZERO_DIRECT_CHARGE_RESOURCE_TYPES = frozenset(
         "aws_iam_role_policy_attachment",
         "aws_iam_instance_profile",
         "aws_key_pair",
+        "aws_apigatewayv2_route",
+        "aws_apigatewayv2_deployment",
     }
 )
 
@@ -736,6 +935,8 @@ def evaluate_generated_plan_pricing(
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -763,6 +964,8 @@ def evaluate_generated_plan_pricing(
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -786,6 +989,8 @@ def evaluate_generated_plan_pricing(
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -812,6 +1017,8 @@ def evaluate_generated_plan_pricing(
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -832,6 +1039,8 @@ def evaluate_generated_plan_pricing(
             usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -844,6 +1053,10 @@ def evaluate_generated_plan_pricing(
     s3_buckets: list[dict[str, Any]] = []
     sqs_queues: list[dict[str, Any]] = []
     rds_instances: list[dict[str, Any]] = []
+    dynamodb_tables: list[dict[str, Any]] = []
+    lambda_functions: list[dict[str, Any]] = []
+    http_apis: list[dict[str, Any]] = []
+    lambda_log_groups: list[dict[str, Any]] = []
     for resource in resources:
         address = resource["address"]
         resource_type = resource["type"]
@@ -858,6 +1071,28 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_db_instance":
             rds_instances.append(resource)
+            continue
+        if resource_type == "aws_dynamodb_table":
+            dynamodb_tables.append(resource)
+            continue
+        if resource_type == "aws_lambda_function":
+            lambda_functions.append(resource)
+            continue
+        if resource_type == "aws_cloudwatch_log_group":
+            lambda_log_groups.append(resource)
+            continue
+        if resource_type == "aws_apigatewayv2_api":
+            http_apis.append(resource)
+            continue
+        if resource_type == "aws_apigatewayv2_stage":
+            stage_error = _validate_http_api_stage(values, changes.get(address))
+            if stage_error:
+                findings.append(PlanPricingFinding(stage_error[0], address, stage_error[1]))
+            continue
+        if resource_type == "aws_apigatewayv2_integration":
+            integration_error = _validate_http_api_integration(values, changes.get(address))
+            if integration_error:
+                findings.append(PlanPricingFinding(integration_error[0], address, integration_error[1]))
             continue
         if resource_type != "aws_ebs_volume":
             findings.append(
@@ -921,6 +1156,15 @@ def evaluate_generated_plan_pricing(
             )
         )
 
+    if lambda_log_groups and not lambda_functions and not http_apis:
+        findings.append(
+            PlanPricingFinding(
+                "cloudwatch_log_group_unpriced",
+                lambda_log_groups[0]["address"],
+                "CloudWatch log groups are priced only when bound to an explicitly priced Lambda function.",
+            )
+        )
+
     if s3_buckets:
         if trusted_context.usage_assumptions is None:
             findings.append(
@@ -977,15 +1221,6 @@ def evaluate_generated_plan_pricing(
                                 rate.low_unit_price_usd or rate.unit_price_usd
                             )
                             low_quantity = amount.minimum
-                            # AWS's 100 GB Internet egress allowance is shared
-                            # across commercial services and regions. Use it
-                            # only for those low estimates; the budget ceiling
-                            # assumes no free allowance.
-                            if (
-                                assumption_name == "monthly_internet_egress_gb"
-                                and not region.startswith(("cn-", "us-gov-"))
-                            ):
-                                low_quantity = max(0, low_quantity - 100)
                             low_minor = int(
                                 (low_unit_price * low_quantity * 100).quantize(
                                     Decimal(1), rounding=ROUND_FLOOR
@@ -1101,13 +1336,8 @@ def evaluate_generated_plan_pricing(
                                     continue
                                 rate = pricing_catalog.sqs_request_rate(region, fifo=is_fifo)
                                 rates.append((is_fifo, amount, description, rate))
-                            free_units = 1_000_000 if not region.startswith(("cn-", "us-gov-")) else 0
                             for is_fifo, amount, description, rate in rates:
                                 low_quantity = amount.minimum
-                                if free_units:
-                                    applied = min(low_quantity, free_units)
-                                    low_quantity -= applied
-                                    free_units -= applied
                                 low_rate = Decimal(rate.low_unit_price_usd or rate.unit_price_usd)
                                 high_rate = Decimal(rate.unit_price_usd)
                                 low_minor = int((low_rate * low_quantity * 100).quantize(Decimal(1), rounding=ROUND_FLOOR))
@@ -1247,15 +1477,15 @@ def evaluate_generated_plan_pricing(
                                 PlanCostLine(
                                     address="usage_assumptions.rds",
                                     resource_type="aws_db_instance",
-                                    description="RDS MySQL backup storage (before account-level free allowance)",
-                                    quantity=0,
+                                    description="RDS MySQL backup storage",
+                                    quantity=usage.monthly_backup_storage_gb_month.minimum,
                                     quantity_max=backup_max,
                                     unit="GB-Mo",
                                     unit_price_usd=backup_rate.unit_price_usd,
-                                    monthly_cost_minor=0,
+                                    monthly_cost_minor=int((Decimal(backup_rate.unit_price_usd) * usage.monthly_backup_storage_gb_month.minimum * 100).quantize(Decimal(1), rounding=ROUND_FLOOR)),
                                     monthly_cost_max_minor=backup_high,
                                     unit_price_low_usd=backup_rate.unit_price_usd,
-                                    low_cost_quantity=0,
+                                    low_cost_quantity=usage.monthly_backup_storage_gb_month.minimum,
                                     catalog_sku=backup_rate.sku,
                                     catalog_product_sha256=backup_rate.product_digest,
                                     catalog_published_at=backup_rate.published_at,
@@ -1279,6 +1509,459 @@ def evaluate_generated_plan_pricing(
                                 "DavDeploy could not identify exact regional RDS prices.",
                             )
                         )
+
+    serverless_document = trusted_context.serverless_usage_assumptions
+    if lambda_functions or http_apis:
+        if serverless_document is None:
+            findings.append(
+                PlanPricingFinding(
+                    "serverless_usage_assumptions_missing",
+                    (lambda_functions or http_apis)[0]["address"],
+                    "Explicit request, duration, and transfer bounds are required for Lambda and HTTP APIs.",
+                )
+            )
+        else:
+            try:
+                serverless_usage = ServerlessPricingUsageAssumptions.model_validate(
+                    serverless_document
+                )
+            except (TypeError, ValueError):
+                findings.append(
+                    PlanPricingFinding(
+                        "serverless_usage_assumptions_invalid",
+                        (lambda_functions or http_apis)[0]["address"],
+                        "Persisted Lambda and HTTP API usage assumptions are invalid.",
+                    )
+                )
+            else:
+                lambda_by_address = {item["address"]: item for item in lambda_functions}
+                api_by_address = {item["address"]: item for item in http_apis}
+                lambda_usage = serverless_usage.lambda_functions
+                api_usage = serverless_usage.http_apis
+                if set(lambda_usage) != set(lambda_by_address) or set(api_usage) != set(api_by_address):
+                    findings.append(
+                        PlanPricingFinding(
+                            "serverless_usage_resource_mismatch",
+                            (lambda_functions or http_apis)[0]["address"],
+                            "Usage bounds must cover every planned Lambda and HTTP API exactly once.",
+                        )
+                    )
+                else:
+                    lambda_log_group_names = {
+                        address: _lambda_log_group_name(resource["values"])
+                        for address, resource in lambda_by_address.items()
+                    }
+                    expected_log_group_names = {
+                        name for name in lambda_log_group_names.values() if name is not None
+                    }
+                    log_groups_by_name = {item["values"].get("name"): item for item in lambda_log_groups}
+                    if (
+                        None in lambda_log_group_names.values()
+                        or len(expected_log_group_names) != len(lambda_log_group_names)
+                        or set(log_groups_by_name) != expected_log_group_names
+                        or len(log_groups_by_name) != len(lambda_log_groups)
+                    ):
+                        findings.append(
+                            PlanPricingFinding(
+                                "lambda_log_group_mismatch",
+                                (lambda_functions or http_apis)[0]["address"],
+                                "Each Lambda needs one explicitly retained Standard CloudWatch log group matching its logging configuration.",
+                            )
+                        )
+                    else:
+                        for address, group_name in lambda_log_group_names.items():
+                            group = log_groups_by_name[group_name]
+                            group_error = _validate_lambda_log_group(
+                                group["values"], changes.get(group["address"]), group_name
+                            )
+                            if group_error:
+                                findings.append(
+                                    PlanPricingFinding(group_error[0], group["address"], group_error[1])
+                                )
+                    try:
+                        if pricing_catalog is None:
+                            pricing_catalog = AwsPriceListCatalog()
+                        for address, resource in lambda_by_address.items():
+                            values = resource["values"]
+                            change = changes.get(address)
+                            error = _validate_lambda_function(values, change)
+                            if error:
+                                findings.append(PlanPricingFinding(error[0], address, error[1]))
+                                continue
+                            group_name = lambda_log_group_names.get(address)
+                            group = log_groups_by_name.get(group_name)
+                            if group is None or _validate_lambda_log_group(
+                                group["values"], changes.get(group["address"]), group_name
+                            ):
+                                continue
+                            assumption = lambda_usage[address]
+                            architecture = values["architectures"][0]
+                            request_rate = pricing_catalog.lambda_request_rate(region, architecture)
+                            duration_rate = pricing_catalog.lambda_duration_rate(region, architecture)
+                            transfer_rate = pricing_catalog.aws_internet_egress_rate(region)
+                            log_ingestion_rate = pricing_catalog.cloudwatch_log_ingestion_rate(region)
+                            log_storage_rate = pricing_catalog.cloudwatch_standard_log_storage_rate(region)
+                            requests = assumption.monthly_invocations
+                            duration = assumption.average_billed_duration_ms
+                            egress = assumption.monthly_internet_egress_gb
+                            log_ingestion = assumption.monthly_cloudwatch_log_ingestion_gb
+                            log_storage = assumption.monthly_log_storage_gb_month
+                            memory_gb = Decimal(values["memory_size"]) / Decimal(1024)
+                            for rate, description, quantity, unit, scale in (
+                                (request_rate, "AWS Lambda invocations", requests, "Requests", Decimal(1)),
+                                (
+                                    duration_rate,
+                                    "AWS Lambda billed duration at declared average and memory",
+                                    requests,
+                                    "Invocations × GB-seconds per invocation",
+                                    memory_gb * Decimal(duration.minimum) / Decimal(1000),
+                                ),
+                            ):
+                                low_cost = (
+                                    Decimal(rate.unit_price_usd)
+                                    * Decimal(quantity.minimum)
+                                    * scale
+                                    * 100
+                                )
+                                if description.startswith("AWS Lambda billed"):
+                                    high_scale = memory_gb * Decimal(duration.maximum) / Decimal(1000)
+                                else:
+                                    high_scale = scale
+                                high_cost = (
+                                    Decimal(rate.unit_price_usd)
+                                    * Decimal(quantity.maximum)
+                                    * high_scale
+                                    * 100
+                                )
+                                lines.append(
+                                    PlanCostLine(
+                                        address=address,
+                                        resource_type="aws_lambda_function",
+                                        description=description,
+                                        quantity=quantity.minimum,
+                                        quantity_max=quantity.maximum,
+                                        unit=unit,
+                                        unit_price_usd=rate.unit_price_usd,
+                                        monthly_cost_minor=int(low_cost.quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                        monthly_cost_max_minor=int(high_cost.quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                        catalog_sku=rate.sku,
+                                        catalog_product_sha256=rate.product_digest,
+                                        catalog_published_at=rate.published_at,
+                                        catalog_effective_at=rate.effective_at,
+                                    )
+                                )
+                            low_rate = Decimal(transfer_rate.low_unit_price_usd or transfer_rate.unit_price_usd)
+                            lines.append(
+                                PlanCostLine(
+                                    address=address,
+                                    resource_type="aws_lambda_function",
+                                    description="AWS Lambda internet data transfer out",
+                                    quantity=egress.minimum,
+                                    quantity_max=egress.maximum,
+                                    unit="GB",
+                                    unit_price_usd=transfer_rate.unit_price_usd,
+                                    monthly_cost_minor=int((low_rate * egress.minimum * 100).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                    monthly_cost_max_minor=int((Decimal(transfer_rate.unit_price_usd) * egress.maximum * 100).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                    unit_price_low_usd=format(low_rate, "f"),
+                                    unit_price_low_source_url=transfer_rate.low_rate_source_url,
+                                    low_cost_quantity=egress.minimum,
+                                    catalog_sku=transfer_rate.sku,
+                                    catalog_product_sha256=transfer_rate.product_digest,
+                                    catalog_published_at=transfer_rate.published_at,
+                                    catalog_effective_at=transfer_rate.effective_at,
+                                )
+                            )
+                            if requests.maximum > 0 and (
+                                log_ingestion.maximum == 0 or log_storage.maximum == 0
+                            ):
+                                findings.append(
+                                    PlanPricingFinding(
+                                        "lambda_log_usage_assumptions_unbounded",
+                                        address,
+                                        "Invoked Lambda functions require nonzero upper bounds for log ingestion and stored log data.",
+                                    )
+                                )
+                            for rate, description, amount, unit in (
+                                (
+                                    log_ingestion_rate,
+                                    "Amazon CloudWatch Logs ingestion",
+                                    log_ingestion,
+                                    "GB",
+                                ),
+                                (
+                                    log_storage_rate,
+                                    "Amazon CloudWatch Logs storage",
+                                    log_storage,
+                                    "GB-Mo",
+                                ),
+                            ):
+                                lines.append(
+                                    PlanCostLine(
+                                        address=address,
+                                        resource_type="aws_lambda_function",
+                                        description=description,
+                                        quantity=amount.minimum,
+                                        quantity_max=amount.maximum,
+                                        unit=unit,
+                                        unit_price_usd=rate.unit_price_usd,
+                                        monthly_cost_minor=int((Decimal(rate.low_unit_price_usd or rate.unit_price_usd) * amount.minimum * 100).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                        monthly_cost_max_minor=int((Decimal(rate.unit_price_usd) * amount.maximum * 100).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                        unit_price_low_usd=rate.low_unit_price_usd,
+                                        low_cost_quantity=amount.minimum,
+                                        catalog_sku=rate.sku,
+                                        catalog_product_sha256=rate.product_digest,
+                                        catalog_published_at=rate.published_at,
+                                        catalog_effective_at=rate.effective_at,
+                                    )
+                                )
+                        for address, resource in api_by_address.items():
+                            error = _validate_http_api(resource["values"], changes.get(address))
+                            if error:
+                                findings.append(PlanPricingFinding(error[0], address, error[1]))
+                                continue
+                            assumption = api_usage[address]
+                            request_rate = pricing_catalog.http_api_request_rate(region)
+                            transfer_rate = pricing_catalog.aws_internet_egress_rate(region)
+                            requests = assumption.monthly_requests
+                            egress = assumption.monthly_internet_egress_gb
+                            for rate, description, quantity, unit in (
+                                (request_rate, "Amazon API Gateway HTTP API requests", requests, "Requests"),
+                                (transfer_rate, "AWS internet data transfer out", egress, "GB"),
+                            ):
+                                low_quantity = quantity.minimum
+                                low_rate = Decimal(rate.low_unit_price_usd or rate.unit_price_usd)
+                                high_rate = Decimal(rate.unit_price_usd)
+                                lines.append(
+                                    PlanCostLine(
+                                        address=address,
+                                        resource_type="aws_apigatewayv2_api",
+                                        description=description,
+                                        quantity=quantity.minimum,
+                                        quantity_max=quantity.maximum,
+                                        unit=unit,
+                                        unit_price_usd=rate.unit_price_usd,
+                                        monthly_cost_minor=int((low_rate * low_quantity * 100).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                        monthly_cost_max_minor=int((high_rate * quantity.maximum * 100).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                        unit_price_low_usd=format(low_rate, "f"),
+                                        unit_price_low_source_url=rate.low_rate_source_url,
+                                        low_cost_quantity=low_quantity,
+                                        catalog_sku=rate.sku,
+                                        catalog_product_sha256=rate.product_digest,
+                                        catalog_published_at=rate.published_at,
+                                        catalog_effective_at=rate.effective_at,
+                                    )
+                                )
+                    except PriceListUnavailableError:
+                        unavailable = True
+                        findings.append(
+                            PlanPricingFinding(
+                                "regional_price_lookup_unavailable",
+                                (lambda_functions or http_apis)[0]["address"],
+                                "DavDeploy could not verify current regional serverless prices.",
+                            )
+                        )
+                    except PlanPricingError:
+                        findings.append(
+                            PlanPricingFinding(
+                                "regional_price_ambiguous",
+                                (lambda_functions or http_apis)[0]["address"],
+                                "DavDeploy could not identify exact regional serverless prices.",
+                            )
+                        )
+
+    dynamodb_document = trusted_context.dynamodb_usage_assumptions
+    if dynamodb_tables:
+        if dynamodb_document is None:
+            findings.append(
+                PlanPricingFinding(
+                    "dynamodb_usage_assumptions_missing",
+                    dynamodb_tables[0]["address"],
+                    "Per-table request, storage, and PITR usage bounds are required for DynamoDB.",
+                )
+            )
+        else:
+            try:
+                dynamodb_usage = DynamoDbPricingUsageAssumptions.model_validate(
+                    dynamodb_document
+                )
+            except (TypeError, ValueError):
+                findings.append(
+                    PlanPricingFinding(
+                        "dynamodb_usage_assumptions_invalid",
+                        dynamodb_tables[0]["address"],
+                        "Persisted DynamoDB usage assumptions are invalid.",
+                    )
+                )
+            else:
+                tables_by_address = {item["address"]: item for item in dynamodb_tables}
+                if set(dynamodb_usage.tables) != set(tables_by_address):
+                    findings.append(
+                        PlanPricingFinding(
+                            "dynamodb_usage_resource_mismatch",
+                            dynamodb_tables[0]["address"],
+                            "Usage bounds must cover every planned DynamoDB table exactly once.",
+                        )
+                    )
+                else:
+                    invalid_table = next(
+                        (
+                            (address, error)
+                            for address, item in tables_by_address.items()
+                            if (
+                                error := _validate_dynamodb_table(
+                                    item["values"], changes.get(address)
+                                )
+                            )
+                            is not None
+                        ),
+                        None,
+                    )
+                    if invalid_table:
+                        address, error = invalid_table
+                        findings.append(PlanPricingFinding(error[0], address, error[1]))
+                    else:
+                        pitr_addresses = {
+                            address
+                            for address, item in tables_by_address.items()
+                            if _dynamodb_pitr_enabled(item["values"])
+                        }
+                        usage_mismatch = next(
+                            (
+                                address
+                                for address, assumptions in dynamodb_usage.tables.items()
+                                if (
+                                    address not in pitr_addresses
+                                    and assumptions.monthly_pitr_storage_gb_month.maximum > 0
+                                )
+                                or (
+                                    address in pitr_addresses
+                                    and assumptions.monthly_pitr_storage_gb_month
+                                    != assumptions.monthly_storage_gb_month
+                                )
+                            ),
+                            None,
+                        )
+                        if usage_mismatch:
+                            findings.append(
+                                PlanPricingFinding(
+                                    "dynamodb_pitr_usage_assumption_mismatch",
+                                    usage_mismatch,
+                                    "PITR storage bounds must match table storage when recovery is enabled and be zero when disabled.",
+                                )
+                            )
+                        else:
+                            try:
+                                if pricing_catalog is None:
+                                    pricing_catalog = AwsPriceListCatalog()
+                                rates = {
+                                    "read": pricing_catalog.dynamodb_read_request_rate(region),
+                                    "write": pricing_catalog.dynamodb_write_request_rate(region),
+                                    "storage": pricing_catalog.dynamodb_standard_storage_rate(region),
+                                }
+                                if pitr_addresses:
+                                    rates["pitr"] = pricing_catalog.dynamodb_pitr_storage_rate(region)
+                                for address, assumptions in dynamodb_usage.tables.items():
+                                    for description, quantity, rate in (
+                                        (
+                                            "Amazon DynamoDB on-demand read request units",
+                                            assumptions.monthly_read_request_units,
+                                            rates["read"],
+                                        ),
+                                        (
+                                            "Amazon DynamoDB on-demand write request units",
+                                            assumptions.monthly_write_request_units,
+                                            rates["write"],
+                                        ),
+                                        (
+                                            "Amazon DynamoDB Standard table storage",
+                                            assumptions.monthly_storage_gb_month,
+                                            rates["storage"],
+                                        ),
+                                    ):
+                                        unit_price = Decimal(rate.unit_price_usd)
+                                        lines.append(
+                                            PlanCostLine(
+                                                address=address,
+                                                resource_type="aws_dynamodb_table",
+                                                description=description,
+                                                quantity=quantity.minimum,
+                                                quantity_max=quantity.maximum,
+                                                unit=rate.unit,
+                                                unit_price_usd=rate.unit_price_usd,
+                                                monthly_cost_minor=int(
+                                                    (unit_price * quantity.minimum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_FLOOR
+                                                    )
+                                                ),
+                                                monthly_cost_max_minor=int(
+                                                    (unit_price * quantity.maximum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_CEILING
+                                                    )
+                                                ),
+                                                unit_price_low_usd=rate.unit_price_usd,
+                                                low_cost_quantity=quantity.minimum,
+                                                catalog_sku=rate.sku,
+                                                catalog_product_sha256=rate.product_digest,
+                                                catalog_published_at=rate.published_at,
+                                                catalog_effective_at=rate.effective_at,
+                                            )
+                                        )
+                                    if address in pitr_addresses:
+                                        quantity = assumptions.monthly_pitr_storage_gb_month
+                                        rate = rates["pitr"]
+                                        unit_price = Decimal(rate.unit_price_usd)
+                                        lines.append(
+                                            PlanCostLine(
+                                                address=address,
+                                                resource_type="aws_dynamodb_table",
+                                                description="Amazon DynamoDB point-in-time recovery storage",
+                                                quantity=quantity.minimum,
+                                                quantity_max=quantity.maximum,
+                                                unit=rate.unit,
+                                                unit_price_usd=rate.unit_price_usd,
+                                                monthly_cost_minor=int(
+                                                    (unit_price * quantity.minimum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_FLOOR
+                                                    )
+                                                ),
+                                                monthly_cost_max_minor=int(
+                                                    (unit_price * quantity.maximum * 100).quantize(
+                                                        Decimal(1), rounding=ROUND_CEILING
+                                                    )
+                                                ),
+                                                unit_price_low_usd=rate.unit_price_usd,
+                                                low_cost_quantity=quantity.minimum,
+                                                catalog_sku=rate.sku,
+                                                catalog_product_sha256=rate.product_digest,
+                                                catalog_published_at=rate.published_at,
+                                                catalog_effective_at=rate.effective_at,
+                                            )
+                                        )
+                            except PriceListUnavailableError:
+                                unavailable = True
+                                findings.append(
+                                    PlanPricingFinding(
+                                        "regional_price_lookup_unavailable",
+                                        dynamodb_tables[0]["address"],
+                                        "DavDeploy could not verify current regional DynamoDB prices.",
+                                    )
+                                )
+                            except PlanPricingError:
+                                findings.append(
+                                    PlanPricingFinding(
+                                        "regional_price_ambiguous",
+                                        dynamodb_tables[0]["address"],
+                                        "DavDeploy could not identify exact regional DynamoDB prices.",
+                                    )
+                                )
+    elif dynamodb_document is not None:
+        findings.append(
+            PlanPricingFinding(
+                "dynamodb_usage_assumptions_stale",
+                None,
+                "DynamoDB usage assumptions do not match any table in this plan.",
+            )
+        )
 
     total_max_minor = sum(
         item.monthly_cost_minor
@@ -1319,6 +2002,8 @@ def evaluate_generated_plan_pricing(
         usage_assumptions=trusted_context.usage_assumptions,
             sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
         transitions=transitions,
     )
 
@@ -1369,6 +2054,8 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "usage_assumptions": document.get("usage_assumptions"),
         "sqs_usage_assumptions": document.get("sqs_usage_assumptions"),
         "rds_usage_assumptions": document.get("rds_usage_assumptions"),
+        "serverless_usage_assumptions": document.get("serverless_usage_assumptions"),
+        "dynamodb_usage_assumptions": document.get("dynamodb_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -1394,6 +2081,8 @@ def pricing_evidence_is_approval_eligible(
         or document.get("usage_assumptions") != trusted_context.usage_assumptions
         or document.get("sqs_usage_assumptions") != trusted_context.sqs_usage_assumptions
         or document.get("rds_usage_assumptions") != trusted_context.rds_usage_assumptions
+        or document.get("serverless_usage_assumptions") != trusted_context.serverless_usage_assumptions
+        or document.get("dynamodb_usage_assumptions") != trusted_context.dynamodb_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -1529,10 +2218,6 @@ def pricing_evidence_is_approval_eligible(
         for description, (usage, unit) in expected_s3_lines.items():
             line = actual_s3_lines[description]
             expected_low_quantity = usage.minimum
-            if description == "AWS internet data transfer out" and not trusted_context.region.startswith(
-                ("cn-", "us-gov-")
-            ):
-                expected_low_quantity = max(0, expected_low_quantity - 100)
             if (
                 line.get("quantity") != usage.minimum
                 or line.get("quantity_max") != usage.maximum
@@ -1543,7 +2228,7 @@ def pricing_evidence_is_approval_eligible(
             if description == "AWS internet data transfer out" and (
                 line.get("unit_price_low_usd") != "0.05"
                 or line.get("unit_price_low_source_url")
-                != "https://aws.amazon.com/s3/pricing/"
+                != "https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer"
             ):
                 return False
     sqs_lines = [line for line in lines if line.get("resource_type") == "aws_sqs_queue"]
@@ -1570,20 +2255,70 @@ def pricing_evidence_is_approval_eligible(
         actual = {line.get("description"): line for line in sqs_lines}
         if set(actual) != set(active):
             return False
-        free_units = 1_000_000 if not trusted_context.region.startswith(("cn-", "us-gov-")) else 0
         for name in ("Amazon SQS FIFO requests", "Amazon SQS Standard requests"):
             if name not in active:
                 continue
             usage, address = active[name]
             line = actual[name]
-            free_applied = min(usage.minimum, free_units)
-            free_units -= free_applied
             if (
                 line.get("quantity") != usage.minimum
                 or line.get("quantity_max") != usage.maximum
-                or line.get("low_cost_quantity") != usage.minimum - free_applied
+                or line.get("low_cost_quantity") != usage.minimum
                 or line.get("address") != address
                 or line.get("unit") != "Requests"
+            ):
+                return False
+    serverless_lines = [
+        line for line in lines
+        if line.get("resource_type") in {"aws_lambda_function", "aws_apigatewayv2_api"}
+    ]
+    if serverless_lines:
+        if trusted_context.serverless_usage_assumptions is None:
+            return False
+        try:
+            assumptions = ServerlessPricingUsageAssumptions.model_validate(
+                trusted_context.serverless_usage_assumptions
+            )
+        except (TypeError, ValueError):
+            return False
+        expected: dict[tuple[str, str], tuple[int, int, str]] = {}
+        for address, usage in assumptions.lambda_functions.items():
+            expected[(address, "AWS Lambda invocations")] = (
+                usage.monthly_invocations.minimum, usage.monthly_invocations.maximum, "Requests"
+            )
+            expected[(address, "AWS Lambda billed duration at declared average and memory")] = (
+                usage.monthly_invocations.minimum, usage.monthly_invocations.maximum,
+                "Invocations × GB-seconds per invocation"
+            )
+            expected[(address, "AWS Lambda internet data transfer out")] = (
+                usage.monthly_internet_egress_gb.minimum,
+                usage.monthly_internet_egress_gb.maximum, "GB"
+            )
+            expected[(address, "Amazon CloudWatch Logs ingestion")] = (
+                usage.monthly_cloudwatch_log_ingestion_gb.minimum,
+                usage.monthly_cloudwatch_log_ingestion_gb.maximum, "GB"
+            )
+            expected[(address, "Amazon CloudWatch Logs storage")] = (
+                usage.monthly_log_storage_gb_month.minimum,
+                usage.monthly_log_storage_gb_month.maximum, "GB-Mo"
+            )
+        for address, usage in assumptions.http_apis.items():
+            expected[(address, "Amazon API Gateway HTTP API requests")] = (
+                usage.monthly_requests.minimum, usage.monthly_requests.maximum, "Requests"
+            )
+            expected[(address, "AWS internet data transfer out")] = (
+                usage.monthly_internet_egress_gb.minimum,
+                usage.monthly_internet_egress_gb.maximum, "GB"
+            )
+        actual = {(line.get("address"), line.get("description")): line for line in serverless_lines}
+        if set(actual) != set(expected):
+            return False
+        for key, (quantity, quantity_max, unit) in expected.items():
+            line = actual[key]
+            if (
+                line.get("quantity") != quantity
+                or line.get("quantity_max") != quantity_max
+                or line.get("unit") != unit
             ):
                 return False
     expected_within_budget = (
@@ -1660,6 +2395,183 @@ def _validate_rds_instance(
     return None
 
 
+def _validate_lambda_function(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "lambda_plan_change_metadata_missing", "The Lambda plan lacks resource-level pricing metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    required = (
+        "function_name", "package_type", "architectures", "memory_size", "ephemeral_storage",
+        "timeout", "snap_start", "vpc_config", "reserved_concurrent_executions",
+        "logging_config",
+    )
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+    ):
+        return "lambda_configuration_unknown", "The Lambda plan lacks known final pricing and networking values."
+    if any(_path_contains_unknown(unknown, (key,)) for key in required):
+        return "lambda_cost_driver_unknown", "A Lambda pricing or network setting is unknown in the plan."
+    if values.get("package_type") != "Zip":
+        return "lambda_artifact_type_unpriced", "Only ZIP packaged Lambda functions are priced in this release."
+    architectures = values.get("architectures")
+    if not isinstance(architectures, list) or len(architectures) != 1 or architectures[0] not in {"x86_64", "arm64"}:
+        return "lambda_architecture_unpriced", "Only one x86_64 or arm64 Lambda architecture is priced."
+    memory = values.get("memory_size")
+    if isinstance(memory, bool) or not isinstance(memory, int) or not 128 <= memory <= 10_240:
+        return "lambda_memory_unpriced", "Lambda memory must be explicitly bounded from 128 to 10,240 MB."
+    ephemeral = values.get("ephemeral_storage")
+    size = ephemeral.get("size") if isinstance(ephemeral, dict) else None
+    if isinstance(size, bool) or size != 512:
+        return "lambda_ephemeral_storage_unpriced", "Only the default 512 MB Lambda ephemeral storage is priced."
+    if values.get("snap_start") not in (None, {"apply_on": "None"}):
+        return "lambda_snap_start_unpriced", "Lambda SnapStart lifecycle storage and restore charges are not priced."
+    vpc = values.get("vpc_config")
+    if isinstance(vpc, list) and vpc:
+        vpc = vpc[0]
+    if isinstance(vpc, dict) and (vpc.get("subnet_ids") or vpc.get("security_group_ids")):
+        return "lambda_vpc_transfer_unpriced", "VPC Lambda networking can incur unmodeled NAT and transfer charges."
+    if values.get("reserved_concurrent_executions") not in (None, -1):
+        return "lambda_reserved_concurrency_unpriced", "Reserved concurrency is outside this bounded Lambda price model."
+    timeout = values.get("timeout")
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 900:
+        return "lambda_timeout_unknown", "Lambda timeout must be known and no greater than 900 seconds."
+    if _lambda_log_group_name(values) is None:
+        return "lambda_logging_configuration_unknown", "The Lambda log group cannot be determined from its final logging configuration."
+    return None
+
+
+def _lambda_log_group_name(values: dict[str, Any]) -> str | None:
+    function_name = values.get("function_name")
+    if not isinstance(function_name, str) or not function_name:
+        return None
+    configuration = values.get("logging_config")
+    if configuration in (None, []):
+        return f"/aws/lambda/{function_name}"
+    if isinstance(configuration, list) and len(configuration) == 1:
+        configuration = configuration[0]
+    if not isinstance(configuration, dict):
+        return None
+    custom_name = configuration.get("log_group")
+    if custom_name in (None, ""):
+        return f"/aws/lambda/{function_name}"
+    return custom_name if isinstance(custom_name, str) and custom_name else None
+
+
+def _validate_lambda_log_group(
+    values: dict[str, Any], change: dict[str, Any] | None, expected_name: str
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "lambda_log_group_metadata_missing", "The Lambda log group lacks resource-level retention metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    required = ("name", "retention_in_days", "log_group_class", "kms_key_id")
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+        or any(_path_contains_unknown(unknown, (key,)) for key in required)
+    ):
+        return "lambda_log_group_unknown", "The Lambda log group lacks known retention, class, or encryption values."
+    if values.get("name") != expected_name:
+        return "lambda_log_group_mismatch", "The CloudWatch log group does not match the Lambda logging destination."
+    retention = values.get("retention_in_days")
+    allowed_retention = {
+        1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400,
+        545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653,
+    }
+    if isinstance(retention, bool) or retention not in allowed_retention:
+        return "lambda_log_retention_unbounded", "Lambda log retention must be an explicit supported expiration period."
+    if values.get("log_group_class") != "STANDARD":
+        return "lambda_log_class_unpriced", "Only Standard CloudWatch log groups are priced in this release."
+    if values.get("kms_key_id") not in (None, ""):
+        return "lambda_log_kms_unpriced", "Customer-managed CloudWatch log encryption keys are not priced."
+    return None
+
+
+def _validate_http_api(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "http_api_plan_change_metadata_missing", "The HTTP API plan lacks resource-level pricing metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    required = ("protocol_type", "disable_execute_api_endpoint")
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+        or any(_path_contains_unknown(unknown, (key,)) for key in required)
+    ):
+        return "http_api_configuration_unknown", "The HTTP API plan lacks known final protocol values."
+    if values.get("protocol_type") != "HTTP":
+        return "http_api_protocol_unpriced", "Only API Gateway HTTP APIs have a verified request price."
+    return None
+
+
+def _validate_http_api_stage(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "http_api_stage_metadata_missing", "The HTTP API stage lacks resource-level cost metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    cost_drivers = ("access_log_settings", "default_route_settings", "route_settings")
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in cost_drivers)
+        or any(_path_contains_unknown(unknown, (key,)) for key in cost_drivers)
+    ):
+        return "http_api_stage_unknown", "The HTTP API stage has unknown log or metrics settings."
+    access_logs = values.get("access_log_settings")
+    if access_logs not in (None, {}, []):
+        return "http_api_access_logs_unpriced", "API access logs can incur CloudWatch ingestion and retention charges."
+    default_settings = values.get("default_route_settings")
+    if isinstance(default_settings, dict) and default_settings.get("detailed_metrics_enabled") is True:
+        return "http_api_metrics_unpriced", "Detailed API metrics can incur CloudWatch charges."
+    route_settings = values.get("route_settings")
+    if isinstance(route_settings, list) and any(
+        isinstance(item, dict) and item.get("detailed_metrics_enabled") is True
+        for item in route_settings
+    ):
+        return "http_api_metrics_unpriced", "Detailed API metrics can incur CloudWatch charges."
+    return None
+
+
+def _validate_http_api_integration(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "http_api_integration_metadata_missing", "The HTTP API integration lacks resource-level cost metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    cost_drivers = ("connection_type", "connection_id")
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in cost_drivers)
+        or any(_path_contains_unknown(unknown, (key,)) for key in cost_drivers)
+    ):
+        return "http_api_integration_unknown", "The HTTP API integration has unknown connection settings."
+    if values.get("connection_type") == "VPC_LINK" or values.get("connection_id"):
+        return "http_api_vpc_link_unpriced", "API Gateway VPC links have separate hourly charges."
+    return None
+
+
 def _validate_gp3_volume(
     values: dict[str, Any], change: dict[str, Any] | None
 ) -> tuple[str, str] | None:
@@ -1730,6 +2642,85 @@ def _validate_sqs_queue(
         return "sqs_configuration_unknown", "The planned SQS encryption configuration is unknown."
     if values.get("fifo_queue") != after.get("fifo_queue"):
         return "sqs_configuration_unknown", "The SQS queue type does not match the final planned resource."
+    return None
+
+
+def _dynamodb_pitr_enabled(values: dict[str, Any]) -> bool | None:
+    raw = values.get("point_in_time_recovery")
+    if raw in (None, [], {}):
+        return False
+    if isinstance(raw, dict):
+        enabled = raw.get("enabled")
+    elif isinstance(raw, list) and len(raw) == 1 and isinstance(raw[0], dict):
+        enabled = raw[0].get("enabled")
+    else:
+        return None
+    return enabled if isinstance(enabled, bool) else None
+
+
+def _validate_dynamodb_table(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "dynamodb_plan_change_metadata_missing", "The DynamoDB plan lacks table-level cost metadata."
+    change_doc = change["change"]
+    after = change_doc.get("after")
+    unknown = change_doc.get("after_unknown")
+    required = (
+        "billing_mode",
+        "table_class",
+        "global_secondary_index",
+        "local_secondary_index",
+        "replica",
+        "point_in_time_recovery",
+        "stream_enabled",
+        "stream_view_type",
+        "server_side_encryption",
+    )
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+        or any(_path_contains_unknown(unknown, (key,)) for key in required)
+    ):
+        return "dynamodb_configuration_unknown", "The DynamoDB plan lacks known final cost-driving settings."
+    if values.get("billing_mode") != "PAY_PER_REQUEST":
+        return "dynamodb_capacity_mode_unpriced", "Only DynamoDB on-demand capacity tables are priced."
+    if values.get("table_class") != "STANDARD":
+        return "dynamodb_table_class_unpriced", "Only DynamoDB Standard tables are priced."
+    for key, code, message in (
+        (
+            "global_secondary_index",
+            "dynamodb_global_secondary_index_unpriced",
+            "DynamoDB global secondary index usage is not included in this estimate.",
+        ),
+        (
+            "local_secondary_index",
+            "dynamodb_local_secondary_index_unpriced",
+            "DynamoDB local secondary index usage is not included in this estimate.",
+        ),
+        (
+            "replica",
+            "dynamodb_global_table_unpriced",
+            "DynamoDB global table replicas are not included in this estimate.",
+        ),
+    ):
+        if values.get(key) not in (None, [], {}):
+            return code, message
+    if values.get("stream_enabled") is True or values.get("stream_view_type") not in (None, ""):
+        return "dynamodb_stream_unpriced", "DynamoDB Streams charges are not included in this estimate."
+    pitr_enabled = _dynamodb_pitr_enabled(values)
+    if pitr_enabled is None:
+        return "dynamodb_pitr_configuration_unknown", "The DynamoDB PITR setting is not known."
+    encryption = values.get("server_side_encryption")
+    if encryption not in (None, [], {}):
+        if isinstance(encryption, list) and len(encryption) == 1:
+            encryption = encryption[0]
+        if not isinstance(encryption, dict) or encryption.get("enabled") is not True:
+            return "dynamodb_encryption_configuration_unknown", "DynamoDB server-side encryption settings are not supported."
+        if encryption.get("kms_key_arn") not in (None, "") or encryption.get("kms_key_id") not in (None, ""):
+            return "dynamodb_customer_kms_unpriced", "Customer-managed DynamoDB encryption keys are not priced."
     return None
 
 
@@ -2178,6 +3169,8 @@ def _evidence(
     usage_assumptions: dict[str, Any] | None = None,
     sqs_usage_assumptions: dict[str, Any] | None = None,
     rds_usage_assumptions: dict[str, Any] | None = None,
+    serverless_usage_assumptions: dict[str, Any] | None = None,
+    dynamodb_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -2196,10 +3189,11 @@ def _evidence(
     plan_digest = _canonical_digest(document) if isinstance(document, (dict, list)) else "0" * 64
     pricing_context_digest = _pricing_context_digest(
         region, currency, budget, persisted_context_sha256, usage_assumptions,
-        sqs_usage_assumptions, rds_usage_assumptions,
+        sqs_usage_assumptions, rds_usage_assumptions, serverless_usage_assumptions,
+        dynamodb_usage_assumptions,
     )
     payload = {
-        "version": 5,
+        "version": 7,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -2225,6 +3219,8 @@ def _evidence(
         "usage_assumptions": usage_assumptions,
         "sqs_usage_assumptions": sqs_usage_assumptions,
         "rds_usage_assumptions": rds_usage_assumptions,
+        "serverless_usage_assumptions": serverless_usage_assumptions,
+        "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -2284,6 +3280,8 @@ def _evidence(
         usage_assumptions=usage_assumptions,
         sqs_usage_assumptions=sqs_usage_assumptions,
         rds_usage_assumptions=rds_usage_assumptions,
+        serverless_usage_assumptions=serverless_usage_assumptions,
+        dynamodb_usage_assumptions=dynamodb_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -2304,10 +3302,12 @@ def _pricing_context_digest(
     usage_assumptions: dict[str, Any] | None = None,
     sqs_usage_assumptions: dict[str, Any] | None = None,
     rds_usage_assumptions: dict[str, Any] | None = None,
+    serverless_usage_assumptions: dict[str, Any] | None = None,
+    dynamodb_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 4,
+            "version": 6,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
@@ -2315,5 +3315,7 @@ def _pricing_context_digest(
             "usage_assumptions": usage_assumptions,
             "sqs_usage_assumptions": sqs_usage_assumptions,
             "rds_usage_assumptions": rds_usage_assumptions,
+            "serverless_usage_assumptions": serverless_usage_assumptions,
+            "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
         }
     )

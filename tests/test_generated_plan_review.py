@@ -93,7 +93,9 @@ class ArtifactStoreFixture:
             raise GeneratedPlanArtifactError("not found")
 
 
-def make_submitted_revision(service, *, usage_assumptions=None):
+def make_submitted_revision(
+    service, *, usage_assumptions=None, additional_pricing_assumptions=None
+):
     project = service.create_project(
         founder(), "nova-artifact-project", "https://github.com/example/nova-artifact", "main"
     )
@@ -133,6 +135,10 @@ def make_submitted_revision(service, *, usage_assumptions=None):
         revision.content.setdefault("application_analysis", {}).setdefault(
             "workload_spec", {}
         )["pricing_usage_assumptions"] = usage_assumptions
+    if additional_pricing_assumptions is not None:
+        revision.content.setdefault("application_analysis", {}).setdefault(
+            "workload_spec", {}
+        ).update(additional_pricing_assumptions)
     revision.content_digest = plan_hash(revision.content)
     service.db.commit()
     service.submit_infrastructure_plan(founder(), revision.id)
@@ -355,7 +361,46 @@ def test_generated_plan_review_displays_revision_bound_usage_assumptions(tmp_pat
         "monthly_get_requests": {"minimum": 300, "maximum": 400},
         "monthly_internet_egress_gb": {"minimum": 0, "maximum": 5},
     }
-    project, _, revision = make_submitted_revision(service, usage_assumptions=usage)
+    sqs_usage = {
+        "monthly_standard_request_units": {"minimum": 10, "maximum": 20},
+        "monthly_fifo_request_units": {"minimum": 0, "maximum": 0},
+        "monthly_fair_queue_request_units": {"minimum": 0, "maximum": 0},
+        "monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+    }
+    rds_usage = {"monthly_backup_storage_gb_month": {"minimum": 1, "maximum": 2}}
+    serverless_usage = {
+        "lambda_functions": {
+            "aws_lambda_function.api": {
+                "monthly_invocations": {"minimum": 10, "maximum": 20},
+                "average_billed_duration_ms": {"minimum": 10, "maximum": 20},
+                "monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+                "monthly_cloudwatch_log_ingestion_gb": {"minimum": 0, "maximum": 0},
+                "monthly_log_storage_gb_month": {"minimum": 0, "maximum": 0},
+            }
+        },
+        "http_apis": {},
+    }
+    dynamodb_usage = {
+        "tables": {
+            "aws_dynamodb_table.records": {
+                "monthly_read_request_units": {"minimum": 10, "maximum": 20},
+                "monthly_write_request_units": {"minimum": 5, "maximum": 10},
+                "monthly_storage_gb_month": {"minimum": 1, "maximum": 1},
+                "monthly_pitr_storage_gb_month": {"minimum": 1, "maximum": 1},
+            }
+        }
+    }
+    project, _, revision = make_submitted_revision(
+        service,
+        usage_assumptions=usage,
+        additional_pricing_assumptions={
+            "sqs_pricing_usage_assumptions": sqs_usage,
+            "rds_pricing_usage_assumptions": rds_usage,
+            "serverless_pricing_usage_assumptions": serverless_usage,
+            "dynamodb_pricing_usage_assumptions": dynamodb_usage,
+        },
+    )
     proposal, generated = generated_runner_result(tmp_path, revision, project)
 
     artifact = service.persist_generated_plan_artifact(
@@ -364,8 +409,20 @@ def test_generated_plan_review_displays_revision_bound_usage_assumptions(tmp_pat
     detail = service.generated_plan_artifact_detail(founder(), artifact.id)
 
     assert detail["pricing"]["usage_assumptions"] == usage
+    assert detail["pricing"]["sqs_usage_assumptions"] == sqs_usage
+    assert detail["pricing"]["rds_usage_assumptions"] == rds_usage
+    assert detail["pricing"]["serverless_usage_assumptions"] == serverless_usage
+    assert detail["pricing"]["dynamodb_usage_assumptions"] == dynamodb_usage
     assert detail["pricing"]["evidence_complete"] is False
     assert detail["approval_allowed"] is False
+
+    artifact.manifest["pricing_evidence"]["dynamodb_usage_assumptions"] = {
+        "tables": {"aws_dynamodb_table.records": {"untrusted": True}}
+    }
+    tampered_detail = service.generated_plan_artifact_detail(founder(), artifact.id)
+    assert tampered_detail["pricing"]["dynamodb_usage_assumptions"] is None
+    assert tampered_detail["pricing"]["lines"] == []
+    assert tampered_detail["approval_allowed"] is False
 
 
 def test_unpriced_resource_keeps_backend_free_plan_unapprovable(tmp_path):
