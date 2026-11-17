@@ -32,6 +32,7 @@ from davdeploy.models import (
     WorkloadIntent,
     WorkspaceInvitation,
 )
+from davdeploy.nova_plan_role_profile import NovaPlanRoleProfile
 from davdeploy.planner import AwsV1Planner
 from davdeploy.policy import PolicyClient
 from davdeploy.security import (
@@ -673,7 +674,7 @@ def test_plan_only_quick_create_reuses_connection_external_id_and_stores_separat
     assert any("bounded planning metadata reads" in step for step in setup["customer_steps"])
     assert any("effective permissions" in step for step in setup["customer_steps"])
     assert "proposal-scoped explicit-deny policy" in setup["boundary"]
-    assert "does not inspect or attest effective permissions" in setup["boundary"]
+    assert "does not attest every effective AWS permission layer" in setup["boundary"]
     detail = service.cloud_connection_detail(founder(), connection.id)
     assert detail["plan_role_policy_status"] == "EXPECTED_UNVERIFIED"
     assert "expected to install" in detail["plan_role_policy"]
@@ -851,7 +852,12 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
         def verify_plan_role(self, _connection_id, role_arn, external_id, _region):
             assert role_arn.endswith("davdeployPlan-connection-plan")
             assert external_id == "current-external-id"
-            return "123456789012"
+            return NovaPlanRoleProfile(
+                account_id="123456789012",
+                role_arn=role_arn,
+                version="nova-plan-role-profile.v1",
+                sha256="a" * 64,
+            )
 
         def verify_execution_role(self, *_args):
             pytest.fail("plan-only verification must not assume the execution role")
@@ -881,19 +887,22 @@ def test_plan_role_verification_checks_trust_and_account_without_claiming_policy
     )
     detail = service.cloud_connection_detail(founder(), connection.id)
     assert saved.setup_state == "VERIFIED"
-    assert saved.plan_role_setup_state == "VERIFIED"
+    assert saved.plan_role_setup_state == "PROFILE_VERIFIED"
     assert saved.execution_role_arn is None
     assert audit.detail["plan_role_verified"] is True
     assert audit.detail["execution_role_verified"] is False
     assert audit.detail["plan_role_permissions_attested"] is False
+    assert audit.detail["plan_role_policy_profile_verified"] is True
+    assert audit.detail["plan_role_policy_profile_sha256"] == "a" * 64
     assert detail["plan_role_arn"] == connection.plan_role_arn
-    assert detail["plan_role_policy_status"] == "POLICY_UNATTESTED"
-    assert "policy contents" in detail["plan_role_policy"]
-    assert "effective AWS permissions and plan-runner readiness are not attested" in detail[
-        "capabilities"
-    ][-1]
+    assert detail["plan_role_policy_status"] == "PROFILE_VERIFIED"
+    assert "current bounded policy profile were verified" in detail["plan_role_policy"]
+    assert (
+        "effective AWS permissions and plan-runner readiness are not fully attested"
+        in detail["capabilities"][-1]
+    )
     assert "no customer service permissions" not in " ".join(detail["capabilities"])
-    assert "plan-runner readiness are not attested" in detail["capabilities"][-1]
+    assert "plan-runner readiness are not fully attested" in detail["capabilities"][-1]
 
 
 def test_general_verification_still_checks_execution_role_on_legacy_mixed_connection(monkeypatch):
@@ -913,7 +922,12 @@ def test_general_verification_still_checks_execution_role_on_legacy_mixed_connec
 
         def verify_plan_role(self, _connection_id, role_arn, _external_id, _region):
             assert role_arn.endswith("davdeployPlan-legacy")
-            return "123456789012"
+            return NovaPlanRoleProfile(
+                account_id="123456789012",
+                role_arn=role_arn,
+                version="nova-plan-role-profile.v1",
+                sha256="b" * 64,
+            )
 
     monkeypatch.setenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "true")
     monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "true")
@@ -931,9 +945,7 @@ def test_general_verification_still_checks_execution_role_on_legacy_mixed_connec
     )
     service.db.commit()
 
-    service.verify_aws_connection(
-        founder(), connection.id, "us-east-1", VerifiedLegacyMixedRoles()
-    )
+    service.verify_aws_connection(founder(), connection.id, "us-east-1", VerifiedLegacyMixedRoles())
 
     audit = next(
         event

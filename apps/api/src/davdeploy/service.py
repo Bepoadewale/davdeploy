@@ -1078,8 +1078,7 @@ class ProductService:
                 select(InfrastructurePlanRevision, InfrastructurePlan)
                 .join(
                     InfrastructurePlan,
-                    InfrastructurePlan.id
-                    == InfrastructurePlanRevision.infrastructure_plan_id,
+                    InfrastructurePlan.id == InfrastructurePlanRevision.infrastructure_plan_id,
                 )
                 .where(*visible, InfrastructurePlanRevision.id == canonical_cursor)
             ).first()
@@ -2127,13 +2126,18 @@ class ProductService:
             not self._is_workspace_administrator(principal)
             and customer_plan.creator_subject != principal.subject
         ):
-            raise PermissionError("only the plan creator or a workspace administrator may request a plan")
+            raise PermissionError(
+                "only the plan creator or a workspace administrator may request a plan"
+            )
         if revision.state not in {
             InfrastructurePlanState.SUBMITTED,
             InfrastructurePlanState.APPROVED,
         }:
             raise ValueError("Nova plan generation requires a submitted customer revision")
-        if revision.content_digest != content_digest or plan_hash(revision.content) != content_digest:
+        if (
+            revision.content_digest != content_digest
+            or plan_hash(revision.content) != content_digest
+        ):
             raise ValueError("customer revision digest is stale or invalid")
         latest = self.db.scalar(
             select(InfrastructurePlanRevision)
@@ -2175,11 +2179,9 @@ class ProductService:
             or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region)
         ):
             raise ValueError("plan target must match a verified AWS account and region")
-        expected_plan_role_arn = (
-            f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
-        )
+        expected_plan_role_arn = f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
         if (
-            connection.plan_role_setup_state != "VERIFIED"
+            connection.plan_role_setup_state != "PROFILE_VERIFIED"
             or connection.plan_role_arn != expected_plan_role_arn
             or not connection.external_id_secret_ref
         ):
@@ -2329,7 +2331,10 @@ class ProductService:
         )
         if not run:
             raise PermissionError("generated plan request not found in this organization")
-        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+        if (
+            not self._is_workspace_administrator(principal)
+            and run.requester_subject != principal.subject
+        ):
             raise PermissionError("generated plan request is not visible to this user")
 
         retry_key_sha256 = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
@@ -2417,9 +2422,7 @@ class ProductService:
             self.db.commit()
         except IntegrityError:
             self.db.rollback()
-            retry_events = self._generated_plan_run_retry_events(
-                principal.organization_id, run.id
-            )
+            retry_events = self._generated_plan_run_retry_events(principal.organization_id, run.id)
             if any(
                 (event.detail or {}).get("idempotency_key_sha256") == retry_key_sha256
                 for event in retry_events
@@ -2465,9 +2468,7 @@ class ProductService:
         if not 1 <= queue_count <= 10:
             raise ValueError("worker queue count is invalid")
         cursor = self.db.scalar(
-            select(WorkerDispatchState)
-            .where(WorkerDispatchState.id == 1)
-            .with_for_update()
+            select(WorkerDispatchState).where(WorkerDispatchState.id == 1).with_for_update()
         )
         if cursor is None:
             self.db.rollback()
@@ -2564,7 +2565,10 @@ class ProductService:
         )
         if not run:
             raise PermissionError("generated plan request not found in this organization")
-        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+        if (
+            not self._is_workspace_administrator(principal)
+            and run.requester_subject != principal.subject
+        ):
             raise PermissionError("generated plan request is not visible to this user")
         if (
             run.state == "RECONCILIATION_REQUIRED"
@@ -2757,15 +2761,17 @@ class ProductService:
         )
         if not run:
             raise PermissionError("generated plan request not found in this organization")
-        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+        if (
+            not self._is_workspace_administrator(principal)
+            and run.requester_subject != principal.subject
+        ):
             raise PermissionError("generated plan request is not visible to this user")
         uncertain_generation = (
             run.error_code == "PROPOSAL_GENERATION_RECONCILIATION_REQUIRED"
             and run.preparation_phase == "GENERATING_PROPOSAL"
         )
         expired_before_call = (
-            run.error_code == "PREPARATION_LEASE_EXPIRED"
-            and run.preparation_phase is None
+            run.error_code == "PREPARATION_LEASE_EXPIRED" and run.preparation_phase is None
         )
         if (
             run.state != "RECONCILIATION_REQUIRED"
@@ -2850,7 +2856,10 @@ class ProductService:
         )
         if not run:
             raise PermissionError("generated plan request not found in this organization")
-        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+        if (
+            not self._is_workspace_administrator(principal)
+            and run.requester_subject != principal.subject
+        ):
             raise PermissionError("generated plan request is not visible to this user")
         uncertain_start = (
             run.state == "RECONCILIATION_REQUIRED"
@@ -2877,15 +2886,16 @@ class ProductService:
         )
         uncertain_status = (
             run.state == "RECONCILIATION_REQUIRED"
-            and run.error_code
-            in {"BUILD_STATUS_UNCONFIRMED", "RUNNER_CONFIGURATION_UNAVAILABLE"}
+            and run.error_code in {"BUILD_STATUS_UNCONFIRMED", "RUNNER_CONFIGURATION_UNAVAILABLE"}
             and run.preparation_phase is None
             and bool(run.codebuild_build_id)
         )
         if not (
             uncertain_start or uncertain_input_stage or uncertain_result_read or uncertain_status
         ):
-            raise ValueError("only an ambiguous CodeBuild start, input stage, or result can be reconciled")
+            raise ValueError(
+                "only an ambiguous CodeBuild start, input stage, or result can be reconciled"
+            )
 
         dispatcher = self.nova_plan_dispatcher or NovaPlanOnlyDispatcher.from_environment()
         if dispatcher is None or dispatcher.project_name != run.codebuild_project:
@@ -3394,9 +3404,7 @@ class ProductService:
             revision = self._infrastructure_revision(actor, run.revision_id)
             customer_plan = self._infrastructure_plan(actor, revision.infrastructure_plan_id)
             target = (revision.content or {}).get("target") or {}
-            connection = self._cloud_connection(
-                actor, str(target.get("connection_id") or "")
-            )
+            connection = self._cloud_connection(actor, str(target.get("connection_id") or ""))
             request_document = run.request_document
             if (
                 not isinstance(request_document, dict)
@@ -3434,7 +3442,7 @@ class ProductService:
                 or connection.provider != "aws"
                 or connection.setup_state != "VERIFIED"
                 or connection.account_id != account_id
-                or connection.plan_role_setup_state != "VERIFIED"
+                or connection.plan_role_setup_state != "PROFILE_VERIFIED"
                 or connection.plan_role_arn
                 != f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
                 or not connection.external_id_secret_ref
@@ -3449,7 +3457,9 @@ class ProductService:
                 or request_document.get("source_deployment_plan_id") != str(source_plan_id)
                 or not source_plan_id
             ):
-                raise ValueError("durable Nova plan request no longer matches its submitted revision")
+                raise ValueError(
+                    "durable Nova plan request no longer matches its submitted revision"
+                )
             if revision.state == InfrastructurePlanState.APPROVED:
                 decision = self.db.scalar(
                     select(InfrastructurePlanDecisionRecord).where(
@@ -3616,9 +3626,7 @@ class ProductService:
                 lease_lost.set()
                 return
 
-    def _generated_plan_run_lease_is_current(
-        self, run_id: str, lease_token: str
-    ) -> bool:
+    def _generated_plan_run_lease_is_current(self, run_id: str, lease_token: str) -> bool:
         return (
             self.db.scalar(
                 select(GeneratedPlanRun.id).where(
@@ -3723,8 +3731,7 @@ class ProductService:
                         GeneratedPlanRun.preparation_phase == "STARTING_BUILD",
                         GeneratedPlanRun.codebuild_build_id.is_(None),
                         GeneratedPlanRun.runner_run_id == expected_runner_run_id,
-                        GeneratedPlanRun.codebuild_idempotency_token
-                        == expected_idempotency_token,
+                        GeneratedPlanRun.codebuild_idempotency_token == expected_idempotency_token,
                     )
                     .values(
                         state="RECONCILIATION_REQUIRED",
@@ -3903,9 +3910,7 @@ class ProductService:
         ):
             raise ValueError("durable Nova plan attempt keys did not match the stored runner ID")
         target = (revision.content or {}).get("target") or {}
-        connection = self._cloud_connection(
-            principal, str(target.get("connection_id") or "")
-        )
+        connection = self._cloud_connection(principal, str(target.get("connection_id") or ""))
         ownership_scope = self._generated_plan_ownership_scope(
             principal,
             customer_plan.project_id,
@@ -3946,9 +3951,7 @@ class ProductService:
                         phase="input_stage",
                     )
             else:
-                if not self._set_generated_plan_run_phase(
-                    run, lease_token, "GENERATING_PROPOSAL"
-                ):
+                if not self._set_generated_plan_run_phase(run, lease_token, "GENERATING_PROPOSAL"):
                     raise NovaPlanDispatchError(
                         "Nova plan worker lease was lost before generation",
                         outcome_uncertain=True,
@@ -4301,7 +4304,9 @@ class ProductService:
                 action = "generated_plan_run.generation_uncertain"
             else:
                 error_code = "PREPARATION_OUTCOME_UNCERTAIN"
-                error_summary = "The request could not be fully confirmed. Check its status before retrying."
+                error_summary = (
+                    "The request could not be fully confirmed. Check its status before retrying."
+                )
                 action = "generated_plan_run.preparation_uncertain"
             self._finish_generated_plan_run_claim(
                 run,
@@ -4319,14 +4324,19 @@ class ProductService:
 
     def generated_plan_run_detail(self, principal: Principal, run_id: str) -> dict[str, Any]:
         run = self.db.scalar(
-            select(GeneratedPlanRun).where(
+            select(GeneratedPlanRun)
+            .where(
                 GeneratedPlanRun.id == run_id,
                 GeneratedPlanRun.organization_id == principal.organization_id,
-            ).execution_options(populate_existing=True)
+            )
+            .execution_options(populate_existing=True)
         )
         if not run:
             raise PermissionError("generated plan request not found in this organization")
-        if not self._is_workspace_administrator(principal) and run.requester_subject != principal.subject:
+        if (
+            not self._is_workspace_administrator(principal)
+            and run.requester_subject != principal.subject
+        ):
             raise PermissionError("generated plan request is not visible to this user")
         expiry = run.preparation_lease_expires_at
         if run.state == "PREPARING" and expiry:
@@ -4988,7 +4998,11 @@ class ProductService:
                         GeneratedPlanRun.runner_run_id == run.runner_run_id,
                         GeneratedPlanRun.codebuild_idempotency_token == run.runner_run_id,
                         GeneratedPlanRun.state.in_(
-                            ("BUILD_STARTED", "BUILD_SUCCEEDED_UNVERIFIED", "RECONCILIATION_REQUIRED")
+                            (
+                                "BUILD_STARTED",
+                                "BUILD_SUCCEEDED_UNVERIFIED",
+                                "RECONCILIATION_REQUIRED",
+                            )
                         ),
                     )
                     .values(
@@ -5087,9 +5101,7 @@ class ProductService:
                 GeneratedPlanRun.id == run.id,
                 GeneratedPlanRun.codebuild_project == run.codebuild_project,
                 GeneratedPlanRun.codebuild_build_id == build_id,
-                GeneratedPlanRun.state.in_(
-                    ("BUILD_STARTED", "RECONCILIATION_REQUIRED")
-                ),
+                GeneratedPlanRun.state.in_(("BUILD_STARTED", "RECONCILIATION_REQUIRED")),
                 or_(
                     GeneratedPlanRun.error_code.is_(None),
                     GeneratedPlanRun.error_code.in_(
@@ -5106,7 +5118,7 @@ class ProductService:
                 state="RECONCILIATION_REQUIRED",
                 error_code="BUILD_STATUS_UNCONFIRMED",
                 error_summary=summary,
-                    preparation_phase=None,
+                preparation_phase=None,
                 updated_at=datetime.now(UTC),
             )
             .execution_options(synchronize_session=False)
@@ -5244,7 +5256,7 @@ class ProductService:
             or connection.provider != "aws"
             or connection.setup_state != "VERIFIED"
             or connection.account_id != account_id
-            or connection.plan_role_setup_state != "VERIFIED"
+            or connection.plan_role_setup_state != "PROFILE_VERIFIED"
             or connection.plan_role_arn != exact_role_arn
             or not connection.external_id_secret_ref
             or request_document.get("target_account_id") != account_id
@@ -5414,7 +5426,10 @@ class ProductService:
         if (
             not isinstance(summary_doc, dict)
             or set(summary_doc) != summary_keys
-            or any(type(summary_doc.get(key)) is not int or summary_doc[key] < 0 for key in summary_keys - {"contains_sensitive_changes"})
+            or any(
+                type(summary_doc.get(key)) is not int or summary_doc[key] < 0
+                for key in summary_keys - {"contains_sensitive_changes"}
+            )
             or type(summary_doc.get("contains_sensitive_changes")) is not bool
             or not isinstance(summary_doc.get("pricing"), dict)
         ):
@@ -5443,8 +5458,7 @@ class ProductService:
             or pricing_evidence_safe_summary(pricing_document) != summary_doc["pricing"]
             or (manifest.get("pricing") or {}).get("evidence_sha256")
             != pricing_document.get("evidence_sha256")
-            or digests.get("pricing_evidence_sha256")
-            != pricing_document.get("evidence_sha256")
+            or digests.get("pricing_evidence_sha256") != pricing_document.get("evidence_sha256")
             or digests.get("pricing_context_sha256")
             != pricing_document.get("pricing_context_sha256")
             or digests.get("plan_json_sha256") != pricing_document.get("plan_json_sha256")
@@ -5473,9 +5487,17 @@ class ProductService:
             "execution_allowed": False,
         }
         expected_manifest_version = (
-            (13 if untagged_records else 12 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 11)
+            (
+                13
+                if untagged_records
+                else 12
+                if boundary_mode == "TENANT_ISOLATED_HTTP_STATE"
+                else 11
+            )
             if pricing_document is not None
-            else (9 if untagged_records else 8 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 7)
+            else (
+                9 if untagged_records else 8 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 7
+            )
         )
         if manifest.get("manifest_version") != expected_manifest_version:
             raise ValueError("Nova result manifest version does not match its state boundary")
@@ -5813,7 +5835,9 @@ class ProductService:
                 expected_sha256=generated_plan.workspace_bundle_sha256,
             )
         except (GeneratedPlanArtifactError, OSError, ValueError) as error:
-            raise ValueError("Terraform execution workspace could not be securely persisted") from error
+            raise ValueError(
+                "Terraform execution workspace could not be securely persisted"
+            ) from error
 
         now = datetime.now(UTC)
         policy_doc, policy_sha256 = policy_evidence(generated_plan.policy)
@@ -5935,9 +5959,7 @@ class ProductService:
             and workspace_doc.get("sha256") == artifact.workspace_sha256
         )
         manifest_boundary = artifact.manifest.get("planning_boundary")
-        planning_boundary = (
-            manifest_boundary if isinstance(manifest_boundary, dict) else {}
-        )
+        planning_boundary = manifest_boundary if isinstance(manifest_boundary, dict) else {}
         boundary_mode = planning_boundary.get("mode", "INITIAL_PLAN_NO_REMOTE_STATE")
         boundary_allows_approval = (
             boundary_mode != "INITIAL_PLAN_NO_REMOTE_STATE"
@@ -5974,22 +5996,26 @@ class ProductService:
                 {
                     key: line.get(key)
                     for key in (
-                        "address", "resource_type", "description", "quantity",
-                        "unit", "monthly_cost_minor", "catalog_sku",
-                        "catalog_published_at", "catalog_effective_at",
+                        "address",
+                        "resource_type",
+                        "description",
+                        "quantity",
+                        "unit",
+                        "monthly_cost_minor",
+                        "catalog_sku",
+                        "catalog_published_at",
+                        "catalog_effective_at",
                     )
                 }
                 for line in pricing_document.get("lines", [])
                 if isinstance(line, dict)
             ]
-            if pricing_document_valid
-            and isinstance(pricing_document.get("lines"), list)
+            if pricing_document_valid and isinstance(pricing_document.get("lines"), list)
             else []
         )
         pricing_findings = (
             [item for item in pricing_document.get("findings", []) if isinstance(item, dict)]
-            if pricing_document_valid
-            and isinstance(pricing_document.get("findings"), list)
+            if pricing_document_valid and isinstance(pricing_document.get("findings"), list)
             else []
         )
         pricing = {
@@ -6012,14 +6038,10 @@ class ProductService:
             "rds_usage_assumptions": pricing_document.get("rds_usage_assumptions")
             if pricing_document_valid
             else None,
-            "serverless_usage_assumptions": pricing_document.get(
-                "serverless_usage_assumptions"
-            )
+            "serverless_usage_assumptions": pricing_document.get("serverless_usage_assumptions")
             if pricing_document_valid
             else None,
-            "dynamodb_usage_assumptions": pricing_document.get(
-                "dynamodb_usage_assumptions"
-            )
+            "dynamodb_usage_assumptions": pricing_document.get("dynamodb_usage_assumptions")
             if pricing_document_valid
             else None,
             "lines": pricing_lines,
@@ -6204,14 +6226,18 @@ class ProductService:
                 revision.content, expected_sha256=revision.content_digest
             )
         except PlanPricingError:
-            raise ValueError("generated plan pricing context failed integrity verification") from None
+            raise ValueError(
+                "generated plan pricing context failed integrity verification"
+            ) from None
         approval_checked_at = datetime.now(UTC)
         if not pricing_evidence_is_approval_eligible(
             manifest.get("pricing_evidence"),
             trusted_context=trusted_pricing_context,
             now=approval_checked_at,
         ):
-            raise ValueError("generated plan pricing is stale, incomplete, over budget, or mismatched")
+            raise ValueError(
+                "generated plan pricing is stale, incomplete, over budget, or mismatched"
+            )
         latest = self.db.scalar(
             select(InfrastructurePlanRevision)
             .where(
@@ -6424,11 +6450,11 @@ class ProductService:
                 *(
                     [
                         (
-                            "Nova plan role identity verified for this account; effective AWS "
-                            "permissions and plan-runner readiness are not attested"
+                            "Nova plan role trust and bounded policy profile verified; effective "
+                            "AWS permissions and plan-runner readiness are not fully attested"
                         )
                     ]
-                    if connection.plan_role_setup_state == "VERIFIED"
+                    if connection.plan_role_setup_state == "PROFILE_VERIFIED"
                     else []
                 ),
             ],
@@ -6447,26 +6473,30 @@ class ProductService:
                     "role trust verification failed; the expected template policy is not verified"
                     if connection.plan_role_setup_state == "VERIFICATION_FAILED"
                     else (
-                        "role trust and account are verified; installed policy contents and later changes are not attested; the control-plane credential broker applies a proposal-scoped explicit-deny session policy to each exact active plan run"
-                        if connection.plan_role_setup_state == "VERIFIED"
-                        else "template is expected to install bounded Terraform metadata reads with an explicit deny outside the profile; setup is not yet verified"
+                        "role trust and current bounded policy profile were verified; the profile is rechecked before plan credentials are issued. This does not attest all effective AWS permissions, organization controls, resource policies, or plan-runner readiness"
+                        if connection.plan_role_setup_state == "PROFILE_VERIFIED"
+                        else (
+                            "role trust and account identity were verified by an earlier version; reverify to check the current bounded policy profile"
+                            if connection.plan_role_setup_state == "VERIFIED"
+                            else "template is expected to install bounded Terraform metadata reads with an explicit deny outside the profile; setup is not yet verified"
+                        )
                     )
                 )
             ),
-            "plan_role_policy_status": (
-                self.plan_role_policy_status(connection)
-            ),
+            "plan_role_policy_status": (self.plan_role_policy_status(connection)),
         }
 
     @staticmethod
     def plan_role_policy_status(connection: CloudConnection) -> str:
-        """Report role identity verification separately from unattested permissions."""
+        """Report profile verification separately from full effective permissions."""
         if not connection.plan_role_arn:
             return "NOT_CONFIGURED"
-        if connection.plan_role_setup_state == "VERIFIED":
-            return "POLICY_UNATTESTED"
+        if connection.plan_role_setup_state == "PROFILE_VERIFIED":
+            return "PROFILE_VERIFIED"
         if connection.plan_role_setup_state == "VERIFICATION_FAILED":
             return "VERIFICATION_FAILED"
+        if connection.plan_role_setup_state == "VERIFIED":
+            return "POLICY_UNATTESTED"
         return "EXPECTED_UNVERIFIED"
 
     @staticmethod
@@ -6489,8 +6519,7 @@ class ProductService:
             and not connection.execution_role_arn
             and not connection.plan_role_arn
             and connection.plan_role_setup_state == "NOT_CONFIGURED"
-            and os.getenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false").lower()
-            == "true"
+            and os.getenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false").lower() == "true"
             and discovery_broker_role
             and template_url
         )
@@ -6535,9 +6564,7 @@ class ProductService:
                     "plan-only setup requires a discovery-only connection without an execution role"
                 )
             if os.getenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false").lower() != "true":
-                raise RuntimeError(
-                    "Nova plan-role verification is disabled for this control plane"
-                )
+                raise RuntimeError("Nova plan-role verification is disabled for this control plane")
         discovery_broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN")
         execution_broker_role_arn = os.getenv("DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN")
         # Compatibility is intentionally temporary for pre-split hosted configurations.
@@ -6634,7 +6661,7 @@ class ProductService:
                 [
                     "Open the AWS Quick Create link in the customer account already connected for discovery.",
                     "Review the template's bounded planning metadata reads. The control plane scopes each temporary plan session to the proposed resources and denies other actions.",
-                    "Create the stack, then return to DavDeploy to verify plan-role trust and account identity; effective permissions and later policy changes are not attested.",
+                    "Create the stack, then return to DavDeploy to verify plan-role trust, account identity, and the bounded policy profile; later profile changes are checked before plan credentials are issued, while full effective permissions remain outside this check.",
                 ]
                 if access_mode == "plan-only"
                 else [
@@ -6644,7 +6671,7 @@ class ProductService:
                 ]
             ),
             "boundary": (
-                "This action only creates a setup link. The customer template grants bounded metadata reads, and each fixed Nova planner session adds a proposal-scoped explicit-deny policy. DavDeploy verifies role trust and account identity only; it does not inspect or attest effective permissions or later customer policy changes."
+                "This action only creates a setup link. The customer template grants bounded metadata reads, and each fixed Nova planner session adds a proposal-scoped explicit-deny policy. Profile verification checks current role trust and policy shape and repeats before plan credentials are issued; it does not attest every effective AWS permission layer."
                 if access_mode == "plan-only"
                 else "This action only creates a setup link. Discovery is read-only; administrator-pilot creates a separate execution role that can modify customer AWS resources after product approval."
             ),
@@ -6762,9 +6789,10 @@ class ProductService:
             raise ValueError("generate a new AWS setup link before verifying this connection")
         if os.getenv("DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED", "false").lower() != "true":
             raise RuntimeError("live AWS discovery is not enabled for this control-plane process")
-        if connection.plan_role_arn and os.getenv(
-            "DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false"
-        ).lower() != "true":
+        if (
+            connection.plan_role_arn
+            and os.getenv("DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED", "false").lower() != "true"
+        ):
             raise RuntimeError("Nova plan-role verification is disabled for this control plane")
         external_id = self.connection_secrets.get_external_id(connection.external_id_secret_ref)
         discovery = discovery or StsAwsDiscovery()
@@ -6790,20 +6818,35 @@ class ProductService:
                 raise PermissionError("assumed execution role belongs to a different account")
             execution_verified = True
         plan_role_verified = False
+        plan_role_profile: dict[str, str] | None = None
         if connection.plan_role_arn:
             try:
-                plan_account = discovery.verify_plan_role(
+                plan_result = discovery.verify_plan_role(
                     connection.id, connection.plan_role_arn, external_id, region
                 )
             except Exception:
                 connection.plan_role_setup_state = "VERIFICATION_FAILED"
                 self.db.commit()
                 raise
+            plan_account = getattr(plan_result, "account_id", None)
+            if plan_account is None:
+                plan_account = plan_result
+            profile_version = getattr(plan_result, "version", None)
+            profile_sha256 = getattr(plan_result, "sha256", None)
+            if profile_version and profile_sha256:
+                plan_role_profile = {
+                    "version": str(profile_version),
+                    "sha256": str(profile_sha256),
+                }
+            if not plan_role_profile:
+                connection.plan_role_setup_state = "VERIFICATION_FAILED"
+                self.db.commit()
+                raise PermissionError("customer plan role profile was not verified")
             if plan_account != connection.account_id:
                 connection.plan_role_setup_state = "VERIFICATION_FAILED"
                 self.db.commit()
                 raise PermissionError("assumed plan role belongs to a different account")
-            connection.plan_role_setup_state = "VERIFIED"
+            connection.plan_role_setup_state = "PROFILE_VERIFIED"
             plan_role_verified = True
         connection.setup_state = "VERIFIED"
         self.audit(
@@ -6818,16 +6861,26 @@ class ProductService:
                 "execution_role_verified": execution_verified,
                 "plan_role_verified": plan_role_verified,
                 "plan_role_permissions_attested": False,
+                "plan_role_policy_profile_verified": bool(plan_role_profile),
+                "plan_role_policy_profile_version": (
+                    plan_role_profile["version"] if plan_role_profile else None
+                ),
+                "plan_role_policy_profile_sha256": (
+                    plan_role_profile["sha256"] if plan_role_profile else None
+                ),
             },
         )
         self.db.commit()
+        snapshot_document = snapshot.model_dump(mode="json")
+        if plan_role_profile:
+            snapshot_document["plan_role_policy_profile"] = plan_role_profile
         return self.record_cloud_inventory_snapshot(
             principal,
             connection.id,
             region,
             snapshot.provenance,
             snapshot.discovered_at,
-            snapshot.model_dump(mode="json"),
+            snapshot_document,
         )
 
     def run_next_discovery_job(self) -> bool:
@@ -7760,9 +7813,7 @@ class ProductService:
                 "attempt_count": (response.usage.retry_count + 1) if response.usage else 1,
                 "retry_count": response.usage.retry_count if response.usage else 0,
                 "latency_ms": response.usage.latency_ms if response.usage else None,
-                "measured_at": (
-                    response.usage.measured_at.isoformat() if response.usage else None
-                ),
+                "measured_at": (response.usage.measured_at.isoformat() if response.usage else None),
                 "estimated_cost_usd": (
                     response.usage.estimated_cost_usd if response.usage else None
                 ),

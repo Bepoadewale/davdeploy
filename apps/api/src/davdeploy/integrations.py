@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,11 @@ import jwt
 from botocore.exceptions import BotoCoreError, ClientError
 
 from davdeploy.domain import CloudInventorySnapshot
+from davdeploy.nova_plan_role_profile import (
+    NovaPlanRoleProfile,
+    build_nova_plan_role_inspection_policy,
+    verify_nova_plan_role_profile,
+)
 
 
 @dataclass(frozen=True)
@@ -771,9 +777,7 @@ def _github_app_private_key_from_secret(secret_arn: str) -> str:
     """Read one configured GitHub App key without logging or persisting it."""
     try:
         value = str(
-            boto3.client("secretsmanager").get_secret_value(SecretId=secret_arn)[
-                "SecretString"
-            ]
+            boto3.client("secretsmanager").get_secret_value(SecretId=secret_arn)["SecretString"]
         )
     except (BotoCoreError, ClientError, KeyError) as error:
         raise RuntimeError("configured GitHub App private key is unavailable") from error
@@ -860,9 +864,7 @@ class StsAwsDiscovery:
     already be the configured davdeploy control-plane identity.
     """
 
-    _pricing_evidence_cache: ClassVar[
-        dict[tuple[str, str], tuple[float, dict[str, object]]]
-    ] = {}
+    _pricing_evidence_cache: ClassVar[dict[tuple[str, str], tuple[float, dict[str, object]]]] = {}
 
     def __init__(self, session: object | None = None):
         self.session = session or boto3.Session()
@@ -918,21 +920,29 @@ class StsAwsDiscovery:
 
     def verify_plan_role(
         self, connection_id: str, role_arn: str, external_id: str, region: str
-    ) -> str:
-        """Verify plan-role trust and account identity without retaining credentials.
-
-        This does not inspect or attest the role's effective permissions. The
-        reviewed template grants bounded planning metadata reads, and the fixed
-        planner adds a proposal-scoped explicit-deny session policy. Customer
-        policy changes and other account policy layers remain outside this
-        identity check.
-        """
+    ) -> NovaPlanRoleProfile:
+        """Verify the current plan-role profile using temporary scoped credentials."""
+        broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN", "").strip()
+        if not broker_role_arn:
+            raise RuntimeError("the discovery broker role identity is not configured")
+        role_match = re.fullmatch(
+            r"arn:aws:iam::(\d{12}):role/davdeployPlan-([A-Za-z0-9-]{8,40})",
+            role_arn,
+        )
+        if not role_match or role_match.group(2) != connection_id:
+            raise PermissionError("plan role ARN does not match the customer connection")
+        expected_account_id = role_match.group(1)
         sts = self.session.client("sts", region_name=region)
         assumed = sts.assume_role(
             RoleArn=role_arn,
             RoleSessionName=f"davdeploy-plan-verify-{connection_id[:8]}",
             ExternalId=external_id,
             DurationSeconds=900,
+            Policy=json.dumps(
+                build_nova_plan_role_inspection_policy(role_arn),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
         )["Credentials"]
         customer = boto3.Session(
             aws_access_key_id=assumed["AccessKeyId"],
@@ -940,7 +950,27 @@ class StsAwsDiscovery:
             aws_session_token=assumed["SessionToken"],
             region_name=region,
         )
-        return str(customer.client("sts").get_caller_identity()["Account"])
+        identity = customer.client("sts").get_caller_identity()
+        account_id = identity.get("Account") if isinstance(identity, dict) else None
+        expected_session_arn = (
+            f"arn:aws:sts::{expected_account_id}:assumed-role/"
+            f"davdeployPlan-{connection_id}/davdeploy-plan-verify-{connection_id[:8]}"
+        )
+        if (
+            not isinstance(account_id, str)
+            or account_id != expected_account_id
+            or not isinstance(identity, dict)
+            or identity.get("Arn") != expected_session_arn
+        ):
+            raise PermissionError("assumed plan role has no valid AWS account identity")
+        return verify_nova_plan_role_profile(
+            customer.client("iam"),
+            role_arn=role_arn,
+            connection_id=connection_id,
+            account_id=account_id,
+            broker_role_arn=broker_role_arn,
+            external_id=external_id,
+        )
 
     @staticmethod
     def _pricing_cache_ttl_seconds() -> int:
@@ -1002,7 +1032,9 @@ class StsAwsDiscovery:
             evidence["catalog"] = {"state": "UNAVAILABLE", "reason": type(error).__name__}
             cast_limitations = evidence["limitations"]
             assert isinstance(cast_limitations, list)
-            cast_limitations.append("AWS Pricing catalog was unavailable to the customer discovery role.")
+            cast_limitations.append(
+                "AWS Pricing catalog was unavailable to the customer discovery role."
+            )
         try:
             end = captured_at.date()
             start = end - timedelta(days=1)
@@ -1025,7 +1057,9 @@ class StsAwsDiscovery:
             evidence["cost_explorer"] = {"state": "UNAVAILABLE", "reason": type(error).__name__}
             cast_limitations = evidence["limitations"]
             assert isinstance(cast_limitations, list)
-            cast_limitations.append("AWS Cost Explorer was unavailable to the customer discovery role.")
+            cast_limitations.append(
+                "AWS Cost Explorer was unavailable to the customer discovery role."
+            )
         cls._pricing_evidence_cache[cache_key] = (
             time.monotonic() + ttl_seconds,
             json.loads(json.dumps(evidence)),

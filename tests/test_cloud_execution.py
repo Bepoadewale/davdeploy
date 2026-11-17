@@ -2663,7 +2663,7 @@ def test_plan_only_role_never_unlocks_legacy_app_runner_apply(monkeypatch):
     connection.setup_state = "VERIFIED"
     connection.account_id = "654654474502"
     connection.plan_role_arn = f"arn:aws:iam::654654474502:role/davdeployPlan-{connection.id}"
-    connection.plan_role_setup_state = "VERIFIED"
+    connection.plan_role_setup_state = "PROFILE_VERIFIED"
     connection.external_id_secret_ref = "arn:aws:secretsmanager:us-east-1:654654474502:secret:test"
     revision = service.db.get(InfrastructurePlanRevision, approved.id)
     assert revision is not None

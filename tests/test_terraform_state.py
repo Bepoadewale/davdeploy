@@ -1053,6 +1053,7 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
 
     reconciler = main.ProductService(db, nova_apply_dispatcher=SuccessfulApplyResultReader())
     assert reconciler.reconcile_generated_plan_apply_build(build_id) is True
+    db.expire_all()
     reconciled_run = db.get(GeneratedPlanApplyRun, apply_run_id)
     assert reconciled_run.state == "APPLIED_UNVERIFIED"
     assert reconciled_run.result_metadata == {

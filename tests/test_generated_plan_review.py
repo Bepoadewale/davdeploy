@@ -105,7 +105,7 @@ def make_submitted_revision(
     connection.account_id = ACCOUNT_ID
     connection.setup_state = "VERIFIED"
     connection.plan_role_arn = f"arn:aws:iam::{ACCOUNT_ID}:role/davdeployPlan-{connection.id}"
-    connection.plan_role_setup_state = "VERIFIED"
+    connection.plan_role_setup_state = "PROFILE_VERIFIED"
     connection.external_id_secret_ref = service.connection_secrets.put_external_id(
         founder().organization_id, connection.id, "fixture-nova-plan-external-id"
     )
