@@ -194,6 +194,21 @@ def test_aws_connection_detail_and_disconnect_are_tenant_scoped_and_credential_f
     assert service.cloud_connections(founder()) == []
 
 
+def test_cloud_connection_list_keeps_legacy_identity_only_state_unattested():
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer account", "aws", "byoc_role_contract"
+    )
+    connection.plan_role_arn = "arn:aws:iam::123456789012:role/davdeployPlan-connection"
+    connection.plan_role_setup_state = "VERIFIED"
+    service.db.commit()
+
+    response = list_cloud_connections(founder(), service)
+    item = next(item for item in response if item["id"] == connection.id)
+    assert item["plan_role_setup_state"] == "VERIFIED"
+    assert item["plan_role_policy_status"] == "POLICY_UNATTESTED"
+
+
 def test_cloud_connection_list_reports_plan_role_profile_as_verified_only():
     service, _ = make_service()
     connection = service.create_cloud_connection(

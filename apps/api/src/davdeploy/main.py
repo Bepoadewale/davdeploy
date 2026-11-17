@@ -617,7 +617,7 @@ def issue_nova_plan_role_credentials(
             role_profile.account_id != binding["account_id"]
             or role_profile.role_arn != binding["plan_role_arn"]
         ):
-            raise NovaPlanAccessError("customer plan role profile identity changed")
+            raise PermissionError("customer plan role profile identity changed")
         assumed = boto3.client("sts").assume_role(
             RoleArn=binding["plan_role_arn"],
             RoleSessionName=f"davdeploy-nova-plan-{run.runner_run_id}",

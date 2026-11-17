@@ -30,7 +30,7 @@ from davdeploy.models import (
     InfrastructurePlanRevision,
 )
 from davdeploy.nova_plan_dispatch import NovaPlanBuild, NovaPlanDispatchError
-from davdeploy.nova_plan_role_profile import NovaPlanRoleProfile, NovaPlanRoleProfileError
+from davdeploy.nova_plan_role_profile import NovaPlanRoleProfile
 from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
@@ -1971,10 +1971,8 @@ def test_plan_credential_broker_checks_current_role_profile_before_issuing_crede
     class FakeRoleProfileDiscovery:
         def verify_plan_role(self, connection_id, role_arn, supplied_external_id, region):
             profile_checks.append((connection_id, role_arn, supplied_external_id, region))
-            if not profile_is_valid:
-                raise NovaPlanRoleProfileError("customer plan role profile changed")
             return NovaPlanRoleProfile(
-                account_id="654654474502",
+                account_id=("654654474502" if profile_is_valid else "999999999999"),
                 role_arn=role_arn,
                 version="nova-plan-role-profile.v1",
                 sha256="d" * 64,
@@ -2036,7 +2034,7 @@ def test_plan_credential_broker_checks_current_role_profile_before_issuing_crede
         if not profile_is_valid:
             assert response.status_code == 403
             assert assumed == {}
-            assert "customer plan role profile changed" not in response.text
+            assert response.json()["detail"] == "The exact customer plan role could not be verified"
             return
         assert response.status_code == 200, response.text
         body = response.json()

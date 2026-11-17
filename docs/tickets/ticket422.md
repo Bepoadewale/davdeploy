@@ -90,13 +90,17 @@ customer-role or workload evidence is claimed.
 
 Commands and results:
 
-- `.venv/bin/python -m pytest -q tests/test_nova_plan_role_profile.py tests/test_customer_cloud_lifecycle.py tests/test_product.py tests/test_connection_experience.py tests/test_nova_plan_credentials.py tests/test_nova_plan_runs.py` — 151 passed.
-- `make verify PY=.venv/bin/python` — 1,280 passed; Ruff, Actions configuration, OpenAPI, and Compose configuration checks passed.
+- `.venv-pr399/bin/python -m pytest -q tests/test_nova_plan_role_profile.py tests/test_customer_cloud_lifecycle.py tests/test_product.py tests/test_connection_experience.py tests/test_nova_plan_credentials.py tests/test_nova_plan_runs.py` — 152 passed after adding the legacy identity-only list-status regression and the mismatched-profile-identity credential denial assertion.
+- `make verify PY=.venv-pr399/bin/python` — 1,281 passed; Ruff, Actions configuration, OpenAPI, and Compose configuration checks passed.
 - `COMPOSE_PROJECT_NAME=davdeploy-pr422-cleanroom-20261117 COMPOSE_FILE=docker-compose.yml:.cleanroom-compose-override.yml make local-proof VENV=.venv PY=.venv/bin/python` from fresh worktree `/private/tmp/davdeploy-pr422-cleanroom-20261117` — smoke checks, API contract, customer-plan E2E, trace check, and repository verification passed (1,280 tests).
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 
-The isolated local proof passed. Docker's default address pools were exhausted
+The isolated local proof passed at source commit `059ec1a`; it covered the
+profile-verification implementation before the later response-classification
+refinement and regression-test additions. Those later changes passed the
+focused 152-test suite and current 1,281-test repository verification above.
+Docker's default address pools were exhausted
 by existing retained networks, so a temporary, untracked Compose override used
 subnet `10.251.250.0/24` for this unique project. The run-specific containers
 were stopped after the checks. The isolated worktree, its generated `.venv`,
