@@ -79,9 +79,14 @@ remain untouched.
   execution are not implemented.
 - [ ] The worker is idempotent and reports uncertain outcomes for reconciliation
   instead of retrying an apply blindly.
-- [ ] Apply uses a separate CodeBuild project and IAM role with explicit denies
+- [x] Apply has a separate CodeBuild project and IAM role with explicit denies
   for build override fields; it never reuses `customer_executor`.
-- [ ] Apply remains disabled by default and no AWS apply/deployment occurs.
+- [x] The separate apply credential broker is gated independently and, when
+  enabled, issues temporary credentials only to the exact active apply build
+  after rechecking current approval, pricing evidence, target role, and AWS
+  caller identity. Credentials are audited and returned with no-store headers.
+- [x] Apply remains disabled by default and no AWS apply/deployment occurred
+  during this source-only work.
 - [ ] Focused tests, full verification, clean-room proof, Terraform validation,
   documentation conventions, diff checks, and required hosted CI pass.
 
@@ -93,8 +98,10 @@ remain untouched.
   separate apply CodeBuild project, isolated service role, restricted artifact
   paths, an IAM-authenticated credential route permission, fixed run-ID-only
   dispatch policy, and explicit StartBuild override denies. Its fixed buildspec
-  exits because the worker is not wired; no API dispatcher, apply credential
-  broker, CodeBuild callback consumer, or Terraform execution exists yet.
+  exits because the worker is not wired. The durable API request/worker
+  dispatcher and apply credential broker now exist in source, but the dedicated
+  customer role setup, CodeBuild callback consumer, and Terraform execution are
+  not implemented.
   The role also has project/build-scoped permission and trusted project
   settings for remote-state credential bootstrap, which exact-plan apply needs;
   The state API now has an apply-run authorization path, but no apply-request
@@ -113,6 +120,33 @@ remain untouched.
   visibility, bounded cursors, and a fixed safe field projection. No route
   creates or dispatches apply runs; these routes have no real customer
   execution data until dispatch and lifecycle observation are implemented.
+
+### Apply credential broker — 2026-11-17
+
+- Added the internal `POST /api/v1/nova-apply/credentials` route. It requires
+  both apply-runner readiness and a separate default-off credential-broker
+  gate, the configured apply CodeBuild role/project, the exact active build,
+  an unexpired current approved manifest with complete pricing evidence,
+  current workspace administrators, and a verified customer execution role
+  in the exact target account.
+- The broker assumes that customer role using the stored ExternalId reference,
+  verifies the returned STS identity and account, records an audit event before
+  returning 15-minute credentials, and sets `Cache-Control: no-store` and
+  `Pragma: no-cache`. The Terraform variable and Lambda environment setting
+  default the broker to disabled. It derives only the dedicated
+  `davdeployNovaApply-<connection-id>` role and never falls back to the legacy
+  `execution_role_arn` administrator-pilot role.
+- Focused route validation: `test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build`
+  passed, covering disabled-by-default behavior, valid issuance, wrong-account
+  and expired credential rejection, and revoked administrator rejection. Ruff, Terraform
+  formatting, and `git diff --check` passed. `make verify
+  VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed (1,291 tests), and
+  `make terraform-validate` passed all configured roots.
+- This route is source-only. No credentials were issued to a real build and no
+  AWS apply/deployment occurred. Provisioning and least-privilege validation of
+  the dedicated customer role remain incomplete; the fixed worker/buildspec,
+  callbacks, hosted apply, health, recovery, destroy, and absence proof remain
+  incomplete.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and

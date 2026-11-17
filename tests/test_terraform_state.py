@@ -552,6 +552,8 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
                 provider="aws",
                 display_name="Verified account",
                 account_id=account_id,
+                execution_role_arn=f"arn:aws:iam::{account_id}:role/davdeployExecution-legacy",
+                external_id_secret_ref="customer-connection-secret-ref",
                 setup_state="VERIFIED",
             ),
             InfrastructurePlan(
@@ -691,6 +693,13 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
     monkeypatch.setitem(main.app.dependency_overrides, main.session, override_session)
 
     with TestClient(main.app) as client:
+        broker_disabled = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert broker_disabled.status_code == 404
+
         response = client.post(
             "/api/v1/terraform-state/credentials",
             headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
@@ -724,8 +733,123 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         assert event.entity_type == "generated_plan_apply_run"
         assert event.entity_id == apply_run_id
 
+        expiration = datetime.now(UTC) + timedelta(minutes=15)
+
+        class FakeSts:
+            def __init__(self):
+                self.calls = []
+
+            def assume_role(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "Credentials": {
+                        "AccessKeyId": "ASIAEXAMPLE",
+                        "SecretAccessKey": "secret-example",
+                        "SessionToken": "session-example",
+                        "Expiration": expiration,
+                    }
+                }
+
+        fake_sts = FakeSts()
+
+        class FakeSession:
+            identity_account = account_id
+
+            def __init__(self, **_kwargs):
+                pass
+
+            def client(self, name):
+                assert name == "sts"
+                return SimpleNamespace(
+                    get_caller_identity=lambda: {
+                        "Account": self.identity_account,
+                        "Arn": f"arn:aws:sts::{account_id}:assumed-role/"
+                        f"davdeployNovaApply-{connection_id}/davdeploy-nova-apply-{apply_run_id}",
+                    }
+                )
+
+        monkeypatch.setenv(
+            "DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED", "true"
+        )
+        monkeypatch.setattr(
+            main,
+            "configured_connection_secret_store",
+            lambda: SimpleNamespace(
+                get_external_id=lambda secret_ref: (
+                    "customer-external-id" if secret_ref == "customer-connection-secret-ref" else None
+                )
+            ),
+        )
+        monkeypatch.setattr(
+            main.boto3,
+            "client",
+            lambda name, **_kwargs: codebuild if name == "codebuild" else fake_sts,
+        )
+        monkeypatch.setattr(main.boto3, "Session", FakeSession)
+        apply_credentials = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert apply_credentials.status_code == 200
+        assert apply_credentials.headers["cache-control"] == "no-store"
+        assert apply_credentials.json() == {
+            "contract": "davdeploy.nova-apply-credentials.v1",
+            "role_arn": f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}",
+            "account_id": account_id,
+            "region": region,
+            "credentials": {
+                "access_key_id": "ASIAEXAMPLE",
+                "secret_access_key": "secret-example",
+                "session_token": "session-example",
+                "expires_at": expiration.isoformat(),
+            },
+        }
+        assert fake_sts.calls == [
+            {
+                "RoleArn": f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}",
+                "RoleSessionName": f"davdeploy-nova-apply-{apply_run_id}",
+                "ExternalId": "customer-external-id",
+                "DurationSeconds": 900,
+            }
+        ]
+        apply_event = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "nova_apply_credentials.issued")
+        )
+        assert apply_event is not None
+        assert apply_event.entity_id == apply_run_id
+        assert (
+            apply_event.detail["execution_role_arn"]
+            == f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}"
+        )
+
+        FakeSession.identity_account = "000000000000"
+        wrong_account = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert wrong_account.status_code == 403
+        assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
+        FakeSession.identity_account = account_id
+        expiration = datetime.now(UTC) - timedelta(minutes=1)
+        expired_credentials = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert expired_credentials.status_code == 403
+        assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
         db.get(ProductUser, "apply-admin-user").role = "developer"
         db.commit()
+        revoked_admin = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert revoked_admin.status_code == 403
         codebuild.calls.clear()
         with pytest.raises(HTTPException, match="Current workspace administrator authorization"):
             main._terraform_state_authorization(

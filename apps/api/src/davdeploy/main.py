@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
@@ -54,6 +55,7 @@ from davdeploy.domain import (
     InvitationRequest,
     LocalLoginRequest,
     MembershipRoleRequest,
+    NovaApplyCredentialRequest,
     NovaPlanCredentialRequest,
     OnboardingRequest,
     PlanCommentRequest,
@@ -887,6 +889,175 @@ def issue_nova_plan_role_credentials(
         },
     }
     return JSONResponse(response, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+
+
+@app.post("/api/v1/nova-apply/credentials", include_in_schema=False)
+def issue_nova_apply_credentials(
+    body: NovaApplyCredentialRequest,
+    request: Request,
+    db: Session = Depends(session),
+):
+    """Broker customer execution credentials to one currently approved exact-plan build."""
+    if (
+        os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED", "false").lower()
+        != "true"
+        or os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower()
+        != "true"
+    ):
+        raise HTTPException(404, "Nova exact-plan apply credential brokerage is not enabled")
+
+    principal_arn = request.headers.get("x-davdeploy-bootstrap-principal")
+    expected_role = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN")
+    project_name = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "")
+    build_id = trusted_codebuild_build_id(principal_arn, expected_role, project_name)
+    if not project_name or build_id is None:
+        raise HTTPException(403, "CodeBuild project is not the fixed Nova exact-plan apply project")
+
+    apply_run = db.scalar(
+        select(GeneratedPlanApplyRun).where(
+            GeneratedPlanApplyRun.runner_run_id == body.run_id
+        )
+    )
+    if apply_run is None:
+        raise HTTPException(403, "CodeBuild run is not bound to an exact-plan apply")
+    if (
+        apply_run.codebuild_build_id != build_id
+        or apply_run.codebuild_project != project_name
+    ):
+        raise HTTPException(403, "CodeBuild run is not bound to the exact-plan apply role")
+
+    _, revision = _require_current_approved_apply_run(db, apply_run)
+    try:
+        codebuild_response = boto3.client("codebuild").batch_get_builds(ids=[build_id])
+    except (BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(503, "Could not verify the active Nova apply build") from None
+    builds = codebuild_response.get("builds", []) if isinstance(codebuild_response, dict) else []
+    if (
+        len(builds) != 1
+        or not isinstance(builds[0], dict)
+        or not _build_matches_generated_plan_apply_run(
+            builds[0], apply_run, project_name, expected_role
+        )
+    ):
+        raise HTTPException(403, "CodeBuild build is not the active trusted Nova apply attempt")
+
+    artifact = db.get(GeneratedPlanArtifact, apply_run.artifact_id)
+    revision_content = revision.content if isinstance(revision.content, dict) else {}
+    target = revision_content.get("target")
+    target = target if isinstance(target, dict) else {}
+    connection = db.get(CloudConnection, target.get("connection_id"))
+    role_arn = (
+        f"arn:aws:iam::{artifact.target_account_id}:role/davdeployNovaApply-{connection.id}"
+        if artifact is not None and connection is not None
+        else None
+    )
+    role_match = (
+        re.fullmatch(r"arn:(aws(?:-[a-z]+)?):iam::([0-9]{12}):role/(.+)", role_arn)
+        if isinstance(role_arn, str)
+        else None
+    )
+    if (
+        artifact is None
+        or connection is None
+        or connection.organization_id != apply_run.organization_id
+        or connection.provider != "aws"
+        or connection.setup_state != "VERIFIED"
+        or connection.account_id != artifact.target_account_id
+        or target.get("account_id") != artifact.target_account_id
+        or target.get("region") != artifact.region
+        or not connection.external_id_secret_ref
+        or role_match is None
+        or role_match.group(2) != artifact.target_account_id
+        or role_match.group(3) != f"davdeployNovaApply-{connection.id}"
+    ):
+        raise HTTPException(403, "Verified customer execution role is unavailable for this target")
+
+    role_session_name = f"davdeploy-nova-apply-{apply_run.runner_run_id}"
+    try:
+        external_id = configured_connection_secret_store().get_external_id(
+            connection.external_id_secret_ref
+        )
+        assumed = boto3.client("sts").assume_role(
+            RoleArn=role_arn,
+            RoleSessionName=role_session_name,
+            ExternalId=external_id,
+            DurationSeconds=900,
+        )
+        credentials = assumed.get("Credentials") if isinstance(assumed, dict) else None
+        if not isinstance(credentials, dict):
+            raise TypeError("temporary credentials are absent")
+        session = boto3.Session(
+            aws_access_key_id=credentials.get("AccessKeyId"),
+            aws_secret_access_key=credentials.get("SecretAccessKey"),
+            aws_session_token=credentials.get("SessionToken"),
+        )
+        identity = session.client("sts").get_caller_identity()
+    except (BotoCoreError, ClientError, OSError, RuntimeError, TypeError, ValueError):
+        raise HTTPException(403, "The exact customer execution role could not be verified") from None
+
+    expected_identity_arn = (
+        f"arn:{role_match.group(1)}:sts::{artifact.target_account_id}:assumed-role/"
+        f"{role_match.group(3)}/{role_session_name}"
+    )
+    expiration = credentials.get("Expiration")
+    now = datetime.now(UTC)
+    if (
+        not isinstance(identity, dict)
+        or identity.get("Account") != artifact.target_account_id
+        or identity.get("Arn") != expected_identity_arn
+        or not all(
+            isinstance(credentials.get(field), str) and credentials[field]
+            for field in ("AccessKeyId", "SecretAccessKey", "SessionToken")
+        )
+        or not isinstance(expiration, datetime)
+        or expiration.tzinfo is None
+        or expiration <= now
+        or expiration > now + timedelta(minutes=15, seconds=30)
+    ):
+        raise HTTPException(403, "Customer execution role identity did not match the approved target")
+    if not isinstance(principal_arn, str) or len(principal_arn) > 160:
+        raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
+
+    db.add(
+        AuditEvent(
+            organization_id=apply_run.organization_id,
+            actor_subject=principal_arn,
+            action="nova_apply_credentials.issued",
+            entity_type="generated_plan_apply_run",
+            entity_id=apply_run.id,
+            detail={
+                "codebuild_build_arn": builds[0].get("arn"),
+                "project_id": apply_run.project_id,
+                "revision_id": apply_run.revision_id,
+                "revision_sha256": revision.content_digest,
+                "manifest_sha256": apply_run.manifest_sha256,
+                "account_id": artifact.target_account_id,
+                "region": artifact.region,
+                "execution_role_arn": role_arn,
+            },
+        )
+    )
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "Credential issuance could not be recorded safely") from None
+
+    return JSONResponse(
+        {
+            "contract": "davdeploy.nova-apply-credentials.v1",
+            "role_arn": role_arn,
+            "account_id": artifact.target_account_id,
+            "region": artifact.region,
+            "credentials": {
+                "access_key_id": credentials["AccessKeyId"],
+                "secret_access_key": credentials["SecretAccessKey"],
+                "session_token": credentials["SessionToken"],
+                "expires_at": expiration.astimezone(UTC).isoformat(),
+            },
+        },
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
 
 
 def _terraform_state_authorization(

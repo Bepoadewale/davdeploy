@@ -34,9 +34,35 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
         assert "count = var.enable_nova_exact_plan_apply_runner ? 1 : 0" in resource
 
     assert (
-        'DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY         = '
+        'DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY = '
         'tostring(var.enable_nova_exact_plan_apply_runner)'
-    ) in MAIN
+    ) in " ".join(MAIN.split())
+    credential_broker = block(
+        VARIABLES, 'variable "enable_nova_exact_plan_apply_credential_broker"'
+    )
+    assert "default     = false" in credential_broker
+    assert "enable_nova_exact_plan_apply_runner" in credential_broker
+    assert (
+        'DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = '
+        'tostring(var.enable_nova_exact_plan_apply_credential_broker)'
+    ) in " ".join(MAIN.split())
+    api_policy = block(MAIN, 'resource "aws_iam_role_policy" "api"')
+    assert "var.enable_nova_exact_plan_apply_credential_broker ? [{" in api_policy
+    assert "role/davdeployNovaApply-*" in api_policy
+    assert '"sts:RoleSessionName" = "davdeploy-nova-apply-*"' in api_policy
+    apply_integration = block(
+        MAIN,
+        'resource "aws_apigatewayv2_integration" "nova_exact_plan_apply_credentials"',
+    )
+    apply_route = block(
+        MAIN,
+        'resource "aws_apigatewayv2_route" "nova_exact_plan_apply_credentials"',
+    )
+    assert "count = var.enable_nova_exact_plan_apply_credential_broker ? 1 : 0" in apply_integration
+    assert "count = var.enable_nova_exact_plan_apply_credential_broker ? 1 : 0" in apply_route
+    assert 'route_key          = "POST /api/v1/nova-apply/credentials"' in apply_route
+    assert 'authorization_type = "AWS_IAM"' in apply_route
+    assert '"$context.identity.userArn"' in apply_integration
 
 
 def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> None:

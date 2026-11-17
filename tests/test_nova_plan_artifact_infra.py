@@ -97,10 +97,13 @@ def test_composed_nova_runner_configuration_enables_recovery_and_scoped_start_on
     assert "aws_codebuild_project.nova_plan_only[0].arn" not in review_policy
 
     assert (
-        'DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? '
+        'DAVDEPLOY_NOVA_PLAN_PROJECT = var.enable_nova_plan_only_runner ? '
         'aws_codebuild_project.nova_plan_only[0].name : ""'
-    ) in terraform
-    assert 'DAVDEPLOY_NOVA_PLAN_REVIEWS_ENABLED                  = tostring(var.enable_nova_plan_reviews)' in terraform
+    ) in " ".join(terraform.split())
+    assert (
+        'DAVDEPLOY_NOVA_PLAN_REVIEWS_ENABLED = tostring(var.enable_nova_plan_reviews)'
+        in " ".join(terraform.split())
+    )
 
 
 def test_nova_plan_storage_runtime_uses_existing_ci_bucket_and_key_with_reviews_disabled_by_default() -> (

@@ -178,3 +178,26 @@ No AWS resources were created by this change. No apply run was dispatched. The w
 - No CodeBuild apply was started and no AWS resources were created or changed by this test run.
 - Limitations: the CodeBuild apply buildspec still exits before Terraform; no hosted callback, real apply, application health, update/recovery, destroy, or independent absence evidence exists. The readiness gate remains closed.
 
+## 2026-11-17 apply credential broker source evidence
+
+- The internal apply credential route is separately default-off and requires
+  the fixed active CodeBuild apply identity plus a current, unexpired approved
+  exact-plan manifest with complete pricing evidence and current workspace
+  administrator authorization.
+- Local test `test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build`
+  passed with test doubles. It verified the disabled gate, successful credential
+  contract and no-store headers, rejected a mismatched STS account and expired
+  credentials, and rejected issuance after administrator authorization was
+  revoked. It also verified the dedicated role ARN is selected instead of the
+  legacy administrator-pilot execution role.
+- `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed
+  (1,291 tests); `make terraform-validate`, Ruff, Terraform format check, and
+  `git diff --check` passed. This is local source evidence only; no real
+  credentials were issued, no apply build was started, and no AWS resource was
+  created or changed.
+- Limitation: provisioning and least-privilege validation of the dedicated
+  `davdeployNovaApply-<connection-id>` role are not implemented, and no hosted
+  apply worker/buildspec, callback,
+  health, recovery, destroy, or independent absence proof exists. Both apply
+  readiness and the credential broker remain disabled.
+

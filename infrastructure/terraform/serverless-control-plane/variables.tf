@@ -165,6 +165,17 @@ variable "enable_nova_exact_plan_apply_runner" {
   }
 }
 
+variable "enable_nova_exact_plan_apply_credential_broker" {
+  type        = bool
+  description = "Allow only the exact active apply build to request short-lived credentials for its verified customer execution role. Keep disabled until the fixed apply worker and lifecycle gates are independently verified."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_credential_broker || var.enable_nova_exact_plan_apply_runner
+    error_message = "The Nova apply credential broker requires the separate exact-plan apply runner."
+  }
+}
+
 variable "enable_nova_terraform_state_storage" {
   type        = bool
   description = "Provision the private versioned KMS state bucket. This does not enable the HTTP API or change the backend-free Nova runner."
