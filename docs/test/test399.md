@@ -207,3 +207,20 @@ passed 1,298 tests, `make terraform-validate` passed all configured roots,
 and documentation conventions, Terraform formatting, and diff checks passed.
 Fresh-head hosted CI is required after push.
 
+## 2026-11-17 exact apply input contract source evidence
+
+- Added an AWS IAM authenticated, default-off API Gateway route for the fixed
+  apply build to fetch a fresh exact-plan request contract. The handler checks
+  build identity, current approval/admin/pricing state, immutable request
+  digest, exact artifact versions, tenant state scope, and a five-minute
+  authorization window before auditing and returning the no-store response.
+- Focused test `test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build`
+  uses test doubles and validates the returned contract with the production
+  contract validator. It checks the disabled runner gate and successful
+  request; it does not call AWS or start CodeBuild.
+- The fixed buildspec remains fail-closed. No AWS credentials were issued and
+  no apply, deploy, health, recovery, or destroy action occurred.
+- Current local validation passed `make verify` (1,298 tests), all configured
+  Terraform roots, documentation conventions, formatting, and diff checks.
+  These tests used mocks and did not exercise AWS or CodeBuild.
+

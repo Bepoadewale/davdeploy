@@ -63,6 +63,19 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
     assert 'route_key          = "POST /api/v1/nova-apply/credentials"' in apply_route
     assert 'authorization_type = "AWS_IAM"' in apply_route
     assert '"$context.identity.userArn"' in apply_integration
+    apply_input_integration = block(
+        MAIN,
+        'resource "aws_apigatewayv2_integration" "nova_exact_plan_apply_input"',
+    )
+    apply_input_route = block(
+        MAIN,
+        'resource "aws_apigatewayv2_route" "nova_exact_plan_apply_input"',
+    )
+    assert "count = var.enable_nova_exact_plan_apply_runner ? 1 : 0" in apply_input_integration
+    assert "count = var.enable_nova_exact_plan_apply_runner ? 1 : 0" in apply_input_route
+    assert 'route_key          = "POST /api/v1/nova-apply/input"' in apply_input_route
+    assert 'authorization_type = "AWS_IAM"' in apply_input_route
+    assert '"$context.identity.userArn"' in apply_input_integration
 
 
 def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> None:
@@ -97,6 +110,7 @@ def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> No
     assert "local.nova_exact_plan_apply_scoped_workspace_key" in policy
     assert '"codebuild:BuildArn"' in policy
     assert "/POST/api/v1/nova-apply/credentials" in policy
+    assert "/POST/api/v1/nova-apply/input" in policy
     assert "/POST/api/v1/terraform-state/credentials" in policy
 
 

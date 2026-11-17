@@ -158,6 +158,28 @@ remain untouched.
 - Fresh-head GitHub CI is pending after push. PR #399 remains a draft; apply
   and broker gates remain disabled. Dedicated role provisioning and hosted
   apply/lifecycle proof remain incomplete.
+
+### Exact apply input contract — 2026-11-17
+
+- Added internal `POST /api/v1/nova-apply/input`, available only when the apply
+  runner is enabled. API Gateway authenticates it with AWS IAM and overwrites
+  the caller header. The handler requires the durable apply ID, exact active
+  CodeBuild role/project/build, current approved manifest and pricing,
+  administrator authorization, and a matching immutable request digest.
+- The response is validated against `davdeploy.nova-apply-request.v1`, including
+  exact versioned plan/workspace keys, tenant-scoped remote state, pricing,
+  approval and a five-minute authorization expiry. The response is audited and
+  returned with no-store headers. Terraform creates the IAM route and
+  integration only with the apply runner gate.
+- Focused test-double checks cover the disabled gate and successful contract
+  validation; no live build or AWS credentials were used. This endpoint is
+  source-only. The fixed buildspec still exits, and role provisioning, artifact
+  restore in CodeBuild, apply execution, callbacks and lifecycle proof remain
+  outstanding.
+- Current local checks passed: `make verify` (1,298 tests), all configured
+  `make terraform-validate` roots, Ruff, OpenAPI, Compose, documentation
+  conventions, Terraform formatting, and `git diff --check`. Fresh-head GitHub
+  CI remains required after push.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and

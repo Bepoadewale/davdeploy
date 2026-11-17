@@ -944,6 +944,16 @@ resource "aws_iam_role_policy" "nova_exact_plan_apply" {
       {
         Effect   = "Allow"
         Action   = ["execute-api:Invoke"]
+        Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/nova-apply/input"
+        Condition = {
+          ArnLike = {
+            "codebuild:BuildArn" = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:build/${local.nova_exact_plan_apply_project_name}:*"
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["execute-api:Invoke"]
         Resource = "${aws_apigatewayv2_api.control_plane.execution_arn}/*/POST/api/v1/terraform-state/credentials"
         Condition = {
           ArnLike = {
@@ -1249,6 +1259,11 @@ resource "aws_codebuild_project" "nova_exact_plan_apply" {
     environment_variable {
       name  = "DAVDEPLOY_NOVA_APPLY_PROJECT_NAME"
       value = local.nova_exact_plan_apply_project_name
+      type  = "PLAINTEXT"
+    }
+    environment_variable {
+      name  = "DAVDEPLOY_NOVA_APPLY_INPUT_URL"
+      value = "${aws_apigatewayv2_api.control_plane.api_endpoint}/api/v1/nova-apply/input"
       type  = "PLAINTEXT"
     }
     environment_variable {
@@ -1684,6 +1699,19 @@ resource "aws_apigatewayv2_integration" "nova_exact_plan_apply_credentials" {
   }
 }
 
+resource "aws_apigatewayv2_integration" "nova_exact_plan_apply_input" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  api_id                 = aws_apigatewayv2_api.control_plane.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.api.invoke_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 29000
+  request_parameters = {
+    "overwrite:header.x-davdeploy-bootstrap-principal" = "$context.identity.userArn"
+  }
+}
+
 resource "aws_apigatewayv2_route" "authenticated" {
   api_id             = aws_apigatewayv2_api.control_plane.id
   route_key          = "$default"
@@ -1712,6 +1740,15 @@ resource "aws_apigatewayv2_route" "nova_exact_plan_apply_credentials" {
   api_id             = aws_apigatewayv2_api.control_plane.id
   route_key          = "POST /api/v1/nova-apply/credentials"
   target             = "integrations/${aws_apigatewayv2_integration.nova_exact_plan_apply_credentials[0].id}"
+  authorization_type = "AWS_IAM"
+}
+
+resource "aws_apigatewayv2_route" "nova_exact_plan_apply_input" {
+  count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.control_plane.id
+  route_key          = "POST /api/v1/nova-apply/input"
+  target             = "integrations/${aws_apigatewayv2_integration.nova_exact_plan_apply_input[0].id}"
   authorization_type = "AWS_IAM"
 }
 
@@ -1835,6 +1872,7 @@ resource "aws_apigatewayv2_stage" "default" {
     aws_apigatewayv2_route.terraform_state_bootstrap,
     aws_apigatewayv2_route.nova_plan_credentials,
     aws_apigatewayv2_route.nova_exact_plan_apply_credentials,
+    aws_apigatewayv2_route.nova_exact_plan_apply_input,
     aws_apigatewayv2_route.terraform_state,
   ]
 

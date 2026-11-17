@@ -624,6 +624,14 @@ class NovaApplyCredentialRequest(BaseModel):
     run_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
 
 
+class NovaApplyInputRequest(BaseModel):
+    """Only a durable apply run ID is caller-provided; build identity comes from SigV4."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+
+
 class GeneratedPlanInputReconciliationRequest(BaseModel):
     """Resolve only an ambiguous S3 input-stage attempt before any build starts."""
 

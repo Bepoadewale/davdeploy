@@ -56,6 +56,7 @@ from davdeploy.domain import (
     LocalLoginRequest,
     MembershipRoleRequest,
     NovaApplyCredentialRequest,
+    NovaApplyInputRequest,
     NovaPlanCredentialRequest,
     OnboardingRequest,
     PlanCommentRequest,
@@ -91,6 +92,7 @@ from davdeploy.models import (
     TerraformStateCredential,
     TerraformStateLock,
 )
+from davdeploy.nova_apply_contract import NovaApplyContractError, validate_nova_apply_request
 from davdeploy.nova_plan_access import NovaPlanAccessError, build_nova_plan_access_policy
 from davdeploy.nova_plan_codebuild import NovaPlanBuildError, _validate_input_document
 from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
@@ -1056,6 +1058,188 @@ def issue_nova_apply_credentials(
                 "expires_at": expiration.astimezone(UTC).isoformat(),
             },
         },
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
+
+
+@app.post("/api/v1/nova-apply/input", include_in_schema=False)
+def get_nova_apply_input(
+    body: NovaApplyInputRequest,
+    request: Request,
+    db: Session = Depends(session),
+):
+    """Return a fresh immutable authorization contract to the exact active apply build."""
+    if os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true":
+        raise HTTPException(404, "Nova exact-plan apply runner is not enabled")
+    principal_arn = request.headers.get("x-davdeploy-bootstrap-principal")
+    expected_role = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN")
+    project_name = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "")
+    build_id = trusted_codebuild_build_id(principal_arn, expected_role, project_name)
+    if not project_name or build_id is None:
+        raise HTTPException(403, "CodeBuild project is not the fixed Nova exact-plan apply project")
+
+    apply_run = db.scalar(
+        select(GeneratedPlanApplyRun).where(
+            GeneratedPlanApplyRun.runner_run_id == body.run_id
+        )
+    )
+    if (
+        apply_run is None
+        or apply_run.codebuild_build_id != build_id
+        or apply_run.codebuild_project != project_name
+    ):
+        raise HTTPException(403, "CodeBuild run is not bound to the exact-plan apply role")
+    source_run, revision = _require_current_approved_apply_run(db, apply_run)
+
+    try:
+        codebuild_response = boto3.client("codebuild").batch_get_builds(ids=[build_id])
+    except (BotoCoreError, ClientError, TypeError, ValueError):
+        raise HTTPException(503, "Could not verify the active Nova apply build") from None
+    builds = codebuild_response.get("builds", []) if isinstance(codebuild_response, dict) else []
+    if (
+        len(builds) != 1
+        or not isinstance(builds[0], dict)
+        or not _build_matches_generated_plan_apply_run(
+            builds[0], apply_run, project_name, expected_role
+        )
+    ):
+        raise HTTPException(403, "CodeBuild build is not the active trusted Nova apply attempt")
+
+    artifact = db.get(GeneratedPlanArtifact, apply_run.artifact_id)
+    approval = db.get(GeneratedPlanApproval, apply_run.approval_id)
+    if artifact is None or approval is None:
+        raise HTTPException(403, "Approved exact-plan artifacts are unavailable")
+    request_document = apply_run.request_document
+    try:
+        request_digest = canonical_json_digest(request_document)
+    except (TypeError, ValueError):
+        request_digest = None
+    if (
+        not isinstance(request_document, dict)
+        or request_digest != apply_run.request_sha256
+        or request_document.get("organization_id") != apply_run.organization_id
+        or request_document.get("project_id") != apply_run.project_id
+        or request_document.get("revision_id") != apply_run.revision_id
+        or request_document.get("source_plan_run_id") != source_run.id
+        or request_document.get("artifact_id") != artifact.id
+        or request_document.get("approval_id") != approval.id
+        or request_document.get("manifest_sha256") != apply_run.manifest_sha256
+        or request_document.get("revision_sha256") != revision.content_digest
+        or request_document.get("target")
+        != {"account_id": artifact.target_account_id, "region": artifact.region}
+        or request_document.get("digests") != artifact.manifest.get("digests")
+        or request_document.get("saved_plan")
+        != {
+            "bucket": artifact.artifact_bucket,
+            "key": artifact.artifact_key,
+            "version_id": artifact.artifact_version_id,
+            "size_bytes": artifact.artifact_size_bytes,
+            "sha256": artifact.saved_plan_sha256,
+        }
+        or request_document.get("execution_workspace")
+        != {
+            "bucket": artifact.workspace_artifact_bucket,
+            "key": artifact.workspace_artifact_key,
+            "version_id": artifact.workspace_artifact_version_id,
+            "size_bytes": artifact.workspace_artifact_size_bytes,
+            "sha256": artifact.workspace_sha256,
+        }
+        or request_document.get("requester_subject") != apply_run.requester_subject
+    ):
+        raise HTTPException(409, "Durable apply request failed integrity validation")
+
+    now = datetime.now(UTC)
+    artifact_expiration = artifact.expires_at
+    if artifact_expiration.tzinfo is None:
+        artifact_expiration = artifact_expiration.replace(tzinfo=UTC)
+    authorization_expires = min(now + timedelta(minutes=5), artifact_expiration)
+    contract_document = {
+        "contract": "davdeploy.nova-apply-request.v1",
+        "run_id": apply_run.runner_run_id,
+        "codebuild_project": project_name,
+        "codebuild_build_arn": builds[0].get("arn"),
+        "tenant": {
+            "organization_id": apply_run.organization_id,
+            "project_id": apply_run.project_id,
+            "revision_id": apply_run.revision_id,
+            "artifact_id": artifact.id,
+            "source_plan_run_id": source_run.id,
+        },
+        "target_account_id": artifact.target_account_id,
+        "region": artifact.region,
+        "manifest": artifact.manifest,
+        "manifest_sha256": apply_run.manifest_sha256,
+        "approval": {
+            "approval_id": approval.id,
+            "state": "APPROVED",
+            "organization_id": approval.organization_id,
+            "project_id": approval.project_id,
+            "revision_id": approval.revision_id,
+            "artifact_id": approval.artifact_id,
+            "approved_manifest_sha256": approval.approved_manifest_sha256,
+            "approver_subject": approval.approver_subject,
+        },
+        "saved_plan": {
+            "bucket": artifact.artifact_bucket,
+            "key": artifact.artifact_key,
+            "version_id": artifact.artifact_version_id,
+            "size_bytes": artifact.artifact_size_bytes,
+            "sha256": artifact.saved_plan_sha256,
+        },
+        "execution_workspace": {
+            "bucket": artifact.workspace_artifact_bucket,
+            "key": artifact.workspace_artifact_key,
+            "version_id": artifact.workspace_artifact_version_id,
+            "size_bytes": artifact.workspace_artifact_size_bytes,
+            "sha256": artifact.workspace_sha256,
+        },
+        "authorization": {
+            "subject": approval.approver_subject,
+            "policy_version": artifact.policy_version,
+            "checked_at": now.isoformat(),
+            "expires_at": authorization_expires.isoformat(),
+        },
+    }
+    artifact_bucket = os.getenv("DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET", "").strip()
+    try:
+        validated = validate_nova_apply_request(
+            contract_document,
+            expected_run_id=apply_run.runner_run_id,
+            expected_codebuild_project=project_name,
+            expected_codebuild_build_arn=builds[0].get("arn"),
+            expected_artifact_bucket=artifact_bucket,
+            now=now,
+        )
+    except NovaApplyContractError:
+        raise HTTPException(409, "Approved exact-plan apply input failed validation") from None
+
+    if not isinstance(principal_arn, str) or len(principal_arn) > 160:
+        raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
+    db.add(
+        AuditEvent(
+            organization_id=apply_run.organization_id,
+            actor_subject=principal_arn,
+            action="nova_apply_input.issued",
+            entity_type="generated_plan_apply_run",
+            entity_id=apply_run.id,
+            detail={
+                "codebuild_build_arn": builds[0].get("arn"),
+                "project_id": apply_run.project_id,
+                "revision_id": apply_run.revision_id,
+                "manifest_sha256": apply_run.manifest_sha256,
+                "request_sha256": apply_run.request_sha256,
+                "account_id": artifact.target_account_id,
+                "region": artifact.region,
+            },
+        )
+    )
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "Apply input issuance could not be recorded safely") from None
+    return JSONResponse(
+        validated.model_dump(mode="json"),
         headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
     )
 

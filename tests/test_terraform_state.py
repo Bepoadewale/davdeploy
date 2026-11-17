@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 from davdeploy import main
+from davdeploy.generated_plan_artifacts import S3GeneratedPlanArtifactStore
 from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
 from davdeploy.models import (
     AuditEvent,
@@ -29,6 +30,7 @@ from davdeploy.models import (
     TerraformStateLock,
     TerraformStateWrite,
 )
+from davdeploy.nova_apply_contract import validate_nova_apply_request
 from davdeploy.terraform_state import (
     TerraformStateError,
     TerraformStateLocked,
@@ -473,6 +475,7 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
     plan_run_id = "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0"
     artifact_id = "ed350f1b-61b1-4edc-9799-35332aa96283"
     approval_id = "8f7c5f1e-9200-4d9c-91d9-8afdd81ec52f"
+    state_id = "11111111-1111-4111-8111-111111111111"
     apply_run_id = "12345678-1234-4234-8234-123456789abc"
     build_uuid = "abcdefff-1234-4234-8234-123456789abc"
     build_id = f"fixed-apply:{build_uuid}"
@@ -512,6 +515,35 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         persisted_context_sha256="b" * 64,
     )
     pricing_document = pricing_evidence.as_manifest_document()
+    plan_sha256 = "2" * 64
+    workspace_sha256 = "6" * 64
+    artifact_bucket = "davdeploy-plans-654654474502"
+    plan_build_arn = "arn:aws:codebuild:us-east-1:654654474502:build/fixed-plan:old-plan-run"
+    plan_key = S3GeneratedPlanArtifactStore._key(
+        ORG,
+        PROJECT,
+        revision_id,
+        plan_run_id,
+        plan_sha256,
+        build_arn=plan_build_arn,
+    )
+    workspace_key = S3GeneratedPlanArtifactStore._key(
+        ORG,
+        PROJECT,
+        revision_id,
+        plan_run_id,
+        workspace_sha256,
+        build_arn=plan_build_arn,
+        artifact_kind="workspace",
+    )
+    digests = {
+        "customer_revision_sha256": revision_digest,
+        "saved_plan_sha256": plan_sha256,
+        "workspace_sha256": workspace_sha256,
+        "pricing_evidence_sha256": pricing_document["evidence_sha256"],
+        "pricing_context_sha256": pricing_document["pricing_context_sha256"],
+        "plan_json_sha256": pricing_document["plan_json_sha256"],
+    }
     manifest = {
         "tenant": {
             "organization_id": ORG,
@@ -520,17 +552,56 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
             "environment_id": ENVIRONMENT,
         },
         "target": {"account_id": account_id, "region": region},
-        "remote_state": {"scope_sha256": state_scope},
+        "remote_state": {"state_id": state_id, "scope_sha256": state_scope},
         "pricing": pricing_evidence.safe_summary(),
         "pricing_evidence": pricing_document,
-        "digests": {
-            "customer_revision_sha256": revision_digest,
-            "pricing_evidence_sha256": pricing_document["evidence_sha256"],
-            "pricing_context_sha256": pricing_document["pricing_context_sha256"],
-            "plan_json_sha256": pricing_document["plan_json_sha256"],
+        "policy": {"human_approval_required": True, "verdict": "REVIEW_REQUIRED"},
+        "planning_boundary": {"approval_allowed": True, "execution_allowed": True},
+        "artifact": {
+            "bucket": artifact_bucket,
+            "key": plan_key,
+            "version_id": "plan-version",
+            "size_bytes": 10,
+            "sha256": plan_sha256,
         },
+        "execution_workspace": {
+            "bucket": artifact_bucket,
+            "key": workspace_key,
+            "version_id": "workspace-version",
+            "size_bytes": 11,
+            "sha256": workspace_sha256,
+        },
+        "digests": digests,
     }
     manifest_digest = main.canonical_json_digest(manifest)
+    request_document = {
+        "contract_version": 1,
+        "organization_id": ORG,
+        "project_id": PROJECT,
+        "revision_id": revision_id,
+        "revision_sha256": revision_digest,
+        "source_plan_run_id": plan_run_id,
+        "artifact_id": artifact_id,
+        "approval_id": approval_id,
+        "manifest_sha256": manifest_digest,
+        "target": {"account_id": account_id, "region": region},
+        "digests": digests,
+        "saved_plan": {
+            "bucket": artifact_bucket,
+            "key": plan_key,
+            "version_id": "plan-version",
+            "size_bytes": 10,
+            "sha256": plan_sha256,
+        },
+        "execution_workspace": {
+            "bucket": artifact_bucket,
+            "key": workspace_key,
+            "version_id": "workspace-version",
+            "size_bytes": 11,
+            "sha256": workspace_sha256,
+        },
+        "requester_subject": "admin",
+    }
     db.add_all(
         [
             Organization(id=ORG, name="state-apply-test-org"),
@@ -603,16 +674,21 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
                 proposal_sha256="e" * 64,
                 context_sha256="f" * 64,
                 configuration_sha256="1" * 64,
-                saved_plan_sha256="2" * 64,
+                saved_plan_sha256=plan_sha256,
                 policy_sha256="3" * 64,
                 manifest_sha256=manifest_digest,
                 manifest=manifest,
                 policy_version="generated-plan-policy-v1",
                 policy_verdict="REVIEW_REQUIRED",
-                artifact_bucket="davdeploy-plans-654654474502",
-                artifact_key="plans/nova-generated/plan.tfplan",
+                artifact_bucket=artifact_bucket,
+                artifact_key=plan_key,
                 artifact_version_id="plan-version",
                 artifact_size_bytes=10,
+                workspace_artifact_bucket=artifact_bucket,
+                workspace_artifact_key=workspace_key,
+                workspace_artifact_version_id="workspace-version",
+                workspace_artifact_size_bytes=11,
+                workspace_sha256=workspace_sha256,
                 created_by_subject="admin",
                 expires_at=datetime.now(UTC) + timedelta(minutes=30),
             ),
@@ -638,7 +714,7 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
                 approval_id=approval_id,
                 requester_subject="admin",
                 idempotency_key_sha256="4" * 64,
-                request_sha256="5" * 64,
+                request_sha256=main.canonical_json_digest(request_document),
                 manifest_sha256=manifest_digest,
                 runner_run_id=apply_run_id,
                 codebuild_idempotency_token=apply_run_id,
@@ -646,7 +722,7 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
                 codebuild_build_id=build_id,
                 codebuild_build_arn=build_arn,
                 state="BUILD_STARTED",
-                request_document={"manifest_sha256": manifest_digest},
+                request_document=request_document,
             ),
         ]
     )
@@ -683,6 +759,7 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
     monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "true")
     monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN", apply_role)
     monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "fixed-apply")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET", artifact_bucket)
     monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_API_URL", "https://api.davdeploy.tech")
     monkeypatch.setattr(main, "ensure_aurora_ready", lambda: None)
     monkeypatch.setattr(
@@ -693,6 +770,38 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
     monkeypatch.setitem(main.app.dependency_overrides, main.session, override_session)
 
     with TestClient(main.app) as client:
+        monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false")
+        input_disabled = client.post(
+            "/api/v1/nova-apply/input",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert input_disabled.status_code == 404
+        monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "true")
+
+        apply_input = client.post(
+            "/api/v1/nova-apply/input",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert apply_input.status_code == 200
+        assert apply_input.headers["cache-control"] == "no-store"
+        validated_input = validate_nova_apply_request(
+            apply_input.json(),
+            expected_run_id=apply_run_id,
+            expected_codebuild_project="fixed-apply",
+            expected_codebuild_build_arn=build_arn,
+            expected_artifact_bucket=artifact_bucket,
+            now=datetime.now(UTC),
+        )
+        assert validated_input.saved_plan.key == plan_key
+        assert validated_input.execution_workspace.key == workspace_key
+        input_event = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "nova_apply_input.issued")
+        )
+        assert input_event is not None
+        assert input_event.entity_id == apply_run_id
+
         broker_disabled = client.post(
             "/api/v1/nova-apply/credentials",
             headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
@@ -706,7 +815,7 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
             json={"run_id": apply_run_id},
         )
         assert response.status_code == 200
-        assert codebuild.calls == [[build_id]]
+        assert codebuild.calls == [[build_id], [build_id]]
         credential_document = response.json()
         credential = db.scalar(
             select(TerraformStateCredential).where(
