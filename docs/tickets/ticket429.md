@@ -71,7 +71,9 @@ evidence change; no Terraform or customer workload operation was performed.
 - `GITHUB_PR_NUMBER=429 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
   passed.
 - `git diff --check`: passed.
-- GitHub checks are pending on the final PR head.
+- GitHub CI run `44198472309` passed all seven checks on implementation head
+  `cada4fc09435186b9e3d706813e27c0c20eed5b0`; the ticket-only final-head
+  follow-up is pending.
 - No customer workload evidence file is required because no customer workload
   was run.
 
