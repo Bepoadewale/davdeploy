@@ -76,6 +76,8 @@ class RecordingGateway:
 
 def provider(
     output: dict[str, Any] | list[dict[str, Any]],
+    *,
+    schema_repair_attempts: int | None = None,
 ) -> tuple[NovaIntentProvider, RecordingGateway]:
     gateway = RecordingGateway(output)
     return (
@@ -85,6 +87,7 @@ def provider(
             max_output_tokens=800,
             timeout_seconds=30,
             data_policy="bedrock-no-training",
+            schema_repair_attempts=schema_repair_attempts,
         ),
         gateway,
     )
@@ -190,6 +193,74 @@ def test_nova_intent_repair_receives_bounded_validation_diagnostics():
         {"location": "execute_terraform", "type": "extra_forbidden"},
     ]
     assert "input" not in repair_document["validation_issues"][0]
+
+
+def test_nova_intent_can_disable_schema_repairs():
+    intent_provider, gateway = provider(
+        proposal(execute_terraform=True), schema_repair_attempts=0
+    )
+
+    with pytest.raises(ModelGatewayUnavailable, match="repair is disabled"):
+        intent_provider.interpret("Deploy my API.", "example/api", scope())
+
+    assert len(gateway.calls) == 1
+
+
+def test_nova_intent_allows_two_bounded_schema_repairs_and_aggregates_usage():
+    intent_provider, gateway = provider(
+        [
+            proposal(execute_terraform=True),
+            proposal(execute_terraform=True),
+            proposal(workload_type="rag_application"),
+        ],
+        schema_repair_attempts=2,
+    )
+
+    result = intent_provider.interpret("Deploy my RAG API.", "example/rag", scope())
+
+    assert len(gateway.calls) == 3
+    assert gateway.calls[1][1]["previous_response"] == proposal(execute_terraform=True)
+    assert gateway.calls[2][1]["previous_response"] == proposal(execute_terraform=True)
+    assert result.spec.workload_type == "rag_application"
+    assert result.model_metadata["usage"]["input_tokens"] == 600
+    assert result.model_metadata["usage"]["output_tokens"] == 240
+    assert result.model_metadata["usage"]["retry_count"] == 2
+
+
+def test_nova_intent_fails_closed_after_configured_repair_limit():
+    intent_provider, gateway = provider(
+        [proposal(execute_terraform=True), proposal(execute_terraform=True)],
+        schema_repair_attempts=1,
+    )
+
+    with pytest.raises(ModelGatewayUnavailable, match="after one repair attempt"):
+        intent_provider.interpret("Deploy my API.", "example/api", scope())
+
+    assert len(gateway.calls) == 2
+
+
+@pytest.mark.parametrize("attempts", [-1, 3, True, 1.5])
+def test_nova_intent_repair_limit_rejects_invalid_configuration(attempts):
+    with pytest.raises(ValueError, match="integer from 0 to 2"):
+        NovaIntentProvider(
+            gateway=RecordingGateway(proposal()),
+            schema_repair_attempts=attempts,
+        )
+
+
+def test_nova_intent_repair_limit_reads_bounded_environment_setting(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS", "2")
+    intent_provider = NovaIntentProvider(gateway=RecordingGateway(proposal()))
+
+    assert intent_provider.schema_repair_attempts == 2
+
+
+@pytest.mark.parametrize("value", ["-1", "3", "one", "1.5"])
+def test_nova_intent_repair_limit_rejects_invalid_environment_setting(monkeypatch, value):
+    monkeypatch.setenv("DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS", value)
+
+    with pytest.raises(ValueError, match="integer from 0 to 2"):
+        NovaIntentProvider(gateway=RecordingGateway(proposal()))
 
 
 def test_model_gateway_failure_translates_to_bounded_service_unavailable():
