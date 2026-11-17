@@ -3,7 +3,7 @@
 PR: https://github.com/Bepoadewale/davdeploy/pull/427
 Branch: `feat/nova-intent-context-provenance-427`
 
-## Goal
+## Problem / goal
 
 Make the context recipe and original intent context identifiable in accepted Nova
 intent evidence, including when schema repair adds later model requests.
@@ -19,7 +19,7 @@ repair request rather than identifying the original context consistently.
 PR #399 remains open and draft. This change is source-only and does not enable
 customer plan or apply execution.
 
-## Research / references
+## Research / references used
 
 - `DAVDEPLOY_NOVA_GOAL.md`, package 3: record model, prompt, context, and
   proposal versions/digests and keep repair bounded.
@@ -27,7 +27,7 @@ customer plan or apply execution.
 - `apps/api/src/davdeploy/model_gateway.py` (`model_input_digest`)
 - `tests/test_nova_intent.py`
 
-## Planned work
+## Work planned for the PR
 
 - Version the composed Nova intent context recipe.
 - Record a canonical digest of the original context on accepted Nova metadata
@@ -37,19 +37,33 @@ customer plan or apply execution.
 
 ## Acceptance criteria
 
-- [ ] Nova metadata includes the context version and original context digest.
-- [ ] Schema repair preserves the same original context digest while retaining
+- [x] Nova metadata includes the context version and original context digest.
+- [x] Schema repair preserves the same original context digest while retaining
   the final model-call request digest.
-- [ ] A meaningful original-context change changes its digest.
-- [ ] Workload provenance carries the context identity without raw prompt text.
-- [ ] Fixture metadata does not claim Nova context provenance.
-- [ ] Focused tests, full verification, docs conventions, and diff checks pass.
+- [x] A meaningful original-context change changes its digest.
+- [x] Workload provenance carries the context identity without raw prompt text.
+- [x] Fixture metadata does not claim Nova context provenance.
+- [x] Focused tests, full verification, docs conventions, and diff checks pass.
 - [ ] All required GitHub checks pass on the final PR head.
 
-## Validation / evidence
+## Acceptance status
 
-No validation has been performed for implementation yet. This package does not
-perform a customer workload run, so no `docs/test/test427.md` file is required.
+Implementation is complete and locally verified. The PR remains draft until
+fresh-head CI and review are complete.
+
+## Tests / validation performed
+
+`make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`
+passed: 1,304 tests, Ruff, Actions configuration, OpenAPI, and Compose checks.
+The focused Nova intent suite passed again after the final assertion (23 tests),
+and focused Ruff, docs conventions, and `git diff --check` passed. An initial
+docs-convention run caught a ticket-heading mismatch, which was corrected before
+the passing run. No customer workload run is part of this package.
+
+## Evidence files produced
+
+- `docs/tickets/ticket427.md`
+- No `docs/test/test427.md` is required because no customer workload was run.
 
 ## Boundaries
 
@@ -58,7 +72,7 @@ issuance, customer workload, or feature-gate change is included. The context
 digest is evidence for exact input identity, not proof of model correctness or
 safe execution.
 
-## Follow-up
+## Follow-up work
 
 Provider schema and official-document provenance, pinned real Nova evaluation,
 prompt-injection coverage, and hosted customer lifecycle evidence remain
