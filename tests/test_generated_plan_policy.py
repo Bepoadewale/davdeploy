@@ -841,6 +841,42 @@ def test_s3_policy_allow_with_not_resource_is_denied_for_specific_principal():
     assert "s3_not_resource_policy_denied" in codes(result)
 
 
+def test_s3_policy_allow_with_not_action_is_denied_for_specific_principal():
+    document = plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::654654474502:role/app"},
+                "NotAction": "s3:DeleteObject",
+                "Resource": "arn:aws:s3:::private-plan-bucket/*",
+            }
+        ],
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "bucket-policy",
+                "resource_type": "aws_s3_bucket_policy",
+                "name": "policy",
+                "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+                "rationale": "Scoped access for the application role.",
+            },
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_not_action_policy_denied" in codes(result)
+
+
 @pytest.mark.parametrize("principal", ["*", {"AWS": "*"}, {"AWS": ["*"]}])
 def test_public_sqs_queue_policy_is_denied(principal):
     policy = {
@@ -874,6 +910,23 @@ def test_sqs_queue_policy_allow_with_not_resource_is_denied_for_specific_princip
     document = add_sqs_queue_policy(plan(), json.dumps(policy))
 
     assert "sqs_not_resource_policy_denied" in codes(evaluate(document))
+
+
+def test_sqs_queue_policy_allow_with_not_action_is_denied_for_specific_principal():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "NotAction": "sqs:DeleteMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_not_action_policy_denied" in codes(evaluate(document))
 
 
 def test_sqs_queue_policy_allow_with_not_principal_is_denied():

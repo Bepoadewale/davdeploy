@@ -727,6 +727,13 @@ def _check_s3(
                         address,
                         "The plan grants direct public access to storage. Serve public files through a private origin instead.",
                     )
+                elif _has_not_action_allow(policy):
+                    _deny(
+                        findings,
+                        "s3_not_action_policy_denied",
+                        address,
+                        "The storage policy uses an inverse action scope that cannot be safely bounded.",
+                    )
                 elif _has_unbounded_resource_allow(policy):
                     _deny(
                         findings,
@@ -1435,6 +1442,14 @@ def _has_unbounded_resource_allow(policy: dict[str, Any]) -> bool:
     )
 
 
+def _has_not_action_allow(policy: dict[str, Any]) -> bool:
+    return any(
+        str(statement.get("Effect", "")).lower() == "allow"
+        and "NotAction" in statement
+        for statement in _statements(policy, require_resource=True)
+    )
+
+
 def _check_sqs_queue_policies(
     resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
 ) -> None:
@@ -1459,6 +1474,13 @@ def _check_sqs_queue_policies(
                     "sqs_public_policy_denied",
                     address,
                     "The plan grants public or unbounded access to an SQS queue.",
+                )
+            elif _has_not_action_allow(policy):
+                _deny(
+                    findings,
+                    "sqs_not_action_policy_denied",
+                    address,
+                    "The queue policy uses an inverse action scope that cannot be safely bounded.",
                 )
             elif _has_unbounded_resource_allow(policy):
                 _deny(
