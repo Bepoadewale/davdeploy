@@ -55,17 +55,20 @@ its apply path.
 - [x] Fixture behavior does not claim Nova proposal provenance.
 - [x] Focused tests (23), full verification (1,304), docs conventions, and diff
   checks pass.
-- [ ] All seven required CI checks pass on the implementation commit.
+- [x] All seven required CI checks pass on implementation head `e2f98fe` in
+  [run `44185396711`](https://github.com/Bepoadewale/davdeploy/actions/runs/44185396711).
 
 ## Acceptance status
 
-Implementation is complete locally. Focused/full verification and documentation
-checks passed; fresh-head CI is pending.
+Implementation is complete. Focused/full verification and documentation checks
+passed locally; all seven required CI checks passed on implementation head
+`e2f98fe` in run `44185396711`.
 
 ## Tests / validation performed
 
 Focused tests and full verification passed locally. Final run details are in
-`docs/test/test426.md`; CI evidence will follow after push.
+`docs/test/test426.md`; the documentation commit's CI result will be recorded
+in the PR description.
 
 ## Evidence files produced
 

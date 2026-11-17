@@ -3,7 +3,7 @@
 Date: 2026-11-17
 Execution type: source tests
 Customer repository: none
-Commit: pending implementation commit
+Commit: `e2f98fe20b70ded9bbd849143cbcf4571b8d8406` (implementation)
 AWS account: none
 AWS region: none
 
@@ -23,7 +23,10 @@ None. No model, AWS, Terraform, or clean-room resources were created.
   1,304 tests passed; Ruff, Actions configuration, OpenAPI, and Compose checks
   passed. One existing Starlette/httpx deprecation warning remains.
 - Documentation convention checks and `git diff --check` passed.
-- Final-head GitHub checks are pending.
+- GitHub Actions run [`44185396711`](https://github.com/Bepoadewale/davdeploy/actions/runs/44185396711)
+  passed all seven required checks on implementation commit `e2f98fe`.
+- The documentation-only evidence commit's fresh-head CI result will be
+  recorded in the PR description.
 
 ## Commands executed
 
@@ -31,6 +34,7 @@ None. No model, AWS, Terraform, or clean-room resources were created.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`
 - `GITHUB_PR_NUMBER=426 python scripts/check_doc_conventions.py`
 - `git diff --check`
+- `gh pr checks 426 --watch --interval 120`
 
 ## Observed result
 
