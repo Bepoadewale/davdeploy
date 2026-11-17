@@ -600,6 +600,9 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - References: [SimulatePrincipalPolicy API](https://docs.aws.amazon.com/IAM/latest/APIReference/API_SimulatePrincipalPolicy.html),
   [IAM simulator behavior and limitations](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html),
   and [role-session policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html).
+- Source commit `d12ee73cbc7aff0f07026094e195c36ba4325449` passed all seven
+  required GitHub Actions checks in run `44128923407`, including the fresh
+  runner `local-e2e` and Terraform validation jobs.
 
 ### Final documentation-head CI and inventory — 2026-11-17
 

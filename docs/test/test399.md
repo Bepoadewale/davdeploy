@@ -477,6 +477,9 @@ Fresh-head hosted CI is required after push.
 - AWS CloudFormation `validate-template` accepted the updated apply-role
   template and reported the expected named-IAM capability; no stack was
   created. `git diff --check` and documentation conventions passed.
+- GitHub Actions run `44128923407` passed all seven required jobs on source
+  commit `d12ee73cbc7aff0f07026094e195c36ba4325449`, including clean-runner
+  `local-e2e` and Terraform validation.
 - No customer apply role exists in the verified inventory, so no live IAM
   simulation was run. Tests use a fake IAM client. AWS documents that
   simulation can differ from live authorization, omits resource control policy
