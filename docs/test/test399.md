@@ -309,9 +309,9 @@ Fresh-head hosted CI is required after push.
   The PR #399 branch was merged with that main at
   `29957e14ce13fb7df7000f3e1a7244cbb1c5154f`.
 - Read-only GitHub reconciliation confirms PR #399 remains open and draft at
-  `f7f97d877fb086aaec4ad0d07febeefa0f2601ce`; its base still reports
-  `8c7f1de`. The new synchronization has not been pushed, so fresh-head PR CI
-  has not run.
+  `fe86079e5bd917daa99f10e63900093aa25753f4`, based on current main
+  `602206e`. Fresh-head GitHub Actions run `44070631960` passed all seven
+  required checks.
 - Read-only AWS checks verified account `654654474502` in `us-east-1`; no
   matching SageMaker endpoint, model, endpoint configuration, or active
   DavDeploy Batch job definition was found. Four tagged DavDeploy Batch job
@@ -328,6 +328,5 @@ Fresh-head hosted CI is required after push.
   1,342 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose
   configuration. `make terraform-validate`, recursive Terraform formatting,
   documentation conventions, and `git diff --check` passed. One existing
-  Starlette/httpx deprecation warning remains. Hosted CI is pending until this
-  synchronized head is pushed to PR #399.
+  Starlette/httpx deprecation warning remains.
 
