@@ -45,11 +45,14 @@ passed in run `44201512025`. No customer Nova workload has been run.
 - [x] Matrix still states that no Nova customer workload has been applied or
   certified.
 - [x] Documentation conventions and diff checks pass.
-- [ ] All seven required CI checks pass on the matrix implementation commit.
+- [x] All seven required CI checks pass on the matrix implementation commit
+  `1137293e24d3c9e32add585283f96254548f7ef7` in run `44202571991`.
 
 ## Acceptance status
 
-Implementation is complete and local documentation checks pass. This is
+Implementation is complete and verified. All seven required checks passed on
+matrix implementation commit `1137293e24d3c9e32add585283f96254548f7ef7` in run
+`44202571991`. The ticket-only follow-up will receive a fresh CI run. This is
 documentation-only; no AWS or Terraform operation was performed.
 
 ## Tests / validation performed
@@ -57,7 +60,9 @@ documentation-only; no AWS or Terraform operation was performed.
 - `GITHUB_PR_NUMBER=430 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
   passed.
 - `git diff --check`: passed.
-- Final-head GitHub checks are pending.
+- Final-head GitHub CI run `44202571991` passed all seven checks on
+  `1137293e24d3c9e32add585283f96254548f7ef7`; the ticket-only follow-up is
+  pending.
 - No `docs/test/test430.md` is required because no customer workload was part of
   this package.
 
