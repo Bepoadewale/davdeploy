@@ -1537,7 +1537,7 @@ def evaluate_generated_plan_pricing(
                         ))
     elif (
         trusted_context.rds_usage_assumptions is not None
-        and any(key.startswith("aurora_") for key in trusted_context.rds_usage_assumptions)
+        and _has_aurora_usage_assumptions(trusted_context.rds_usage_assumptions)
     ):
         findings.append(PlanPricingFinding(
             "aurora_usage_assumptions_stale", None,
@@ -1591,6 +1591,7 @@ def evaluate_generated_plan_pricing(
                         usage.aurora_monthly_io_requests,
                         usage.aurora_monthly_backup_overage_gb_month,
                         usage.aurora_monthly_secret_api_requests,
+                        usage.aurora_monthly_inter_az_transfer_gb,
                         usage.aurora_monthly_cross_region_transfer_gb,
                         usage.aurora_monthly_internet_egress_gb,
                     )
@@ -2380,7 +2381,7 @@ def pricing_evidence_is_approval_eligible(
             return False
         if (
             trusted_context.rds_usage_assumptions.get("monthly_backup_storage_gb_month") is None
-            or any(key.startswith("aurora_") for key in trusted_context.rds_usage_assumptions)
+            or _has_aurora_usage_assumptions(trusted_context.rds_usage_assumptions)
         ):
             return False
     aurora_lines = [line for line in lines if line.get("resource_type") == "aws_rds_cluster"]
@@ -3726,6 +3727,13 @@ def _evidence(
 def _canonical_digest(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _has_aurora_usage_assumptions(value: dict[str, Any]) -> bool:
+    return any(
+        key.startswith("aurora_") and item is not None
+        for key, item in value.items()
+    )
 
 
 def _pricing_context_digest(

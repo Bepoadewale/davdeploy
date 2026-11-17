@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from botocore.exceptions import ClientError
+from davdeploy.domain import RdsPricingUsageAssumptions
 from davdeploy.generated_plan_pricing import (
     AwsPriceListCatalog,
     GeneratedPlanPricingEvidence,
@@ -646,6 +647,34 @@ def test_rds_usage_is_extracted_from_integrity_checked_customer_revision():
     )
 
     assert context.rds_usage_assumptions == usage
+
+
+def test_legacy_rds_context_survives_default_null_aurora_fields_in_serialized_workload():
+    expanded_usage = RdsPricingUsageAssumptions.model_validate(RDS_USAGE).model_dump(mode="json")
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"rds_pricing_usage_assumptions": expanded_usage}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+
+    assert context.rds_usage_assumptions == expanded_usage
+    result, _ = evaluate(
+        rds_plan(), rds_usage_assumptions=context.rds_usage_assumptions,
+        context_digest=revision_sha256, catalog_client=FakeRdsPriceList(),
+    )
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=context,
+        now=CAPTURED_AT,
+    )
 
 
 def test_aurora_usage_is_extracted_and_bound_to_integrity_checked_revision():
