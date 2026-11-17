@@ -1603,6 +1603,16 @@ def test_publicly_routable_security_group_cidr_is_not_limited_to_world_open_cidr
             "iam_privileged_wildcard",
         ),
         (
+            {
+                "Statement": {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "NotResource": "arn:aws:s3:::excluded-bucket/*",
+                }
+            },
+            "iam_not_resource_policy_denied",
+        ),
+        (
             {"Statement": {"Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"}},
             "iam_passrole_unbounded_denied",
         ),

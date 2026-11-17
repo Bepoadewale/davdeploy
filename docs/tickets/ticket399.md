@@ -630,16 +630,17 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - The actual-plan IAM policy reviewer now rejects wildcard action patterns,
   including service-level forms such as `s3:*`, `sqs:*`, and
   `dynamodb:Put*`. Existing wildcard role-assumption checks retain their
-  specific denial finding.
+  specific denial finding. Allow statements using `NotResource` are also
+  denied because their inverse scope cannot be safely bounded.
 - S3, SQS, and DynamoDB permissions also fail closed when a resource scope is
   unbounded. Exact resource ARNs remain usable; S3 object access may use the
   exact bucket's object suffix, and DynamoDB index access may use the exact
   table's index suffix. Broad buckets, queues, tables, and wildcard resource
   patterns are denied. Incomplete or unrecognized ARN shapes fail closed;
   IAM may expand omitted ARN fields to wildcards.
-- Regression tests exercise wildcard actions, incomplete and unbounded resource
-  ARNs, and allowed exact bucket, object, queue, table, and index scopes. Full
-  local verification passed 1,393 tests,
+- Regression tests exercise wildcard actions, inverse resource scopes,
+  incomplete and unbounded resource ARNs, and allowed exact bucket, object,
+  queue, table, and index scopes. Full local verification passed 1,394 tests,
   Ruff, Actions configuration, OpenAPI snapshot, and Compose validation.
 - This is source and local test evidence. No live customer role was available
   for authorization checks. It does not establish effective AWS permissions

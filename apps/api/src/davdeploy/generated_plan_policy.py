@@ -1574,6 +1574,14 @@ def _check_iam_permissions(
     for statement in _statements(policy, require_resource=True):
         if str(statement.get("Effect", "")).lower() != "allow":
             continue
+        if "NotResource" in statement:
+            _deny(
+                findings,
+                "iam_not_resource_policy_denied",
+                address,
+                "An IAM allow policy uses NotResource, so its effective resource scope cannot be safely bounded.",
+            )
+            continue
         if "NotAction" in statement:
             _deny(
                 findings,
