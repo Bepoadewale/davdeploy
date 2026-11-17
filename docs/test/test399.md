@@ -289,3 +289,16 @@ Fresh-head hosted CI is required after push.
   workload deployment, health observation, or teardown occurred.
 - PR #399 remains draft and both apply gates remain disabled.
 
+## Current main synchronization — 2026-11-17
+
+- PR #399 source commit `e01eee2` merges backend `main` through `8c7f1de`,
+  including PRs #422 and #423. The control plane remains deployed from PR #420;
+  this merge is source-only.
+- `make verify` passed 1,332 tests, Ruff, Actions configuration, OpenAPI, and
+  Compose configuration. Documentation conventions and `git diff --check`
+  passed. One existing Starlette/httpx deprecation warning remains.
+- GitHub run `44060781429` passed all seven required checks, including the
+  hosted clean-runner `local-e2e` check.
+- This sync does not enable either apply gate. No AWS resource was changed,
+  no customer credential was issued, and no apply build or workload ran.
+

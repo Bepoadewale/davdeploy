@@ -13,17 +13,16 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` after PRs #417–#420;
-merged-main checks passed. PR #399 is based on that commit through merge
-commit `57f061f24cbb98dba12edd6b7a0e99406f9d5398`; its latest committed head
-before this worker package was `8380b65d04831caff83f5606456abdbc35103799`.
-Mainline has bounded regional
-price evidence for supported S3, SQS, RDS MySQL, Lambda/API, and DynamoDB
-configurations, but material unsupported or unpriced resources still block
-approval and PR #318 remains closed/held. The latest documented hosted release
-is PR #411; this PR remains source-only, disabled, and unapplied. No Nova
-customer workload has been applied. The protected untracked `--only-show-errors`
-and `.venv-pr399/` must remain untouched.
+Backend `main` is `8c7f1deab9e9b9865a25d0fffaf87be2066b8ea4` after PRs #422 and
+#423. The hosted control plane remains on PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by plan run `43981566184`
+and apply run `43982396577`; PR #422 is source-only. PR #399 is open and draft,
+now based on current `main` through merge commit `e01eee2fbb395ef4421bc30c6459ce6cf4f89a8a`.
+Apply gates remain disabled. Mainline has bounded regional price evidence for
+supported S3, SQS, RDS MySQL, Lambda/API, and DynamoDB configurations, but
+material unsupported or unpriced resources still block approval and PR #318
+remains closed/held. No Nova customer workload has been applied. The protected
+untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
 
 ## Research / references used
 
@@ -413,4 +412,22 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - Remaining: create and verify the dedicated customer apply role with
   proposal-bound least-privilege permissions; then establish hosted apply,
   health, update/recovery, destroy, and independent absence evidence.
+
+## 2026-11-17 synchronization with current main
+
+- PR #399 branch `feat/nova-exact-plan-apply-399` merged current `main`
+  `8c7f1de` through merge commit `e01eee2`. This brings in PR #422 plan-role
+  profile verification and PR #423's source/deployed status reconciliation;
+  neither changes the hosted release. PR #399 remains open and draft.
+- The `main.py` import conflict was resolved by retaining both the apply
+  pricing-evidence imports and the plan-role verifier import.
+- Current local verification passed 1,332 tests, Ruff, Actions configuration,
+  OpenAPI, Compose configuration, documentation conventions, and diff checks.
+  The apply reconciliation test now expires its SQLAlchemy identity-map cache
+  before reading the committed bulk-update result.
+- Final-head GitHub CI run `44060781429` passed all seven required checks.
+- No AWS mutation, Terraform operation, customer credential issuance, apply
+  build, or customer workload occurred. The apply runner and credential gates
+  remain disabled. Dedicated apply-role verification and hosted lifecycle
+  evidence remain outstanding.
 
