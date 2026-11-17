@@ -656,6 +656,16 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - This is source and local test evidence. No live customer role was available
   for authorization checks. It does not establish effective AWS permissions
   or a customer workload; both apply gates remain disabled.
+- Follow-up hardening also rejects wildcard or malformed `Resource` ARNs in
+  S3 bucket and SQS queue resource policies. Commit
+  `9140d45431847cb171ec0bad758fdf69b5e7115c` passed all seven required checks
+  in GitHub Actions run `44179449868`, including `local-e2e` and
+  `cloud-contracts`.
+- Read-only recheck verified AWS account `654654474502`, no
+  `davdeployNovaApply-*` role or matching SageMaker endpoint/model/config, and
+  four tagged DavDeploy Batch definitions still `INACTIVE`. The Terraform
+  monitor was empty. No AWS resource, control-plane runtime, or lineage
+  evidence changed.
 - Source commit `7b2b84b` passed all seven required GitHub Actions checks in
   run `44177455097`, including fresh-runner `local-e2e` and Terraform
   validation.
