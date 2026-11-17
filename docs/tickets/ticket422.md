@@ -72,15 +72,18 @@ limits.
 - [x] Audit and customer-facing status describe profile verification without
   claiming full effective permissions or plan-runner readiness.
 - [x] Focused tests and required repository checks pass.
-- [ ] The full local clean-room cycle is required before this authorization
-  change is review-ready.
+- [x] Full `make local-proof` passes from a fresh isolated worktree, including
+  the local E2E path and repository verification.
+- [ ] Remove only the generated clean-room files, Compose network, and database
+  volume after proof; this cleanup awaits explicit deletion authorization.
 - [x] No AWS mutation, Terraform operation, feature-gate change, customer
   credential issuance, or customer workload is performed.
 
 ## Acceptance status
 
-Implementation and focused/full repository checks are complete. The required
-local clean-room cycle has not run, so this PR remains draft. No hosted
+Implementation, focused/full checks, and the isolated local proof are complete.
+Cleanup of generated local files and the project network/database volume awaits
+explicit deletion authorization, so this PR remains draft. No hosted
 customer-role or workload evidence is claimed.
 
 ## Tests / validation performed
@@ -89,19 +92,23 @@ Commands and results:
 
 - `.venv/bin/python -m pytest -q tests/test_nova_plan_role_profile.py tests/test_customer_cloud_lifecycle.py tests/test_product.py tests/test_connection_experience.py tests/test_nova_plan_credentials.py tests/test_nova_plan_runs.py` — 151 passed.
 - `make verify PY=.venv/bin/python` — 1,280 passed; Ruff, Actions configuration, OpenAPI, and Compose configuration checks passed.
+- `COMPOSE_PROJECT_NAME=davdeploy-pr422-cleanroom-20261117 COMPOSE_FILE=docker-compose.yml:.cleanroom-compose-override.yml make local-proof VENV=.venv PY=.venv/bin/python` from fresh worktree `/private/tmp/davdeploy-pr422-cleanroom-20261117` — smoke checks, API contract, customer-plan E2E, trace check, and repository verification passed (1,280 tests).
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 
-The local clean-room cycle remains incomplete. Its final cleanup would remove
-generated local files and Docker resources; deletion permission for those
-exact targets has not been granted in this conversation. No AWS API mutation,
+The isolated local proof passed. Docker's default address pools were exhausted
+by existing retained networks, so a temporary, untracked Compose override used
+subnet `10.251.250.0/24` for this unique project. The run-specific containers
+were stopped after the checks. The isolated worktree, its generated `.venv`,
+`.local` database, override file, Compose network, and named database volume
+remain pending explicit deletion authorization. No AWS API mutation,
 Terraform operation, control-plane deployment, or customer credential
 issuance occurred.
 
 ## Evidence files produced
 
-No `docs/test/test422.md` is planned; this PR uses mocked AWS APIs and performs
-no customer workload test. This ticket is the source-change record.
+No `docs/test/test422.md` was added; this PR uses mocked AWS APIs and performed
+no customer workload test. This ticket records source and local-proof evidence.
 
 ## Boundaries
 
