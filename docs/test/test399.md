@@ -346,6 +346,15 @@ Fresh-head hosted CI is required after push.
 - The base S3 bucket resource includes its provider's bucket-scoped read
   permissions, permits bucket create/tag/delete operations only, and rejects
   changed embedded settings outside that map or `force_destroy` deletion.
+- Credential issuance rejects incomplete price evidence before calling STS,
+  even when the test rebinds the apply run and stored approval digest to the
+  incomplete manifest. The regression also verifies no credential-issued
+  audit event is added. Approval itself validates the pricing evidence against
+  the persisted customer context and freshness window.
+- After this regression, `make verify` passed 1,366 tests, Ruff, Actions
+  configuration, OpenAPI, and Compose checks. Documentation conventions and
+  `git diff --check` passed; all configured Terraform roots had passed
+  `make terraform-validate` earlier in this same source package.
 - S3 deletion operations use their documented IAM authorization action; for
   example, deleting bucket CORS, lifecycle, ownership, public-access-block,
   and encryption settings is authorized with the corresponding `Put...`
@@ -379,4 +388,7 @@ Fresh-head hosted CI is required after push.
 - The full local clean-room cycle was not run because its cleanup would delete
   retained artifacts without current explicit deletion approval. No customer
   workload was applied or certified.
+- This pricing-gate regression was added after runs `44078718495` and
+  `44095877464`; both ran before the regression. Local validation has since
+  passed; the new head requires fresh hosted CI.
 

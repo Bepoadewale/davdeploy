@@ -9,7 +9,10 @@ from uuid import uuid4
 
 import pytest
 from davdeploy import main
-from davdeploy.generated_plan_artifacts import S3GeneratedPlanArtifactStore
+from davdeploy.generated_plan_artifacts import (
+    S3GeneratedPlanArtifactStore,
+    pricing_evidence_safe_summary,
+)
 from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
 from davdeploy.models import (
     AuditEvent,
@@ -47,7 +50,7 @@ from davdeploy.terraform_state import (
 )
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -1023,6 +1026,98 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         )
         assert expired_credentials.status_code == 403
         assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
+        artifact_record = db.get(GeneratedPlanArtifact, artifact_id)
+        apply_run_record = db.get(GeneratedPlanApplyRun, apply_run_id)
+        original_manifest = artifact_record.manifest
+        original_manifest_sha256 = artifact_record.manifest_sha256
+        original_request_document = apply_run_record.request_document
+        original_request_sha256 = apply_run_record.request_sha256
+        incomplete_pricing = _evidence(
+            status=PlanPricingStatus.UNAVAILABLE,
+            region=region,
+            currency="USD",
+            captured_at=datetime.now(UTC).isoformat(),
+            budget=None,
+            document={},
+            lines=(),
+            findings=(),
+            persisted_context_sha256="b" * 64,
+        ).as_manifest_document()
+        incomplete_manifest = json.loads(json.dumps(original_manifest))
+        incomplete_manifest["pricing_evidence"] = incomplete_pricing
+        incomplete_manifest["pricing"] = pricing_evidence_safe_summary(incomplete_pricing)
+        incomplete_manifest["digests"]["pricing_evidence_sha256"] = incomplete_pricing[
+            "evidence_sha256"
+        ]
+        incomplete_manifest["digests"]["pricing_context_sha256"] = incomplete_pricing[
+            "pricing_context_sha256"
+        ]
+        incomplete_manifest["digests"]["plan_json_sha256"] = incomplete_pricing[
+            "plan_json_sha256"
+        ]
+        incomplete_manifest_sha256 = main.canonical_json_digest(incomplete_manifest)
+        incomplete_request_document = json.loads(json.dumps(original_request_document))
+        incomplete_request_document["manifest_sha256"] = incomplete_manifest_sha256
+        incomplete_request_document["digests"] = incomplete_manifest["digests"]
+        db.execute(
+            update(GeneratedPlanArtifact)
+            .where(GeneratedPlanArtifact.id == artifact_id)
+            .values(
+                manifest=incomplete_manifest,
+                manifest_sha256=incomplete_manifest_sha256,
+            )
+        )
+        db.execute(
+            update(GeneratedPlanApproval)
+            .where(GeneratedPlanApproval.id == approval_id)
+            .values(approved_manifest_sha256=incomplete_manifest_sha256)
+        )
+        db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.id == apply_run_id)
+            .values(
+                manifest_sha256=incomplete_manifest_sha256,
+                request_document=incomplete_request_document,
+                request_sha256=main.canonical_json_digest(incomplete_request_document),
+            )
+        )
+        db.commit()
+        db.expire_all()
+        calls_before_incomplete_pricing = len(fake_sts.calls)
+        incomplete_pricing_credentials = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert incomplete_pricing_credentials.status_code == 403
+        assert len(fake_sts.calls) == calls_before_incomplete_pricing
+        assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
+        db.execute(
+            update(GeneratedPlanArtifact)
+            .where(GeneratedPlanArtifact.id == artifact_id)
+            .values(
+                manifest=original_manifest,
+                manifest_sha256=original_manifest_sha256,
+            )
+        )
+        db.execute(
+            update(GeneratedPlanApproval)
+            .where(GeneratedPlanApproval.id == approval_id)
+            .values(approved_manifest_sha256=original_manifest_sha256)
+        )
+        db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.id == apply_run_id)
+            .values(
+                manifest_sha256=original_manifest_sha256,
+                request_document=original_request_document,
+                request_sha256=original_request_sha256,
+            )
+        )
+        db.commit()
+        db.expire_all()
 
         db.get(ProductUser, "apply-admin-user").role = "developer"
         db.commit()

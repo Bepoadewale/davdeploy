@@ -70,8 +70,12 @@ untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
   request/result metadata, artifact locations, and build internals are omitted.
   The response distinguishes runner status from application health or confirmed
   cleanup.
-- [ ] A plan without complete trusted regional pricing and a persisted approval
+- [x] A plan without complete trusted regional pricing and a persisted approval
   bound to its exact immutable manifest cannot reach a credentialed apply step.
+  Approval validates the fresh regional price evidence against the persisted
+  customer pricing context; apply rechecks evidence freshness, artifact digest,
+  and approval binding before STS. A route-level regression now proves that
+  even an exactly re-bound approval with unavailable pricing never calls STS.
 - [x] The fixed worker verifies and uses exact staged saved-plan and workspace
   versions, their manifest bindings, and tenant-scoped remote state; changed,
   stale, cross-tenant, or mismatched artifacts fail closed. Local tests use
@@ -318,7 +322,10 @@ gates disabled until those gates are met.
   conventions, and `git diff --check` passed. GitHub Actions run
   `44078718495` passed all seven required checks on implementation commit
   `1a2c507`, including the clean-runner end-to-end job. This evidence update
-  is a follow-up documentation commit and receives its own CI run.
+  is a follow-up documentation commit; that commit's checks also passed in
+  run `44095877464`. The credential-route pricing regression added after those
+  runs now passes the full 1,366-test local verification; fresh-head hosted CI
+  remains pending.
 - Apply and broker gates remain disabled. No role, credential, apply build,
   customer workload, or hosted control-plane change was performed. The local
   clean-room cycle remains unrun; its cleanup step would remove retained local
