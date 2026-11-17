@@ -634,17 +634,22 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   `dynamodb:Put*`. Existing wildcard role-assumption checks retain their
   specific denial finding. Allow statements using `NotResource` are also
   denied because their inverse scope cannot be safely bounded. S3 and SQS
-  resource policies with narrow principals also deny inverse `NotAction`
-  grants.
+  resource policies reject external or unverified principals and also deny
+  inverse `NotAction` grants, even when a principal is specific.
 - S3, SQS, and DynamoDB permissions also fail closed when a resource scope is
   unbounded. Exact resource ARNs remain usable; S3 object access may use the
   exact bucket's object suffix, and DynamoDB index access may use the exact
   table's index suffix. Broad buckets, queues, tables, and wildcard resource
   patterns are denied. Incomplete or unrecognized ARN shapes fail closed;
   IAM may expand omitted ARN fields to wildcards.
+- S3 bucket and SQS queue resource policies accept only same-account AWS
+  identities or verified AWS service principal shapes. Cross-account AWS
+  principals are currently denied; the source does not yet model an explicit
+  cross-account sharing contract or prove the other account's policy.
 - Regression tests exercise wildcard actions, inverse action/resource scopes,
-  incomplete and unbounded resource ARNs, and allowed exact bucket, object,
-  queue, table, and index scopes. Full local verification passed 1,398 tests,
+  external resource-policy principals, incomplete and unbounded resource ARNs,
+  and allowed exact bucket, object, queue, table, and index scopes. Full local
+  verification passed 1,400 tests,
   Ruff, Actions configuration, OpenAPI snapshot, and Compose validation.
 - This is source and local test evidence. No live customer role was available
   for authorization checks. It does not establish effective AWS permissions
@@ -666,6 +671,8 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   images are retained. This is local fixture evidence, not hosted customer
   apply or lifecycle proof.
 - References: [IAM ARN formats and wildcard behavior](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html),
+  [IAM policy principals](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html),
   [S3 IAM resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html),
+  [SQS cross-account access requirements](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-overview-of-managing-access.html),
   and [DynamoDB table/index IAM resources](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/iam-policy-specific-table-indexes.html).
 

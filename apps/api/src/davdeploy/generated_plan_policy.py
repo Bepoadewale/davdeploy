@@ -223,8 +223,8 @@ def _evaluate(
         document, resources, ownership_scope, findings, untagged_resource_ownership
     )
     _check_policy_critical_unknowns(document, findings)
-    _check_s3(document, resources, findings)
-    _check_sqs_queue_policies(resources, findings)
+    _check_s3(document, resources, findings, expected_account_id)
+    _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
     _check_iam(resources, findings, expected_account_id)
@@ -655,6 +655,7 @@ def _check_s3(
     document: dict[str, Any],
     resources: tuple[dict[str, Any], ...],
     findings: list[PlanPolicyFinding],
+    expected_account_id: str,
 ) -> None:
     buckets = {
         item.get("values", {}).get("bucket"): item
@@ -726,6 +727,15 @@ def _check_s3(
                         "s3_public_policy_denied",
                         address,
                         "The plan grants direct public access to storage. Serve public files through a private origin instead.",
+                    )
+                elif _has_unverified_resource_policy_principal(
+                    policy, expected_account_id
+                ):
+                    _deny(
+                        findings,
+                        "s3_unverified_policy_principal_denied",
+                        address,
+                        "The storage policy names an external or unverified principal.",
                     )
                 elif _has_not_action_allow(policy):
                     _deny(
@@ -1450,8 +1460,39 @@ def _has_not_action_allow(policy: dict[str, Any]) -> bool:
     )
 
 
+def _has_unverified_resource_policy_principal(
+    policy: dict[str, Any], expected_account_id: str
+) -> bool:
+    service_pattern = r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?"
+    for statement in _statements(policy, require_resource=True, require_principal=True):
+        if str(statement.get("Effect", "")).lower() != "allow" or "NotPrincipal" in statement:
+            continue
+        principal = statement.get("Principal")
+        if principal == "*":
+            continue
+        principals = principal if isinstance(principal, dict) else {"AWS": principal}
+        for principal_type, raw_values in principals.items():
+            values = _string_list(raw_values)
+            if not values or any("*" in value or "?" in value for value in values):
+                return True
+            if principal_type == "AWS":
+                if any(
+                    not _is_same_account_principal(value, expected_account_id)
+                    for value in values
+                ):
+                    return True
+            elif principal_type == "Service":
+                if any(not re.fullmatch(service_pattern, value) for value in values):
+                    return True
+            else:
+                return True
+    return False
+
+
 def _check_sqs_queue_policies(
-    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
 ) -> None:
     for item in resources:
         if item.get("type") != "aws_sqs_queue_policy":
@@ -1474,6 +1515,15 @@ def _check_sqs_queue_policies(
                     "sqs_public_policy_denied",
                     address,
                     "The plan grants public or unbounded access to an SQS queue.",
+                )
+            elif _has_unverified_resource_policy_principal(
+                policy, expected_account_id
+            ):
+                _deny(
+                    findings,
+                    "sqs_unverified_policy_principal_denied",
+                    address,
+                    "The queue policy names an external or unverified principal.",
                 )
             elif _has_not_action_allow(policy):
                 _deny(
