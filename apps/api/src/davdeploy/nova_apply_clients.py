@@ -15,6 +15,7 @@ from uuid import UUID
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
+from davdeploy.nova_apply_access import NOVA_APPLY_ACCESS_POLICY_VERSION
 from davdeploy.nova_apply_contract import (
     NovaApplyContractError,
     NovaApplyRequest,
@@ -37,6 +38,8 @@ class NovaApplyRoleCredentials:
     role_arn: str
     account_id: str
     region: str
+    policy_version: str
+    policy_sha256: str
     access_key_id: str = field(repr=False)
     secret_access_key: str = field(repr=False)
     session_token: str = field(repr=False)
@@ -98,6 +101,8 @@ def request_nova_apply_credentials(
     run_id: str,
     expected_account_id: str,
     expected_region: str,
+    expected_policy_version: str,
+    expected_policy_sha256: str,
     credentials,
     opener: Callable[..., object] = _open_without_redirects,
 ) -> NovaApplyRoleCredentials:
@@ -105,7 +110,9 @@ def request_nova_apply_credentials(
     _validate_identity(run_id, broker_url, CREDENTIAL_PATH)
     if not re.fullmatch(r"\d{12}", expected_account_id) or not re.fullmatch(
         r"[a-z]{2}(?:-[a-z0-9]+)+-\d", expected_region
-    ):
+    ) or expected_policy_version != NOVA_APPLY_ACCESS_POLICY_VERSION or re.fullmatch(
+        r"[a-f0-9]{64}", expected_policy_sha256
+    ) is None:
         raise NovaApplyApiError("trusted Nova apply target is invalid")
     raw = _signed_post(
         url=broker_url,
@@ -123,6 +130,8 @@ def request_nova_apply_credentials(
         expected_run_id=run_id,
         expected_account_id=expected_account_id,
         expected_region=expected_region,
+        expected_policy_version=expected_policy_version,
+        expected_policy_sha256=expected_policy_sha256,
     )
 
 
@@ -193,13 +202,23 @@ def _validate_credentials(
     expected_run_id: str,
     expected_account_id: str,
     expected_region: str,
+    expected_policy_version: str,
+    expected_policy_sha256: str,
 ) -> NovaApplyRoleCredentials:
     try:
         if str(UUID(expected_run_id)) != expected_run_id:
             raise ValueError
     except (AttributeError, TypeError, ValueError):
         raise NovaApplyApiError("durable apply run ID is invalid") from None
-    expected_fields = {"contract", "role_arn", "account_id", "region", "credentials"}
+    expected_fields = {
+        "contract",
+        "role_arn",
+        "account_id",
+        "region",
+        "policy_version",
+        "policy_sha256",
+        "credentials",
+    }
     if not isinstance(document, dict) or set(document) != expected_fields:
         raise NovaApplyApiError("Nova apply credential response shape is invalid")
     credentials = document.get("credentials")
@@ -215,6 +234,8 @@ def _validate_credentials(
         document.get("contract") != "davdeploy.nova-apply-credentials.v1"
         or document.get("account_id") != expected_account_id
         or document.get("region") != expected_region
+        or document.get("policy_version") != expected_policy_version
+        or document.get("policy_sha256") != expected_policy_sha256
         or not isinstance(role_arn, str)
         or re.fullmatch(
             rf"arn:aws:iam::{expected_account_id}:role/davdeployNovaApply-[A-Za-z0-9-]{{1,128}}",
@@ -247,6 +268,8 @@ def _validate_credentials(
         role_arn=role_arn,
         account_id=expected_account_id,
         region=expected_region,
+        policy_version=expected_policy_version,
+        policy_sha256=expected_policy_sha256,
         access_key_id=access_key,
         secret_access_key=secret_key,
         session_token=token,

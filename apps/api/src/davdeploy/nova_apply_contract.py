@@ -7,6 +7,7 @@ must repeat live authorization immediately before invoking this boundary.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,10 @@ from davdeploy.generated_plan_artifacts import (
     has_complete_pricing_evidence,
 )
 from davdeploy.generated_terraform_plan import MAX_EXECUTION_WORKSPACE_BYTES
+from davdeploy.nova_apply_access import (
+    MAX_SESSION_POLICY_BYTES,
+    NOVA_APPLY_ACCESS_POLICY_VERSION,
+)
 from davdeploy.terraform_state import terraform_state_scope_digest
 
 MAX_AUTHORIZATION_AGE = timedelta(minutes=5)
@@ -159,6 +164,7 @@ def validate_nova_apply_request(
     target = manifest.get("target")
     digests = manifest.get("digests")
     policy = manifest.get("policy")
+    apply_access = manifest.get("customer_apply_access")
     boundary = manifest.get("planning_boundary")
     if (
         not isinstance(tenant, dict)
@@ -166,8 +172,27 @@ def validate_nova_apply_request(
         or not isinstance(digests, dict)
         or not isinstance(policy, dict)
         or not isinstance(boundary, dict)
+        or not isinstance(apply_access, dict)
     ):
         raise NovaApplyContractError("Nova apply manifest is incomplete")
+    session_policy = apply_access.get("session_policy")
+    session_policy_sha256 = apply_access.get("session_policy_sha256")
+    if (
+        apply_access.get("status") != "READY"
+        or apply_access.get("version") != NOVA_APPLY_ACCESS_POLICY_VERSION
+        or not isinstance(session_policy, dict)
+        or session_policy.get("Version") != "2012-10-17"
+        or not isinstance(session_policy.get("Statement"), list)
+        or not isinstance(session_policy_sha256, str)
+        or not re.fullmatch(r"[a-f0-9]{64}", session_policy_sha256)
+        or len(json.dumps(session_policy, sort_keys=True, separators=(",", ":")).encode())
+        > MAX_SESSION_POLICY_BYTES
+        or hashlib.sha256(
+            json.dumps(session_policy, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        != session_policy_sha256
+    ):
+        raise NovaApplyContractError("approved-plan apply permission scope is unavailable")
     if (
         tenant.get("organization_id") != request.tenant.organization_id
         or tenant.get("project_id") != request.tenant.project_id

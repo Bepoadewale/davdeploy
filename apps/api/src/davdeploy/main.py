@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -92,6 +93,10 @@ from davdeploy.models import (
     TerraformRemoteState,
     TerraformStateCredential,
     TerraformStateLock,
+)
+from davdeploy.nova_apply_access import (
+    MAX_SESSION_POLICY_BYTES,
+    NOVA_APPLY_ACCESS_POLICY_VERSION,
 )
 from davdeploy.nova_apply_artifacts import NovaApplyArtifactError, stage_nova_apply_artifacts
 from davdeploy.nova_apply_contract import NovaApplyContractError, validate_nova_apply_request
@@ -996,16 +1001,45 @@ def issue_nova_apply_credentials(
     ):
         raise HTTPException(403, "Verified customer execution role is unavailable for this target")
 
+    apply_access = artifact.manifest.get("customer_apply_access")
+    session_policy = apply_access.get("session_policy") if isinstance(apply_access, dict) else None
+    policy_version = apply_access.get("version") if isinstance(apply_access, dict) else None
+    policy_sha256 = (
+        apply_access.get("session_policy_sha256") if isinstance(apply_access, dict) else None
+    )
+    try:
+        encoded_session_policy = json.dumps(
+            session_policy, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        encoded_session_policy = b""
+    if (
+        not isinstance(apply_access, dict)
+        or apply_access.get("status") != "READY"
+        or not isinstance(session_policy, dict)
+        or policy_version != NOVA_APPLY_ACCESS_POLICY_VERSION
+        or not isinstance(policy_sha256, str)
+        or hashlib.sha256(encoded_session_policy).hexdigest() != policy_sha256
+        or len(encoded_session_policy) > MAX_SESSION_POLICY_BYTES
+    ):
+        raise HTTPException(403, "Approved-plan apply permission scope is unavailable")
+
     role_session_name = f"davdeploy-nova-apply-{apply_run.runner_run_id}"
     try:
         external_id = configured_connection_secret_store().get_external_id(
             connection.external_id_secret_ref
         )
+        role_profile = StsAwsDiscovery().verify_apply_role(
+            connection.id, role_arn, external_id, artifact.region
+        )
+        if role_profile.account_id != artifact.target_account_id or role_profile.role_arn != role_arn:
+            raise PermissionError("customer apply role profile identity changed")
         assumed = boto3.client("sts").assume_role(
             RoleArn=role_arn,
             RoleSessionName=role_session_name,
             ExternalId=external_id,
             DurationSeconds=900,
+            Policy=encoded_session_policy.decode("utf-8"),
         )
         credentials = assumed.get("Credentials") if isinstance(assumed, dict) else None
         if not isinstance(credentials, dict):
@@ -1058,6 +1092,9 @@ def issue_nova_apply_credentials(
                 "account_id": artifact.target_account_id,
                 "region": artifact.region,
                 "execution_role_arn": role_arn,
+                "role_profile_version": role_profile.version,
+                "role_profile_sha256": role_profile.sha256,
+                "apply_session_policy_sha256": policy_sha256,
             },
         )
     )
@@ -1073,6 +1110,8 @@ def issue_nova_apply_credentials(
             "role_arn": role_arn,
             "account_id": artifact.target_account_id,
             "region": artifact.region,
+            "policy_version": policy_version,
+            "policy_sha256": policy_sha256,
             "credentials": {
                 "access_key_id": credentials["AccessKeyId"],
                 "secret_access_key": credentials["SecretAccessKey"],

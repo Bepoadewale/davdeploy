@@ -31,6 +31,10 @@ from davdeploy.generated_terraform_plan import (
     MAX_EXECUTION_WORKSPACE_BYTES,
     GeneratedTerraformPlan,
 )
+from davdeploy.nova_apply_access import (
+    MAX_SESSION_POLICY_BYTES,
+    NOVA_APPLY_ACCESS_POLICY_VERSION,
+)
 
 MAX_SAVED_PLAN_BYTES = 128 * 1024 * 1024
 NOVA_PLAN_OBJECT_PREFIX = "plans/nova-generated"
@@ -553,9 +557,9 @@ def generated_plan_manifest(
     pricing_summary = pricing_evidence_safe_summary(pricing_document)
     manifest = {
         "manifest_version": (
-            (13 if untagged_resources else 12 if remote_state is not None else 11)
+            (15 if untagged_resources else 14 if remote_state is not None else 13)
             if pricing_document is not None
-            else (9 if untagged_resources else 8 if remote_state is not None else 7)
+            else (12 if untagged_resources else 11 if remote_state is not None else 10)
         ),
         "tenant": {
             "organization_id": organization_id,
@@ -587,6 +591,12 @@ def generated_plan_manifest(
         "customer_plan_access": {
             "version": plan.plan_access_policy_version,
             "session_policy_sha256": plan.plan_access_policy_sha256,
+        },
+        "customer_apply_access": {
+            "status": "UNAVAILABLE",
+            "version": "UNAVAILABLE",
+            "session_policy_sha256": "0" * 64,
+            "session_policy": None,
         },
         "proposal_requirements": {
             "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
@@ -653,6 +663,30 @@ def generated_plan_manifest(
         manifest["summary"]["pricing"] = pricing_summary
         manifest["pricing"] = pricing_summary
         manifest["pricing_evidence"] = pricing_document
+    apply_policy_document = getattr(plan, "apply_access_policy_document", None)
+    apply_policy_version = getattr(plan, "apply_access_policy_version", "UNAVAILABLE")
+    apply_policy_sha256 = getattr(plan, "apply_access_policy_sha256", "0" * 64)
+    if (
+        isinstance(apply_policy_document, dict)
+        and apply_policy_version == NOVA_APPLY_ACCESS_POLICY_VERSION
+        and isinstance(apply_policy_sha256, str)
+        and re.fullmatch(r"[a-f0-9]{64}", apply_policy_sha256)
+    ):
+        encoded_apply_policy = json.dumps(
+            apply_policy_document, sort_keys=True, separators=(",", ":")
+        ).encode()
+        if (
+            len(encoded_apply_policy) <= MAX_SESSION_POLICY_BYTES
+            and hashlib.sha256(encoded_apply_policy).hexdigest() == apply_policy_sha256
+            and apply_policy_document.get("Version") == "2012-10-17"
+            and isinstance(apply_policy_document.get("Statement"), list)
+        ):
+            manifest["customer_apply_access"] = {
+                "status": "READY",
+                "version": apply_policy_version,
+                "session_policy_sha256": apply_policy_sha256,
+                "session_policy": apply_policy_document,
+            }
     if remote_state is not None:
         manifest["remote_state"] = remote_state
     if untagged_resources:

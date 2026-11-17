@@ -20,6 +20,11 @@ import jwt
 from botocore.exceptions import BotoCoreError, ClientError
 
 from davdeploy.domain import CloudInventorySnapshot
+from davdeploy.nova_apply_access import build_nova_apply_role_inspection_policy
+from davdeploy.nova_apply_role_profile import (
+    NovaApplyRoleProfile,
+    verify_nova_apply_role_profile,
+)
 from davdeploy.nova_plan_role_profile import (
     NovaPlanRoleProfile,
     build_nova_plan_role_inspection_policy,
@@ -968,6 +973,57 @@ class StsAwsDiscovery:
             role_arn=role_arn,
             connection_id=connection_id,
             account_id=account_id,
+            broker_role_arn=broker_role_arn,
+            external_id=external_id,
+        )
+
+    def verify_apply_role(
+        self, connection_id: str, role_arn: str, external_id: str, region: str
+    ) -> NovaApplyRoleProfile:
+        """Verify the apply role profile using temporary role-scoped IAM reads."""
+        broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN", "").strip()
+        if not broker_role_arn:
+            raise RuntimeError("the discovery broker role identity is not configured")
+        role_match = re.fullmatch(
+            r"arn:aws:iam::(\d{12}):role/davdeployNovaApply-([A-Za-z0-9-]{8,40})",
+            role_arn,
+        )
+        if not role_match or role_match.group(2) != connection_id:
+            raise PermissionError("apply role ARN does not match the customer connection")
+        expected_account_id = role_match.group(1)
+        sts = self.session.client("sts", region_name=region)
+        assumed = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName=f"davdeploy-apply-verify-{connection_id[:8]}",
+            ExternalId=external_id,
+            DurationSeconds=900,
+            Policy=json.dumps(
+                build_nova_apply_role_inspection_policy(role_arn),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )["Credentials"]
+        customer = boto3.Session(
+            aws_access_key_id=assumed["AccessKeyId"],
+            aws_secret_access_key=assumed["SecretAccessKey"],
+            aws_session_token=assumed["SessionToken"],
+            region_name=region,
+        )
+        identity = customer.client("sts").get_caller_identity()
+        expected_session_arn = (
+            f"arn:aws:sts::{expected_account_id}:assumed-role/"
+            f"davdeployNovaApply-{connection_id}/davdeploy-apply-verify-{connection_id[:8]}"
+        )
+        if (
+            not isinstance(identity, dict)
+            or identity.get("Account") != expected_account_id
+            or identity.get("Arn") != expected_session_arn
+        ):
+            raise PermissionError("assumed apply role has no valid AWS account identity")
+        return verify_nova_apply_role_profile(
+            customer.client("iam"),
+            account_id=expected_account_id,
+            connection_id=connection_id,
             broker_role_arn=broker_role_arn,
             external_id=external_id,
         )

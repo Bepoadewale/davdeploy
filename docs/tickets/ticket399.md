@@ -84,6 +84,11 @@ untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
   enabled, issues temporary credentials only to the exact active apply build
   after rechecking current approval, pricing evidence, target role, and AWS
   caller identity. Credentials are audited and returned with no-store headers.
+- [x] Source now checks the dedicated customer's exact apply-role profile at
+  credential issuance and supplies a saved-plan-derived STS session policy
+  for the explicitly mapped S3 bucket, SQS queue, and DynamoDB table types.
+  Unsupported resource/action mappings fail closed. This does not attest every
+  AWS effective-permission source or cover every Terraform provider resource.
 - [x] Apply remains disabled by default and no AWS apply/deployment occurred
   during this source-only work.
 - [ ] Focused tests, full verification, clean-room proof, Terraform validation,
@@ -270,12 +275,53 @@ AWS deployment or workload mutation is authorized by this PR.
 ## Follow-up work
 
 Trusted pricing is now integrated for the currently supported proposal
-profiles. The next apply dependency is a dedicated customer apply role whose
-effective permissions are checked at credential issuance and constrained to
-the approved Terraform plan. The current broker derives the role ARN and
-checks its account/session identity, but it does not attest or scope the role's
-permissions. Keep both apply gates disabled until that permission boundary and
-the full hosted lifecycle evidence are complete.
+profiles. Source now contains a dedicated role profile check and a plan-derived
+session policy for the mapped services below. Provisioning and independent
+verification of a real customer role, broader effective-permission analysis,
+and the full hosted lifecycle evidence remain outstanding. Keep both apply
+gates disabled until those gates are met.
+
+### Plan-scoped customer role profile — 2026-11-17
+
+- The source provisions no role. A standalone customer CloudFormation template
+  describes a dedicated `davdeployNovaApply-<connection-id>` role with exact
+  broker trust, ExternalId, ownership tags, and one fixed inline permission
+  ceiling. Broker code assumes the customer role with a role-scoped inspection
+  policy and checks the returned account/session identity, trust, tags, session
+  duration, boundary, attached policies, and exact inline policy immediately
+  before issuing apply credentials.
+- Saved Terraform plan JSON is mapped to an inline STS session policy only for
+  S3 buckets and listed bucket subresources, SQS queues, and DynamoDB tables.
+  Replacement policies scope deletion to the old resource ARN and creation to
+  the new ARN. Embedded S3 bucket configuration outside the mapped tag/create
+  operations, forced bucket deletion, unsupported types/actions, unscopable
+  names, empty apply plans, and policies over the STS 2,048-byte limit are
+  marked unavailable. The credential path requires a ready versioned policy
+  whose canonical SHA-256 matches the approved manifest. The worker checks the
+  broker response carries that same policy version and digest.
+- The CloudFormation action ceiling and broker profile are asserted to match.
+  Profile verification is a bounded source check, not a complete effective
+  permissions attestation: it does not inspect organization SCP/RCP policy,
+  resource-based grants, or every service-level authorization nuance. No
+  customer role was provisioned or assumed, and no AWS mutation occurred.
+- References: [STS AssumeRole session policies](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html),
+  [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html),
+  [required S3 API permissions](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-policy-actions.html),
+  [Terraform plan JSON format](https://developer.hashicorp.com/terraform/internals/json-format),
+  and the pinned AWS provider v5.100.0 resource implementations for
+  [S3 buckets](https://github.com/hashicorp/terraform-provider-aws/blob/v5.100.0/internal/service/s3/bucket.go),
+  [SQS queues](https://github.com/hashicorp/terraform-provider-aws/blob/v5.100.0/internal/service/sqs/queue.go),
+  and [DynamoDB tables](https://github.com/hashicorp/terraform-provider-aws/blob/v5.100.0/internal/service/dynamodb/table.go).
+- Focused tests passed (94); full `make verify` passed 1,366 tests and its
+  Ruff, Actions configuration, OpenAPI, and Compose checks. All configured
+  Terraform roots validated, recursive Terraform formatting, documentation
+  conventions, and `git diff --check` passed. Hosted CI for this new head is
+  pending.
+- Apply and broker gates remain disabled. No role, credential, apply build,
+  customer workload, or hosted control-plane change was performed. The local
+  clean-room cycle remains unrun; its cleanup step would remove retained local
+  artifacts without the required explicit deletion approval. Hosted CI's
+  clean-runner checks remain required but do not prove AWS behavior.
 
 
 ## Hosted handoff update — 2026-11-14

@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from davdeploy.nova_apply_access import NOVA_APPLY_ACCESS_POLICY_VERSION
 from davdeploy.nova_apply_clients import (
     NovaApplyApiError,
     request_nova_apply_credentials,
@@ -117,6 +118,8 @@ def test_credential_client_validates_role_account_and_short_lifetime():
         "role_arn": f"arn:aws:iam::{ACCOUNT}:role/davdeployNovaApply-connection-1",
         "account_id": ACCOUNT,
         "region": REGION,
+        "policy_version": NOVA_APPLY_ACCESS_POLICY_VERSION,
+        "policy_sha256": "a" * 64,
         "credentials": {
             "access_key_id": "ASIA" + "B" * 16,
             "secret_access_key": "S" * 40,
@@ -130,6 +133,8 @@ def test_credential_client_validates_role_account_and_short_lifetime():
         run_id=RUN_ID,
         expected_account_id=ACCOUNT,
         expected_region=REGION,
+        expected_policy_version=NOVA_APPLY_ACCESS_POLICY_VERSION,
+        expected_policy_sha256="a" * 64,
         credentials=Credentials(),
         opener=lambda *_args, **_kwargs: Response(document),
     )
@@ -145,6 +150,8 @@ def test_credential_client_rejects_wrong_account():
         "role_arn": "arn:aws:iam::111111111111:role/davdeployNovaApply-connection-1",
         "account_id": "111111111111",
         "region": REGION,
+        "policy_version": NOVA_APPLY_ACCESS_POLICY_VERSION,
+        "policy_sha256": "a" * 64,
         "credentials": {
             "access_key_id": "ASIA" + "B" * 16,
             "secret_access_key": "S" * 40,
@@ -158,6 +165,8 @@ def test_credential_client_rejects_wrong_account():
             run_id=RUN_ID,
             expected_account_id=ACCOUNT,
             expected_region=REGION,
+            expected_policy_version=NOVA_APPLY_ACCESS_POLICY_VERSION,
+            expected_policy_sha256="a" * 64,
             credentials=Credentials(),
             opener=lambda *_args, **_kwargs: Response(document),
         )

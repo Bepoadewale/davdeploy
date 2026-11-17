@@ -30,6 +30,7 @@ from davdeploy.models import (
     TerraformStateLock,
     TerraformStateWrite,
 )
+from davdeploy.nova_apply_access import build_nova_apply_access_policy
 from davdeploy.nova_apply_contract import ApplyArtifactObject, validate_nova_apply_request
 from davdeploy.terraform_state import (
     TerraformStateError,
@@ -515,6 +516,24 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         persisted_context_sha256="b" * 64,
     )
     pricing_document = pricing_evidence.as_manifest_document()
+    apply_access = build_nova_apply_access_policy(
+        {
+            "resource_changes": [
+                {
+                    "mode": "managed",
+                    "type": "aws_s3_bucket",
+                    "address": "aws_s3_bucket.example",
+                    "change": {
+                        "actions": ["create"],
+                        "before": None,
+                        "after": {"bucket": "nova-test-bucket"},
+                    },
+                }
+            ]
+        },
+        account_id=account_id,
+        region=region,
+    )
     plan_sha256 = "2" * 64
     workspace_sha256 = "6" * 64
     artifact_bucket = "davdeploy-plans-654654474502"
@@ -555,6 +574,12 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         "remote_state": {"state_id": state_id, "scope_sha256": state_scope},
         "pricing": pricing_evidence.safe_summary(),
         "pricing_evidence": pricing_document,
+        "customer_apply_access": {
+            "status": "READY",
+            "version": apply_access.version,
+            "session_policy_sha256": apply_access.sha256,
+            "session_policy": apply_access.document,
+        },
         "policy": {"human_approval_required": True, "verdict": "REVIEW_REQUIRED"},
         "planning_boundary": {"approval_allowed": True, "execution_allowed": True},
         "artifact": {
@@ -925,6 +950,18 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
             "client",
             lambda name, **_kwargs: codebuild if name == "codebuild" else fake_sts,
         )
+        monkeypatch.setattr(
+            main,
+            "StsAwsDiscovery",
+            lambda: SimpleNamespace(
+                verify_apply_role=lambda _connection_id, role_arn, _external_id, _region: SimpleNamespace(
+                    account_id=account_id,
+                    role_arn=role_arn,
+                    version="nova-apply-role-profile.v1",
+                    sha256="a" * 64,
+                )
+            ),
+        )
         monkeypatch.setattr(main.boto3, "Session", FakeSession)
         apply_credentials = client.post(
             "/api/v1/nova-apply/credentials",
@@ -938,6 +975,8 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
             "role_arn": f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}",
             "account_id": account_id,
             "region": region,
+            "policy_version": apply_access.version,
+            "policy_sha256": apply_access.sha256,
             "credentials": {
                 "access_key_id": "ASIAEXAMPLE",
                 "secret_access_key": "secret-example",
@@ -951,6 +990,9 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
                 "RoleSessionName": f"davdeploy-nova-apply-{apply_run_id}",
                 "ExternalId": "customer-external-id",
                 "DurationSeconds": 900,
+                "Policy": json.dumps(
+                    apply_access.document, sort_keys=True, separators=(",", ":")
+                ),
             }
         ]
         apply_event = db.scalar(

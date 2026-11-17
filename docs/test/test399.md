@@ -330,3 +330,51 @@ Fresh-head hosted CI is required after push.
   documentation conventions, and `git diff --check` passed. One existing
   Starlette/httpx deprecation warning remains.
 
+## Plan-scoped apply role source checks — 2026-11-17
+
+- Execution type: local tests, static infrastructure checks, and read-only AWS
+  inventory only. The checks ran against the PR #399 synchronized worktree;
+  no customer role or permission policy was installed or assumed.
+- The source builds a per-plan STS session policy for mapped S3 bucket,
+  bucket-subresource, SQS queue, and DynamoDB table changes. It rejects
+  unsupported types/actions, unscopable names, empty mutation plans, and
+  policies over 2,048 bytes. Replacement tests confirm the old ARN receives
+  delete actions and the new ARN receives create actions. The dedicated role
+  verifier checks exact broker trust and ExternalId, tags, role identity,
+  session duration, no boundary or managed policies, and the fixed inline
+  policy. The template and broker policy action ceilings are tested for drift.
+- The base S3 bucket resource includes its provider's bucket-scoped read
+  permissions, permits bucket create/tag/delete operations only, and rejects
+  changed embedded settings outside that map or `force_destroy` deletion.
+- S3 deletion operations use their documented IAM authorization action; for
+  example, deleting bucket CORS, lifecycle, ownership, public-access-block,
+  and encryption settings is authorized with the corresponding `Put...`
+  permission. See [AWS's S3 API permission reference](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-policy-actions.html).
+- Focused command: `python -m pytest -q tests/test_nova_apply_access.py
+  tests/test_nova_apply_role_profile.py tests/test_nova_apply_contract.py
+  tests/test_nova_apply_clients.py tests/test_nova_apply_codebuild.py
+  tests/test_generated_plan_artifacts.py tests/test_nova_plan_codebuild.py
+  tests/test_terraform_state.py::test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build
+  tests/test_nova_exact_plan_apply_infra.py` — 94 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`
+  passed 1,366 tests, Ruff, Actions configuration, OpenAPI snapshot, and
+  Compose configuration. `make terraform-validate` passed all configured
+  roots. Recursive Terraform formatting, documentation conventions, and
+  `git diff --check` passed.
+- AWS CloudFormation `validate-template` parsed the customer role template;
+  this validated template syntax only and created or changed no AWS resource.
+- This profile check is not a complete AWS effective-permissions attestation;
+  it does not inspect organization SCP/RCP policy, resource-based grants, or
+  all service authorization behavior. Only the mapped resource families can
+  receive an apply session policy; unsupported plans remain uncredentialed.
+- AWS account `654654474502` was rechecked read-only in `us-east-1`; the
+  matching SageMaker endpoint/model/configuration queries were empty and four
+  tagged Batch test definitions remained INACTIVE. The Terraform monitor
+  registry was empty. SageMaker lineage evidence was preserved. No AWS
+  resource, lineage record, credential, apply build, or control-plane state was
+  changed. Apply and credential-broker gates remain off.
+- Hosted CI for this source head is pending. The full local clean-room cycle
+  was not run because its cleanup would delete retained artifacts without
+  current explicit deletion approval. No customer workload was applied or
+  certified.
+

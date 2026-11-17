@@ -206,14 +206,25 @@ def run_nova_apply_build(
 
     _revalidate_request(request, run_id, project_name, build_arn, bucket, clock())
     credential_fetch = credential_requester or request_nova_apply_credentials
+    apply_access = request.manifest.get("customer_apply_access")
+    if not isinstance(apply_access, dict):
+        raise NovaApplyBuildError("approved-plan apply permission scope is unavailable")
     try:
         customer_credentials = credential_fetch(
             broker_url=credential_url,
             run_id=run_id,
             expected_account_id=request.target_account_id,
             expected_region=request.region,
+            expected_policy_version=apply_access.get("version"),
+            expected_policy_sha256=apply_access.get("session_policy_sha256"),
             credentials=base_credentials,
         )
+        if (
+            customer_credentials.policy_version != apply_access.get("version")
+            or customer_credentials.policy_sha256
+            != apply_access.get("session_policy_sha256")
+        ):
+            raise NovaApplyBuildError("credential broker apply permission scope did not match")
         _verify_customer_identity(customer_credentials, request, run_id)
         _require_execution_credentials_lifetime(
             customer_credentials.expires_at,

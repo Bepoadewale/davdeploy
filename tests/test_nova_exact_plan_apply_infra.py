@@ -53,7 +53,8 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
     api_policy = block(MAIN, 'resource "aws_iam_role_policy" "api"')
     assert "var.enable_nova_exact_plan_apply_credential_broker ? [{" in api_policy
     assert "role/davdeployNovaApply-*" in api_policy
-    assert '"sts:RoleSessionName" = "davdeploy-nova-apply-*"' in api_policy
+    assert '"davdeploy-apply-verify-*"' in api_policy
+    assert '"davdeploy-nova-apply-*"' in api_policy
     apply_integration = block(
         MAIN,
         'resource "aws_apigatewayv2_integration" "nova_exact_plan_apply_credentials"',

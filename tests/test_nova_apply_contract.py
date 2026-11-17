@@ -10,6 +10,7 @@ from davdeploy.generated_plan_artifacts import (
     canonical_json_digest,
 )
 from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
+from davdeploy.nova_apply_access import build_nova_apply_access_policy
 from davdeploy.nova_apply_contract import (
     NovaApplyContractError,
     validate_nova_apply_request,
@@ -62,6 +63,24 @@ def _request_document(*, now: datetime | None = None) -> dict:
         persisted_context_sha256="d" * 64,
     )
     pricing_document = pricing_evidence.as_manifest_document()
+    apply_access = build_nova_apply_access_policy(
+        {
+            "resource_changes": [
+                {
+                    "mode": "managed",
+                    "type": "aws_s3_bucket",
+                    "address": "aws_s3_bucket.example",
+                    "change": {
+                        "actions": ["create"],
+                        "before": None,
+                        "after": {"bucket": "nova-test-bucket"},
+                    },
+                }
+            ]
+        },
+        account_id="654654474502",
+        region="us-east-1",
+    )
     manifest = {
         "tenant": {
             "organization_id": organization_id,
@@ -90,6 +109,12 @@ def _request_document(*, now: datetime | None = None) -> dict:
         "policy": {
             "verdict": "REVIEW_REQUIRED",
             "human_approval_required": True,
+        },
+        "customer_apply_access": {
+            "status": "READY",
+            "version": apply_access.version,
+            "session_policy_sha256": apply_access.sha256,
+            "session_policy": apply_access.document,
         },
         "planning_boundary": {"approval_allowed": True, "execution_allowed": True},
         "pricing": pricing_evidence.safe_summary(),

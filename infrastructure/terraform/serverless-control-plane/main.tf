@@ -298,8 +298,11 @@ resource "aws_iam_role_policy" "api" {
         Resource = "arn:aws:iam::*:role/davdeployNovaApply-*"
         Condition = {
           StringLike = {
-            "sts:ExternalId"      = "?*"
-            "sts:RoleSessionName" = "davdeploy-nova-apply-*"
+            "sts:ExternalId" = "?*"
+            "sts:RoleSessionName" = [
+              "davdeploy-apply-verify-*",
+              "davdeploy-nova-apply-*",
+            ]
           }
         }
       }] : [],
