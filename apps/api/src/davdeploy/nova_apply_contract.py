@@ -11,6 +11,7 @@ import json
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -82,6 +83,8 @@ class NovaApplyRequest(StrictApplyModel):
     approval: ApplyApprovalBinding
     saved_plan: ApplyArtifactObject
     execution_workspace: ApplyWorkspaceObject
+    staged_saved_plan: ApplyArtifactObject | None = None
+    staged_execution_workspace: ApplyWorkspaceObject | None = None
     authorization: ApplyAuthorization
 
 
@@ -97,6 +100,7 @@ def validate_nova_apply_request(
     expected_codebuild_build_arn: str,
     expected_artifact_bucket: str,
     now: datetime | None = None,
+    require_staged_artifacts: bool = False,
 ) -> NovaApplyRequest:
     """Validate the only request shape an exact-plan apply worker may accept.
 
@@ -264,6 +268,31 @@ def validate_nova_apply_request(
         or plan_build_arn != workspace_build_arn
     ):
         raise NovaApplyContractError("Nova apply artifacts do not belong to this source plan")
+
+    staged_plan = request.staged_saved_plan
+    staged_workspace = request.staged_execution_workspace
+    if require_staged_artifacts and (staged_plan is None or staged_workspace is None):
+        raise NovaApplyContractError("Nova apply artifacts are not isolated to the active build")
+    if staged_plan is not None or staged_workspace is not None:
+        if staged_plan is None or staged_workspace is None:
+            raise NovaApplyContractError("Nova apply staged artifact pair is incomplete")
+        expected_staged_prefix = (
+            "plans/nova-generated/apply-builds/"
+            f"{quote(request.codebuild_build_arn, safe=':/-_')}/artifacts/{request.run_id}/"
+        )
+        if (
+            staged_plan.bucket != expected_artifact_bucket
+            or staged_workspace.bucket != expected_artifact_bucket
+            or staged_plan.key != expected_staged_prefix + "saved.tfplan"
+            or staged_workspace.key != expected_staged_prefix + "execution-workspace.tar.gz"
+            or staged_plan.version_id == "null"
+            or staged_workspace.version_id == "null"
+            or staged_plan.sha256 != request.saved_plan.sha256
+            or staged_workspace.sha256 != request.execution_workspace.sha256
+            or staged_plan.size_bytes != request.saved_plan.size_bytes
+            or staged_workspace.size_bytes != request.execution_workspace.size_bytes
+        ):
+            raise NovaApplyContractError("Nova apply staged artifact binding is invalid")
 
     current = now or datetime.now(UTC)
     if current.tzinfo is None:

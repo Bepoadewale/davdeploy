@@ -13,16 +13,16 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is now `f89a4018b31c14e8a060065045169644dc422c57` after PR #416;
-merged-main CI run `43961573351` passed all seven jobs. Mainline adds bounded
-regional price evidence for supported S3, SQS, RDS MySQL, Lambda/API, and
-DynamoDB configurations, plus lifecycle-bound review assumptions. This is
-still partial coverage: material unsupported or unpriced resources block
-approval, and PR #318 remains closed/held. The latest documented hosted
-control-plane release is PR #411 (apply run `43685318088`); this PR remains
-source-only, disabled, and not applied. No Nova customer workload has been
-applied. The protected untracked `--only-show-errors` and `.venv-pr399/` must
-remain untouched.
+Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` after PRs #417–#420;
+merged-main checks passed. PR #399 is based on that commit through merge
+commit `57f061f24cbb98dba12edd6b7a0e99406f9d5398`; its latest committed head
+is `9fbd9692793925879b33279953648a0de8cf5541`. Mainline has bounded regional
+price evidence for supported S3, SQS, RDS MySQL, Lambda/API, and DynamoDB
+configurations, but material unsupported or unpriced resources still block
+approval and PR #318 remains closed/held. The latest documented hosted release
+is PR #411; this PR remains source-only, disabled, and unapplied. No Nova
+customer workload has been applied. The protected untracked `--only-show-errors`
+and `.venv-pr399/` must remain untouched.
 
 ## Research / references used
 
@@ -334,4 +334,35 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   generated `.venv`, `.local`, Compose containers, network, and volume; those
   deletions are not approved. No AWS call, deployment, apply, or customer
   workload action occurred.
+
+## 2026-11-17 apply-input and artifact-isolation follow-up
+
+- Added the internal `POST /api/v1/nova-apply/input` contract. It rechecks the
+  fixed active CodeBuild build, current approved manifest and pricing,
+  administrators, request digest, exact artifact versions, tenant state scope,
+  and a five-minute authorization window. The response is audited and
+  no-store. API Gateway IAM authentication supplies the trusted caller identity.
+- The API stages only those exact source plan/workspace versions to encrypted,
+  versioned keys under the active apply build. It validates the source
+  object's owner, version, KMS key, SHA-256 checksum, run ID, and manifest
+  digest before copying; destination metadata binds the apply run and source
+  object version. An audit record is committed before staging.
+- The apply CodeBuild role now reads staged artifacts only within its own
+  build prefix. It no longer has S3 read access to all source plan artifacts.
+  The API's copy permission is limited to saved plans/workspaces and staged
+  keys; the build role still has no Terraform-specific AWS permissions.
+- Local focused checks passed (23 tests), including source metadata rejection,
+  exact staged-prefix validation, workspace restore, active-run API contract,
+  and Terraform IAM assertions. `make verify
+  VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed (1,301 tests),
+  and `make terraform-validate` passed for all configured roots. Ruff,
+  documentation conventions, Terraform formatting, OpenAPI, Compose config,
+  and `git diff --check` passed. GitHub CI run `43988367335` passed all seven
+  jobs on the preceding commit; a fresh-head run is required after this change.
+- This is not yet an executable apply worker: the CodeBuild buildspec remains
+  fail-closed, and role provisioning, Terraform execution, callback
+  reconciliation, application health, update/recovery, destroy, and absence
+  evidence remain unmet. Feature and credential gates remain disabled; no real
+  artifacts were copied, credentials issued, CodeBuild apply started, or AWS
+  resources changed.
 

@@ -156,6 +156,47 @@ def test_accepts_exact_fresh_priced_approval_and_both_artifact_versions():
     assert accepted.execution_workspace.version_id == "workspace-version-1"
 
 
+def test_requires_staged_artifacts_to_match_only_the_active_apply_build():
+    document = _request_document()
+    prefix = (
+        "plans/nova-generated/apply-builds/"
+        f"{document['codebuild_build_arn']}/artifacts/{document['run_id']}/"
+    )
+    document["staged_saved_plan"] = {
+        **document["saved_plan"],
+        "key": prefix + "saved.tfplan",
+        "version_id": "staged-plan-version",
+    }
+    document["staged_execution_workspace"] = {
+        **document["execution_workspace"],
+        "key": prefix + "execution-workspace.tar.gz",
+        "version_id": "staged-workspace-version",
+    }
+
+    accepted = validate_nova_apply_request(
+        document,
+        expected_run_id=document["run_id"],
+        expected_codebuild_project=document["codebuild_project"],
+        expected_codebuild_build_arn=document["codebuild_build_arn"],
+        expected_artifact_bucket="davdeploy-plans-654654474502",
+        require_staged_artifacts=True,
+    )
+    assert accepted.staged_saved_plan.key == prefix + "saved.tfplan"
+
+    document["staged_execution_workspace"]["key"] = (
+        document["staged_execution_workspace"]["key"].replace(document["run_id"], str(uuid4()))
+    )
+    with pytest.raises(NovaApplyContractError, match="staged artifact binding"):
+        validate_nova_apply_request(
+            document,
+            expected_run_id=document["run_id"],
+            expected_codebuild_project=document["codebuild_project"],
+            expected_codebuild_build_arn=document["codebuild_build_arn"],
+            expected_artifact_bucket="davdeploy-plans-654654474502",
+            require_staged_artifacts=True,
+        )
+
+
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [

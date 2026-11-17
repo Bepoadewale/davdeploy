@@ -46,6 +46,9 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
         'DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = '
         'tostring(var.enable_nova_exact_plan_apply_credential_broker)'
     ) in " ".join(MAIN.split())
+    runtime_env = block(MAIN, "locals {\n  runtime_environment = {")
+    assert "DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER" in runtime_env
+    assert "DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN" in runtime_env
     api_policy = block(MAIN, 'resource "aws_iam_role_policy" "api"')
     assert "var.enable_nova_exact_plan_apply_credential_broker ? [{" in api_policy
     assert "role/davdeployNovaApply-*" in api_policy
@@ -108,10 +111,20 @@ def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> No
     assert '"s3:GetObjectVersion"' in policy
     assert "local.nova_exact_plan_apply_scoped_plan_key" in policy
     assert "local.nova_exact_plan_apply_scoped_workspace_key" in policy
+    assert "plans/nova-generated/builds/*" not in policy
     assert '"codebuild:BuildArn"' in policy
     assert "/POST/api/v1/nova-apply/credentials" in policy
     assert "/POST/api/v1/nova-apply/input" in policy
     assert "/POST/api/v1/terraform-state/credentials" in policy
+
+    api_artifacts = block(
+        MAIN,
+        'resource "aws_iam_role_policy" "api_nova_exact_plan_apply_artifacts"',
+    )
+    assert "local.nova_plan_only_build_saved_plan_key" in api_artifacts
+    assert "local.nova_plan_only_build_workspace_key" in api_artifacts
+    assert "local.nova_exact_plan_apply_staged_plan_key" in api_artifacts
+    assert "local.nova_exact_plan_apply_staged_workspace_key" in api_artifacts
 
 
 def test_apply_dispatch_uses_only_durable_run_id_and_denies_build_overrides() -> None:

@@ -224,3 +224,28 @@ Fresh-head hosted CI is required after push.
   Terraform roots, documentation conventions, formatting, and diff checks.
   These tests used mocks and did not exercise AWS or CodeBuild.
 
+## 2026-11-17 apply artifact isolation
+
+- Execution type: local unit and infrastructure-contract tests only. No AWS
+  request, artifact copy, customer credentials, CodeBuild apply, or workload
+  mutation occurred.
+- The apply input route now copies the approved saved-plan and workspace object
+  versions into the active build's versioned, KMS-encrypted artifact prefix.
+  Source version, digest, checksum, run identity, owner, and encryption are
+  checked. Staging is recorded in the audit log before the copy. The apply
+  CodeBuild IAM policy can read only this build-specific staged prefix, not
+  other tenants' source artifacts.
+- Focused validation passed: 23 tests across `test_nova_apply_artifacts.py`,
+  `test_nova_apply_contract.py`, `test_nova_apply_workspace.py`, the active
+  apply input/state route, and `test_nova_exact_plan_apply_infra.py`. Ruff
+  passed on all changed Python files.
+- `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed
+  (1,301 tests); `make terraform-validate` passed all configured roots.
+  Documentation conventions, Terraform format, OpenAPI snapshot, Compose
+  configuration, Ruff, and `git diff --check` passed. GitHub CI run
+  `43988367335` passed all seven jobs on the preceding commit; fresh-head CI
+  remains required after this change.
+- This provides source evidence only. The apply buildspec still fails closed;
+  no fixed worker execution, AWS apply, application health, recovery, destroy,
+  or independent absence evidence is established.
+

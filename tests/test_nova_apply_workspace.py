@@ -130,32 +130,57 @@ def _prepared_request(tmp_path: Path):
     request_document["approval"]["approved_manifest_sha256"] = manifest_sha
     request_document["saved_plan"] = plan
     request_document["execution_workspace"] = workspace
+    staged_prefix = (
+        "plans/nova-generated/apply-builds/"
+        f"{request_document['codebuild_build_arn']}/artifacts/{request_document['run_id']}/"
+    )
+    staged_plan = {
+        **plan,
+        "key": staged_prefix + "saved.tfplan",
+        "version_id": "staged-plan-version",
+    }
+    staged_workspace = {
+        **workspace,
+        "key": staged_prefix + "execution-workspace.tar.gz",
+        "version_id": "staged-workspace-version",
+    }
+    request_document["staged_saved_plan"] = staged_plan
+    request_document["staged_execution_workspace"] = staged_workspace
     request = validate_nova_apply_request(
         request_document,
         expected_run_id=request_document["run_id"],
         expected_codebuild_project=request_document["codebuild_project"],
         expected_codebuild_build_arn=request_document["codebuild_build_arn"],
         expected_artifact_bucket=BUCKET,
+        require_staged_artifacts=True,
     )
     objects = {
-        (BUCKET, plan["key"], plan["version_id"]): (
+        (BUCKET, staged_plan["key"], staged_plan["version_id"]): (
             PLAN_BYTES,
             {
-                "version_id": plan["version_id"],
+                "version_id": staged_plan["version_id"],
                 "metadata": {
                     "davdeploy-plan-sha256": plan_sha,
-                    "davdeploy-run-id": source_plan_run_id,
+                    "davdeploy-run-id": request_document["run_id"],
+                    "davdeploy-source-run-id": source_plan_run_id,
+                    "davdeploy-source-version-sha256": hashlib.sha256(
+                        plan["version_id"].encode()
+                    ).hexdigest(),
                 },
                 "checksum_sha256": plan_sha,
             },
         ),
-        (BUCKET, workspace["key"], workspace["version_id"]): (
+        (BUCKET, staged_workspace["key"], staged_workspace["version_id"]): (
             workspace_bytes,
             {
-                "version_id": workspace["version_id"],
+                "version_id": staged_workspace["version_id"],
                 "metadata": {
                     "davdeploy-workspace-sha256": workspace_sha,
-                    "davdeploy-run-id": source_plan_run_id,
+                    "davdeploy-run-id": request_document["run_id"],
+                    "davdeploy-source-run-id": source_plan_run_id,
+                    "davdeploy-source-version-sha256": hashlib.sha256(
+                        workspace["version_id"].encode()
+                    ).hexdigest(),
                 },
             },
         ),
@@ -188,7 +213,11 @@ def test_prepares_only_exact_encrypted_plan_and_workspace_versions(tmp_path):
 
 def test_refuses_tampered_plan_bytes_after_exact_s3_version_read(tmp_path):
     request, objects, _ = _prepared_request(tmp_path)
-    plan_key = (request.saved_plan.bucket, request.saved_plan.key, request.saved_plan.version_id)
+    plan_key = (
+        request.staged_saved_plan.bucket,
+        request.staged_saved_plan.key,
+        request.staged_saved_plan.version_id,
+    )
     _old_bytes, metadata = objects[plan_key]
     objects[plan_key] = (b"x" * len(PLAN_BYTES), metadata)
 
@@ -204,7 +233,11 @@ def test_refuses_tampered_plan_bytes_after_exact_s3_version_read(tmp_path):
 
 def test_refuses_mismatched_encryption_metadata(tmp_path):
     request, objects, _ = _prepared_request(tmp_path)
-    plan_key = (request.saved_plan.bucket, request.saved_plan.key, request.saved_plan.version_id)
+    plan_key = (
+        request.staged_saved_plan.bucket,
+        request.staged_saved_plan.key,
+        request.staged_saved_plan.version_id,
+    )
     plan_bytes, metadata = objects[plan_key]
     metadata["metadata"]["davdeploy-plan-sha256"] = "d" * 64
 

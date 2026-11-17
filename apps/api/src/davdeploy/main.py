@@ -92,6 +92,7 @@ from davdeploy.models import (
     TerraformStateCredential,
     TerraformStateLock,
 )
+from davdeploy.nova_apply_artifacts import NovaApplyArtifactError, stage_nova_apply_artifacts
 from davdeploy.nova_apply_contract import NovaApplyContractError, validate_nova_apply_request
 from davdeploy.nova_plan_access import NovaPlanAccessError, build_nova_plan_access_policy
 from davdeploy.nova_plan_codebuild import NovaPlanBuildError, _validate_input_document
@@ -1215,6 +1216,49 @@ def get_nova_apply_input(
 
     if not isinstance(principal_arn, str) or len(principal_arn) > 160:
         raise HTTPException(403, "Authenticated CodeBuild identity cannot be recorded safely")
+    db.add(
+        AuditEvent(
+            organization_id=apply_run.organization_id,
+            actor_subject=principal_arn,
+            action="nova_apply_artifact_staging.requested",
+            entity_type="generated_plan_apply_run",
+            entity_id=apply_run.id,
+            detail={
+                "codebuild_build_arn": builds[0].get("arn"),
+                "manifest_sha256": apply_run.manifest_sha256,
+                "source_plan_run_id": source_run.id,
+            },
+        )
+    )
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "Apply artifact staging could not be recorded safely") from None
+
+    artifact_owner = os.getenv("DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER", "").strip()
+    kms_key_arn = os.getenv("DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN", "").strip()
+    try:
+        staged_plan, staged_workspace = stage_nova_apply_artifacts(
+            validated,
+            s3_client=boto3.client("s3", region_name=artifact.region),
+            expected_bucket_owner=artifact_owner,
+            expected_kms_key_arn=kms_key_arn,
+        )
+        contract_document["staged_saved_plan"] = staged_plan.model_dump(mode="json")
+        contract_document["staged_execution_workspace"] = staged_workspace.model_dump(mode="json")
+        validated = validate_nova_apply_request(
+            contract_document,
+            expected_run_id=apply_run.runner_run_id,
+            expected_codebuild_project=project_name,
+            expected_codebuild_build_arn=builds[0].get("arn"),
+            expected_artifact_bucket=artifact_bucket,
+            now=now,
+            require_staged_artifacts=True,
+        )
+    except (NovaApplyArtifactError, NovaApplyContractError, BotoCoreError, ClientError):
+        raise HTTPException(503, "Approved apply artifacts could not be isolated to this build") from None
+
     db.add(
         AuditEvent(
             organization_id=apply_run.organization_id,

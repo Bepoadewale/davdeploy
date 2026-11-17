@@ -28,10 +28,10 @@ locals {
   nova_exact_plan_apply_build_result_key     = "${local.nova_exact_plan_apply_build_prefix}/result.json"
   nova_exact_plan_apply_scoped_input_key     = "${local.nova_exact_plan_apply_build_scoped_prefix}/input.json"
   nova_exact_plan_apply_scoped_result_key    = "${local.nova_exact_plan_apply_build_scoped_prefix}/result.json"
-  nova_exact_plan_apply_plan_key             = "plans/nova-generated/builds/*/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.tfplan"
-  nova_exact_plan_apply_workspace_key        = "plans/nova-generated/builds/*/org-????????????????????????????????/project-????????????????????????????????/revision-????????????????????????????????/*.workspace.tar.gz"
-  nova_exact_plan_apply_scoped_plan_key      = "plans/nova-generated/builds/*/org-*/project-*/revision-*/*.tfplan"
-  nova_exact_plan_apply_scoped_workspace_key = "plans/nova-generated/builds/*/org-*/project-*/revision-*/*.workspace.tar.gz"
+  nova_exact_plan_apply_staged_plan_key      = "${local.nova_exact_plan_apply_build_prefix}/artifacts/*/saved.tfplan"
+  nova_exact_plan_apply_staged_workspace_key = "${local.nova_exact_plan_apply_build_prefix}/artifacts/*/execution-workspace.tar.gz"
+  nova_exact_plan_apply_scoped_plan_key      = "${local.nova_exact_plan_apply_build_scoped_prefix}/artifacts/*/saved.tfplan"
+  nova_exact_plan_apply_scoped_workspace_key = "${local.nova_exact_plan_apply_build_scoped_prefix}/artifacts/*/execution-workspace.tar.gz"
 }
 
 data "aws_availability_zones" "available" {
@@ -488,6 +488,36 @@ resource "aws_iam_role_policy" "api_nova_exact_plan_apply_artifacts" {
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
         Resource = "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_build_result_key}"
+      },
+      {
+        Effect = "Allow"
+        Action = ["s3:GetObjectVersion"]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_saved_plan_key}",
+          "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_plan_only_build_workspace_key}",
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = ["s3:PutObject"]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_staged_plan_key}",
+          "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_staged_workspace_key}",
+        ]
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-server-side-encryption"                = "aws:kms"
+            "s3:x-amz-server-side-encryption-aws-kms-key-id" = var.nova_plan_kms_key_arn
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = ["s3:GetObjectVersion"]
+        Resource = [
+          "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_staged_plan_key}",
+          "arn:${data.aws_partition.current.partition}:s3:::${var.nova_plan_artifact_bucket}/${local.nova_exact_plan_apply_staged_workspace_key}",
+        ]
       },
       {
         Effect   = "Allow"
@@ -1561,6 +1591,8 @@ locals {
     DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET                       = var.nova_plan_artifact_bucket
     DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN                           = var.nova_plan_kms_key_arn
     DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER                          = data.aws_caller_identity.current.account_id
+    DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER                         = var.enable_nova_exact_plan_apply_runner ? data.aws_caller_identity.current.account_id : ""
+    DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN                          = var.enable_nova_exact_plan_apply_runner ? var.nova_plan_kms_key_arn : ""
     DAVDEPLOY_WORKER_QUEUE_URL                                = aws_sqs_queue.worker.id
     DAVDEPLOY_GITHUB_APP_READ_ONLY                            = tostring(var.enable_github_app_read_only)
     DAVDEPLOY_GITHUB_APP_ID                                   = var.github_app_id

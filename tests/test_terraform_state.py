@@ -30,7 +30,7 @@ from davdeploy.models import (
     TerraformStateLock,
     TerraformStateWrite,
 )
-from davdeploy.nova_apply_contract import validate_nova_apply_request
+from davdeploy.nova_apply_contract import ApplyArtifactObject, validate_nova_apply_request
 from davdeploy.terraform_state import (
     TerraformStateError,
     TerraformStateLocked,
@@ -760,8 +760,37 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
     monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN", apply_role)
     monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "fixed-apply")
     monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET", artifact_bucket)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER", account_id)
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN",
+        f"arn:aws:kms:{region}:{account_id}:key/11111111-2222-3333-4444-555555555555",
+    )
     monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_API_URL", "https://api.davdeploy.tech")
     monkeypatch.setattr(main, "ensure_aurora_ready", lambda: None)
+    staged_prefix = (
+        "plans/nova-generated/apply-builds/"
+        f"{build_arn}/artifacts/{apply_run_id}/"
+    )
+    monkeypatch.setattr(
+        main,
+        "stage_nova_apply_artifacts",
+        lambda _request, **_kwargs: (
+            ApplyArtifactObject(
+                bucket=artifact_bucket,
+                key=staged_prefix + "saved.tfplan",
+                version_id="staged-plan-version",
+                size_bytes=10,
+                sha256=plan_sha256,
+            ),
+            ApplyArtifactObject(
+                bucket=artifact_bucket,
+                key=staged_prefix + "execution-workspace.tar.gz",
+                version_id="staged-workspace-version",
+                size_bytes=11,
+                sha256=workspace_sha256,
+            ),
+        ),
+    )
     monkeypatch.setattr(
         main.boto3,
         "client",
@@ -793,9 +822,11 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
             expected_codebuild_build_arn=build_arn,
             expected_artifact_bucket=artifact_bucket,
             now=datetime.now(UTC),
+            require_staged_artifacts=True,
         )
         assert validated_input.saved_plan.key == plan_key
         assert validated_input.execution_workspace.key == workspace_key
+        assert validated_input.staged_saved_plan.key == staged_prefix + "saved.tfplan"
         input_event = db.scalar(
             select(AuditEvent).where(AuditEvent.action == "nova_apply_input.issued")
         )

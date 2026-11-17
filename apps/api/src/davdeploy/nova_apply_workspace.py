@@ -54,6 +54,8 @@ def prepare_nova_apply_workspace(
     """Download and verify exact artifact versions into a private directory."""
     if not isinstance(request, NovaApplyRequest):
         raise NovaApplyWorkspaceError("Nova apply request was not validated")
+    if request.staged_saved_plan is None or request.staged_execution_workspace is None:
+        raise NovaApplyWorkspaceError("Nova apply artifacts are not isolated to the active build")
     if not re.fullmatch(r"\d{12}", expected_bucket_owner):
         raise NovaApplyWorkspaceError("Nova apply artifact owner is invalid")
     if not re.fullmatch(
@@ -77,12 +79,14 @@ def prepare_nova_apply_workspace(
         archive_path = root / "execution-workspace.tar.gz"
         _download_exact_artifact(
             s3_client,
-            bucket=request.saved_plan.bucket,
-            key=request.saved_plan.key,
-            version_id=request.saved_plan.version_id,
-            size_bytes=request.saved_plan.size_bytes,
-            expected_sha256=request.saved_plan.sha256,
-            expected_run_id=request.tenant.source_plan_run_id,
+            bucket=request.staged_saved_plan.bucket,
+            key=request.staged_saved_plan.key,
+            version_id=request.staged_saved_plan.version_id,
+            size_bytes=request.staged_saved_plan.size_bytes,
+            expected_sha256=request.staged_saved_plan.sha256,
+            expected_run_id=request.run_id,
+            expected_source_run_id=request.tenant.source_plan_run_id,
+            expected_source_version_id=request.saved_plan.version_id,
             expected_bucket_owner=expected_bucket_owner,
             expected_kms_key_arn=expected_kms_key_arn,
             digest_metadata_key="davdeploy-plan-sha256",
@@ -91,12 +95,14 @@ def prepare_nova_apply_workspace(
         )
         _download_exact_artifact(
             s3_client,
-            bucket=request.execution_workspace.bucket,
-            key=request.execution_workspace.key,
-            version_id=request.execution_workspace.version_id,
-            size_bytes=request.execution_workspace.size_bytes,
-            expected_sha256=request.execution_workspace.sha256,
-            expected_run_id=request.tenant.source_plan_run_id,
+            bucket=request.staged_execution_workspace.bucket,
+            key=request.staged_execution_workspace.key,
+            version_id=request.staged_execution_workspace.version_id,
+            size_bytes=request.staged_execution_workspace.size_bytes,
+            expected_sha256=request.staged_execution_workspace.sha256,
+            expected_run_id=request.run_id,
+            expected_source_run_id=request.tenant.source_plan_run_id,
+            expected_source_version_id=request.execution_workspace.version_id,
             expected_bucket_owner=expected_bucket_owner,
             expected_kms_key_arn=expected_kms_key_arn,
             digest_metadata_key="davdeploy-workspace-sha256",
@@ -150,6 +156,8 @@ def _download_exact_artifact(
     size_bytes: int,
     expected_sha256: str,
     expected_run_id: str,
+    expected_source_run_id: str,
+    expected_source_version_id: str,
     expected_bucket_owner: str,
     expected_kms_key_arn: str,
     digest_metadata_key: str,
@@ -184,6 +192,9 @@ def _download_exact_artifact(
             or head.get("BucketKeyEnabled") is not True
             or metadata.get(digest_metadata_key) != expected_sha256
             or metadata.get("davdeploy-run-id") != expected_run_id
+            or metadata.get("davdeploy-source-run-id") != expected_source_run_id
+            or metadata.get("davdeploy-source-version-sha256")
+            != hashlib.sha256(expected_source_version_id.encode("utf-8")).hexdigest()
             or head.get("ChecksumSHA256")
             != base64.b64encode(bytes.fromhex(expected_sha256)).decode("ascii")
         ):
@@ -207,6 +218,9 @@ def _download_exact_artifact(
             or response.get("BucketKeyEnabled") is not True
             or response_metadata.get(digest_metadata_key) != expected_sha256
             or response_metadata.get("davdeploy-run-id") != expected_run_id
+            or response_metadata.get("davdeploy-source-run-id") != expected_source_run_id
+            or response_metadata.get("davdeploy-source-version-sha256")
+            != hashlib.sha256(expected_source_version_id.encode("utf-8")).hexdigest()
         ):
             if body is not None:
                 body.close()
