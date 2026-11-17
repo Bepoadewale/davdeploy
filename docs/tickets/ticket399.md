@@ -95,8 +95,11 @@ untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
   AWS effective-permission source or cover every Terraform provider resource.
 - [x] Apply remains disabled by default and no AWS apply/deployment occurred
   during this source-only work.
-- [ ] Focused tests, full verification, clean-room proof, Terraform validation,
-  documentation conventions, diff checks, and required hosted CI pass.
+- [x] Focused tests, full verification, configured Terraform validation,
+  documentation conventions, diff checks, and required hosted CI pass,
+  including the fresh-runner `local-e2e` clean integration check.
+- [ ] A separate full local clean-room cycle remains unrun because the final
+  cleanup would delete retained local artifacts without explicit approval.
 
 ## Acceptance status
 
@@ -324,8 +327,10 @@ gates disabled until those gates are met.
   `1a2c507`, including the clean-runner end-to-end job. This evidence update
   is a follow-up documentation commit; that commit's checks also passed in
   run `44095877464`. The credential-route pricing regression added after those
-  runs now passes the full 1,366-test local verification; fresh-head hosted CI
-  remains pending.
+  runs passes the full 1,366-test local verification. GitHub Actions run
+  `44103391874` passed all seven checks on implementation commit `ef1e12b`,
+  including the fresh-runner end-to-end job. This evidence update gets its own
+  fresh-head CI run.
 - Apply and broker gates remain disabled. No role, credential, apply build,
   customer workload, or hosted control-plane change was performed. The local
   clean-room cycle remains unrun; its cleanup step would remove retained local

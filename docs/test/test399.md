@@ -390,5 +390,7 @@ Fresh-head hosted CI is required after push.
   workload was applied or certified.
 - This pricing-gate regression was added after runs `44078718495` and
   `44095877464`; both ran before the regression. Local validation has since
-  passed; the new head requires fresh hosted CI.
+  passed. GitHub Actions run `44103391874` then passed all seven checks on
+  implementation commit `ef1e12b`, including the fresh-runner end-to-end job.
+  This evidence-only follow-up requires its own fresh-head check run.
 
