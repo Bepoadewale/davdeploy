@@ -57,6 +57,54 @@ def test_plan_only_quick_create_is_not_mistaken_for_administrator_access():
 
     assert response.status_code == 200
     assert response.json()["access_mode"] == "plan-only"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+
+
+def test_nova_apply_role_quick_create_request_is_accepted_and_no_store():
+    class QuickCreateService:
+        def aws_quick_create_setup(self, *_args):
+            return {"access_mode": _args[-1], "boundary": "customer-reviewed setup only"}
+
+    app.dependency_overrides[product_service] = lambda: QuickCreateService()
+    app.dependency_overrides[verify_token] = founder
+    try:
+        response = TestClient(app).post(
+            "/api/v1/cloud-connections/connection-1/aws-quick-create",
+            json={
+                "account_id": "123456789012",
+                "access_mode": "nova-apply",
+                "acknowledge_nova_apply_role_setup": True,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json()["access_mode"] == "nova-apply"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+
+
+def test_nova_apply_role_quick_create_requires_explicit_acknowledgement():
+    class QuickCreateService:
+        def aws_quick_create_setup(self, *_args):
+            raise AssertionError("service must not run without apply-role acknowledgement")
+
+    app.dependency_overrides[product_service] = lambda: QuickCreateService()
+    app.dependency_overrides[verify_token] = founder
+    try:
+        response = TestClient(app).post(
+            "/api/v1/cloud-connections/connection-1/aws-quick-create",
+            json={"account_id": "123456789012", "access_mode": "nova-apply"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "acknowledge the dedicated Nova apply role setup before creating its link"
+    }
 
 
 def test_fixture_github_connection_lists_only_authorized_repositories_and_branches():

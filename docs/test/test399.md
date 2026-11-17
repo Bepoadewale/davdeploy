@@ -415,3 +415,29 @@ Fresh-head hosted CI is required after push.
   customer-role effectiveness, hosted apply, health, recovery, teardown, or
   independent absence. Both apply gates remain disabled.
 
+## Customer apply-role onboarding source validation — 2026-11-17
+
+- Added a default-off `nova-apply` Quick Create path for a workspace
+  administrator after discovery verification and exact plan-role profile
+  verification. The setup link binds the connection ExternalId and target
+  account to the dedicated apply role, and the API returns it with
+  `Cache-Control: no-store` and `Pragma: no-cache`.
+- The API audit record omits the ExternalId and URL. The role template is
+  published as a separate content-hash S3 object; Terraform exposes the URL
+  and keeps the onboarding flag disabled by default. Creating a setup link
+  does not create or verify a customer role, issue credentials, start
+  CodeBuild, or enable apply.
+- Full `make verify
+  PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` passed 1,373
+  tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose config.
+- `make terraform-validate` passed every configured Terraform root;
+  `terraform fmt -check -recursive infrastructure/terraform`, documentation
+  conventions, and `git diff --check` passed. AWS CloudFormation
+  `validate-template` parsed the role template and reported the named-IAM
+  capability; no stack was created.
+- This is source/static/local-test evidence only. The full local clean-room
+  cycle was not run because cleanup would remove retained local artifacts
+  without current deletion approval. No AWS resource, template-host object,
+  control-plane state, role, customer credential, apply build, or workload was
+  changed. Apply and credential-broker gates remain disabled.
+

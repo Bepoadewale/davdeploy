@@ -176,6 +176,33 @@ variable "enable_nova_exact_plan_apply_credential_broker" {
   }
 }
 
+variable "enable_nova_apply_role_onboarding" {
+  type        = bool
+  description = "Allow workspace administrators to generate a CloudFormation Quick Create link for the dedicated customer Nova apply role. This does not provision the role or enable apply."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_apply_role_onboarding || var.enable_nova_plan_role_verification
+    error_message = "Nova apply-role onboarding requires customer plan-role verification to be configured."
+  }
+}
+
+variable "nova_apply_role_template_url" {
+  type        = string
+  description = "Public immutable content-hash URL for the separate customer Nova apply-role template."
+  default     = ""
+
+  validation {
+    condition     = var.nova_apply_role_template_url == "" || can(regex("^https://[a-z0-9.-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/cloudformation/customer-nova-apply-role-[0-9a-f]{64}\\.yaml$", var.nova_apply_role_template_url))
+    error_message = "nova_apply_role_template_url must be an immutable content-hash S3 template URL."
+  }
+
+  validation {
+    condition     = !var.enable_nova_apply_role_onboarding || var.nova_apply_role_template_url != ""
+    error_message = "Nova apply-role onboarding requires the published customer role template URL."
+  }
+}
+
 variable "enable_nova_terraform_state_storage" {
   type        = bool
   description = "Provision the private versioned KMS state bucket. This does not enable the HTTP API or change the backend-free Nova runner."

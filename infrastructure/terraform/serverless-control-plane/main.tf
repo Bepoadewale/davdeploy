@@ -1580,6 +1580,9 @@ locals {
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN                  = var.enable_nova_exact_plan_apply_runner ? aws_iam_role.nova_exact_plan_apply[0].arn : ""
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY              = tostring(var.enable_nova_exact_plan_apply_runner && var.enable_nova_exact_plan_apply_credential_broker)
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = tostring(var.enable_nova_exact_plan_apply_credential_broker)
+    DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED                   = tostring(var.enable_nova_apply_role_onboarding)
+    DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL                    = var.nova_apply_role_template_url
+    DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN                      = var.enable_nova_apply_role_onboarding ? aws_iam_role.api.arn : ""
     DAVDEPLOY_TERRAFORM_STATE_ENABLED                         = tostring(var.enable_nova_terraform_state_api)
     DAVDEPLOY_TERRAFORM_STATE_API_URL                         = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
     DAVDEPLOY_TERRAFORM_STATE_BUCKET                          = var.enable_nova_terraform_state_storage ? aws_s3_bucket.nova_terraform_state[0].bucket : ""

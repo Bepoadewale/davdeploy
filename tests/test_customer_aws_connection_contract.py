@@ -166,6 +166,38 @@ def test_public_template_host_allows_only_versioned_template_reads_and_is_confir
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
 
 
+def test_public_template_host_publishes_separate_immutable_apply_role_template():
+    configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
+    variables = Path("infrastructure/terraform/connection-template-host/variables.tf").read_text()
+    outputs = Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
+
+    assert "customer-nova-apply-role.yaml" in configuration
+    assert 'resource "aws_s3_object" "current_customer_nova_apply_role"' in configuration
+    assert "customer-nova-apply-role-${local.nova_apply_template_hash}.yaml" in configuration
+    apply_object = configuration.split(
+        'resource "aws_s3_object" "current_customer_nova_apply_role"', 1
+    )[1].split('resource "aws_s3_object" "retained_customer_templates"', 1)[0]
+    assert "prevent_destroy = true" in apply_object
+    assert "nova-apply-role" in variables
+    assert "customer_nova_apply_role_template_url" in outputs
+    assert "current_customer_nova_apply_role.key" in outputs
+
+
+def test_nova_apply_role_onboarding_is_default_off_and_uses_public_template_configuration():
+    configuration = Path("infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    variables = Path("infrastructure/terraform/serverless-control-plane/variables.tf").read_text()
+
+    assert 'variable "enable_nova_apply_role_onboarding"' in variables
+    onboarding = variables.split(
+        'variable "enable_nova_apply_role_onboarding"', 1
+    )[1].split("variable ", 1)[0]
+    assert "default     = false" in onboarding
+    assert 'variable "nova_apply_role_template_url"' in variables
+    assert "DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED" in configuration
+    assert "DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL" in configuration
+    assert "DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN" in configuration
+
+
 def test_control_plane_identity_can_assume_the_quick_create_role_name_pattern():
     configuration = Path("infrastructure/terraform/management-identity/main.tf").read_text()
     assert "role/davdeployDiscovery-*" in configuration

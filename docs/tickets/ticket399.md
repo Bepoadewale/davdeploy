@@ -537,3 +537,32 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   recovery, teardown, and independent absence evidence remain unmet. The
   retained local clean-room artifacts and protected files were not removed.
 
+## Customer apply-role onboarding source — 2026-11-17
+
+- Added a separate `nova-apply` customer Quick Create path. It is available
+  only to workspace administrators who explicitly acknowledge setup, after
+  the same AWS connection is verified and its exact plan-only role is
+  `PROFILE_VERIFIED`. The independent
+  `DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED` runtime flag and published template
+  URL are required; the infrastructure variable defaults off.
+- The setup link reuses the connection ExternalId, targets the deterministic
+  `davdeployNovaApply-<connection-id>` role, returns a content-hash CloudFormation
+  template URL, and sets no-store response headers. The audit record contains
+  account and stack name only. The customer must review and create the stack in
+  their AWS account; the API does not provision it or claim verification.
+- The public template host now publishes the separate apply-role template as
+  its own content-hash S3 object and exposes the URL as an output. Existing
+  discovery template objects remain unchanged. Terraform configures the API
+  broker ARN and setup URL independently from both apply gates.
+- Focused tests cover default-off behavior, administrator authorization,
+  verified plan-role prerequisites, exact account/role/ExternalId bindings,
+  audit redaction, API no-store headers, and template-host/config contracts.
+  The route checks the customer role profile later during exact active-build
+  credential issuance; this change does not add live role verification.
+- The role's profile and plan-scoped policy remain limited to mapped S3,
+  SQS, and DynamoDB resources. Effective permission gaps and broader module
+  support remain open. This does not close the hosted customer lifecycle gate.
+- Full `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`
+  passed 1,373 tests, Ruff, Actions configuration, OpenAPI snapshot, and
+  Compose validation on the complete current source changes.
+

@@ -111,7 +111,7 @@
         "properties": {
           "access_mode": {
             "default": "discovery",
-            "pattern": "^(discovery|plan-only|administrator-pilot)$",
+            "pattern": "^(discovery|plan-only|administrator-pilot|nova-apply)$",
             "title": "Access Mode",
             "type": "string"
           },
@@ -123,6 +123,11 @@
           "acknowledge_administrator_access": {
             "default": false,
             "title": "Acknowledge Administrator Access",
+            "type": "boolean"
+          },
+          "acknowledge_nova_apply_role_setup": {
+            "default": false,
+            "title": "Acknowledge Nova Apply Role Setup",
             "type": "boolean"
           }
         },

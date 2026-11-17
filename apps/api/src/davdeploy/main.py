@@ -2158,6 +2158,7 @@ def get_cloud_role_contract(
 def create_aws_quick_create_setup(
     connection_id: str,
     request: AwsQuickCreateRequest,
+    response: Response,
     principal: Principal = Depends(verify_token),
     service: ProductService = Depends(product_service),
 ):
@@ -2170,9 +2171,19 @@ def create_aws_quick_create_setup(
             raise ValueError(
                 "acknowledge administrator access before enabling the deployment pilot"
             )
-        return service.aws_quick_create_setup(
+        if (
+            request.access_mode == "nova-apply"
+            and not request.acknowledge_nova_apply_role_setup
+        ):
+            raise ValueError(
+                "acknowledge the dedicated Nova apply role setup before creating its link"
+            )
+        setup = service.aws_quick_create_setup(
             principal, connection_id, request.account_id, request.access_mode
         )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        return setup
     except (PermissionError, ValueError, KeyError, RuntimeError) as error:
         translate(error)
 

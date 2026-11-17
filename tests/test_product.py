@@ -25,6 +25,7 @@ from davdeploy.invitation_email import (
 )
 from davdeploy.main import app, product_service
 from davdeploy.models import (
+    AuditEvent,
     Incident,
     Recommendation,
     RepositoryConnection,
@@ -1166,6 +1167,121 @@ def test_aws_quick_create_setup_is_tenant_scoped_and_never_applies(monkeypatch):
     assert saved.external_id is None
     assert saved.external_id_secret_ref
     assert "only creates a setup link" in setup["boundary"]
+
+
+def test_nova_apply_role_setup_link_requires_flag_and_verified_plan_profile(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED", "true")
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-api",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL",
+        "https://templates.example/cloudformation/customer-nova-apply-role-"
+        + "a" * 64
+        + ".yaml",
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    external_id = "connection-external-id-keep-private"
+    secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, external_id
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployDiscovery-{connection.id}"
+    )
+    connection.external_id_secret_ref = secret_ref
+    connection.setup_state = "VERIFIED"
+    connection.plan_role_arn = (
+        f"arn:aws:iam::123456789012:role/davdeployPlan-{connection.id}"
+    )
+    connection.plan_role_setup_state = "PROFILE_VERIFIED"
+    service.db.commit()
+
+    setup = service.aws_quick_create_setup(
+        workspace_admin(), connection.id, "123456789012", access_mode="nova-apply"
+    )
+
+    parameters = parse_qs(urlsplit(setup["quick_create_url"]).fragment.split("?", 1)[1])
+    assert setup["stack_name"] == f"davdeploy-NovaApply-{connection.id}"
+    assert setup["apply_role_arn"] == (
+        f"arn:aws:iam::123456789012:role/davdeployNovaApply-{connection.id}"
+    )
+    assert parameters["param_ConnectionId"] == [connection.id]
+    assert parameters["param_ExternalId"] == [external_id]
+    assert parameters["param_davdeployApplyBrokerRoleArn"] == [
+        "arn:aws:iam::111122223333:role/davdeploy-api"
+    ]
+    assert "external_id" not in setup
+    assert "apply remains disabled by default" in setup["boundary"]
+    event = service.db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "cloud_connection.nova_apply_role_setup_link_generated"
+        )
+    )
+    assert event is not None
+    assert external_id not in json.dumps(event.detail)
+
+
+def test_nova_apply_role_setup_is_default_off_and_requires_profile_verified_plan_role(
+    monkeypatch,
+):
+    monkeypatch.delenv("DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED", raising=False)
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-api",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL",
+        "https://templates.example/customer-nova-apply-role.yaml",
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    connection.account_id = "123456789012"
+    connection.discovery_role_arn = "arn:aws:iam::123456789012:role/davdeployDiscovery-test"
+    connection.external_id_secret_ref = service.connection_secrets.put_external_id(
+        founder().organization_id, connection.id, "external-id"
+    )
+    connection.setup_state = "VERIFIED"
+    service.db.commit()
+
+    with pytest.raises(RuntimeError, match="onboarding is disabled"):
+        service.aws_quick_create_setup(
+            workspace_admin(), connection.id, "123456789012", access_mode="nova-apply"
+        )
+
+    monkeypatch.setenv("DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED", "true")
+    with pytest.raises(ValueError, match="verify the exact plan-only role profile"):
+        service.aws_quick_create_setup(
+            workspace_admin(), connection.id, "123456789012", access_mode="nova-apply"
+        )
+
+
+def test_nova_apply_role_setup_link_requires_workspace_administrator(monkeypatch):
+    monkeypatch.setenv("DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED", "true")
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN",
+        "arn:aws:iam::111122223333:role/davdeploy-api",
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL",
+        "https://templates.example/customer-nova-apply-role.yaml",
+    )
+    service, _ = make_service()
+    connection = service.create_cloud_connection(
+        founder(), "Customer AWS", "aws", "byoc_role_contract"
+    )
+    developer = Principal("workspace-developer", founder().organization_id, "developer")
+
+    with pytest.raises(PermissionError, match="workspace administrator role required"):
+        service.aws_quick_create_setup(
+            developer, connection.id, "123456789012", access_mode="nova-apply"
+        )
 
 
 def test_live_inventory_snapshot_is_durable_and_tenant_scoped():

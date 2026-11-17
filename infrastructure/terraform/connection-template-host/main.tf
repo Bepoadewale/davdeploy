@@ -1,7 +1,10 @@
 locals {
-  template_source = "${path.module}/../../cloudformation/customer-discovery-role.yaml"
-  template_hash   = filesha256(local.template_source)
-  template_key    = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"
+  template_source            = "${path.module}/../../cloudformation/customer-discovery-role.yaml"
+  template_hash              = filesha256(local.template_source)
+  template_key               = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"
+  nova_apply_template_source = "${path.module}/../../cloudformation/customer-nova-apply-role.yaml"
+  nova_apply_template_hash   = filesha256(local.nova_apply_template_source)
+  nova_apply_template_key    = "cloudformation/customer-nova-apply-role-${local.nova_apply_template_hash}.yaml"
   tags = {
     Project   = "davdeploy"
     ManagedBy = "terraform"
@@ -78,6 +81,26 @@ resource "aws_s3_object" "current_customer_discovery_role" {
     aws_s3_bucket_server_side_encryption_configuration.templates,
     aws_s3_bucket_versioning.templates,
   ]
+}
+
+# This separate immutable template installs only the dedicated default-off
+# Nova apply role. It never replaces or broadens the discovery/plan-only roles.
+resource "aws_s3_object" "current_customer_nova_apply_role" {
+  bucket       = aws_s3_bucket.templates.id
+  key          = local.nova_apply_template_key
+  source       = local.nova_apply_template_source
+  etag         = filemd5(local.nova_apply_template_source)
+  content_type = "application/x-yaml"
+  tags         = local.tags
+  depends_on = [
+    aws_s3_bucket_ownership_controls.templates,
+    aws_s3_bucket_server_side_encryption_configuration.templates,
+    aws_s3_bucket_versioning.templates,
+  ]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # Preserve previously published immutable template objects. A customer may

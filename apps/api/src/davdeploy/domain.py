@@ -608,9 +608,11 @@ class CloudConnectionRequest(BaseModel):
 class AwsQuickCreateRequest(BaseModel):
     account_id: str = Field(pattern=r"^[0-9]{12}$")
     access_mode: str = Field(
-        default="discovery", pattern=r"^(discovery|plan-only|administrator-pilot)$"
+        default="discovery",
+        pattern=r"^(discovery|plan-only|administrator-pilot|nova-apply)$",
     )
     acknowledge_administrator_access: bool = False
+    acknowledge_nova_apply_role_setup: bool = False
 
 
 class AwsExistingRoleRequest(BaseModel):

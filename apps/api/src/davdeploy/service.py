@@ -6557,6 +6557,10 @@ class ProductService:
     ) -> dict[str, object]:
         """Generate a one-click AWS Console setup; it does not create AWS resources itself."""
         connection = self._cloud_connection(principal, connection_id)
+        if access_mode == "nova-apply":
+            return self._nova_apply_role_quick_create_setup(
+                principal, connection, account_id
+            )
         if access_mode == "plan-only":
             self._require_workspace_admin(principal)
             if connection.execution_role_arn:
@@ -6674,6 +6678,82 @@ class ProductService:
                 "This action only creates a setup link. The customer template grants bounded metadata reads, and each fixed Nova planner session adds a proposal-scoped explicit-deny policy. Profile verification checks current role trust and policy shape and repeats before plan credentials are issued; it does not attest every effective AWS permission layer."
                 if access_mode == "plan-only"
                 else "This action only creates a setup link. Discovery is read-only; administrator-pilot creates a separate execution role that can modify customer AWS resources after product approval."
+            ),
+        }
+
+    def _nova_apply_role_quick_create_setup(
+        self, principal: Principal, connection: CloudConnection, account_id: str
+    ) -> dict[str, object]:
+        """Create a guarded setup link for a separate exact-plan apply role."""
+        self._require_workspace_admin(principal)
+        if os.getenv("DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED", "false").lower() != "true":
+            raise RuntimeError("Nova apply-role onboarding is disabled for this control plane")
+        broker_role_arn = os.getenv("DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN", "").strip()
+        template_url = os.getenv("DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL", "").strip()
+        if not broker_role_arn or not template_url:
+            raise RuntimeError("Nova apply-role onboarding is not configured")
+        if (
+            connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or connection.account_id != account_id
+            or not connection.discovery_role_arn
+            or not connection.external_id_secret_ref
+            or connection.execution_role_arn
+        ):
+            raise ValueError(
+                "Nova apply-role setup requires a verified discovery-only connection for this account"
+            )
+        expected_plan_role_arn = (
+            f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
+        )
+        if (
+            connection.plan_role_arn != expected_plan_role_arn
+            or connection.plan_role_setup_state != "PROFILE_VERIFIED"
+        ):
+            raise ValueError(
+                "verify the exact plan-only role profile before setting up the separate apply role"
+            )
+        external_id = self.connection_secrets.get_external_id(
+            connection.external_id_secret_ref
+        )
+        if not isinstance(external_id, str) or not external_id:
+            raise RuntimeError("the verified AWS connection external ID is unavailable")
+
+        role_arn = f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection.id}"
+        stack_name = f"davdeploy-NovaApply-{connection.id}"
+        parameters = {
+            "davdeployApplyBrokerRoleArn": broker_role_arn,
+            "ExternalId": external_id,
+            "ConnectionId": connection.id,
+        }
+        quick_create_url = (
+            "https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?"
+            + urlencode({"templateURL": template_url, "stackName": stack_name})
+            + "&"
+            + urlencode({f"param_{key}": value for key, value in parameters.items()})
+        )
+        self.audit(
+            principal,
+            "cloud_connection.nova_apply_role_setup_link_generated",
+            "cloud_connection",
+            connection.id,
+            {"account_id": account_id, "stack_name": stack_name},
+        )
+        self.db.commit()
+        return {
+            "connection_id": connection.id,
+            "account_id": account_id,
+            "stack_name": stack_name,
+            "template_path": "infrastructure/cloudformation/customer-nova-apply-role.yaml",
+            "apply_role_arn": role_arn,
+            "quick_create_url": quick_create_url,
+            "customer_steps": [
+                "Open the AWS Quick Create link for the already verified account.",
+                "Review the dedicated exact-plan apply role and its fixed S3, SQS, and DynamoDB permission ceiling before acknowledging IAM resource creation.",
+                "Create the stack, then return to DavDeploy; apply credentials remain unavailable until the role profile and each exact approved plan are verified.",
+            ],
+            "boundary": (
+                "This action only creates a no-store setup link. The customer must review and create the role in AWS. The role is limited to the checked-in action ceiling and a per-plan STS session policy for supported resources; unsupported plans fail closed. This profile check is not complete effective-permissions attestation, and apply remains disabled by default."
             ),
         }
 
