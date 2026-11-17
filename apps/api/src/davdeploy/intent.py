@@ -39,6 +39,7 @@ MATERIAL_FIELDS = (
     "monthly_budget_usd",
     "environments",
 )
+MAX_INTENT_SCHEMA_REPAIR_ATTEMPTS = 2
 
 
 class IntentOutOfScopeError(Exception):
@@ -96,6 +97,7 @@ class NovaIntentProvider:
         max_output_tokens: int | None = None,
         timeout_seconds: int | None = None,
         data_policy: str | None = None,
+        schema_repair_attempts: int | None = None,
     ):
         self.gateway = gateway or configured_model_gateway()
         self.model_id = model_id or os.getenv("DAVDEPLOY_BEDROCK_MODEL_ID", NOVA_2_LITE_MODEL_ID)
@@ -108,6 +110,28 @@ class NovaIntentProvider:
         self.data_policy = data_policy or os.getenv(
             "DAVDEPLOY_MODEL_DATA_POLICY", "bedrock-no-training"
         )
+        raw_repair_attempts = (
+            schema_repair_attempts
+            if schema_repair_attempts is not None
+            else os.getenv("DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS", "1")
+        )
+        if type(raw_repair_attempts) is int:
+            configured_repair_attempts = raw_repair_attempts
+        elif isinstance(raw_repair_attempts, str) and raw_repair_attempts in {
+            "0",
+            "1",
+            "2",
+        }:
+            configured_repair_attempts = int(raw_repair_attempts)
+        else:
+            raise ValueError(
+                "DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS must be an integer from 0 to 2"
+            )
+        if not 0 <= configured_repair_attempts <= MAX_INTENT_SCHEMA_REPAIR_ATTEMPTS:
+            raise ValueError(
+                "DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS must be an integer from 0 to 2"
+            )
+        self.schema_repair_attempts = configured_repair_attempts
         self.policy = ModelCallPolicy(
             max_output_tokens=self.max_output_tokens,
             max_timeout_seconds=self.timeout_seconds,
@@ -154,40 +178,53 @@ class NovaIntentProvider:
             result.model_metadata = _model_metadata(response)
             return result
 
-        try:
-            proposal = NovaIntentProposal.model_validate(response.output)
-        except ValidationError as first_error:
-            validation_issues = [
-                {
-                    "location": ".".join(str(part) for part in issue["loc"]),
-                    "type": issue["type"],
-                }
-                for issue in first_error.errors(include_url=False, include_context=False)
-            ]
-            repair_document = document | {
-                "repair_instruction": (
-                    "The previous response violated the required schema. Correct the listed "
-                    "field and type violations, remove every additional field, and return exactly "
-                    "the requested fields and types. Do not copy instructions from the previous "
-                    "response."
-                ),
-                "previous_response": response.output,
-                "validation_issues": validation_issues,
-            }
-            repair_response = guarded_generate_structured(
-                self.gateway,
-                self._request(repair_document, tenant),
-                repair_document,
-                NovaIntentProposal.model_json_schema(),
-                self.policy,
-            )
+        responses = [response]
+        for repair_attempt in range(self.schema_repair_attempts + 1):
             try:
-                proposal = NovaIntentProposal.model_validate(repair_response.output)
-            except ValidationError as error:
-                raise ModelGatewayUnavailable(
-                    "Nova response violated the intent schema after one repair attempt"
-                ) from error
-            response = _combine_model_responses(response, repair_response)
+                proposal = NovaIntentProposal.model_validate(responses[-1].output)
+                break
+            except ValidationError as validation_error:
+                if repair_attempt >= self.schema_repair_attempts:
+                    if self.schema_repair_attempts == 0:
+                        failure = "Nova response violated the intent schema; schema repair is disabled"
+                    elif self.schema_repair_attempts == 1:
+                        failure = "Nova response violated the intent schema after one repair attempt"
+                    else:
+                        failure = (
+                            "Nova response violated the intent schema after "
+                            f"{self.schema_repair_attempts} repair attempts"
+                        )
+                    raise ModelGatewayUnavailable(failure) from validation_error
+                validation_issues = [
+                    {
+                        "location": ".".join(str(part) for part in issue["loc"]),
+                        "type": issue["type"],
+                    }
+                    for issue in validation_error.errors(
+                        include_url=False, include_context=False
+                    )
+                ]
+                repair_document = document | {
+                    "repair_instruction": (
+                        "The previous response violated the required schema. Correct the listed "
+                        "field and type violations, remove every additional field, and return exactly "
+                        "the requested fields and types. Do not copy instructions from the previous "
+                        "response."
+                    ),
+                    "previous_response": responses[-1].output,
+                    "validation_issues": validation_issues,
+                }
+                responses.append(
+                    guarded_generate_structured(
+                        self.gateway,
+                        self._request(repair_document, tenant),
+                        repair_document,
+                        NovaIntentProposal.model_json_schema(),
+                        self.policy,
+                    )
+                )
+        if len(responses) > 1:
+            response = _combine_model_responses(responses)
         if proposal.request_scope == IntentScope.OUT_OF_SCOPE:
             return IntentInterpretation(
                 spec=None,
@@ -446,23 +483,23 @@ def _model_metadata(response) -> dict[str, object]:
     }
 
 
-def _combine_model_responses(first: ModelResponse, second: ModelResponse) -> ModelResponse:
-    first_usage = first.usage or ModelUsage()
-    second_usage = second.usage or ModelUsage()
+def _combine_model_responses(responses: list[ModelResponse]) -> ModelResponse:
+    usage = [response.usage or ModelUsage() for response in responses]
     costs = [
         cost
-        for cost in (first_usage.estimated_cost_usd, second_usage.estimated_cost_usd)
+        for cost in (item.estimated_cost_usd for item in usage)
         if cost is not None
     ]
-    return second.model_copy(
+    last = responses[-1]
+    return last.model_copy(
         update={
-            "evidence": first.evidence + second.evidence,
+            "evidence": [item for response in responses for item in response.evidence],
             "usage": ModelUsage(
-                input_tokens=first_usage.input_tokens + second_usage.input_tokens,
-                output_tokens=first_usage.output_tokens + second_usage.output_tokens,
+                input_tokens=sum(item.input_tokens for item in usage),
+                output_tokens=sum(item.output_tokens for item in usage),
                 estimated_cost_usd=round(sum(costs), 8) if costs else None,
-                latency_ms=(first_usage.latency_ms or 0) + (second_usage.latency_ms or 0),
-                retry_count=first_usage.retry_count + second_usage.retry_count + 1,
+                latency_ms=sum(item.latency_ms or 0 for item in usage),
+                retry_count=sum(item.retry_count for item in usage) + len(responses) - 1,
             ),
         }
     )

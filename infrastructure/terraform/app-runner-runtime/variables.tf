@@ -56,6 +56,21 @@ variable "nova_model_id" {
   }
 }
 
+variable "nova_intent_schema_repair_attempts" {
+  type        = number
+  description = "Maximum locally validated Nova intent schema repairs, bounded from zero to two."
+  default     = 1
+
+  validation {
+    condition = (
+      var.nova_intent_schema_repair_attempts >= 0 &&
+      var.nova_intent_schema_repair_attempts <= 2 &&
+      floor(var.nova_intent_schema_repair_attempts) == var.nova_intent_schema_repair_attempts
+    )
+    error_message = "nova_intent_schema_repair_attempts must be an integer from zero to two."
+  }
+}
+
 variable "image_identifier" {
   type        = string
   description = "Full ECR image URI with tag for the davdeploy runtime. Required when enable_service is true."
