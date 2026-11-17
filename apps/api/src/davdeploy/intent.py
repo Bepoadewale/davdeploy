@@ -40,6 +40,7 @@ MATERIAL_FIELDS = (
     "environments",
 )
 MAX_INTENT_SCHEMA_REPAIR_ATTEMPTS = 2
+NOVA_INTENT_CONTEXT_VERSION = "nova-intent-context-v1"
 NOVA_INTENT_PROPOSAL_VERSION = "nova-intent-proposal-v1"
 
 
@@ -166,6 +167,7 @@ class NovaIntentProvider:
             "customer_request": prompt,
             "selected_repository": source_repository,
         }
+        context_digest = model_input_digest(document)
         request = self._request(document, tenant)
         response = guarded_generate_structured(
             self.gateway,
@@ -229,7 +231,9 @@ class NovaIntentProvider:
         if proposal.request_scope == IntentScope.OUT_OF_SCOPE:
             return IntentInterpretation(
                 spec=None,
-                model_metadata=_validated_proposal_metadata(response, proposal),
+                model_metadata=_validated_proposal_metadata(
+                    response, proposal, context_digest
+                ),
                 request_scope=IntentScope.OUT_OF_SCOPE,
             )
         if not proposal.workload_type or not proposal.data_classification:
@@ -271,12 +275,16 @@ class NovaIntentProvider:
                 "model": self.model_id,
                 "prompt_version": request.prompt_version,
                 "input_digest": request.input_digest,
+                "context_version": NOVA_INTENT_CONTEXT_VERSION,
+                "context_digest": context_digest,
             },
         )
         return IntentInterpretation(
             spec=spec,
             questions=[_material_question(field) for field in unknowns],
-            model_metadata=_validated_proposal_metadata(response, proposal),
+            model_metadata=_validated_proposal_metadata(
+                response, proposal, context_digest
+            ),
             request_scope=proposal.request_scope,
         )
 
@@ -485,7 +493,7 @@ def _model_metadata(response) -> dict[str, object]:
 
 
 def _validated_proposal_metadata(
-    response, proposal: NovaIntentProposal
+    response, proposal: NovaIntentProposal, context_digest: str
 ) -> dict[str, object]:
     metadata = _model_metadata(response)
     validated_proposal = proposal.model_dump(mode="json")
@@ -493,6 +501,8 @@ def _validated_proposal_metadata(
         {
             "proposal_version": NOVA_INTENT_PROPOSAL_VERSION,
             "proposal_digest": model_input_digest(validated_proposal),
+            "context_version": NOVA_INTENT_CONTEXT_VERSION,
+            "context_digest": context_digest,
         }
     )
     return metadata

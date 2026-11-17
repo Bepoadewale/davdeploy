@@ -6,6 +6,7 @@ import pytest
 from davdeploy.contracts import ModelResponse, ModelUsage, TenantScope
 from davdeploy.domain import IntentScope
 from davdeploy.intent import (
+    NOVA_INTENT_CONTEXT_VERSION,
     NOVA_INTENT_PROPOSAL_VERSION,
     IntentOutOfScopeError,
     NovaIntentProposal,
@@ -128,10 +129,26 @@ def test_nova_intent_is_typed_tenant_scoped_and_non_authoritative():
     assert result.spec.unknowns == []
     assert result.spec.requires_kubernetes is False
     assert result.model_metadata["provider"] == "bedrock"
+    context_digest = model_input_digest(document)
+    assert result.model_metadata["context_version"] == NOVA_INTENT_CONTEXT_VERSION
+    assert result.model_metadata["context_digest"] == context_digest
+    assert result.spec.provenance["context_version"] == NOVA_INTENT_CONTEXT_VERSION
+    assert result.spec.provenance["context_digest"] == context_digest
+    changed_context_provider, _ = provider(proposal())
+    changed_context = changed_context_provider.interpret(
+        "Deploy this API with private customer data and asynchronous work.",
+        "example/support-rag-api",
+        scope(),
+    )
+    assert changed_context.model_metadata["context_digest"] != context_digest
+    assert "customer_request" not in result.spec.provenance
     validated = NovaIntentProposal.model_validate(proposal())
     assert result.model_metadata["proposal_version"] == NOVA_INTENT_PROPOSAL_VERSION
     assert result.model_metadata["proposal_digest"] == model_input_digest(
         validated.model_dump(mode="json")
+    )
+    assert result.model_metadata["context_digest"] == model_input_digest(
+        gateway.calls[0][1]
     )
     equivalent = NovaIntentProposal.model_validate(
         dict(reversed(list(proposal().items())))
@@ -172,6 +189,8 @@ def test_fixture_intent_metadata_does_not_claim_nova_proposal_provenance():
     assert result.model_metadata["provider"] == "fixture"
     assert "proposal_version" not in result.model_metadata
     assert "proposal_digest" not in result.model_metadata
+    assert "context_version" not in result.model_metadata
+    assert "context_digest" not in result.model_metadata
 
 
 def test_model_scope_classification_keeps_deploying_financial_software_in_scope():
@@ -235,6 +254,12 @@ def test_nova_intent_repairs_one_schema_violation_and_records_usage():
     rejected = model_input_digest(invalid)
     assert result.model_metadata["proposal_digest"] == expected
     assert result.model_metadata["proposal_digest"] != rejected
+    assert result.model_metadata["context_version"] == NOVA_INTENT_CONTEXT_VERSION
+    assert result.model_metadata["context_digest"] == model_input_digest(
+        gateway.calls[0][1]
+    )
+    assert result.model_metadata["input_digest"] == gateway.calls[1][0].input_digest
+    assert result.model_metadata["context_digest"] != result.model_metadata["input_digest"]
 
 
 def test_nova_intent_repair_receives_bounded_validation_diagnostics():
