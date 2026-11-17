@@ -7,6 +7,7 @@ from davdeploy.generated_deployment_contract import (
 )
 from davdeploy.generated_provider_validation import (
     GeneratedProviderSchemaError,
+    provider_schema_provenance,
     validate_generated_proposal,
 )
 
@@ -15,6 +16,7 @@ PROVIDER = "registry.terraform.io/hashicorp/aws"
 
 def schema():
     return {
+        "format_version": "1.0",
         "provider_schemas": {
             PROVIDER: {
                 "provider": {"version": 0},
@@ -83,6 +85,24 @@ def schema():
             }
         }
     }
+
+
+def test_provider_schema_provenance_is_canonical_and_rejects_unsupported_formats():
+    first = schema()
+    format_version, first_digest = provider_schema_provenance(first)
+    reordered = {"provider_schemas": first["provider_schemas"], "format_version": "1.0"}
+    assert format_version == "1.0"
+    assert provider_schema_provenance(reordered) == ("1.0", first_digest)
+
+    changed = schema()
+    changed["provider_schemas"][PROVIDER]["resource_schemas"]["aws_test_resource"][
+        "block"
+    ]["attributes"]["name"]["description"] = "A changed schema field."
+    assert provider_schema_provenance(changed)[1] != first_digest
+
+    for unsupported in ({}, {"format_version": "2.0"}, {"format_version": "1"}):
+        with pytest.raises(GeneratedProviderSchemaError):
+            provider_schema_provenance(unsupported)
 
 
 def proposal(arguments=None, outputs=None, resource_type="aws_test_resource"):

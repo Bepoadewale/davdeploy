@@ -432,6 +432,8 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         terraform_version="1.14.7",
         aws_provider_version="5.100.0",
         provider_lockfile_sha256="b" * 64,
+        provider_schema_format_version="1.0",
+        provider_schema_sha256="8" * 64,
         proposal_sha256=proposal_sha256,
         context_sha256="e" * 64,
         configuration_sha256="d" * 64,
@@ -456,8 +458,27 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 7
+    assert manifest["manifest_version"] == 14
+    assert manifest["toolchain"]["provider_schema_format_version"] == "1.0"
+    assert manifest["toolchain"]["provider_schema_sha256"] == "8" * 64
     assert manifest["execution_workspace"]["sha256"] == "c" * 64
+    for invalid_schema_evidence in (
+        {"provider_schema_format_version": "2.0", "provider_schema_sha256": "8" * 64},
+        {"provider_schema_format_version": "1.0", "provider_schema_sha256": "invalid"},
+    ):
+        with pytest.raises(GeneratedPlanArtifactError, match="provider schema"):
+            generated_plan_manifest(
+                organization_id="org-1",
+                project_id="project-1",
+                revision_id="revision-1",
+                revision_sha256="e" * 64,
+                stored_object=stored,
+                workspace_object=stored_workspace,
+                plan=replace(plan, **invalid_schema_evidence),
+                proposal=proposal,
+                policy_digest=evidence_digest,
+                created_at="2026-11-04T00:00:00Z",
+            )
     assert manifest["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [
@@ -544,7 +565,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         created_at="2026-11-04T00:00:00Z",
         remote_state=remote_state,
     )
-    assert owned_manifest["manifest_version"] == 9
+    assert owned_manifest["manifest_version"] == 16
     assert owned_manifest["remote_state"] == remote_state
     assert owned_manifest["ownership_inventory"] == {
         "version": 1,

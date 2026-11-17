@@ -48,24 +48,32 @@ in run `44195944703`. No customer Nova workload has been run.
 
 ## Acceptance criteria
 
-- [ ] Unsupported or malformed provider schema format versions fail closed.
-- [ ] Valid schema format version and canonical schema digest are returned by
+- [x] Unsupported or malformed provider schema format versions fail closed.
+- [x] Valid schema format version and canonical schema digest are returned by
   the plan runner.
-- [ ] Immutable saved-plan manifest carries and validates schema provenance.
-- [ ] Existing provider lockfile, proposal, context, plan, and workspace digests
+- [x] Immutable saved-plan manifest carries and validates schema provenance.
+- [x] Existing provider lockfile, proposal, context, plan, and workspace digests
   remain bound as before.
-- [ ] Focused tests, full verification, docs conventions, and diff checks pass.
+- [x] Focused tests, full verification, docs conventions, and diff checks pass.
 - [ ] All required GitHub checks pass on the final PR head.
 
 ## Acceptance status
 
-Implementation has not started. This is a source-only evidence change; no
-Terraform or customer workload operation is planned.
+Implementation is complete and locally verified. This is a source-only
+evidence change; no Terraform or customer workload operation was performed.
 
 ## Tests / validation performed
 
-No checks have run for this implementation yet. No customer workload evidence
-file is required because no customer workload is part of this package.
+- Focused provider validation, plan runner, artifact, review, and CodeBuild tests:
+  92 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  1,306 passed; Ruff, configuration, OpenAPI snapshot, and Compose checks passed.
+- `GITHUB_PR_NUMBER=429 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
+  passed.
+- `git diff --check`: passed.
+- GitHub checks are pending on the final PR head.
+- No customer workload evidence file is required because no customer workload
+  was run.
 
 ## Evidence files produced
 
