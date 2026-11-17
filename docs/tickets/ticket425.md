@@ -35,6 +35,9 @@ only bounded Nova intent extraction and does not depend on enabling that path.
 
 - Add a bounded `DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS` setting, defaulting to
   one and accepting only values from zero through two.
+- Pass the same validated range through both Terraform-hosted runtime roots and
+  document the local environment setting. Existing per-call timeout and
+  output-token limits remain in force, with at most three structured requests.
 - Retry only schema-invalid Nova responses. Each repair receives bounded
   validation locations/types and the prior response as untrusted data; local
   Pydantic validation remains authoritative.
@@ -45,26 +48,33 @@ only bounded Nova intent extraction and does not depend on enabling that path.
 
 ## Acceptance criteria
 
-- [ ] Default behavior still makes at most one schema-repair call.
-- [ ] Zero disables schema repair; the invalid response fails closed.
-- [ ] A configured limit of two allows a second correction and succeeds only
+- [x] Default behavior still makes at most one schema-repair call.
+- [x] Zero disables schema repair; the invalid response fails closed.
+- [x] A configured limit of two allows a second correction and succeeds only
   when the final response passes the local schema.
-- [ ] Invalid setting values fail during provider construction; no unbounded
+- [x] Invalid setting values fail during provider construction; no unbounded
   retry is possible.
-- [ ] Call count, token, timeout, and usage evidence stay bounded and accurate.
-- [ ] Focused tests, full verification, documentation conventions, and diff
-  checks pass.
-- [ ] All seven required CI checks pass on the final PR head.
+- [x] Call count, token, timeout, and usage evidence stay bounded and accurate.
+- [x] Focused tests (22), full verification (1,303), documentation conventions,
+  Terraform formatting/validation, and diff checks pass.
+- [x] All seven required CI checks pass on implementation source head `dbb6b13` in
+  [run `44182459869`](https://github.com/Bepoadewale/davdeploy/actions/runs/44182459869).
 
 ## Acceptance status
 
-Not implemented yet. Ticket and evidence files are being established before
-source changes.
+Implementation is complete locally. Focused and full verification, Terraform
+formatting/validation for both changed roots, and documentation checks passed.
+All seven required checks passed on source head `dbb6b13` in run `44182459869`.
+The final evidence commit will be documentation-only; its fresh-head CI result
+will be recorded in the PR description.
 
 ## Tests / validation performed
 
-Before implementation, only documentation convention and diff checks will be
-run. Full checks will be recorded after the source change.
+Focused and full verification, Terraform formatting and validation for both
+changed runtime roots, documentation conventions, and diff checks passed.
+All seven required CI jobs passed on implementation source head `dbb6b13` in
+run `44182459869`. The documentation-only evidence commit's fresh-head CI
+result will be recorded in the PR description.
 
 ## Evidence files produced
 
