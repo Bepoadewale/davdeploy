@@ -1,36 +1,54 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-16. This status summary tracks the Nova-led infrastructure
+Updated: 2026-11-17. This status summary tracks the Nova-led infrastructure
 workflow without claiming launch readiness. Code, control-plane deployment,
 customer plan, application behavior, and lifecycle evidence are distinct states.
 
-## Current source and hosted status — 2026-11-16
+## Current source and hosted status — 2026-11-17
 
-Backend `main` is `2b78e0a97940179bac0654cf005f04df00949995` (PR #415). The
-hosted control plane is PR #411 source `a9c5ca127e8e93845b215c795dd6755e6683869f`,
-applied by [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
-after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
-Read-only checks confirmed matching Lambda package identities and `/healthz`
-HTTP 200. PRs #412 and #414 add bounded cost evidence in source but are not
-deployed. PR #414 prices single-region Standard DynamoDB on-demand reads,
-writes, table storage, and PITR from explicit revision-bound assumptions.
-PR #415 adds lifecycle regression coverage without changing runtime behavior.
-Draft PR #416 exposes the revision-bound pricing inputs in generated-plan
-review output. Unmodeled DynamoDB settings remain approval blockers.
-Open draft PR #399 has passing CI, but its apply worker and credential broker
-are incomplete and Nova customer apply remains disabled. No Nova customer plan
-or workload has been applied, health-checked,
-updated, recovered, or destroyed.
+Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420). PR #413
+merged the Nova coverage ledger. PRs #412 and #414 add bounded, revision-bound
+pricing for supported Lambda/API and DynamoDB configurations; PR #416 exposes
+the modeled pricing assumptions in generated-plan review output. PRs #417–#420
+make the protected Terraform plan summary inspectable while keeping values
+redacted and malformed IAM policy shapes fail-closed.
+
+The control plane was deployed from current `main` using plan
+[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+and saved-plan apply
+[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
+Both workflow jobs succeeded, including database migrations. Read-only checks
+found all six `davdeploy-*` Lambda packages on code hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
+HTTP 200. This verifies the deployed control plane, not a customer workload.
+
+Draft PR #399 is open at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`; CI run
+[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
+passed all seven jobs. The branch now contains the default-off apply credential
+and input routes, isolated staging of exact plan/workspace artifacts, a fixed
+apply worker, and result reconciliation. The apply worker and credential gates
+remain disabled. A dedicated customer role and its least-privilege permissions
+have not been provisioned or verified. No customer credentials were issued and
+no Nova customer plan, apply, health check, update, recovery, or destroy has
+been performed.
+
+Read-only inventory in account `654654474502`, region `us-east-1`, found no
+SageMaker endpoint, model, or endpoint configuration. Four tagged DavDeploy
+Batch job definitions remain inactive. One SageMaker lineage action and one
+context remain as retained evidence. The local Terraform run monitor is empty
+and no Terraform plan, apply, or destroy process is active. Preserve the
+untracked `--only-show-errors` file, `.venv-pr399/`, and lineage records.
 
 The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
 human approval -> exact-plan execution -> observed application health and
 lifecycle evidence. Model output cannot authorize execution. Current gaps
-include complete cost evidence, durable customer state/artifacts, hosted plan
-and approval journey, exact-plan apply integration, health/recovery/cleanup,
-and full scenario coverage. The [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
-tracks all 26 architecture entries and 30 implementation roots with explicit
-acceptance cases and honest evidence status.
+include complete cost evidence, a customer-owned least-privilege apply role,
+the hosted customer plan and approval journey, apply credential/build/result
+exercise, health/recovery/cleanup, and full scenario coverage. The
+[capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) tracks all 26
+architecture entries and 30 implementation roots with explicit acceptance
+cases and honest evidence status.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 
@@ -57,14 +75,22 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `f0c6f3af36a0ab14a5dafb9a1684c41140da7eef`, deployed by
-  apply run `42902934302` after plan run `42902031985`. The deployed plan
-  history APIs from #333/#334 remain behind authentication; the authenticated
-  customer journey is not yet verified.
-- PR #303 is included in the November 10 release. Renderer routes remain
-  gated; no hosted composed customer workload has run. Plan pricing, exact
-  costed approval, customer apply, health observation, recovery, teardown, and
-  independent absence evidence remain outstanding.
+- Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420),
+  deployed by apply run `43982396577` after plan run `43981566184`. The six
+  backend Lambda packages share code hash
+  `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; public `/healthz` returned
+  HTTP 200. This release does not establish a Nova customer workload.
+- PR #399 remains open and draft. Its current branch contains a separate
+  default-off apply worker, credential broker, exact artifact staging, and
+  result reconciliation; CI run `43997205241` passed all seven checks. The
+  customer apply role has not been provisioned or verified, and no real apply
+  build, health observation, recovery, destroy, or independent absence check
+  has run. Do not merge or enable apply before those gates are satisfied.
+- Current AWS inventory has four tagged inactive Batch job definitions and
+  retained SageMaker lineage evidence; no endpoint, model, or endpoint
+  configuration was returned. The local Terraform monitor is empty and no
+  Terraform operation is active. Preserve the protected local untracked files
+  and lineage evidence.
 
 ## Verified boundary — historical detail, read with current status above
 

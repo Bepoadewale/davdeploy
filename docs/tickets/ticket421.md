@@ -1,24 +1,26 @@
 # ticket421 — reconcile current Nova execution evidence
 
-## Goal
+PR: #421 https://github.com/Bepoadewale/davdeploy/pull/421
+Branch: `docs/reconcile-nova-current-evidence-421`
+
+## Problem / goal
 
 Refresh the durable Nova execution handoff with current backend, hosted release,
 draft apply-worker, AWS inventory, and Terraform monitor evidence. Keep source,
 deployment, and customer workload acceptance as separate states.
 
-## Current state
+## Current repo state
 
 - Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420).
 - PR #413 merged as `de873ef9e22a96ec38aa4650741b42ff73f053f1`.
 - Draft PR #399 is open at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`.
-  It includes the apply credential and input APIs, isolated artifact staging,
+  It contains the apply credential and input APIs, isolated artifact staging,
   a fixed apply worker, and result reconciliation in source. CI run
   [43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
   passed all seven jobs. The runner and credential gates remain disabled; no
   customer role, credential issuance, or customer workload lifecycle has been
   verified.
-- The protected control plane was subsequently deployed from current `main`
-  using plan run
+- The protected control plane was deployed from current `main` using plan run
   [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
   and apply run
   [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -35,7 +37,7 @@ deployment, and customer workload acceptance as separate states.
 - The protected untracked `--only-show-errors` file and `.venv-pr399/` remain
   untouched.
 
-## References
+## Research / references used
 
 - [Nova execution handoff](../product/COMPOSED_EXECUTION_GOAL.md)
 - [Nova capability evidence matrix](../product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
@@ -43,42 +45,50 @@ deployment, and customer workload acceptance as separate states.
 - [PR #420](https://github.com/Bepoadewale/davdeploy/pull/420)
 - AWS CLI read-only inventory in account `654654474502`, region `us-east-1`.
 
-## Work
+## Work planned for the PR
 
-- Reconcile the current source and hosted control-plane release in the goal
-  handoff.
+- Reconcile current source and hosted control-plane release in the goal handoff.
 - Record the exact current status of PR #399 and preserve the disabled apply
   boundary.
-- Update the acceptance matrix's status notes where the pricing and plan-review
-  evidence advanced after its last documented baseline.
+- Update pricing and plan-review status notes in the capability matrix.
 
 ## Acceptance criteria
 
-- [ ] Current main, merged coverage-ledger PR, and open draft apply PR are
+- [x] Current main, merged coverage-ledger PR, and open draft apply PR are
   identified by exact commit and workflow evidence.
-- [ ] Hosted control-plane deployment and runtime health are recorded without
+- [x] Hosted control-plane deployment and runtime health are recorded without
   claiming a Nova customer workload.
-- [ ] Current AWS test inventory and monitor status are recorded without
+- [x] Current AWS test inventory and monitor status are recorded without
   deleting or altering retained evidence.
-- [ ] Follow-up work and safety boundaries are explicit.
+- [x] Follow-up work and safety boundaries are explicit.
 
-## Validation and evidence
+## Acceptance status
 
-Documentation-only. No runtime evidence file is required. Reviewed GitHub PR
-and workflow metadata, the Terraform monitor, AWS read-only inventory, and the
-health endpoint; no repository tests or Terraform mutation are part of this
-change.
+Complete for this documentation scope; no customer execution gate is promoted.
+
+## Tests / validation performed
+
+Documentation-only. No runtime evidence file is required.
+
+- `python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- No Terraform mutation or customer workload was run.
+
+## Evidence files produced
+
+No `docs/test/test421.md` is required because this PR changes documentation only.
+The reconciled evidence is linked from the two product documents above.
 
 ## Boundaries
 
 - Do not merge PR #399 or enable either apply gate without the separate
   customer-role, hosted plan/apply, application health, update/recovery, destroy,
   and independent absence acceptance evidence.
-- Do not alter the hosted control plane or the retained SageMaker lineage
-  records as part of this documentation update.
+- Do not alter the hosted control plane or retained SageMaker lineage records
+  as part of this documentation update.
 - Do not claim any Nova customer workload has been applied or certified.
 
-## Follow-up
+## Follow-up work
 
 Implement the next dependency-ready customer apply-role and permission evidence
 package, then complete hosted apply and lifecycle acceptance before enabling the
