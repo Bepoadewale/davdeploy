@@ -1,17 +1,27 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `2b78e0a` (PR #415), 2026-11-16. The hosted
-control plane is on PR #411 commit `a9c5ca1`, applied by exact saved-plan run
-[43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
-after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
-Read-only post-apply checks found all six backend Lambdas on package hash
-`DN7QMWh1lCNtB9bK8AA0uWHRyMTEVwF7qKTmzB/JbhU=`, with `/healthz` HTTP 200.
-This verifies control-plane source and health only. PRs #412 and #414 add
-source-only pricing and are not deployed; neither establishes a Nova customer
-workload journey. PR #414 covers bounded DynamoDB on-demand request units,
-table storage, and PITR. Unsupported DynamoDB settings remain unpriced and
-approval-blocking. Draft PR #416 adds assumption visibility to the local
-generated-plan review contract; it is not deployed.
+Status snapshot: backend `main` at `9951caa9244128b1551fea3af66b1bdbf884c800`
+(PR #420), 2026-11-17. PR #413 merged the expanded coverage ledger. The hosted
+control plane was deployed from current `main` by saved-plan apply
+[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
+after plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184);
+both jobs succeeded, including migrations. Read-only checks found all six
+backend Lambdas on package hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` HTTP 200. This
+verifies the deployed control plane only.
+
+Merged PRs #412 and #414 provide bounded, revision-bound Lambda/API and
+DynamoDB pricing, and #416 exposes modeled assumptions in generated-plan
+review output. PRs #417–#420 add value-redacted protected plan summaries,
+including safe IAM policy scope, bounded policy placeholders, failure
+locators, and hyphenated IAM policy names. These features are in the current
+hosted package. They do not make all resource costs known or establish a Nova
+customer workload journey. Unsupported material costs and settings still
+block approval. Draft PR #399 remains open at
+`72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`; its latest CI run
+[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
+passed seven jobs. Apply gates remain disabled, and the customer apply role,
+credential issuance, hosted apply, health, recovery, and cleanup are unverified.
 
 This document joins the checked-in architecture catalogue, Terraform
 implementation registry, scenario catalogue and existing evidence. A catalogue
@@ -45,7 +55,7 @@ customer.
 |---|---|---|
 | Proposal/schema checks | `generated_provider_validation.py` checks generated resource types and arguments against the initialized, locked AWS provider schema. [`ticket309.md`](../tickets/ticket309.md) records a synthetic S3 schema check; [`test311.md`](../test/test311.md) records the later authenticated S3 saved-plan run with the locked provider schema. | This verifies Terraform schema shape, not service semantics, customer security, cost, or lifecycle behavior. There is no per-module schema-version/evidence binding in either registry. |
 | Generated-plan policy | `generated_plan_policy.py` binds trusted account/region and proposal inventory; reviews destructive and sensitive changes; checks policy-critical unknowns for a finite list of Terraform types; and contains S3, IAM, security-group/network-ACL ingress, EC2 metadata, relational-database, and bounded EKS node IMDSv2 rules. PRs #401/#402/#404 are merged and deployed to the control plane; [`test401.md`](../test/test401.md), [`test402.md`](../test/test402.md), and [`test404.md`](../test/test404.md) record synthetic/local tests and hosted CI. | Partial shared rules only. The EKS node rule applies only when the plan binds a node group to exactly one same-plan launch template whose metadata settings are visible to policy. It does not establish pod metadata isolation, Kubernetes/RBAC or cluster endpoint security. Unknown-value checks cover only paths in `POLICY_CRITICAL_UNKNOWN_PATHS`. ACL association, route/egress reachability, and a complete deterministic policy map for all 26 modules or 30 roots are not established. No customer plan has exercised these checks. See the resource-family table below. |
-| Cost | `generated_plan_pricing.py` has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PRs #407–#414 are merged source; #412 and #414 are not deployed. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
+| Cost | `generated_plan_pricing.py` has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PRs #407–#416 are merged and included in the current hosted package. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
 | Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. Some isolated AWS evidence below records real service requests or traffic. | The scenario declarations are not proof that the hosted worker ran the probes. The current `CertificationEvidence` is five booleans (apply, destroy, readiness, rollback, cleanup); it does not record update, controlled failure, cost, source/artifact digest, or evidence link. |
 | Update/recovery/cleanup | Some service-level evidence records create and destroy; the scenario declarations include rollback and cleanup descriptions. | No complete Nova-hosted composed application evidence for update, injected failure, recovery, exact ownership-based destroy, and independent absence verification. A scenario label is not an observed result. |
 | Hosted execution | The repository records an App Runner customer workload pilot in [`test42.md`](../test/test42.md). PR #314 added durable saved-plan storage and administrator approval; its ticket states the hosted worker has no caller and apply/destroy are unavailable on this path. | The App Runner pilot is a separate legacy renderer, not Nova-generated composed execution. No Nova-hosted plan-to-apply customer workload is evidenced here. Hosted control-plane health is not workload health. |
@@ -127,7 +137,7 @@ above applies to every row.
 | `aws-lambda-service` | `web-application` / `saas-backend` function case | Bound runtime/memory/time/concurrency, role, references and artifact; invoke and inspect redacted output; price requests/duration/logs/VPC/egress. |
 | `aws-ecr-image` | Additional image provenance case | Require immutable digest, approved source/build, scan and scoped pull; run exact image; price storage, transfer, scan and requests. |
 | `aws-aurora-postgres` | `saas-backend` relational case | Require private encryption, backups/deletion and secret contract; query/restore/checksum; price instances, storage, I/O, backup, network and secret. |
-| `aws-dynamodb-table` | `saas-backend` NoSQL case | Require encryption, PITR, deletion protection and ownership; put/get/restore; price capacity or request mode, storage, backup and streams. Merged source PR #414 prices single-region Standard on-demand request units, table storage and PITR; it is not deployed. Provisioned capacity, indexes, replicas, streams and other omitted charges remain blockers. |
+| `aws-dynamodb-table` | `saas-backend` NoSQL case | Require encryption, PITR, deletion protection and ownership; put/get/restore; price capacity or request mode, storage, backup and streams. Merged and deployed PR #414 prices single-region Standard on-demand request units, table storage and PITR. Provisioned capacity, indexes, replicas, streams and other omitted charges remain blockers. |
 | `aws-elasticache-redis` | Additional cache case | Require private encrypted/authenticated access and failover; set/get/reconnect; price node-hours, backup, storage and transfer. |
 | `aws-opensearch` | `ai-rag` search case | Check private access, encryption, scoped index permissions and capacity; query/update/delete plus tenant denial; price OCU/node, storage, ingest/query. |
 | `aws-efs-shared-storage` | Additional shared-file case | Check encryption, mount security, access point identity and retention; authorized clients read/write, other denied; price storage, throughput, backup, transfer. |
