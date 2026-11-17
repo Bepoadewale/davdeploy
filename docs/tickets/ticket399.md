@@ -315,8 +315,10 @@ gates disabled until those gates are met.
 - Focused tests passed (94); full `make verify` passed 1,366 tests and its
   Ruff, Actions configuration, OpenAPI, and Compose checks. All configured
   Terraform roots validated, recursive Terraform formatting, documentation
-  conventions, and `git diff --check` passed. Hosted CI for this new head is
-  pending.
+  conventions, and `git diff --check` passed. GitHub Actions run
+  `44078718495` passed all seven required checks on implementation commit
+  `1a2c507`, including the clean-runner end-to-end job. This evidence update
+  is a follow-up documentation commit and receives its own CI run.
 - Apply and broker gates remain disabled. No role, credential, apply build,
   customer workload, or hosted control-plane change was performed. The local
   clean-room cycle remains unrun; its cleanup step would remove retained local

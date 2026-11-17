@@ -373,8 +373,10 @@ Fresh-head hosted CI is required after push.
   registry was empty. SageMaker lineage evidence was preserved. No AWS
   resource, lineage record, credential, apply build, or control-plane state was
   changed. Apply and credential-broker gates remain off.
-- Hosted CI for this source head is pending. The full local clean-room cycle
-  was not run because its cleanup would delete retained artifacts without
-  current explicit deletion approval. No customer workload was applied or
-  certified.
+- GitHub Actions run `44078718495` passed all seven checks on implementation
+  commit `1a2c507`, including its clean-runner end-to-end job. This section is
+  a documentation-only follow-up and has its own required PR check run.
+- The full local clean-room cycle was not run because its cleanup would delete
+  retained artifacts without current explicit deletion approval. No customer
+  workload was applied or certified.
 
