@@ -201,3 +201,9 @@ No AWS resources were created by this change. No apply run was dispatched. The w
   health, recovery, destroy, or independent absence proof exists. Both apply
   readiness and the credential broker remain disabled.
 
+The branch was then synchronized with current backend `main` at merge commit
+`57f061f24cbb98dba12edd6b7a0e99406f9d5398`. On that head, `make verify`
+passed 1,298 tests, `make terraform-validate` passed all configured roots,
+and documentation conventions, Terraform formatting, and diff checks passed.
+Fresh-head hosted CI is required after push.
+

@@ -147,6 +147,17 @@ remain untouched.
   the dedicated customer role remain incomplete; the fixed worker/buildspec,
   callbacks, hosted apply, health, recovery, destroy, and absence proof remain
   incomplete.
+
+### Current-base synchronization — 2026-11-17
+
+- Merged current `main` (`9951caa9244128b1551fea3af66b1bdbf884c800`) into the
+  PR branch at merge commit `57f061f24cbb98dba12edd6b7a0e99406f9d5398`.
+- On that merged head, `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399`
+  passed (1,298 tests), `make terraform-validate` passed all configured roots,
+  and documentation conventions, Terraform formatting, and diff checks passed.
+- Fresh-head GitHub CI is pending after push. PR #399 remains a draft; apply
+  and broker gates remain disabled. Dedicated role provisioning and hosted
+  apply/lifecycle proof remain incomplete.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and
