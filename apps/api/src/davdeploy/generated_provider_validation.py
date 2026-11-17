@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -30,6 +32,40 @@ def _schema_value_type(value: Any) -> str:
 
 
 _OUTPUT_PATH_PATTERN = re.compile(GENERATED_OUTPUT_PATH_PATTERN)
+_PROVIDER_SCHEMA_FORMAT_PATTERN = re.compile(r"^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)$")
+SUPPORTED_PROVIDER_SCHEMA_FORMAT_MAJOR = 1
+
+
+def validate_provider_schema_format_version(value: object) -> str:
+    """Accept Terraform's documented compatible 1.x schema JSON format."""
+    if not isinstance(value, str):
+        raise GeneratedProviderSchemaError("pinned AWS provider schema format is unavailable")
+    match = _PROVIDER_SCHEMA_FORMAT_PATTERN.fullmatch(value)
+    if match is None or int(match.group("major")) != SUPPORTED_PROVIDER_SCHEMA_FORMAT_MAJOR:
+        raise GeneratedProviderSchemaError(
+            "pinned AWS provider schema format version is unsupported"
+        )
+    return value
+
+
+def provider_schema_provenance(provider_schema_document: dict[str, Any]) -> tuple[str, str]:
+    """Return supported Terraform schema format and digest of the complete document."""
+    if not isinstance(provider_schema_document, dict):
+        raise GeneratedProviderSchemaError("pinned AWS provider schema is unavailable")
+    format_version = validate_provider_schema_format_version(
+        provider_schema_document.get("format_version")
+    )
+    try:
+        encoded = json.dumps(
+            provider_schema_document,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        raise GeneratedProviderSchemaError("pinned AWS provider schema is malformed") from None
+    return format_version, hashlib.sha256(encoded).hexdigest()
 
 
 def _computed_output(block: dict[str, Any], path: str) -> tuple[Any, bool, bool] | None:
@@ -193,6 +229,7 @@ def validate_generated_proposal(
     validates Terraform configuration shape, not AWS permissions, quotas,
     service behavior, cost or successful execution.
     """
+    provider_schema_provenance(provider_schema_document)
     schemas = provider_schema_document.get("provider_schemas", {})
     provider = schemas.get(provider_address)
     if not isinstance(provider, dict):

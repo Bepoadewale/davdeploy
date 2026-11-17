@@ -27,6 +27,10 @@ from davdeploy.generated_plan_pricing import (
     pricing_evidence_is_fresh,
     pricing_evidence_safe_summary,
 )
+from davdeploy.generated_provider_validation import (
+    GeneratedProviderSchemaError,
+    validate_provider_schema_format_version,
+)
 from davdeploy.generated_terraform_plan import (
     MAX_EXECUTION_WORKSPACE_BYTES,
     GeneratedTerraformPlan,
@@ -513,6 +517,14 @@ def generated_plan_manifest(
         or not re.fullmatch(r"[a-f0-9]{64}", plan.plan_access_policy_sha256)
     ):
         raise GeneratedPlanArtifactError("customer plan permission evidence is malformed")
+    try:
+        provider_schema_format_version = validate_provider_schema_format_version(
+            plan.provider_schema_format_version
+        )
+    except GeneratedProviderSchemaError:
+        raise GeneratedPlanArtifactError("provider schema format evidence is malformed") from None
+    if not re.fullmatch(r"[a-f0-9]{64}", plan.provider_schema_sha256):
+        raise GeneratedPlanArtifactError("provider schema digest evidence is malformed")
     if (
         not isinstance(workspace_object, StoredPlanObject)
         or not workspace_object.version_id
@@ -553,9 +565,9 @@ def generated_plan_manifest(
     pricing_summary = pricing_evidence_safe_summary(pricing_document)
     manifest = {
         "manifest_version": (
-            (13 if untagged_resources else 12 if remote_state is not None else 11)
+            (19 if untagged_resources else 18 if remote_state is not None else 17)
             if pricing_document is not None
-            else (9 if untagged_resources else 8 if remote_state is not None else 7)
+            else (16 if untagged_resources else 15 if remote_state is not None else 14)
         ),
         "tenant": {
             "organization_id": organization_id,
@@ -567,6 +579,8 @@ def generated_plan_manifest(
             "terraform_version": plan.terraform_version,
             "aws_provider_version": plan.aws_provider_version,
             "provider_lockfile_sha256": plan.provider_lockfile_sha256,
+            "provider_schema_format_version": provider_schema_format_version,
+            "provider_schema_sha256": plan.provider_schema_sha256,
         },
         "digests": {
             "customer_revision_sha256": revision_sha256,

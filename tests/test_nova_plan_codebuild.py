@@ -397,6 +397,8 @@ class FakePlanRunner:
             terraform_version=PINNED_TERRAFORM_VERSION,
             aws_provider_version=PINNED_AWS_PROVIDER_VERSION,
             provider_lockfile_sha256="a" * 64,
+            provider_schema_format_version="1.0",
+            provider_schema_sha256="8" * 64,
             proposal_sha256=canonical_json_digest(proposal.model_dump(mode="json")),
             context_sha256=proposal.context_digest,
             configuration_sha256="b" * 64,
@@ -584,7 +586,7 @@ def test_remote_state_bootstrap_uses_durable_request_and_keeps_credentials_out_o
         "state_id": state_backend.state_id,
         "scope_sha256": state_backend.scope_sha256,
     }
-    assert result_document["manifest"]["manifest_version"] == 12
+    assert result_document["manifest"]["manifest_version"] == 18
     assert result_document["manifest"]["proposal_requirements"] == {
         "status": "PROPOSED_UNVALIDATED_NOT_EXECUTED",
         "health_assertions": [],
