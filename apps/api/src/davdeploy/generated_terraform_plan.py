@@ -47,6 +47,7 @@ from davdeploy.generated_plan_pricing import (
 )
 from davdeploy.generated_provider_validation import (
     GeneratedProviderSchemaError,
+    provider_schema_provenance,
     validate_generated_proposal,
 )
 from davdeploy.nova_apply_access import (
@@ -75,6 +76,8 @@ class GeneratedTerraformPlan:
     terraform_version: str
     aws_provider_version: str
     provider_lockfile_sha256: str
+    provider_schema_format_version: str
+    provider_schema_sha256: str
     proposal_sha256: str
     context_sha256: str
     configuration_sha256: str
@@ -229,6 +232,7 @@ class GeneratedTerraformPlanRunner:
         )
         try:
             schema = json.loads(schema_output.stdout)
+            provider_schema_format, provider_schema_sha256 = provider_schema_provenance(schema)
             validate_generated_proposal(proposal, schema)
             untagged_resource_ownership = inject_trusted_ownership_tags(
                 config,
@@ -328,6 +332,8 @@ class GeneratedTerraformPlanRunner:
             terraform_version=installed_version,
             aws_provider_version=lockfile_version,
             provider_lockfile_sha256=lockfile_digest,
+            provider_schema_format_version=provider_schema_format,
+            provider_schema_sha256=provider_schema_sha256,
             proposal_sha256=hashlib.sha256(proposal_bytes).hexdigest(),
             context_sha256=proposal.context_digest,
             configuration_sha256=config_digest,

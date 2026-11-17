@@ -251,6 +251,8 @@ def generated_runner_result(
         terraform_version="1.14.7",
         aws_provider_version="5.100.0",
         provider_lockfile_sha256="b" * 64,
+        provider_schema_format_version="1.0",
+        provider_schema_sha256="8" * 64,
         proposal_sha256=proposal_digest,
         context_sha256=proposal.context_digest,
         configuration_sha256="c" * 64,

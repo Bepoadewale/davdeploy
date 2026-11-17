@@ -65,9 +65,17 @@ def proposal():
     )
 
 
-def fake_terraform(tmp_path, *, applyable=True, errored=False, taggable=True):
+def fake_terraform(
+    tmp_path,
+    *,
+    applyable=True,
+    errored=False,
+    taggable=True,
+    schema_format_version="1.0",
+):
     executable = tmp_path / "terraform-fake"
     schema = {
+        "format_version": schema_format_version,
         "provider_schemas": {
             "registry.terraform.io/hashicorp/aws": {
                 "provider": {"version": 0},
@@ -295,8 +303,10 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
     assert result.region == "us-east-1"
     assert result.terraform_version == "1.14.7"
     assert result.aws_provider_version == "5.100.0"
+    assert result.provider_schema_format_version == "1.0"
     assert len(result.proposal_sha256) == 64
     assert len(result.provider_lockfile_sha256) == 64
+    assert len(result.provider_schema_sha256) == 64
     assert len(result.configuration_sha256) == 64
     assert len(result.saved_plan_sha256) == 64
     assert os.stat(result.saved_plan_path).st_mode & 0o777 == 0o600
@@ -336,6 +346,19 @@ def test_proposal_digest_uses_canonical_unicode_json(tmp_path):
     assert result.proposal_sha256 == canonical_json_digest(
         unicode_proposal.model_dump(mode="json")
     )
+
+
+def test_runner_rejects_unsupported_provider_schema_format(tmp_path):
+    fake = fake_terraform(tmp_path, schema_format_version="2.0")
+
+    with pytest.raises(TerraformPlanExecutionError, match="schema validation"):
+        runner(tmp_path, fake=fake).plan(
+            proposal(),
+            expected_account_id="654654474502",
+            region="us-east-1",
+            ownership_scope=ownership_scope(),
+            workspace=tmp_path / "unsupported-schema-run",
+        )
 
 
 def test_remote_state_uses_trusted_http_backend_and_secret_environment(tmp_path):

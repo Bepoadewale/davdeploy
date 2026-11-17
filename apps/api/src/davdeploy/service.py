@@ -79,6 +79,10 @@ from davdeploy.generated_plan_pricing import (
     pricing_evidence_is_approval_eligible,
     pricing_evidence_safe_summary,
 )
+from davdeploy.generated_provider_validation import (
+    GeneratedProviderSchemaError,
+    validate_provider_schema_format_version,
+)
 from davdeploy.generated_terraform_plan import (
     PINNED_AWS_PROVIDER_VERSION,
     PINNED_TERRAFORM_VERSION,
@@ -5368,8 +5372,16 @@ class ProductService:
             or toolchain.get("terraform_version") != PINNED_TERRAFORM_VERSION
             or toolchain.get("aws_provider_version") != PINNED_AWS_PROVIDER_VERSION
             or toolchain.get("provider_lockfile_sha256") != lockfile_sha256
+            or not isinstance(toolchain.get("provider_schema_sha256"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", toolchain["provider_schema_sha256"])
         ):
             raise ValueError("Nova result toolchain did not match the fixed runner")
+        try:
+            provider_schema_format_version = validate_provider_schema_format_version(
+                toolchain.get("provider_schema_format_version")
+            )
+        except GeneratedProviderSchemaError:
+            raise ValueError("Nova result provider schema format is unsupported") from None
         policy_doc = result.get("policy_evidence")
         if (
             not isinstance(policy_doc, dict)
@@ -5488,15 +5500,19 @@ class ProductService:
         }
         expected_manifest_version = (
             (
-                13
+                22
                 if untagged_records
-                else 12
+                else 21
                 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE"
-                else 11
+                else 20
             )
             if pricing_document is not None
             else (
-                9 if untagged_records else 8 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE" else 7
+                19
+                if untagged_records
+                else 18
+                if boundary_mode == "TENANT_ISOLATED_HTTP_STATE"
+                else 17
             )
         )
         if manifest.get("manifest_version") != expected_manifest_version:
@@ -5593,6 +5609,8 @@ class ProductService:
             terraform_version=toolchain["terraform_version"],
             aws_provider_version=toolchain["aws_provider_version"],
             provider_lockfile_sha256=toolchain["provider_lockfile_sha256"],
+            provider_schema_format_version=provider_schema_format_version,
+            provider_schema_sha256=toolchain["provider_schema_sha256"],
             proposal_sha256=proposal_sha256,
             context_sha256=expected_context_sha256,
             configuration_sha256=digests.get("configuration_sha256"),
@@ -6136,6 +6154,19 @@ class ProductService:
         if canonical_json_digest(artifact.manifest) != artifact.manifest_sha256:
             raise ValueError("generated plan manifest failed integrity verification")
         manifest = artifact.manifest
+        toolchain = manifest.get("toolchain")
+        if not isinstance(toolchain, dict):
+            raise TypeError("generated plan schema provenance is missing")
+        try:
+            validate_provider_schema_format_version(
+                toolchain.get("provider_schema_format_version")
+            )
+        except GeneratedProviderSchemaError:
+            raise ValueError("generated plan schema format evidence is invalid") from None
+        if not isinstance(toolchain.get("provider_schema_sha256"), str) or not re.fullmatch(
+            r"[a-f0-9]{64}", toolchain["provider_schema_sha256"]
+        ):
+            raise ValueError("generated plan schema digest evidence is invalid")
         if (manifest.get("planning_boundary") or {}).get("mode") == "INITIAL_PLAN_NO_REMOTE_STATE":
             raise ValueError(
                 "durable remote Terraform state is unavailable; initial-state plans cannot be approved"
