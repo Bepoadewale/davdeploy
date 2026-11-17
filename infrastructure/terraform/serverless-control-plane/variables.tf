@@ -146,7 +146,7 @@ variable "enable_nova_plan_only_runner" {
 
 variable "enable_nova_exact_plan_apply_runner" {
   type        = bool
-  description = "Provision a separate disabled-by-default CodeBuild boundary for exact saved-plan apply. This does not enable customer execution until the fixed worker, live approval/pricing checks and credential broker are implemented and verified."
+  description = "Provision the separate disabled-by-default CodeBuild boundary for exact saved-plan apply. The API dispatch readiness flag remains closed until both this runner and the separate credential broker are enabled; customer role permission verification and lifecycle certification are still required."
   default     = false
 
   validation {

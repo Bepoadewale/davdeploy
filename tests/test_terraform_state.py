@@ -1009,6 +1009,72 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
         assert denied.status_code == 403
         assert codebuild.calls == []
 
+    from davdeploy.nova_apply_dispatch import NovaApplyBuild
+
+    class SuccessfulApplyResultReader:
+        project_name = "fixed-apply"
+
+        def describe_build(self, requested_build_id):
+            assert requested_build_id == build_id
+            return NovaApplyBuild(
+                build_id=build_id,
+                project_name="fixed-apply",
+                status="SUCCEEDED",
+                run_id=apply_run_id,
+                build_arn=build_arn,
+            )
+
+        def read_result(self, requested_run_id, request, requested_build_id, requested_build_arn, **kwargs):
+            assert requested_run_id == apply_run_id
+            assert request == request_document
+            assert requested_build_id == build_id
+            assert requested_build_arn == build_arn
+            assert kwargs == {
+                "expected_state_id": state_id,
+                "expected_state_scope_sha256": state_scope,
+                "expected_account_id": account_id,
+                "expected_region": region,
+            }
+            return (
+                {
+                    "execution_status": "APPLIED_UNVERIFIED",
+                    "state_id": state_id,
+                    "state_scope_sha256": state_scope,
+                    "terraform_version": "1.14.7",
+                    "aws_provider_version": "6.0.0",
+                },
+                "result-version-1",
+                "a" * 64,
+            )
+
+        @staticmethod
+        def result_key(requested_build_arn):
+            return f"plans/nova-generated/apply-builds/{requested_build_arn}/result.json"
+
+    reconciler = main.ProductService(db, nova_apply_dispatcher=SuccessfulApplyResultReader())
+    assert reconciler.reconcile_generated_plan_apply_build(build_id) is True
+    reconciled_run = db.get(GeneratedPlanApplyRun, apply_run_id)
+    assert reconciled_run.state == "APPLIED_UNVERIFIED"
+    assert reconciled_run.result_metadata == {
+        "codebuild_status": "SUCCEEDED",
+        "codebuild_build_arn": build_arn,
+        "result_key": f"plans/nova-generated/apply-builds/{build_arn}/result.json",
+        "result_version_id": "result-version-1",
+        "result_sha256": "a" * 64,
+        "manifest_sha256": manifest_digest,
+        "execution_status": "APPLIED_UNVERIFIED",
+        "state_id": state_id,
+        "state_scope_sha256": state_scope,
+    }
+    reconcile_event = db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "generated_plan_apply.build_reconciled"
+        )
+    )
+    assert reconcile_event is not None
+    assert reconcile_event.entity_id == apply_run_id
+    assert reconcile_event.detail["result_sha256"] == "a" * 64
+
     db.close()
     engine.dispose()
 

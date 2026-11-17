@@ -16,7 +16,8 @@ CodeBuild project and `customer_executor`.
 Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` after PRs #417–#420;
 merged-main checks passed. PR #399 is based on that commit through merge
 commit `57f061f24cbb98dba12edd6b7a0e99406f9d5398`; its latest committed head
-is `9fbd9692793925879b33279953648a0de8cf5541`. Mainline has bounded regional
+before this worker package was `8380b65d04831caff83f5606456abdbc35103799`.
+Mainline has bounded regional
 price evidence for supported S3, SQS, RDS MySQL, Lambda/API, and DynamoDB
 configurations, but material unsupported or unpriced resources still block
 approval and PR #318 remains closed/held. The latest documented hosted release
@@ -72,13 +73,12 @@ and `.venv-pr399/` must remain untouched.
   cleanup.
 - [ ] A plan without complete trusted regional pricing and a persisted approval
   bound to its exact immutable manifest cannot reach a credentialed apply step.
-- [ ] Apply verifies and uses the exact saved-plan and workspace versions and
-  their manifests; changed, stale, cross-tenant, or mismatched artifacts fail
-  closed. Contract and workspace restore checks are implemented. The contract
-  also rejects plans without tenant-scoped remote state; apply dispatch and
-  execution are not implemented.
-- [ ] The worker is idempotent and reports uncertain outcomes for reconciliation
-  instead of retrying an apply blindly.
+- [x] The fixed worker verifies and uses exact staged saved-plan and workspace
+  versions, their manifest bindings, and tenant-scoped remote state; changed,
+  stale, cross-tenant, or mismatched artifacts fail closed. Local tests use
+  test doubles; no live CodeBuild or AWS apply has been exercised.
+- [x] The durable dispatcher remains idempotent, and the fixed worker records
+  uncertain apply outcomes for reconciliation instead of retrying blindly.
 - [x] Apply has a separate CodeBuild project and IAM role with explicit denies
   for build override fields; it never reuses `customer_executor`.
 - [x] The separate apply credential broker is gated independently and, when
@@ -97,11 +97,11 @@ and `.venv-pr399/` must remain untouched.
   restoration are implemented. Source now also contains a disabled-by-default
   separate apply CodeBuild project, isolated service role, restricted artifact
   paths, an IAM-authenticated credential route permission, fixed run-ID-only
-  dispatch policy, and explicit StartBuild override denies. Its fixed buildspec
-  exits because the worker is not wired. The durable API request/worker
-  dispatcher and apply credential broker now exist in source, but the dedicated
-  customer role setup, CodeBuild callback consumer, and Terraform execution are
-  not implemented.
+  dispatch policy, and explicit StartBuild override denies. A fixed worker and
+  CodeBuild buildspec are now present in source, but remain behind the default-
+  off project and credential gates. They have not run against AWS. Dedicated
+  customer role setup/effective permissions and callback result verification
+  remain incomplete in the committed source at the time of this snapshot.
   The role also has project/build-scoped permission and trusted project
   settings for remote-state credential bootstrap, which exact-plan apply needs;
   The state API now has an apply-run authorization path, but no apply-request
@@ -365,4 +365,32 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   evidence remain unmet. Feature and credential gates remain disabled; no real
   artifacts were copied, credentials issued, CodeBuild apply started, or AWS
   resources changed.
+
+## 2026-11-17 fixed apply worker and result reconciliation
+
+- The gated CodeBuild buildspec loads the pinned immutable application archive,
+  verifies Terraform 1.14.7 against its SHA-256 digest, and invokes the fixed
+  `davdeploy.nova_apply_codebuild` entrypoint. The worker validates the exact
+  build/run contract, restores only the staged plan/workspace versions,
+  rechecks tenant state binding, initializes the remote HTTP backend, and
+  applies only `terraform apply <saved.tfplan>`.
+- The worker requests customer credentials only after restore and state init,
+  verifies the exact temporary role identity, and checks that both state and
+  customer credentials outlast the bounded 12-minute apply timeout plus a
+  30-second margin. Timeout, nonzero apply, and result-write uncertainty
+  require reconciliation. The result object is encrypted, versioned, and
+  created conditionally so the same build cannot overwrite it.
+- The completion reconciler accepts `APPLIED_UNVERIFIED` only after reading
+  the exact build-scoped result object and validating its object version,
+  checksum, KMS metadata, run/build identity, saved-plan/workspace digests,
+  target, state scope, and toolchain against durable records. Missing or
+  mismatched evidence remains `RECONCILIATION_REQUIRED`. Build success does
+  not mean application health.
+- The worker readiness variable remains closed unless both the separate apply
+  runner and credential broker flags are enabled. Both flags default false.
+  Customer role creation/effective permission validation and full lifecycle
+  evidence remain missing.
+- Evidence is test-double and source validation only: no real credential was
+  issued, no CodeBuild apply was started, and no customer AWS resource was
+  created or changed. See `docs/test/test399.md` for validation and limitations.
 

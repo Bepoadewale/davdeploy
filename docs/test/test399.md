@@ -249,3 +249,34 @@ Fresh-head hosted CI is required after push.
   no fixed worker execution, AWS apply, application health, recovery, destroy,
   or independent absence evidence is established.
 
+## 2026-11-17 fixed apply worker and callback source evidence
+
+- Execution type: local source tests and static Terraform validation using
+  test doubles. No AWS credential was issued, no CodeBuild apply was started,
+  and no customer resource was created or changed.
+- The fixed buildspec fetches the exact version of the reviewed application
+  archive, verifies Terraform 1.14.7 against a pinned SHA-256 checksum, and
+  invokes `davdeploy.nova_apply_codebuild`. The worker restores the exact
+  staged artifacts, binds the tenant state, requests customer credentials only
+  after initialization, verifies the returned role identity, and invokes only
+  `terraform apply` with the saved plan. It refuses to start unless the state
+  and customer credentials outlast the full 12-minute apply bound plus a
+  30-second margin.
+- The worker writes a bounded KMS-encrypted, versioned result with a
+  create-only condition. The API reconciler reads and validates the exact
+  build-scoped result version, checksum, KMS metadata, plan/workspace digests,
+  account, region, state scope, and toolchain before recording
+  `APPLIED_UNVERIFIED`. Missing or mismatched results stay in
+  `RECONCILIATION_REQUIRED`; build success is not application health.
+- Focused checks passed: 52 tests across the apply dispatcher, client, worker,
+  state API, and infrastructure gate. `make verify
+  VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed 1,312 tests,
+  Ruff, Actions configuration, OpenAPI snapshot, and Compose config.
+- `make terraform-validate` passed all configured roots;
+  `terraform fmt -check -recursive infrastructure/terraform`, documentation
+  conventions, and `git diff --check` passed.
+- Apply and credential-broker flags remain false by default; dispatch readiness
+  requires both. Dedicated customer-role provisioning/effective permission
+  checks and hosted apply, health, recovery, destroy, and independent absence
+  evidence remain incomplete. Fresh-head GitHub CI is required after push.
+

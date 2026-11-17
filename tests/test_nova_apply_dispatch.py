@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import uuid
 
 import pytest
@@ -47,6 +50,27 @@ class FakeCodeBuild:
     def list_builds_for_project(self, **kwargs):
         self.calls.append(("list_builds_for_project", kwargs))
         return self.pages.pop(0) if self.pages else {"ids": []}
+
+
+class FakeBody:
+    def __init__(self, raw):
+        self.raw = raw
+
+    def read(self, size):
+        return self.raw[:size]
+
+    def close(self):
+        return None
+
+
+class FakeS3:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def get_object(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.response
 
 
 def test_start_build_uses_only_fixed_project_and_durable_run_override():
@@ -143,6 +167,28 @@ def test_dispatcher_stays_disabled_without_explicit_runner_flag(monkeypatch):
     assert NovaExactPlanApplyDispatcher.from_environment() is None
 
 
+def test_enabled_dispatcher_loads_the_encrypted_result_bucket(monkeypatch):
+    clients = {"s3": object(), "codebuild": object()}
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", PROJECT)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET", "davdeploy-plans-654654474502")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER", "654654474502")
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN",
+        "arn:aws:kms:us-east-1:654654474502:key/abc",
+    )
+    monkeypatch.setattr(
+        "davdeploy.nova_apply_dispatch.boto3.client",
+        lambda name, **_kwargs: clients[name],
+    )
+
+    dispatcher = NovaExactPlanApplyDispatcher.from_environment()
+
+    assert dispatcher is not None
+    assert dispatcher.s3 is clients["s3"]
+    assert dispatcher.codebuild is clients["codebuild"]
+
+
 def test_invalid_run_and_idempotency_values_fail_before_codebuild_call():
     codebuild = FakeCodeBuild()
     dispatcher = NovaExactPlanApplyDispatcher(project_name=PROJECT, codebuild_client=codebuild)
@@ -152,3 +198,142 @@ def test_invalid_run_and_idempotency_values_fail_before_codebuild_call():
     with pytest.raises(ValueError):
         dispatcher.start_build(RUN_ID, "not-a-token")
     assert codebuild.calls == []
+
+
+def test_read_result_accepts_only_exact_versioned_approved_run_result():
+    plan_sha256 = "a" * 64
+    workspace_sha256 = "b" * 64
+    manifest_sha256 = "c" * 64
+    state_id = "tenant-state-1"
+    state_scope_sha256 = "d" * 64
+    request_document = {
+        "source_plan_run_id": "source-run-1",
+        "manifest_sha256": manifest_sha256,
+        "saved_plan": {"sha256": plan_sha256},
+        "execution_workspace": {"sha256": workspace_sha256},
+    }
+    result = {
+        "contract": "davdeploy.nova-apply-result.v1",
+        "run_id": RUN_ID,
+        "codebuild_project": PROJECT,
+        "codebuild_build_id": BUILD_ID,
+        "codebuild_build_arn": BUILD_ARN,
+        "source_plan_run_id": "source-run-1",
+        "manifest_sha256": manifest_sha256,
+        "saved_plan_sha256": plan_sha256,
+        "execution_workspace_sha256": workspace_sha256,
+        "state_id": state_id,
+        "state_scope_sha256": state_scope_sha256,
+        "account_id": "123456789012",
+        "region": "us-east-1",
+        "execution_status": "APPLIED_UNVERIFIED",
+        "started_at": "2026-11-17T10:00:00+00:00",
+        "finished_at": "2026-11-17T10:01:00+00:00",
+        "terraform_version": "1.14.7",
+        "aws_provider_version": "6.0.0",
+    }
+    raw = json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
+    raw_sha256 = hashlib.sha256(raw).digest()
+    digest = raw_sha256.hex()
+    s3 = FakeS3(
+        {
+            "Body": FakeBody(raw),
+            "VersionId": "result-version-1",
+            "ContentLength": len(raw),
+            "ChecksumSHA256": base64.b64encode(raw_sha256).decode(),
+            "ServerSideEncryption": "aws:kms",
+            "SSEKMSKeyId": "arn:aws:kms:us-east-1:654654474502:key/abc",
+            "BucketKeyEnabled": True,
+            "Metadata": {
+                "davdeploy-run-id": RUN_ID,
+                "davdeploy-build-id": BUILD_ID,
+                "davdeploy-result-sha256": digest,
+            },
+        }
+    )
+    dispatcher = NovaExactPlanApplyDispatcher(
+        project_name=PROJECT,
+        codebuild_client=FakeCodeBuild(),
+        s3_client=s3,
+        artifact_bucket="davdeploy-plans-654654474502",
+        expected_bucket_owner="654654474502",
+        kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/abc",
+    )
+
+    verified, version_id, result_sha256 = dispatcher.read_result(
+        RUN_ID,
+        request_document,
+        BUILD_ID,
+        BUILD_ARN,
+        expected_state_id=state_id,
+        expected_state_scope_sha256=state_scope_sha256,
+        expected_account_id="123456789012",
+        expected_region="us-east-1",
+    )
+
+    assert verified == result
+    assert version_id == "result-version-1"
+    assert result_sha256 == digest
+    assert s3.calls == [
+        {
+            "Bucket": "davdeploy-plans-654654474502",
+            "Key": f"plans/nova-generated/apply-builds/{BUILD_ARN}/result.json",
+            "ExpectedBucketOwner": "654654474502",
+            "ChecksumMode": "ENABLED",
+        }
+    ]
+
+
+def test_read_result_rejects_a_result_from_a_different_manifest():
+    altered = {
+        "contract": "davdeploy.nova-apply-result.v1",
+        "run_id": RUN_ID,
+        "codebuild_project": PROJECT,
+        "codebuild_build_id": BUILD_ID,
+        "codebuild_build_arn": BUILD_ARN,
+        "source_plan_run_id": "source-run-1",
+        "manifest_sha256": "e" * 64,
+    }
+    raw = json.dumps(altered, sort_keys=True, separators=(",", ":")).encode()
+    digest_bytes = hashlib.sha256(raw).digest()
+    digest = digest_bytes.hex()
+    dispatcher = NovaExactPlanApplyDispatcher(
+        project_name=PROJECT,
+        codebuild_client=FakeCodeBuild(),
+        s3_client=FakeS3(
+            {
+                "Body": FakeBody(raw),
+                "VersionId": "result-version-1",
+                "ContentLength": len(raw),
+                "ChecksumSHA256": base64.b64encode(digest_bytes).decode(),
+                "ServerSideEncryption": "aws:kms",
+                "SSEKMSKeyId": "arn:aws:kms:us-east-1:654654474502:key/abc",
+                "BucketKeyEnabled": True,
+                "Metadata": {
+                    "davdeploy-run-id": RUN_ID,
+                    "davdeploy-build-id": BUILD_ID,
+                    "davdeploy-result-sha256": digest,
+                },
+            }
+        ),
+        artifact_bucket="davdeploy-plans-654654474502",
+        expected_bucket_owner="654654474502",
+        kms_key_arn="arn:aws:kms:us-east-1:654654474502:key/abc",
+    )
+
+    with pytest.raises(NovaApplyDispatchError, match="approved run and saved plan"):
+        dispatcher.read_result(
+            RUN_ID,
+            {
+                "source_plan_run_id": "source-run-1",
+                "manifest_sha256": "c" * 64,
+                "saved_plan": {"sha256": "a" * 64},
+                "execution_workspace": {"sha256": "b" * 64},
+            },
+            BUILD_ID,
+            BUILD_ARN,
+            expected_state_id="tenant-state-1",
+            expected_state_scope_sha256="d" * 64,
+            expected_account_id="123456789012",
+            expected_region="us-east-1",
+        )

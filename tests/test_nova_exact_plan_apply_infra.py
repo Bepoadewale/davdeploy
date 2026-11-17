@@ -35,7 +35,8 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
 
     assert (
         'DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY = '
-        'tostring(var.enable_nova_exact_plan_apply_runner)'
+        'tostring(var.enable_nova_exact_plan_apply_runner && '
+        'var.enable_nova_exact_plan_apply_credential_broker)'
     ) in " ".join(MAIN.split())
     credential_broker = block(
         VARIABLES, 'variable "enable_nova_exact_plan_apply_credential_broker"'
@@ -81,21 +82,26 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
     assert '"$context.identity.userArn"' in apply_input_integration
 
 
-def test_apply_runner_is_separate_and_fails_closed_until_worker_is_wired() -> None:
+def test_apply_runner_is_separate_and_invokes_the_fixed_saved_plan_worker() -> None:
     project = block(MAIN, 'resource "aws_codebuild_project" "nova_exact_plan_apply"')
     assert 'name                   = local.nova_exact_plan_apply_project_name' in project
     assert 'service_role           = aws_iam_role.nova_exact_plan_apply[0].arn' in project
     assert 'type      = "NO_SOURCE"' in project
     assert 'artifacts { type = "NO_ARTIFACTS" }' in project
     assert 'privileged_mode             = false' in project
-    assert "The fixed Nova exact-plan apply worker is not wired." in project
-    assert "exit 1" in project
+    assert "davdeploy.nova_apply_codebuild" in project
+    assert "terraform/1.14.7/terraform_1.14.7_linux_amd64.zip" in project
+    assert "e8bbcefea8015156e04e2a325cde37a0b2fb761728bda548e2fe3b8ad7c18c96" in project
+    assert "sha256sum --check --status" in project
     assert "aws_iam_role.customer_executor" not in project
     assert "aws_codebuild_project.nova_plan_only" not in project
     for setting in (
         "DAVDEPLOY_TERRAFORM_STATE_BOOTSTRAP_URL",
         "DAVDEPLOY_TERRAFORM_STATE_ENABLED",
         "DAVDEPLOY_TERRAFORM_STATE_API_URL",
+        "DAVDEPLOY_NOVA_APPLY_CODE_BUCKET",
+        "DAVDEPLOY_NOVA_APPLY_CODE_KEY",
+        "DAVDEPLOY_NOVA_APPLY_CODE_VERSION",
     ):
         assert setting in project
 

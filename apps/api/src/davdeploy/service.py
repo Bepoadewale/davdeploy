@@ -234,6 +234,7 @@ class ProductService:
         terraform_generator: NovaTerraformGenerator | None = None,
         generated_plan_artifact_store: Any | None = None,
         nova_plan_dispatcher: NovaPlanOnlyDispatcher | None = None,
+        nova_apply_dispatcher: NovaExactPlanApplyDispatcher | None = None,
     ):
         self.db = db
         self.intent_provider = intent_provider or configured_intent_provider()
@@ -250,6 +251,7 @@ class ProductService:
         self.terraform_generator = terraform_generator or NovaTerraformGenerator()
         self.generated_plan_artifact_store = generated_plan_artifact_store
         self.nova_plan_dispatcher = nova_plan_dispatcher
+        self.nova_apply_dispatcher = nova_apply_dispatcher
 
     def _wake_worker(self, kind: str, job_id: str) -> None:
         """Send a non-sensitive wake-up after durable work has committed.
@@ -9600,7 +9602,7 @@ class ProductService:
         """Dispatch one approved saved plan through the fixed CodeBuild project."""
         if os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true":
             return False
-        dispatcher = NovaExactPlanApplyDispatcher.from_environment()
+        dispatcher = self.nova_apply_dispatcher or NovaExactPlanApplyDispatcher.from_environment()
         if dispatcher is None:
             return False
         self._reconcile_expired_generated_plan_apply_leases()
@@ -9650,6 +9652,8 @@ class ProductService:
             )
             return True
         self._finish_generated_plan_apply_dispatch(run.id, lease_token, build)
+        if build.status == "SUCCEEDED":
+            self.reconcile_generated_plan_apply_build(build.build_id)
         return True
 
     def _claim_next_generated_plan_apply_run(
@@ -9746,8 +9750,11 @@ class ProductService:
             }
             finished_at = None
             if build.status == "SUCCEEDED":
-                state = "APPLIED_UNVERIFIED"
-                finished_at = now
+                # A successful CodeBuild status is only transport evidence. The
+                # durable state advances after the exact encrypted result object
+                # has been read and matched against the approved manifest.
+                state = "BUILD_STARTED"
+                finished_at = None
                 error_code = None
                 error_summary = None
             elif build.status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
@@ -9794,7 +9801,9 @@ class ProductService:
         if not project:
             return False
         try:
-            dispatcher = NovaExactPlanApplyDispatcher(project_name=project)
+            dispatcher = self.nova_apply_dispatcher or NovaExactPlanApplyDispatcher.from_environment()
+            if dispatcher is None:
+                return False
             build = dispatcher.describe_build(build_id)
         except (NovaApplyDispatchError, ValueError):
             return False
@@ -9814,12 +9823,112 @@ class ProductService:
             return False
         now = datetime.now(UTC)
         state = "BUILD_STARTED"
+        result_metadata: dict[str, Any] | None = None
         error_code = None
         error_summary = None
         finished_at = None
         if build.status == "SUCCEEDED":
-            state = "APPLIED_UNVERIFIED"
-            finished_at = now
+            try:
+                artifact = self.db.get(GeneratedPlanArtifact, run.artifact_id)
+                manifest = artifact.manifest if artifact is not None else None
+                request_document = run.request_document
+                tenant = manifest.get("tenant") if isinstance(manifest, dict) else None
+                remote_state = manifest.get("remote_state") if isinstance(manifest, dict) else None
+                target = manifest.get("target") if isinstance(manifest, dict) else None
+                saved_plan = request_document.get("saved_plan") if isinstance(request_document, dict) else None
+                workspace = (
+                    request_document.get("execution_workspace")
+                    if isinstance(request_document, dict)
+                    else None
+                )
+                if (
+                    artifact is None
+                    or not isinstance(manifest, dict)
+                    or not isinstance(request_document, dict)
+                    or canonical_json_digest(manifest) != run.manifest_sha256
+                    or artifact.manifest_sha256 != run.manifest_sha256
+                    or artifact.organization_id != run.organization_id
+                    or artifact.project_id != run.project_id
+                    or artifact.revision_id != run.revision_id
+                    or artifact.run_id != run.source_plan_run_id
+                    or canonical_json_digest(request_document) != run.request_sha256
+                    or request_document.get("manifest_sha256") != run.manifest_sha256
+                    or request_document.get("artifact_id") != run.artifact_id
+                    or request_document.get("source_plan_run_id") != run.source_plan_run_id
+                    or request_document.get("organization_id") != run.organization_id
+                    or request_document.get("project_id") != run.project_id
+                    or request_document.get("revision_id") != run.revision_id
+                    or request_document.get("digests") != manifest.get("digests")
+                    or request_document.get("target") != manifest.get("target")
+                    or not isinstance(tenant, dict)
+                    or tenant.get("organization_id") != run.organization_id
+                    or tenant.get("project_id") != run.project_id
+                    or tenant.get("revision_id") != run.revision_id
+                    or not isinstance(saved_plan, dict)
+                    or saved_plan.get("bucket") != artifact.artifact_bucket
+                    or saved_plan.get("key") != artifact.artifact_key
+                    or saved_plan.get("version_id") != artifact.artifact_version_id
+                    or saved_plan.get("size_bytes") != artifact.artifact_size_bytes
+                    or saved_plan.get("sha256") != artifact.saved_plan_sha256
+                    or not isinstance(workspace, dict)
+                    or workspace.get("bucket") != artifact.workspace_artifact_bucket
+                    or workspace.get("key") != artifact.workspace_artifact_key
+                    or workspace.get("version_id") != artifact.workspace_artifact_version_id
+                    or workspace.get("size_bytes") != artifact.workspace_artifact_size_bytes
+                    or workspace.get("sha256") != artifact.workspace_sha256
+                    or not isinstance(remote_state, dict)
+                    or not isinstance(target, dict)
+                    or target.get("account_id") != artifact.target_account_id
+                    or target.get("region") != artifact.region
+                    or not isinstance(remote_state.get("state_id"), str)
+                    or not isinstance(remote_state.get("scope_sha256"), str)
+                    or not isinstance(target.get("account_id"), str)
+                    or not isinstance(target.get("region"), str)
+                ):
+                    raise ValueError
+                result, result_version_id, result_sha256 = dispatcher.read_result(
+                    run.runner_run_id,
+                    request_document,
+                    build.build_id,
+                    build.build_arn,
+                    expected_state_id=remote_state["state_id"],
+                    expected_state_scope_sha256=remote_state["scope_sha256"],
+                    expected_account_id=target["account_id"],
+                    expected_region=target["region"],
+                )
+                if (
+                    result["terraform_version"] != artifact.terraform_version
+                    or result["aws_provider_version"] != artifact.aws_provider_version
+                ):
+                    raise ValueError
+                state = "APPLIED_UNVERIFIED"
+                finished_at = now
+                result_metadata = {
+                    "codebuild_status": build.status,
+                    "codebuild_build_arn": build.build_arn,
+                    "result_key": dispatcher.result_key(build.build_arn),
+                    "result_version_id": result_version_id,
+                    "result_sha256": result_sha256,
+                    "manifest_sha256": run.manifest_sha256,
+                    "execution_status": result["execution_status"],
+                    "state_id": result["state_id"],
+                    "state_scope_sha256": result["state_scope_sha256"],
+                }
+            except (
+                BotoCoreError,
+                ClientError,
+                NovaApplyDispatchError,
+                OSError,
+                TypeError,
+                ValueError,
+                KeyError,
+            ):
+                state = "RECONCILIATION_REQUIRED"
+                error_code = "APPLY_RESULT_NOT_VERIFIED"
+                error_summary = (
+                    "The successful build result could not be matched to the approved saved plan; reconcile before any retry."
+                )
+                finished_at = now
         elif build.status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
             state = "RECONCILIATION_REQUIRED"
             error_code = "APPLY_BUILD_FAILED"
@@ -9844,7 +9953,7 @@ class ProductService:
                 codebuild_build_arn=build.build_arn,
                 worker_lease_token=None,
                 worker_lease_expires_at=None,
-                result_metadata={
+                result_metadata=result_metadata or {
                     "codebuild_status": build.status,
                     "codebuild_build_arn": build.build_arn,
                 },
@@ -9857,6 +9966,22 @@ class ProductService:
             .execution_options(synchronize_session=False)
         )
         if changed.rowcount == 1:
+            self.audit(
+                Principal("system-nova-apply-worker", run.organization_id, "operator"),
+                "generated_plan_apply.build_reconciled",
+                "generated_plan_apply_run",
+                run.id,
+                {
+                    "codebuild_project": project,
+                    "codebuild_build_id": build.build_id,
+                    "build_status": build.status,
+                    "state": state,
+                    "result_sha256": result_metadata.get("result_sha256")
+                    if result_metadata
+                    else None,
+                    "error_code": error_code,
+                },
+            )
             self.db.commit()
             return True
         self.db.rollback()

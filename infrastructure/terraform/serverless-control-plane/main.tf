@@ -1257,7 +1257,7 @@ resource "aws_codebuild_project" "nova_exact_plan_apply" {
   count = var.enable_nova_exact_plan_apply_runner ? 1 : 0
 
   name                   = local.nova_exact_plan_apply_project_name
-  description            = "Separate fixed CodeBuild boundary for future exact approved-plan apply; no customer apply is wired by this disabled project."
+  description            = "Separate fixed CodeBuild boundary for exact approved-plan Nova apply; disabled by default."
   service_role           = aws_iam_role.nova_exact_plan_apply[0].arn
   build_timeout          = 120
   queued_timeout         = 5
@@ -1344,9 +1344,19 @@ resource "aws_codebuild_project" "nova_exact_plan_apply" {
       version: 0.2
       phases:
         install:
+          runtime-versions:
+            python: 3.12
           commands:
-            - echo "The fixed Nova exact-plan apply worker is not wired." >&2
-            - exit 1
+            - mkdir -p /tmp/davdeploy-nova-apply/code /tmp/davdeploy-nova-apply/terraform
+            - aws s3api get-object --bucket "$DAVDEPLOY_NOVA_APPLY_CODE_BUCKET" --key "$DAVDEPLOY_NOVA_APPLY_CODE_KEY" --version-id "$DAVDEPLOY_NOVA_APPLY_CODE_VERSION" --expected-bucket-owner "$DAVDEPLOY_NOVA_APPLY_CODE_BUCKET_OWNER" /tmp/davdeploy-nova-apply/code.zip >/dev/null
+            - unzip -q /tmp/davdeploy-nova-apply/code.zip -d /tmp/davdeploy-nova-apply/code
+            - curl -fsSL -o /tmp/davdeploy-nova-apply/terraform.zip https://releases.hashicorp.com/terraform/1.14.7/terraform_1.14.7_linux_amd64.zip
+            - echo "e8bbcefea8015156e04e2a325cde37a0b2fb761728bda548e2fe3b8ad7c18c96  /tmp/davdeploy-nova-apply/terraform.zip" | sha256sum --check --status
+            - unzip -q /tmp/davdeploy-nova-apply/terraform.zip -d /tmp/davdeploy-nova-apply/terraform
+            - chmod 700 /tmp/davdeploy-nova-apply/terraform/terraform
+        build:
+          commands:
+            - PATH="/tmp/davdeploy-nova-apply/terraform:$PATH" PYTHONPATH="/tmp/davdeploy-nova-apply/code" python3.12 -m davdeploy.nova_apply_codebuild
     EOT
   }
 
@@ -1565,7 +1575,7 @@ locals {
     DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                         = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT                   = var.enable_nova_exact_plan_apply_runner ? aws_codebuild_project.nova_exact_plan_apply[0].name : ""
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN                  = var.enable_nova_exact_plan_apply_runner ? aws_iam_role.nova_exact_plan_apply[0].arn : ""
-    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY              = tostring(var.enable_nova_exact_plan_apply_runner)
+    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY              = tostring(var.enable_nova_exact_plan_apply_runner && var.enable_nova_exact_plan_apply_credential_broker)
     DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = tostring(var.enable_nova_exact_plan_apply_credential_broker)
     DAVDEPLOY_TERRAFORM_STATE_ENABLED                         = tostring(var.enable_nova_terraform_state_api)
     DAVDEPLOY_TERRAFORM_STATE_API_URL                         = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
