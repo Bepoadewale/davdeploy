@@ -38,13 +38,14 @@ locals {
     DAVDEPLOY_DATABASE_URL = "sqlite+pysqlite:////tmp/davdeploy.db"
   }
   runtime_env_model = var.enable_nova_model ? {
-    DAVDEPLOY_MODEL_PROVIDER          = "bedrock"
-    DAVDEPLOY_MODEL_FALLBACK          = "disabled"
-    DAVDEPLOY_BEDROCK_REGION          = var.region
-    DAVDEPLOY_BEDROCK_MODEL_ID        = var.nova_model_id
-    DAVDEPLOY_MODEL_DATA_POLICY       = "bedrock-no-training"
-    DAVDEPLOY_MODEL_MAX_OUTPUT_TOKENS = "2000"
-    DAVDEPLOY_MODEL_TIMEOUT_SECONDS   = "60"
+    DAVDEPLOY_MODEL_PROVIDER                = "bedrock"
+    DAVDEPLOY_MODEL_FALLBACK                = "disabled"
+    DAVDEPLOY_BEDROCK_REGION                = var.region
+    DAVDEPLOY_BEDROCK_MODEL_ID              = var.nova_model_id
+    DAVDEPLOY_MODEL_DATA_POLICY             = "bedrock-no-training"
+    DAVDEPLOY_MODEL_MAX_OUTPUT_TOKENS       = "2000"
+    DAVDEPLOY_MODEL_TIMEOUT_SECONDS         = "60"
+    DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS = tostring(var.nova_intent_schema_repair_attempts)
     } : {
     DAVDEPLOY_MODEL_PROVIDER = "fixture"
   }

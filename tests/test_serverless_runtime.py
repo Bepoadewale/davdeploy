@@ -404,6 +404,12 @@ def test_serverless_stack_authorizes_only_the_selected_nova_model_family():
     )
     assert '"true"' in nova_setting
     assert "foundation-model/*" not in terraform
+    variables = (
+        ROOT / "infrastructure/terraform/serverless-control-plane/variables.tf"
+    ).read_text()
+    assert "DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS" in terraform
+    assert 'variable "nova_intent_schema_repair_attempts"' in variables
+    assert "<= 2" in variables
 
 
 def test_hosted_serverless_certification_is_off_and_workspace_allowlisted_by_default():

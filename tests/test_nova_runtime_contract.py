@@ -15,7 +15,14 @@ def test_nova_runtime_is_opt_in_and_restricted_to_nova_2_lite():
     assert "inference-profile/${var.nova_model_id}" in runtime
     assert 'variable = "bedrock:InferenceProfileArn"' in runtime
     assert "InvokeNova2LiteOnlyThroughProfile" in runtime
-    assert 'DAVDEPLOY_MODEL_FALLBACK          = "disabled"' in runtime
+    assert any(
+        line.split("=", 1)[0].strip() == "DAVDEPLOY_MODEL_FALLBACK"
+        and '"disabled"' in line
+        for line in runtime.splitlines()
+    )
+    assert "DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS" in runtime
+    assert 'variable "nova_intent_schema_repair_attempts"' in variables
+    assert "<= 2" in variables
     assert "DAVDEPLOY_MODEL_MAX_ATTEMPTS" not in runtime
 
 

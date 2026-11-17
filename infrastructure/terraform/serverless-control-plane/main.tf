@@ -1174,6 +1174,7 @@ locals {
     DAVDEPLOY_MODEL_PROVIDER                             = "bedrock"
     DAVDEPLOY_ENABLE_NOVA_MODEL                          = "true"
     DAVDEPLOY_BEDROCK_MODEL_ID                           = var.nova_model_id
+    DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS              = tostring(var.nova_intent_schema_repair_attempts)
     DAVDEPLOY_EXECUTOR_MODE                              = "embedded_fixture"
     DAVDEPLOY_EMAIL_PROVIDER                             = var.resend_invitation_parameter_name != "" ? "resend" : (var.ses_identity_arn == "" ? "disabled" : "ses")
     DAVDEPLOY_SES_FROM_ADDRESS                           = var.ses_from_address
