@@ -13,15 +13,15 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `8c7f1deab9e9b9865a25d0fffaf87be2066b8ea4` after PRs #422 and
-#423. The hosted control plane remains on PR #420 commit
-`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by plan run `43981566184`
-and apply run `43982396577`; PR #422 is source-only. PR #399 is open and draft,
-now based on current `main` through merge commit `e01eee2fbb395ef4421bc30c6459ce6cf4f89a8a`.
-Apply gates remain disabled. Mainline has bounded regional price evidence for
-supported S3, SQS, RDS MySQL, Lambda/API, and DynamoDB configurations, but
-material unsupported or unpriced resources still block approval and PR #318
-remains closed/held. No Nova customer workload has been applied. The protected
+Backend `main` is `602206ee1fd73b4582015ec30d2b5e472d72baf7` after PRs #422,
+#423, #413, and #424. PR #424 adds bounded Aurora Serverless v2 Standard
+writer pricing; it does not remove other unsupported or unpriced-resource
+blocks. PR #413's coverage ledger is merged. The hosted control plane remains
+on PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by
+plan run `43981566184` and apply run `43982396577`; these source changes are not
+deployed. PR #399 is open and draft; its latest synchronization with current
+`main` is merge commit `29957e14ce13fb7df7000f3e1a7244cbb1c5154f`. Apply gates
+remain disabled. No Nova customer workload has been applied. The protected
 untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
 
 ## Research / references used
@@ -430,4 +430,31 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   build, or customer workload occurred. The apply runner and credential gates
   remain disabled. Dedicated apply-role verification and hosted lifecycle
   evidence remain outstanding.
+
+## 2026-11-17 synchronization with Aurora pricing main
+
+- PR #424 merged as `602206ee1fd73b4582015ec30d2b5e472d72baf7`; main CI run
+  `44068755226` passed all seven checks. PR #413 is also merged. The PR #399
+  source branch was merged with this current main at commit
+  `29957e14ce13fb7df7000f3e1a7244cbb1c5154f`; this synchronization is not yet
+  pushed to the PR branch.
+- PR #399 remains open and draft, and its GitHub base currently points to
+  `8c7f1de`. The hosted control plane remains PR #420 (`9951caa`); neither #413
+  nor #424 has been deployed. Apply and credential-broker gates remain off.
+- On the synchronized worktree, `make verify
+  VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed 1,342 tests,
+  Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration.
+  `make terraform-validate`, Terraform formatting, documentation conventions,
+  and `git diff --check` passed. Fresh-head hosted CI remains required after
+  pushing the PR branch.
+- Read-only AWS checks on 2026-11-17 verified account `654654474502`, no
+  matching SageMaker endpoints, models, endpoint configurations, or active
+  DavDeploy Batch job definitions, and four matching inactive Batch job
+  definitions. The existing SageMaker lineage action and context remain as
+  audit evidence; their properties still report `Deleting`. No lineage or
+  workload resource was changed. The Terraform run monitor returned `{}`.
+- No customer credentials were issued, no CodeBuild apply was started, and no
+  customer workload was applied. Dedicated customer apply-role provisioning
+  and effective least-privilege validation, followed by hosted apply and full
+  lifecycle evidence, remain required.
 

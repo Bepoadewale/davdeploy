@@ -302,3 +302,32 @@ Fresh-head hosted CI is required after push.
 - This sync does not enable either apply gate. No AWS resource was changed,
   no customer credential was issued, and no apply build or workload ran.
 
+## Current main synchronization after PR #424 — 2026-11-17
+
+- Backend `main` is `602206ee1fd73b4582015ec30d2b5e472d72baf7` after PR #424
+  (bounded Aurora Serverless v2 pricing) and PR #413 (coverage ledger) merged.
+  The PR #399 branch was merged with that main at
+  `29957e14ce13fb7df7000f3e1a7244cbb1c5154f`.
+- Read-only GitHub reconciliation confirms PR #399 remains open and draft at
+  `f7f97d877fb086aaec4ad0d07febeefa0f2601ce`; its base still reports
+  `8c7f1de`. The new synchronization has not been pushed, so fresh-head PR CI
+  has not run.
+- Read-only AWS checks verified account `654654474502` in `us-east-1`; no
+  matching SageMaker endpoint, model, endpoint configuration, or active
+  DavDeploy Batch job definition was found. Four tagged DavDeploy Batch job
+  definitions remain inactive. The existing SageMaker lineage action and
+  context remain; their recorded properties report `Deleting`. The attempted
+  association-list command was unsupported by the installed AWS CLI, so this
+  check does not establish the association inventory. No AWS resources or
+  lineage records were changed.
+- The Terraform run monitor returned `{}`. Protected local files and retained
+  clean-room artifacts were left untouched. PR #413 and #424 are merged; the
+  hosted runtime remains PR #420. Apply/broker gates remain off; no customer
+  credential, apply build, or Nova workload was used.
+- `make verify VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` passed
+  1,342 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose
+  configuration. `make terraform-validate`, recursive Terraform formatting,
+  documentation conventions, and `git diff --check` passed. One existing
+  Starlette/httpx deprecation warning remains. Hosted CI is pending until this
+  synchronized head is pushed to PR #399.
+
