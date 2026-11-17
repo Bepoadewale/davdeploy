@@ -489,3 +489,17 @@ Fresh-head hosted CI is required after push.
   evidence changed. Both apply gates remain disabled; no Nova customer
   workload has been applied or certified.
 
+## IAM data policy wildcard bounds — 2026-11-17
+
+- `tests/test_generated_plan_policy.py`: 191 focused tests passed, including
+  new cases rejecting `s3:*`, `sqs:*`, and `dynamodb:Put*`; wildcard or
+  unbounded S3/SQS/DynamoDB resource scopes; and cases retaining exact S3
+  bucket-object and DynamoDB table-index child scopes.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  passed 1,386 tests, Ruff, Actions configuration, OpenAPI snapshot, and
+  Compose validation. `git diff --check` passed.
+- These tests validate source policy evaluation only. They use no live
+  customer AWS role and do not establish effective permissions or apply
+  behavior. No AWS resource, control-plane state, credential, or lineage
+  evidence was changed.
+

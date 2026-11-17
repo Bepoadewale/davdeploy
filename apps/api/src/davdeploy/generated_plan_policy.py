@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-14.4"
+POLICY_VERSION = "nova-generated-plan-2026-11-17.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -1598,12 +1598,36 @@ def _check_iam_permissions(
             )
         wildcard_resource = any("*" in item or "?" in item for item in resources)
         pass_role = "iam:passrole" in normalized_actions
-        if "*" in actions or "iam:*" in normalized_actions:
+        broad_assume_role = any(
+            action == "sts:*"
+            or action.startswith("sts:assume") and action != "sts:assumerole"
+            for action in normalized_actions
+        )
+        if broad_assume_role:
+            _deny(
+                findings,
+                "sts_assume_role_unbounded_denied",
+                address,
+                "The plan uses a wildcard role-assumption action that cannot be safely bounded.",
+            )
+            continue
+        if any("*" in action or "?" in action for action in actions):
             _deny(
                 findings,
                 "iam_privileged_wildcard",
                 address,
-                "The plan grants broad IAM administration. Narrow the permissions to required actions and resources.",
+                "The plan grants wildcard IAM permissions. Name each required action explicitly.",
+            )
+            continue
+        if any(
+            action.startswith(("s3:", "sqs:", "dynamodb:"))
+            for action in normalized_actions
+        ) and any(_unbounded_data_resource(resource) for resource in resources):
+            _deny(
+                findings,
+                "iam_data_resource_unbounded",
+                address,
+                "The plan grants data-service access outside an exact bucket, queue, table, or table index scope.",
             )
             continue
         iam_mutations = {
@@ -1638,18 +1662,7 @@ def _check_iam_permissions(
                     "The plan passes a specific role to a named AWS service; confirm the role permissions and service use before approval.",
                 )
         assume_role = "sts:assumerole" in normalized_actions
-        broad_assume_role = any(
-            action == "sts:*" or action.startswith("sts:assume") and action != "sts:assumerole"
-            for action in normalized_actions
-        )
-        if broad_assume_role:
-            _deny(
-                findings,
-                "sts_assume_role_unbounded_denied",
-                address,
-                "The plan uses a wildcard role-assumption action that cannot be safely bounded.",
-            )
-        elif assume_role:
+        if assume_role:
             if wildcard_resource or not _same_account_role_resources(
                 resources, expected_account_id
             ):
@@ -1666,6 +1679,23 @@ def _check_iam_permissions(
                     address,
                     "The plan grants role assumption for a specific same-account role; review the target trust and application need.",
                 )
+
+
+def _unbounded_data_resource(resource: str) -> bool:
+    """Allow only exact data resources and the exact S3/DynamoDB child scopes."""
+    if "*" not in resource and "?" not in resource:
+        return False
+    if resource == "*" or "?" in resource:
+        return True
+    if re.fullmatch(
+        r"arn:aws(?:-[a-z0-9-]+)?:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/\*",
+        resource,
+    ):
+        return False
+    return not re.fullmatch(
+        r"arn:aws(?:-[a-z0-9-]+)?:dynamodb:[a-z0-9-]+:\d{12}:table/[A-Za-z0-9_.-]+/index/\*",
+        resource,
+    )
 
 
 def _same_account_role_resources(resources: tuple[str, ...], account_id: str) -> bool:

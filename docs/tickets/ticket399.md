@@ -625,3 +625,21 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   the hosted control plane, so those gates remain unmet. No Nova customer
   workload has been applied or certified.
 
+## Data policy wildcard bounds — 2026-11-17
+
+- The actual-plan IAM policy reviewer now rejects wildcard action patterns,
+  including service-level forms such as `s3:*`, `sqs:*`, and
+  `dynamodb:Put*`. Existing wildcard role-assumption checks retain their
+  specific denial finding.
+- S3, SQS, and DynamoDB permissions also fail closed when a resource scope is
+  unbounded. Exact resource ARNs remain usable; S3 object access may use the
+  exact bucket's object suffix, and DynamoDB index access may use the exact
+  table's index suffix. Broad buckets, queues, tables, and wildcard resource
+  patterns are denied.
+- Regression tests exercise wildcard actions, unbounded resources, and the
+  allowed exact child scopes. Full local verification passed 1,386 tests,
+  Ruff, Actions configuration, OpenAPI snapshot, and Compose validation.
+- This is source and local test evidence. No live customer role was available
+  for authorization checks. It does not establish effective AWS permissions
+  or a customer workload; both apply gates remain disabled.
+

@@ -1692,6 +1692,73 @@ def evaluate_application_policy(policy_document):
     )
 
 
+@pytest.mark.parametrize("action", ["s3:*", "dynamodb:Put*", "sqs:*"])
+def test_application_data_policies_deny_service_action_wildcards(action):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": "arn:aws:s3:::pilot-uploads",
+            }
+        }
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_privileged_wildcard" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("action", "resource_arn"),
+    [
+        ("s3:GetObject", "*"),
+        ("s3:GetObject", "arn:aws:s3:::*"),
+        ("dynamodb:PutItem", "arn:aws:dynamodb:us-east-1:654654474502:table/*"),
+        (
+            "sqs:SendMessage",
+            "arn:aws:sqs:us-east-1:654654474502:*",
+        ),
+    ],
+)
+def test_application_data_policies_deny_unbounded_resource_patterns(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_data_resource_unbounded" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("action", "resource_arn"),
+    [
+        ("s3:GetObject", "arn:aws:s3:::pilot-uploads/*"),
+        (
+            "dynamodb:Query",
+            "arn:aws:dynamodb:us-east-1:654654474502:table/pilot-table/index/*",
+        ),
+    ],
+)
+def test_application_data_policies_allow_exact_child_resource_scopes(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+
+    assert "iam_data_resource_unbounded" not in codes(result)
+
+
 def evaluate_role_trust(trust_document):
     encoded = json.dumps(trust_document)
     role_address = "aws_iam_role.application"
