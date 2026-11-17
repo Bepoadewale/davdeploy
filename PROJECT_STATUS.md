@@ -2,15 +2,15 @@
 
 ## Current state
 
-**As of 2026-11-17, backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420). The hosted control plane was deployed from that commit using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184) and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). Both jobs succeeded, including database migrations. Read-only checks found all six backend Lambdas on code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` returned HTTP 200 in account `654654474502`, region `us-east-1`. This is control-plane deployment evidence only.**
+**As of 2026-11-17, backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422). The hosted control plane remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184) and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). Both jobs succeeded, including database migrations. Read-only checks found all six backend Lambdas on code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` returned HTTP 200 in account `654654474502`, region `us-east-1`. This is control-plane deployment evidence only.**
 
 Source and the hosted control plane now include durable plan requests, isolated Terraform state, plan review, actual-plan policy, typed health/recovery requirements, exact workspace artifacts, and bounded regional pricing for selected EBS, S3, SQS, RDS MySQL, DynamoDB, Lambda/API, logs, and modeled egress. Cost coverage is still partial and unpriced material resources block approval. Merged PRs #417–#420 make protected Terraform plan summaries reviewable without exposing raw values. PR #413's 26-capability/30-root evidence ledger is merged.
 
 Draft PR #399 is open at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`; its current source includes default-off apply credential/input routes, exact artifact staging, a fixed apply worker, and result reconciliation. CI run [43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241) passed seven checks. The apply and credential gates remain disabled. A dedicated customer apply role and its effective least-privilege permissions have not been verified. No Nova customer credentials were issued and no Nova customer plan, apply, health check, update, recovery, or destroy has occurred.
 
-Draft PR #422 adds source-only checks for current plan-role trust and the
-bounded inline policy profile during setup verification and before each plan
-credential issuance. It remains unmerged and undeployed. Existing
+PR #422 merged as `8c84827` and adds source-only checks for current plan-role
+trust and the bounded inline policy profile during setup verification and
+before each plan credential issuance. It is not deployed. Existing
 identity-only role records require fresh verification; the profile check does
 not attest every effective AWS permission layer.
 
@@ -60,7 +60,7 @@ The GitHub repository was renamed from `ai-platform-product-strategy` to `davdep
 
 ## Boundaries
 
-- Latest hosted deployment: backend `main` `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), plan run [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184), and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). Migration verification passed. The six backend Lambda packages share code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` returned HTTP 200. This is control-plane health only.
+- Latest hosted deployment: backend source `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420; main has since advanced through source-only PR #422), plan run [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184), and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). Migration verification passed. The six backend Lambda packages share code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` returned HTTP 200. This is control-plane health only.
 - PR #303's `table_name` dispatcher fix and the later bounded pricing and plan-summary changes are now included in the hosted package. The Nova apply worker from draft PR #399 is source-only and gated off.
 - The hosted dispatcher still rejects multi-module runs. App Runner is the only generally enabled renderer. The Lambda/API renderer has isolated real AWS evidence (`docs/test/test268.md`) but remains gated; S3 and DynamoDB renderer paths are also gated and lack hosted lifecycle evidence. See `docs/product/EXECUTION_READINESS_MATRIX.md` for all 26 catalogue entries, 30 implementation entries, and remaining execution gaps.
 

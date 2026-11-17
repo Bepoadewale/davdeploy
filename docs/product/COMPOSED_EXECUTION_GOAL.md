@@ -6,14 +6,15 @@ customer plan, application behavior, and lifecycle evidence are distinct states.
 
 ## Current source and hosted status — 2026-11-17
 
-Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420). PR #413
+Backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422); the
+hosted control plane remains at PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`. PR #413
 merged the Nova coverage ledger. PRs #412 and #414 add bounded, revision-bound
 pricing for supported Lambda/API and DynamoDB configurations; PR #416 exposes
 the modeled pricing assumptions in generated-plan review output. PRs #417–#420
 make the protected Terraform plan summary inspectable while keeping values
 redacted and malformed IAM policy shapes fail-closed.
 
-The control plane was deployed from current `main` using plan
+The control plane remains deployed from pre-PR #422 source (PR #420) using plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and saved-plan apply
 [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -32,11 +33,11 @@ have not been provisioned or verified. No customer credentials were issued and
 no Nova customer plan, apply, health check, update, recovery, or destroy has
 been performed.
 
-Draft PR #422 adds a strict check of the customer plan role's current trust and
-bounded inline policy profile at connection verification and before plan
-credentials are issued. This source change is not merged or deployed. It keeps
-older identity-only `VERIFIED` records from becoming plan-ready and does not
-claim full effective AWS permissions or hosted plan-runner readiness.
+PR #422 merged as `8c84827` and adds a strict check of the customer plan role's
+current trust and bounded inline policy profile at connection verification and
+before plan credentials are issued. It is not deployed. It keeps older
+identity-only `VERIFIED` records from becoming plan-ready and does not claim
+full effective AWS permissions or hosted plan-runner readiness.
 
 Read-only inventory in account `654654474502`, region `us-east-1`, found no
 SageMaker endpoint, model, or endpoint configuration. Four tagged DavDeploy

@@ -1,7 +1,8 @@
 # Implementation Status
 
 Status snapshot: 2026-11-17. Backend `main` is
-`9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
+`8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422); hosted runtime remains
+at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
 [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -30,10 +31,10 @@ Nova customer plan or workload has been applied, operated, or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance crosswalk.
 
-Draft PR #422 adds a strict source-level check of customer plan-role trust and
-the bounded inline policy profile, repeated before plan credentials are
-issued. It remains unmerged and undeployed. This is not full effective AWS
-permission attestation, and no customer plan has run.
+PR #422 merged as `8c84827` and adds a strict source-level check of customer
+plan-role trust and the bounded inline policy profile, repeated before plan
+credentials are issued. The change is not deployed. This is not full effective
+AWS permission attestation, and no customer plan has run.
 
 Read-only inventory in account `654654474502`, region `us-east-1`, found no
 SageMaker endpoint, model, or endpoint configuration; four tagged DavDeploy

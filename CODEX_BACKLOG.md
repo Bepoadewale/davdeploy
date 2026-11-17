@@ -2,8 +2,9 @@
 
 ## Nova status snapshot — 2026-11-17
 
-Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420),
-deployed by plan run [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+Backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422). The
+hosted control plane remains deployed at `9951caa9244128b1551fea3af66b1bdbf884c800`
+(PR #420), using plan run [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
 Database migrations passed; all six backend Lambda packages share code hash
 `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz` returned HTTP
@@ -26,11 +27,11 @@ recorded hosted plan. No Nova customer workload has been applied or certified.
 See [`docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance map.
 
-Draft PR #422 adds source checks for the exact customer plan-role trust and
-bounded policy profile, including a fresh check before plan credentials are
-issued. It is not merged or deployed, does not establish every effective AWS
-permission layer, and does not replace hosted plan/apply/health/recovery/cleanup
-evidence.
+PR #422 merged as `8c84827` and adds source checks for the exact customer
+plan-role trust and bounded policy profile, including a fresh check before
+plan credentials are issued. It is not deployed, does not establish every
+effective AWS permission layer, and does not replace hosted
+plan/apply/health/recovery/cleanup evidence.
 
 ## Three-PR delivery plan
 
