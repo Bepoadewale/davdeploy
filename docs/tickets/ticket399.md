@@ -635,11 +635,16 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   unbounded. Exact resource ARNs remain usable; S3 object access may use the
   exact bucket's object suffix, and DynamoDB index access may use the exact
   table's index suffix. Broad buckets, queues, tables, and wildcard resource
-  patterns are denied.
-- Regression tests exercise wildcard actions, unbounded resources, and the
-  allowed exact child scopes. Full local verification passed 1,386 tests,
+  patterns are denied. Incomplete or unrecognized ARN shapes fail closed;
+  IAM may expand omitted ARN fields to wildcards.
+- Regression tests exercise wildcard actions, incomplete and unbounded resource
+  ARNs, and allowed exact bucket, object, queue, table, and index scopes. Full
+  local verification passed 1,393 tests,
   Ruff, Actions configuration, OpenAPI snapshot, and Compose validation.
 - This is source and local test evidence. No live customer role was available
   for authorization checks. It does not establish effective AWS permissions
   or a customer workload; both apply gates remain disabled.
+- References: [IAM ARN formats and wildcard behavior](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html),
+  [S3 IAM resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html),
+  and [DynamoDB table/index IAM resources](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/iam-policy-specific-table-indexes.html).
 

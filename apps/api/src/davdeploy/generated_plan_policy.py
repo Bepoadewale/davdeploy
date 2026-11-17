@@ -1682,20 +1682,18 @@ def _check_iam_permissions(
 
 
 def _unbounded_data_resource(resource: str) -> bool:
-    """Allow only exact data resources and the exact S3/DynamoDB child scopes."""
-    if "*" not in resource and "?" not in resource:
-        return False
-    if resource == "*" or "?" in resource:
-        return True
-    if re.fullmatch(
-        r"arn:aws(?:-[a-z0-9-]+)?:s3:::[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/\*",
-        resource,
-    ):
-        return False
-    return not re.fullmatch(
-        r"arn:aws(?:-[a-z0-9-]+)?:dynamodb:[a-z0-9-]+:\d{12}:table/[A-Za-z0-9_.-]+/index/\*",
-        resource,
+    """Allow complete data ARNs and only the exact S3/DynamoDB child scopes."""
+    partition = r"aws(?:-[a-z0-9-]+)?"
+    bucket = r"[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])"
+    allowed_patterns = (
+        rf"arn:{partition}:s3:::{bucket}(?:/[^*?]+)?",
+        rf"arn:{partition}:s3:::{bucket}/\*",
+        rf"arn:{partition}:sqs:[a-z0-9-]+:\d{{12}}:(?:[A-Za-z0-9_-]{{1,80}}|[A-Za-z0-9_-]{{1,75}}\.fifo)",
+        rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}",
+        rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/[A-Za-z0-9_.-]{{3,255}}",
+        rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/\*",
     )
+    return not any(re.fullmatch(pattern, resource) for pattern in allowed_patterns)
 
 
 def _same_account_role_resources(resources: tuple[str, ...], account_id: str) -> bool:

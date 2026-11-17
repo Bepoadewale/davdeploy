@@ -1738,7 +1738,37 @@ def test_application_data_policies_deny_unbounded_resource_patterns(action, reso
 @pytest.mark.parametrize(
     ("action", "resource_arn"),
     [
+        ("s3:GetObject", "arn:aws:s3"),
+        ("sqs:SendMessage", "arn:aws:sqs"),
+        ("dynamodb:PutItem", "arn:aws:dynamodb:us-east-1:654654474502"),
+    ],
+)
+def test_application_data_policies_deny_incomplete_resource_arns(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_data_resource_unbounded" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("action", "resource_arn"),
+    [
+        ("s3:GetObject", "arn:aws:s3:::pilot-uploads"),
         ("s3:GetObject", "arn:aws:s3:::pilot-uploads/*"),
+        ("s3:GetObject", "arn:aws:s3:::pilot-uploads/inbox/item.json"),
+        ("sqs:SendMessage", "arn:aws:sqs:us-east-1:654654474502:pilot-queue"),
+        (
+            "dynamodb:PutItem",
+            "arn:aws:dynamodb:us-east-1:654654474502:table/pilot-table",
+        ),
         (
             "dynamodb:Query",
             "arn:aws:dynamodb:us-east-1:654654474502:table/pilot-table/index/*",
