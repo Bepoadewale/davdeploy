@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `8c7f1deab9e9b9865a25d0fffaf87be2066b8ea4`
-(PR #423), 2026-11-17; hosted runtime remains at PR #420 commit
+Status snapshot: backend `main` at `bd6288b6147888d3e6aeee918012fc74cb8d233d`
+(PR #427), 2026-11-17; hosted runtime remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`. PR #413 merged the expanded
 coverage ledger. The hosted control plane remains on pre-PR #422 source, using saved-plan apply
 [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -17,14 +17,17 @@ review output. PRs #417–#420 add value-redacted protected plan summaries,
 including safe IAM policy scope, bounded policy placeholders, failure
 locators, and hyphenated IAM policy names. These features are in the current
 hosted package. They do not make all resource costs known or establish a Nova
-customer workload journey. Draft PR #424 adds bounded Aurora PostgreSQL
-Serverless v2 pricing for one writer shape, but remains source-only and is not
-part of the hosted package. Unsupported material costs and settings still
-block approval. Draft PR #399 remains open at
-`f7f97d877fb086aaec4ad0d07febeefa0f2601ce`; its latest CI run
-[44061663988](https://github.com/Bepoadewale/davdeploy/actions/runs/44061663988)
-passed seven jobs. Apply gates remain disabled, and the customer apply role,
-credential issuance, hosted apply, health, recovery, and cleanup are unverified.
+customer workload journey. PR #424 adds bounded Aurora PostgreSQL Serverless
+v2 pricing for one writer shape; it is merged in backend source but remains
+outside the hosted PR #420 package. PRs #425–#427 add bounded Nova schema repair
+and versioned context/proposal identity evidence in backend source; they are
+also not deployed. Unsupported material costs and settings still block
+approval. Draft PR #399 remains open at
+`ac0d29d279ffb622a610c873c08a5dda9acd1c2d`; its latest CI run
+[44192118631](https://github.com/Bepoadewale/davdeploy/actions/runs/44192118631)
+passed all seven checks. Apply gates remain disabled, and the customer apply
+role, credential issuance, hosted apply, health, recovery, and cleanup are
+unverified.
 
 PR #422 merged as `8c84827` and adds source-only verification of the customer
 plan role's exact trust and bounded inline policy profile during connection
@@ -62,9 +65,10 @@ customer.
 
 | Area | Implemented evidence | Coverage limit in this snapshot |
 |---|---|---|
+| Nova intent provenance | Backend source PRs #425–#427 bound schema-repair attempts to 0–2, record the final validated proposal version/digest, and record a versioned digest of the original intent context across repairs. The context digest is attached to intent metadata and workload provenance without adding raw customer text. | These changes are in backend `main` but not the deployed hosted runtime. Digests identify inputs; they do not prove model correctness, repeatability, prompt-injection resistance, or safe execution. Provider-schema/document retrieval provenance and pinned live Nova evaluation remain incomplete. |
 | Proposal/schema checks | `generated_provider_validation.py` checks generated resource types and arguments against the initialized, locked AWS provider schema. [`ticket309.md`](../tickets/ticket309.md) records a synthetic S3 schema check; [`test311.md`](../test/test311.md) records the later authenticated S3 saved-plan run with the locked provider schema. | This verifies Terraform schema shape, not service semantics, customer security, cost, or lifecycle behavior. There is no per-module schema-version/evidence binding in either registry. |
 | Generated-plan policy | `generated_plan_policy.py` binds trusted account/region and proposal inventory; reviews destructive and sensitive changes; checks policy-critical unknowns for a finite list of Terraform types; and contains S3, IAM, security-group/network-ACL ingress, EC2 metadata, relational-database, and bounded EKS node IMDSv2 rules. PRs #401/#402/#404 are merged and deployed to the control plane; [`test401.md`](../test/test401.md), [`test402.md`](../test/test402.md), and [`test404.md`](../test/test404.md) record synthetic/local tests and hosted CI. | Partial shared rules only. The EKS node rule applies only when the plan binds a node group to exactly one same-plan launch template whose metadata settings are visible to policy. It does not establish pod metadata isolation, Kubernetes/RBAC or cluster endpoint security. Unknown-value checks cover only paths in `POLICY_CRITICAL_UNKNOWN_PATHS`. ACL association, route/egress reachability, and a complete deterministic policy map for all 26 modules or 30 roots are not established. No customer plan has exercised these checks. See the resource-family table below. |
-| Cost | The hosted package has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PR #424 is a draft source change for one Aurora PostgreSQL Serverless v2 writer shape; its catalog response and local tests are not deployed evidence. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
+| Cost | The hosted package has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PR #424 is merged in backend source for one Aurora PostgreSQL Serverless v2 writer shape; its catalog response and local tests are not deployed evidence. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
 | Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. Some isolated AWS evidence below records real service requests or traffic. | The scenario declarations are not proof that the hosted worker ran the probes. The current `CertificationEvidence` is five booleans (apply, destroy, readiness, rollback, cleanup); it does not record update, controlled failure, cost, source/artifact digest, or evidence link. |
 | Update/recovery/cleanup | Some service-level evidence records create and destroy; the scenario declarations include rollback and cleanup descriptions. | No complete Nova-hosted composed application evidence for update, injected failure, recovery, exact ownership-based destroy, and independent absence verification. A scenario label is not an observed result. |
 | Hosted execution | The repository records an App Runner customer workload pilot in [`test42.md`](../test/test42.md). PR #314 added durable saved-plan storage and administrator approval; its ticket states the hosted worker has no caller and apply/destroy are unavailable on this path. | The App Runner pilot is a separate legacy renderer, not Nova-generated composed execution. No Nova-hosted plan-to-apply customer workload is evidenced here. Hosted control-plane health is not workload health. |
