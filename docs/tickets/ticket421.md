@@ -43,9 +43,10 @@ deployment, and customer workload acceptance as separate states.
   `76908ebd7ea3453320fe7959c9b4643b3b6632ac`; backend `main` still returns a
   fixed blog author display name and the PR is not cleanly mergeable. Five
   Dependabot PRs (#82–#86) also remain open.
-- `PROJECT_STATUS.md`, `docs/IMPLEMENTATION_STATUS.md`, and
-  `CODEX_BACKLOG.md` still reported a November 13 source/deployment baseline
-  and said regional pricing was not integrated.
+- At the start of this reconciliation, `PROJECT_STATUS.md`,
+  `docs/IMPLEMENTATION_STATUS.md`, and `CODEX_BACKLOG.md` still reported a
+  November 13 source/deployment baseline and said regional pricing was not
+  integrated. Those summaries are now refreshed below.
 
 ## Research / references used
 
