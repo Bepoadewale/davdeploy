@@ -39,23 +39,27 @@ passed in run `44201512025`. No customer Nova workload has been run.
 
 ## Acceptance criteria
 
-- [ ] Matrix names backend source `b7c15b4` separately from hosted PR #420.
-- [ ] Matrix records PR #429's plan-level schema format/digest as source-only.
-- [ ] Matrix records PR #399 head `86584d4` and CI run `44201512025`.
-- [ ] Matrix still states that no Nova customer workload has been applied or
+- [x] Matrix names backend source `b7c15b4` separately from hosted PR #420.
+- [x] Matrix records PR #429's plan-level schema format/digest as source-only.
+- [x] Matrix records PR #399 head `86584d4` and CI run `44201512025`.
+- [x] Matrix still states that no Nova customer workload has been applied or
   certified.
-- [ ] Documentation conventions and diff checks pass.
+- [x] Documentation conventions and diff checks pass.
 - [ ] All seven required CI checks pass on the matrix implementation commit.
 
 ## Acceptance status
 
-Implementation has not started. This is documentation-only; no AWS or
-Terraform operation is planned.
+Implementation is complete and local documentation checks pass. This is
+documentation-only; no AWS or Terraform operation was performed.
 
 ## Tests / validation performed
 
-No checks have run for the matrix update yet. No `docs/test/test430.md` is
-required because no customer workload is part of this package.
+- `GITHUB_PR_NUMBER=430 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
+  passed.
+- `git diff --check`: passed.
+- Final-head GitHub checks are pending.
+- No `docs/test/test430.md` is required because no customer workload was part of
+  this package.
 
 ## Evidence files produced
 
