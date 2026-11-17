@@ -719,13 +719,21 @@ def _check_s3(
             _deny(findings, "s3_public_acl", address, "The plan grants public access through an S3 access control list.")
         if kind == "aws_s3_bucket_policy":
             policy = _json_document(values.get("policy"), findings, address)
-            if policy is not None and _has_public_allow(policy):
-                _deny(
-                    findings,
-                    "s3_public_policy_denied",
-                    address,
-                    "The plan grants direct public access to storage. Serve public files through a private origin instead.",
-                )
+            if policy is not None:
+                if _has_public_allow(policy):
+                    _deny(
+                        findings,
+                        "s3_public_policy_denied",
+                        address,
+                        "The plan grants direct public access to storage. Serve public files through a private origin instead.",
+                    )
+                elif _has_unbounded_resource_allow(policy):
+                    _deny(
+                        findings,
+                        "s3_not_resource_policy_denied",
+                        address,
+                        "The storage policy uses an inverse resource scope that cannot be safely bounded.",
+                    )
 
 
 def _check_iam(
@@ -1419,6 +1427,14 @@ def _has_public_allow(policy: dict[str, Any]) -> bool:
     return False
 
 
+def _has_unbounded_resource_allow(policy: dict[str, Any]) -> bool:
+    return any(
+        str(statement.get("Effect", "")).lower() == "allow"
+        and "NotResource" in statement
+        for statement in _statements(policy, require_resource=True)
+    )
+
+
 def _check_sqs_queue_policies(
     resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
 ) -> None:
@@ -1436,13 +1452,21 @@ def _check_sqs_queue_policies(
             continue
         address = item.get("address")
         policy = _json_document(values.get("policy"), findings, address)
-        if policy is not None and _has_public_allow(policy):
-            _deny(
-                findings,
-                "sqs_public_policy_denied",
-                address,
-                "The plan grants public or unbounded access to an SQS queue.",
-            )
+        if policy is not None:
+            if _has_public_allow(policy):
+                _deny(
+                    findings,
+                    "sqs_public_policy_denied",
+                    address,
+                    "The plan grants public or unbounded access to an SQS queue.",
+                )
+            elif _has_unbounded_resource_allow(policy):
+                _deny(
+                    findings,
+                    "sqs_not_resource_policy_denied",
+                    address,
+                    "The queue policy uses an inverse resource scope that cannot be safely bounded.",
+                )
 
 
 def _check_lambda_permissions(
