@@ -508,4 +508,6 @@ Fresh-head hosted CI is required after push.
   `local-e2e` and Terraform validation.
 - Follow-up commit `9a241e1`, including the `NotResource` regression, passed
   all seven checks in fresh-head run `44140537111`.
+- Source commit `33cd509` passed all seven checks in fresh-head run
+  `44142215551`, including the S3 and SQS inverse-resource regressions.
 
