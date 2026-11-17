@@ -53,16 +53,16 @@ The Nova cost evaluator currently blocks `aws_rds_cluster` and `aws_rds_cluster_
 
 ## Acceptance status
 
-Draft PR #424 remains open. The bounded source implementation, focused tests,
-and full repository verification are complete. Final-head CI is the remaining
-package gate. This source is not merged or deployed.
+PR #424 remains open and in draft. The bounded source implementation, focused
+tests, full repository verification, and final-head CI are complete. This source
+is not merged or deployed.
 
 - [x] Only one private Aurora PostgreSQL Serverless v2 Standard writer shape with the checked-in capacity settings is priced; unsupported topology and unknown price-driving fields remain ineligible.
 - [x] Compute, storage, Standard I/O, billable backup overage, the managed secret, and secret API requests use exact regional catalog products with SKU, product digest, publication time, effective time, and bounded quantities. Inter-AZ, cross-region, and internet transfer ranges above zero stay blocked.
 - [x] Missing, mixed, stale, or invalid usage assumptions fail closed; assumption quantities remain customer-provided persisted context, never model-authored rates.
 - [x] Current evidence is canonical and approval-verifiable, and legacy RDS pricing evidence remains parseable.
 - [x] Full repository verification passes (`make verify PY=.venv-pr399/bin/python`, 1,290 tests, Ruff, OpenAPI snapshot, and Compose config).
-- [ ] Final-head CI passes.
+- [x] Final-head CI run [44065602570](https://github.com/Bepoadewale/davdeploy/actions/runs/44065602570) passed all seven checks for commit `d634ceb1369b0f2c34ec0e1254d9c45b9cec4076`.
 - [x] Documentation conventions and `git diff --check` pass.
 - [x] No AWS resource, Terraform state, feature gate, customer credential, or workload was changed.
 
@@ -72,7 +72,8 @@ Focused pricing and usage-assumption tests passed (107). Full repository
 verification passed: `make verify PY=.venv-pr399/bin/python` (1,290 tests),
 Ruff, OpenAPI snapshot check, and `docker compose config --quiet`. The generated
 OpenAPI snapshot includes the optional Aurora usage bounds. Documentation
-conventions and `git diff --check` passed. Final-head GitHub CI is pending.
+conventions and `git diff --check` passed. Final-head CI run `44065602570`
+passed all seven checks.
 
 ## Evidence files produced
 
