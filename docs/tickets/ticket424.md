@@ -62,7 +62,7 @@ is not merged or deployed.
 - [x] Missing, mixed, stale, or invalid usage assumptions fail closed; assumption quantities remain customer-provided persisted context, never model-authored rates.
 - [x] Current evidence is canonical and approval-verifiable, and legacy RDS pricing evidence remains parseable.
 - [x] Full repository verification passes (`make verify PY=.venv-pr399/bin/python`, 1,291 tests, Ruff, OpenAPI snapshot, and Compose config).
-- [x] Final-head CI run [44066670092](https://github.com/Bepoadewale/davdeploy/actions/runs/44066670092) passed all seven checks for implementation commit `5b4ea952d05bee8f5f1275174fc5951d0959444c`.
+- [x] Final-head CI run [44067281321](https://github.com/Bepoadewale/davdeploy/actions/runs/44067281321) passed all seven checks for commit `e8e70b7f3387fae1a5d0b13011e63ddf8f054798`.
 - [x] Documentation conventions and `git diff --check` pass.
 - [x] No AWS resource, Terraform state, feature gate, customer credential, or workload was changed.
 
@@ -72,8 +72,8 @@ Focused pricing and usage-assumption tests passed (108). Full repository
 verification passed: `make verify PY=.venv-pr399/bin/python` (1,291 tests),
 Ruff, OpenAPI snapshot check, and `docker compose config --quiet`. The generated
 OpenAPI snapshot includes the optional Aurora usage bounds. Documentation
-conventions and `git diff --check` passed. Final-head CI run `44066670092`
-passed all seven checks for implementation commit `5b4ea952d05bee8f5f1275174fc5951d0959444c`.
+conventions and `git diff --check` passed. Final-head CI run `44067281321`
+passed all seven checks for commit `e8e70b7f3387fae1a5d0b13011e63ddf8f054798`.
 
 ## Evidence files produced
 
