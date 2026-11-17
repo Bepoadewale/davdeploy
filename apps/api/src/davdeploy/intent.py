@@ -40,6 +40,7 @@ MATERIAL_FIELDS = (
     "environments",
 )
 MAX_INTENT_SCHEMA_REPAIR_ATTEMPTS = 2
+NOVA_INTENT_PROPOSAL_VERSION = "nova-intent-proposal-v1"
 
 
 class IntentOutOfScopeError(Exception):
@@ -228,7 +229,7 @@ class NovaIntentProvider:
         if proposal.request_scope == IntentScope.OUT_OF_SCOPE:
             return IntentInterpretation(
                 spec=None,
-                model_metadata=_model_metadata(response),
+                model_metadata=_validated_proposal_metadata(response, proposal),
                 request_scope=IntentScope.OUT_OF_SCOPE,
             )
         if not proposal.workload_type or not proposal.data_classification:
@@ -275,7 +276,7 @@ class NovaIntentProvider:
         return IntentInterpretation(
             spec=spec,
             questions=[_material_question(field) for field in unknowns],
-            model_metadata=_model_metadata(response),
+            model_metadata=_validated_proposal_metadata(response, proposal),
             request_scope=proposal.request_scope,
         )
 
@@ -481,6 +482,20 @@ def _model_metadata(response) -> dict[str, object]:
         "usage": usage.model_dump(mode="json") if usage else None,
         "evidence": [item.model_dump(mode="json") for item in response.evidence],
     }
+
+
+def _validated_proposal_metadata(
+    response, proposal: NovaIntentProposal
+) -> dict[str, object]:
+    metadata = _model_metadata(response)
+    validated_proposal = proposal.model_dump(mode="json")
+    metadata.update(
+        {
+            "proposal_version": NOVA_INTENT_PROPOSAL_VERSION,
+            "proposal_digest": model_input_digest(validated_proposal),
+        }
+    )
+    return metadata
 
 
 def _combine_model_responses(responses: list[ModelResponse]) -> ModelResponse:
