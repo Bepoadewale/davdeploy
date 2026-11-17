@@ -39,19 +39,22 @@ passing in run `44192118631`.
 - [x] Matrix records merged #425–#427 source evidence and current #399 head/run.
 - [x] No hosted Nova workload or customer sign-up is inferred from source state.
 - [x] Documentation conventions and diff checks pass.
-- [ ] All required GitHub checks pass on the final PR head.
+- [x] All seven required GitHub checks pass on the matrix update commit
+  `79406af` in run `44193547583`.
 
 ## Acceptance status
 
-Implementation is complete and documentation checks pass. Final-head CI is
-pending; the PR remains draft until review and required checks finish.
+Implementation is complete and documentation checks pass. All seven required
+checks passed on the matrix update commit `79406af` in run `44193547583`. This
+evidence-only ticket update receives a fresh PR run before merge.
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=428 python3.12 scripts/check_doc_conventions.py` and
-`git diff --check` pass. The ticket and matrix changes are documentation-only;
-no customer workload evidence file is required because no customer workload
-was run. GitHub CI is pending on the final PR head.
+`git diff --check` pass. Final-head run `44193547583` passed all seven checks on
+the matrix update commit `79406af`. The evidence-only ticket follow-up will be
+covered by a fresh run; no customer workload evidence file is required because
+no customer workload was run.
 
 ## Evidence files produced
 
