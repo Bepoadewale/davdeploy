@@ -55,7 +55,7 @@ in run `44195944703`. No customer Nova workload has been run.
 - [x] Existing provider lockfile, proposal, context, plan, and workspace digests
   remain bound as before.
 - [x] Focused tests, full verification, docs conventions, and diff checks pass.
-- [ ] All required GitHub checks pass on the final PR head.
+- [x] All required GitHub checks pass on the final PR head.
 
 ## Acceptance status
 
@@ -73,7 +73,9 @@ evidence change; no Terraform or customer workload operation was performed.
 - `git diff --check`: passed.
 - GitHub CI run `44198472309` passed all seven checks on implementation head
   `cada4fc09435186b9e3d706813e27c0c20eed5b0`; the ticket-only final-head
-  follow-up is pending.
+  follow-up run `44199213650` also passed all seven checks on
+  `191c078afbde8ce2cbd62b38139efbdfbd5a68b6`. The acceptance checklist update
+  is a final documentation-only follow-up and will receive its own CI run.
 - No customer workload evidence file is required because no customer workload
   was run.
 
