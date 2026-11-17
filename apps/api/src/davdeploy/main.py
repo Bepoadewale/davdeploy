@@ -67,6 +67,7 @@ from davdeploy.domain import (
 )
 from davdeploy.edge_origin import edge_origin_is_authorized
 from davdeploy.generated_plan_artifacts import canonical_json_digest
+from davdeploy.integrations import StsAwsDiscovery
 from davdeploy.intent import IntentOutOfScopeError
 from davdeploy.invitation_email import InvitationDeliveryUnavailable
 from davdeploy.model_gateway import ModelGatewayUnavailable
@@ -210,9 +211,9 @@ async def apply_api_guardrails(request: Request, call_next):
             os.getenv("DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN"),
         )
     )
-    if not (is_terraform_state_bootstrap or is_nova_plan_credential_bootstrap) and not edge_origin_is_authorized(
-        request.headers.get("x-davdeploy-edge")
-    ):
+    if not (
+        is_terraform_state_bootstrap or is_nova_plan_credential_bootstrap
+    ) and not edge_origin_is_authorized(request.headers.get("x-davdeploy-edge")):
         return JSONResponse(
             status_code=403,
             content={"detail": "This API is available through the DavDeploy edge endpoint."},
@@ -513,10 +514,15 @@ def issue_nova_plan_role_credentials(
             run.input_version_id,
             run.input_sha256,
         )
-        binding = _validate_input_document(
-            staged_input, run.runner_run_id, project_name, build_arn
-        )
-    except (NovaPlanBuildError, NovaPlanDispatchError, BotoCoreError, ClientError, TypeError, ValueError):
+        binding = _validate_input_document(staged_input, run.runner_run_id, project_name, build_arn)
+    except (
+        NovaPlanBuildError,
+        NovaPlanDispatchError,
+        BotoCoreError,
+        ClientError,
+        TypeError,
+        ValueError,
+    ):
         raise HTTPException(409, "Exact Nova plan input could not be verified") from None
     request_document = run.request_document
     if (
@@ -571,7 +577,7 @@ def issue_nova_plan_role_credentials(
         or connection.organization_id != run.organization_id
         or connection.provider != "aws"
         or connection.setup_state != "VERIFIED"
-        or connection.plan_role_setup_state != "VERIFIED"
+        or connection.plan_role_setup_state != "PROFILE_VERIFIED"
         or connection.account_id != binding["account_id"]
         or connection.plan_role_arn != binding["plan_role_arn"]
         or not connection.external_id_secret_ref
@@ -601,14 +607,23 @@ def issue_nova_plan_role_credentials(
         external_id = configured_connection_secret_store().get_external_id(
             connection.external_id_secret_ref
         )
+        role_profile = StsAwsDiscovery().verify_plan_role(
+            connection.id,
+            binding["plan_role_arn"],
+            external_id,
+            binding["region"],
+        )
+        if (
+            role_profile.account_id != binding["account_id"]
+            or role_profile.role_arn != binding["plan_role_arn"]
+        ):
+            raise NovaPlanAccessError("customer plan role profile identity changed")
         assumed = boto3.client("sts").assume_role(
             RoleArn=binding["plan_role_arn"],
             RoleSessionName=f"davdeploy-nova-plan-{run.runner_run_id}",
             ExternalId=external_id,
             DurationSeconds=900,
-            Policy=json.dumps(
-                access_policy.document, sort_keys=True, separators=(",", ":")
-            ),
+            Policy=json.dumps(access_policy.document, sort_keys=True, separators=(",", ":")),
         )
         credentials = assumed.get("Credentials") if isinstance(assumed, dict) else None
         if not isinstance(credentials, dict):
@@ -620,8 +635,10 @@ def issue_nova_plan_role_credentials(
         )
         identity = session.client("sts").get_caller_identity()
     except NovaPlanAccessError:
-        raise HTTPException(403, "Nova proposal exceeds the fixed plan permission profile") from None
-    except (BotoCoreError, ClientError, OSError, RuntimeError, TypeError, ValueError):
+        raise HTTPException(
+            403, "Nova proposal exceeds the fixed plan permission profile"
+        ) from None
+    except (BotoCoreError, ClientError, KeyError, OSError, RuntimeError, TypeError, ValueError):
         raise HTTPException(403, "The exact customer plan role could not be verified") from None
     expected_identity = (
         f"arn:aws:sts::{binding['account_id']}:assumed-role/"
@@ -655,6 +672,8 @@ def issue_nova_plan_role_credentials(
                 "region": binding["region"],
                 "policy_version": access_policy.version,
                 "policy_sha256": access_policy.sha256,
+                "plan_role_profile_version": role_profile.version,
+                "plan_role_profile_sha256": role_profile.sha256,
             },
         )
     )
@@ -670,6 +689,8 @@ def issue_nova_plan_role_credentials(
         "region": binding["region"],
         "policy_version": access_policy.version,
         "policy_sha256": access_policy.sha256,
+        "plan_role_profile_version": role_profile.version,
+        "plan_role_profile_sha256": role_profile.sha256,
         "credentials": {
             "access_key_id": credentials.get("AccessKeyId"),
             "secret_access_key": credentials.get("SecretAccessKey"),

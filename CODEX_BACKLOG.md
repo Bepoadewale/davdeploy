@@ -26,6 +26,12 @@ recorded hosted plan. No Nova customer workload has been applied or certified.
 See [`docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance map.
 
+Draft PR #422 adds source checks for the exact customer plan-role trust and
+bounded policy profile, including a fresh check before plan credentials are
+issued. It is not merged or deployed, does not establish every effective AWS
+permission layer, and does not replace hosted plan/apply/health/recovery/cleanup
+evidence.
+
 ## Three-PR delivery plan
 
 ### Developer and administrator workflow

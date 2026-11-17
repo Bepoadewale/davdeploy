@@ -30,6 +30,11 @@ Nova customer plan or workload has been applied, operated, or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance crosswalk.
 
+Draft PR #422 adds a strict source-level check of customer plan-role trust and
+the bounded inline policy profile, repeated before plan credentials are
+issued. It remains unmerged and undeployed. This is not full effective AWS
+permission attestation, and no customer plan has run.
+
 Read-only inventory in account `654654474502`, region `us-east-1`, found no
 SageMaker endpoint, model, or endpoint configuration; four tagged DavDeploy
 Batch job definitions are inactive; one SageMaker lineage action and context

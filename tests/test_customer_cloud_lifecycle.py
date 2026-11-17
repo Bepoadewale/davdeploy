@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -8,10 +9,14 @@ from davdeploy import integrations
 from davdeploy.domain import CloudInventorySnapshot
 from davdeploy.integrations import StsAwsDiscovery
 from davdeploy.models import Environment
+from davdeploy.nova_plan_role_profile import (
+    NovaPlanRoleProfile,
+    build_nova_plan_role_inspection_policy,
+)
 from test_product import founder, make_service
 
 
-def test_plan_role_verification_uses_exact_customer_arn_external_id_and_verify_session(monkeypatch):
+def test_plan_role_verification_uses_scoped_inspection_and_returns_profile_digest(monkeypatch):
     calls = []
 
     class StsClient:
@@ -26,7 +31,13 @@ def test_plan_role_verification_uses_exact_customer_arn_external_id_and_verify_s
             }
 
         def get_caller_identity(self):
-            return {"Account": "123456789012"}
+            return {
+                "Account": "123456789012",
+                "Arn": (
+                    "arn:aws:sts::123456789012:assumed-role/"
+                    "davdeployPlan-conn1234-5678/davdeploy-plan-verify-conn1234"
+                ),
+            }
 
     class ApiSession:
         def client(self, service_name, region_name=None):
@@ -36,28 +47,45 @@ def test_plan_role_verification_uses_exact_customer_arn_external_id_and_verify_s
 
     class CustomerSession:
         def client(self, service_name):
-            assert service_name == "sts"
-            return StsClient()
+            if service_name == "sts":
+                return StsClient()
+            assert service_name == "iam"
+            return object()
 
+    profile = NovaPlanRoleProfile(
+        account_id="123456789012",
+        role_arn="arn:aws:iam::123456789012:role/davdeployPlan-conn1234-5678",
+        version="nova-plan-role-profile.v1",
+        sha256="c" * 64,
+    )
+    monkeypatch.setenv(
+        "DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN",
+        "arn:aws:iam::123456789012:role/davdeploy-api",
+    )
+    monkeypatch.setattr(
+        integrations,
+        "verify_nova_plan_role_profile",
+        lambda iam, **kwargs: profile,
+    )
     monkeypatch.setattr(integrations.boto3, "Session", lambda **_kwargs: CustomerSession())
     discovery = StsAwsDiscovery(session=ApiSession())
 
-    account_id = discovery.verify_plan_role(
+    result = discovery.verify_plan_role(
         "conn1234-5678",
         "arn:aws:iam::123456789012:role/davdeployPlan-conn1234-5678",
         "connection-specific-external-id",
         "eu-west-1",
     )
 
-    assert account_id == "123456789012"
-    assert calls == [
-        {
-            "RoleArn": "arn:aws:iam::123456789012:role/davdeployPlan-conn1234-5678",
-            "RoleSessionName": "davdeploy-plan-verify-conn1234",
-            "ExternalId": "connection-specific-external-id",
-            "DurationSeconds": 900,
-        }
-    ]
+    assert result == profile
+    assert len(calls) == 1
+    assert calls[0]["RoleArn"] == profile.role_arn
+    assert calls[0]["RoleSessionName"] == "davdeploy-plan-verify-conn1234"
+    assert calls[0]["ExternalId"] == "connection-specific-external-id"
+    assert calls[0]["DurationSeconds"] == 900
+    assert json.loads(calls[0]["Policy"]) == build_nova_plan_role_inspection_policy(
+        profile.role_arn
+    )
 
 
 def test_verified_customer_snapshot_is_the_only_non_fixture_planning_input():
