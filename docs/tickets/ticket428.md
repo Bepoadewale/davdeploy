@@ -35,20 +35,23 @@ passing in run `44192118631`.
 
 ## Acceptance criteria
 
-- [ ] Matrix names current backend source and separately deployed runtime.
-- [ ] Matrix records merged #425–#427 source evidence and current #399 head/run.
-- [ ] No hosted Nova workload or customer sign-up is inferred from source state.
-- [ ] Documentation conventions and diff checks pass.
+- [x] Matrix names current backend source and separately deployed runtime.
+- [x] Matrix records merged #425–#427 source evidence and current #399 head/run.
+- [x] No hosted Nova workload or customer sign-up is inferred from source state.
+- [x] Documentation conventions and diff checks pass.
 - [ ] All required GitHub checks pass on the final PR head.
 
 ## Acceptance status
 
-Implementation has not started. This PR is documentation-only.
+Implementation is complete and documentation checks pass. Final-head CI is
+pending; the PR remains draft until review and required checks finish.
 
 ## Tests / validation performed
 
-No checks have run for this implementation yet. No customer workload evidence
-file is required because no customer workload was run.
+`GITHUB_PR_NUMBER=428 python3.12 scripts/check_doc_conventions.py` and
+`git diff --check` pass. The ticket and matrix changes are documentation-only;
+no customer workload evidence file is required because no customer workload
+was run. GitHub CI is pending on the final PR head.
 
 ## Evidence files produced
 
