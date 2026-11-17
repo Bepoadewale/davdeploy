@@ -44,12 +44,14 @@ customer plan or apply execution.
 - [x] Workload provenance carries the context identity without raw prompt text.
 - [x] Fixture metadata does not claim Nova context provenance.
 - [x] Focused tests, full verification, docs conventions, and diff checks pass.
-- [ ] All required GitHub checks pass on the final PR head.
+- [x] All seven required GitHub checks pass on final head `dfa6ae6` in run
+  `44189957814`.
 
 ## Acceptance status
 
-Implementation is complete and locally verified. The PR remains draft until
-fresh-head CI and review are complete.
+Implementation is complete and locally verified. All seven required checks
+passed on final PR head `dfa6ae6` in run `44189957814`. The PR remains draft
+pending final review.
 
 ## Tests / validation performed
 
