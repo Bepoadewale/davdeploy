@@ -36,6 +36,13 @@ deployment, and customer workload acceptance as separate states.
   Terraform plan, apply, or destroy process was found.
 - The protected untracked `--only-show-errors` file and `.venv-pr399/` remain
   untouched.
+- Frontend `main` is `b6cb14bc9563802d9b0b644739a6136336594174`. PR #102 is
+  draft at `d3008e72296064beb2eea75c3efffcd96c809554`; all five required checks
+  passed in run `43579164304`, but the change is not merged and does not add a
+  backend execution path. PR #99 is draft at
+  `76908ebd7ea3453320fe7959c9b4643b3b6632ac`; backend `main` still returns a
+  fixed blog author display name and the PR is not cleanly mergeable. Five
+  Dependabot PRs (#82–#86) also remain open.
 
 ## Research / references used
 
@@ -43,6 +50,8 @@ deployment, and customer workload acceptance as separate states.
 - [Nova capability evidence matrix](../product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 - [PR #399 source and evidence](https://github.com/Bepoadewale/davdeploy/pull/399)
 - [PR #420](https://github.com/Bepoadewale/davdeploy/pull/420)
+- [Frontend PR #102](https://github.com/Bepoadewale/davdeploy-frontend/pull/102)
+- [Frontend PR #99](https://github.com/Bepoadewale/davdeploy-frontend/pull/99)
 - AWS CLI read-only inventory in account `654654474502`, region `us-east-1`.
 
 ## Work planned for the PR
@@ -51,6 +60,8 @@ deployment, and customer workload acceptance as separate states.
 - Record the exact current status of PR #399 and preserve the disabled apply
   boundary.
 - Update pricing and plan-review status notes in the capability matrix.
+- Record the relevant open frontend PRs and distinguish UI clarity from actual
+  lifecycle parity.
 
 ## Acceptance criteria
 
@@ -61,6 +72,7 @@ deployment, and customer workload acceptance as separate states.
 - [x] Current AWS test inventory and monitor status are recorded without
   deleting or altering retained evidence.
 - [x] Follow-up work and safety boundaries are explicit.
+- [x] The open frontend PRs are checked for relevance and dependency status.
 
 ## Acceptance status
 

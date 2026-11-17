@@ -39,6 +39,15 @@ context remain as retained evidence. The local Terraform run monitor is empty
 and no Terraform plan, apply, or destroy process is active. Preserve the
 untracked `--only-show-errors` file, `.venv-pr399/`, and lineage records.
 
+The frontend `main` is `b6cb14bc9563802d9b0b644739a6136336594174`. Draft PR #102
+(`d3008e7`) makes customer pages and plan status more truthful; its five required
+checks passed in run
+[43579164304](https://github.com/Bepoadewale/davdeploy-frontend/actions/runs/43579164304),
+but it is not merged or a customer execution flow. Draft PR #99 adds blog author
+names, but the current backend still returns a fixed display name and the PR's
+branch is not cleanly mergeable. The frontend also has five open dependency
+update PRs; they are unrelated to Nova acceptance.
+
 The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
 human approval -> exact-plan execution -> observed application health and
@@ -91,6 +100,11 @@ execution strategy. Dated release details below remain historical records.
   configuration was returned. The local Terraform monitor is empty and no
   Terraform operation is active. Preserve the protected local untracked files
   and lineage evidence.
+- Frontend `main` remains `b6cb14bc9563802d9b0b644739a6136336594174`. Draft
+  PR #102 passed its five checks but is not merged and adds no backend execution
+  capability. Draft PR #99 remains blocked by the backend's fixed blog author
+  name. Neither dependency work nor the five open Dependabot PRs proves browser,
+  CLI, and MCP lifecycle parity.
 
 ## Verified boundary — historical detail, read with current status above
 
