@@ -1,5 +1,31 @@
 # Backlog
 
+## Nova status snapshot — 2026-11-17
+
+Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420),
+deployed by plan run [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+and saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
+Database migrations passed; all six backend Lambda packages share code hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz` returned HTTP
+200. PR #413's 26-capability/30-root ledger is merged. Bounded pricing for
+selected resources and protected plan summaries are in the current hosted
+package; cost coverage remains partial.
+
+Draft PR #399 is at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`. Its source now
+includes the exact-plan apply credential/input APIs, artifact staging, fixed
+worker, and result reconciliation. CI run
+[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
+passed seven jobs. The apply and credential gates remain disabled. A dedicated
+customer apply role and hosted customer lifecycle have not been verified. Do
+not repeat the worker implementation; continue with role permissions and
+hosted plan/apply/health/recovery/cleanup evidence.
+
+The plan-only runner, review, role trust verification, and tenant state APIs
+are deployed, but no authenticated customer Nova request has produced a
+recorded hosted plan. No Nova customer workload has been applied or certified.
+See [`docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
+for the detailed acceptance map.
+
 ## Three-PR delivery plan
 
 ### Developer and administrator workflow
@@ -76,9 +102,8 @@
 - [x] Correct lifecycle terminal-evidence checks (PR #287), validate serialized lifecycle graphs before renderer selection (PR #289), calculate dependency-safe dispatch waves (PR #290), and persist per-module state/output/evidence outcomes (PR #291). These code foundations are merged but are not wired into multi-module worker dispatch.
 - [x] PR #320 adds bounded semantic repair for Nova proposal validation failures; PR #321 denies generated EBS volumes unless encryption is known to be enabled. Both are included in the deployed control-plane package; no Nova-generated customer plan has been deployed.
 - [x] PR #322 marks generated-plan pricing unavailable and blocks approval unless complete region-bound cost evidence is present. This fail-closed approval gate is deployed; it is not a pricing evaluator. No Nova-generated customer plan has been deployed.
-- [x] PR #393 binds proposal health assertions, recovery requirements, cost assumptions, assumptions and limitations into the exact saved-plan manifest with explicit proposed/unvalidated/unexecuted status. PR #395 adds a typed bounded assertion catalog and compatible-resource checks. Both are source-only and neither executes probes, records observed customer health, or supplies pricing.
-- [x] PR #397 preserves the exact generated Terraform configuration, provider lockfile and initialized workspace as a separately KMS-encrypted, versioned artifact bound to the saved plan. The approval path verifies both exact objects. It is merged source only and does not add or enable Terraform apply; pricing still blocks approval. Evidence: `docs/test/test397.md`.
-- [x] PRs #401/#402 add bounded actual-plan network ACL ingress and EC2 IMDSv2 checks; PR #404 requires EKS managed node groups to bind a same-plan launch template whose metadata settings require IMDSv2. All are merged and deployed to the control plane in apply run `43566319945`; no customer plan has exercised them. ACL topology, broader EKS security, hosted customer planning/apply, pricing and workload lifecycle remain open. Deployment evidence: `docs/test/test406.md`; policy evidence: `docs/test/test401.md`, `docs/test/test402.md`, `docs/test/test404.md`.
+- [x] PR #393 binds proposal health assertions, recovery requirements, cost assumptions and limitations into the plan manifest; PR #395 adds typed bounded health assertions; PR #397 preserves and verifies the exact plan-time workspace. These changes are included in the current hosted control-plane package. They do not execute health probes or record customer workload health. Evidence: `docs/test/test393.md`, `docs/test/test395.md`, and `docs/test/test397.md`.
+- [x] PRs #401/#402 add bounded actual-plan network ACL ingress and EC2 IMDSv2 checks; PR #404 requires EKS managed node groups to bind a same-plan launch template with IMDSv2. These checks are included in the current control-plane package; no customer plan has exercised them. ACL topology and broader EKS security remain open. Policy evidence: `docs/test/test401.md`, `docs/test/test402.md`, and `docs/test/test404.md`.
 - [x] PR #340 adds a versioned customer plan-role metadata-read profile, a proposal-scoped explicit-deny STS session policy, and saved-plan manifest binding. Its control-plane package was deployed with protected Terraform apply run [42985628568](https://github.com/Bepoadewale/davdeploy/actions/runs/42985628568); exact current-release evidence is in `docs/test/test345.md`, with the earlier #340 release recorded in `docs/test/test341.md`. PRs #343–#345 retained the old setup URL, published the current immutable template and updated the hosted URL. At that release the customer setup template was not installed and hosted role verification was disabled; PR #369 later enabled only trust/account verification.
 - [x] Harden actual generated-plan policy for IAM escalation (PR #353), public SQS queue policies (PR #355), and wildcard Lambda invocation (PR #356); suppress raw control-plane plan output with a bounded summary (PR #354). PRs #353–#356 are deployed in the control plane by protected apply run [43082767507](https://github.com/Bepoadewale/davdeploy/actions/runs/43082767507). Exact latest evidence is in `docs/test/test356.md`. These controls do not enable the Nova runner, pricing, approval, customer apply, health or teardown.
 - [x] Require explicit review for open API Gateway routes (PR #358) and bind untaggable API Gateway routes to the exact tenant-scoped state and a proposal-owned API reference (PR #359). Both are deployed by protected plan [43098415855](https://github.com/Bepoadewale/davdeploy/actions/runs/43098415855) and exact saved-plan apply [43101777948](https://github.com/Bepoadewale/davdeploy/actions/runs/43101777948). This control-plane rollout does not enable the Nova runner or customer workload execution; see `docs/test/test359.md`.
@@ -92,9 +117,9 @@
 - [x] PR #379 adds proposal-gated, region-bounded read metadata access for proposed VPCs, subnets, and security groups; this control-plane source is now deployed in the PR #381 release. PR #381 separately published the customer role template, but it has not been installed in a customer account and effective permissions are unverified. Routes, internet gateways, NAT, and VPC endpoints remain unsupported by this profile. Evidence: `docs/test/test379.md` and `docs/test/test382.md`.
 - [x] PR #381 preserves the prior immutable customer plan-role template URL and publishes the content-hash template. PR #392 validates a disposable plan-only role's trust/policy shape and selected IAM simulator decisions, then deletes its exact stack. No persistent customer connection or role was verified; real broker assumption and account-effective permissions remain unproven. Evidence: `docs/test/test382.md` and `docs/test/test392.md`.
 - [ ] Finish the hosted Nova plan-only customer journey and tenant-scoped remote-state path. The isolated runner, plan review, credential broker and state API are deployed, but no authenticated customer request has produced a hosted plan. A disposable IAM policy simulation is evidence only; real customer-role assumption, effective permissions, and service-limit checks remain incomplete. PRs #371/#372 add RDS planner metadata access and PR #379 adds bounded VPC/subnet/security-group metadata reads. No Nova-generated customer plan has been applied.
-- [ ] Integrate and verify a trusted regional pricing evaluator that supplies complete cost evidence. PR #318 is closed; its pricing approach remains unresolved. Until pricing is integrated, PR #322's gate blocks generated-plan approval.
+- [ ] Extend the deployed regional pricing evaluator and usage contracts to cover all material supported resources and supporting costs. PRs #407–#416 add bounded evidence for selected families; unsupported or unpriced material resources continue to block approval. PR #318 remains closed and is not used as current pricing evidence.
 - [ ] Define and implement tenant-scoped secret references: bind customer-approved secret identifiers to the trusted deployment context, keep secret values out of Nova prompts and Terraform state, scope runtime reads, and cover rotation/revocation. PRs #365/#367 constrain generated literals and a narrow RDS ARN-reference path; PR #374 denies runtime secret-value grants until policy permissions can be bound to a verified typed reference. Runtime reads remain unavailable.
-- [ ] Wire per-module conditional claims, dispatch waves, outcomes, build/result identities, typed output binding, authenticated CodeBuild/SQS reconciliation, bounded safe retries, partial-failure recovery and reverse graph cleanup into the hosted worker.
+- [ ] Prove worker restart/reconciliation, bounded retries, partial-failure recovery, typed output binding, and reverse graph cleanup in the hosted worker. Draft PR #399 has source tests for the fixed apply worker, but no hosted customer build has exercised it.
 - [ ] Dispatch compatible approved module graphs through checked-in renderers with typed outputs, dependency ordering and reverse cleanup. CodeBuild remains single-module and fail-closed until this complete path is validated.
 - [ ] Certify each hosted renderer and composed workload through the customer execution runner, including health, update/recovery, destroy and independent absence verification.
 - [ ] Ingest real App Runner Terraform outputs and AWS resource observations through the product UI/API execution path.

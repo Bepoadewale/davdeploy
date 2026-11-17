@@ -1,34 +1,41 @@
 # Implementation Status
 
-Current backend source `main` is commit
-`2b78e0a97940179bac0654cf005f04df00949995` (PR #415). The hosted control plane
-is on PR #411 commit `a9c5ca127e8e93845b215c795dd6755e6683869f`, applied by
-protected Terraform apply run
-[43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088)
-after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950).
-All six `davdeploy-*` Lambdas were observed with package hash
-`DN7QMWh1lCNtB9bK8AA0uWHRyMTEVwF7qKTmzB/JbhU=`; database migration and
-`/healthz` HTTP 200 checks passed. PRs #412 and #414 are merged source but are
-not deployed.
-Source includes the generated graph, schema validation, bounded repair,
-actual-plan security/ownership/retention checks, isolated plan-only runner,
-tenant-state and plan-review contracts, and partial regional cost evaluation
-for explicitly bounded EBS, S3, SQS, selected RDS MySQL, single-region
-DynamoDB Standard on-demand tables, Lambda, HTTP API, CloudWatch Standard logs
-and modeled egress. PR #414 covers DynamoDB billed request units, table storage
-and PITR with explicit revision-bound assumptions. Cost completeness, customer
-approval-after-plan, durable customer apply, health observations, recovery,
-and teardown remain incomplete. Open draft PR #399 has green CI but does not
-wire or enable Nova customer apply. No Nova customer plan or workload has been
-applied, operated, or certified. This summary records source and control-plane
-state only; it is not customer execution evidence. See
+Status snapshot: 2026-11-17. Backend `main` is
+`9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
+plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+and exact saved-plan apply
+[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
+Both workflow jobs succeeded, including database migrations. Read-only checks
+found all six `davdeploy-*` Lambda packages on code hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
+HTTP 200. This is deployed control-plane evidence only.
+
+Mainline includes the plan-only runner, tenant-scoped Terraform state, plan
+review, proposal-bound verification requirements, exact workspace artifacts,
+bounded actual-plan policy, and revision-bound regional pricing for selected
+resource families. PRs #417–#420 add safe reviewable protected plan summaries.
+The 26-capability/30-root coverage ledger from PR #413 is merged. Pricing
+coverage remains partial; unknown or unpriced material resources block
+approval.
+
+Draft PR #399 is open at
+`72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`. Source includes the separate apply
+credential/input routes, isolated exact-artifact staging, fixed apply worker,
+and result reconciliation. CI run
+[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
+passed all seven checks. Apply and credential gates remain disabled. The
+dedicated customer apply role, its effective least-privilege permissions, and
+the hosted customer apply/health/recovery/cleanup cycle remain unverified. No
+Nova customer plan or workload has been applied, operated, or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
-for the 26-entry / 30-root acceptance and evidence crosswalk.
-PR #414 is source-only and not deployed. PR #415 adds regression coverage for
-its immutable pricing assumptions; PR #416 is changing the generated-plan
-review response to show all validated pricing assumptions. Unsupported
-DynamoDB costs remain approval blockers. None of these source changes
-establishes a customer Nova plan or workload.
+for the detailed acceptance crosswalk.
+
+Read-only inventory in account `654654474502`, region `us-east-1`, found no
+SageMaker endpoint, model, or endpoint configuration; four tagged DavDeploy
+Batch job definitions are inactive; one SageMaker lineage action and context
+remain as retained evidence. The Terraform run monitor is empty and no
+Terraform operation is active. Preserve the protected untracked `--only-show-errors`
+file, `.venv-pr399/`, and lineage evidence.
 
 ## Executed locally
 
@@ -38,7 +45,7 @@ establishes a customer Nova plan or workload.
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
 | Nova intent scope boundary | PR #377 adds typed infrastructure/out-of-scope classification. Unrelated requests receive a fixed HTTP 422 explanation before a workload intent is stored; deploying financial-domain software remains in scope. The code is deployed with backend `40439ab6b493a40c522102fa88de1c48043b4177` via protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048). Two bounded synthetic model checks passed for stock advice and a stockbroking-app deployment, but this is not broad classification-quality evidence and no authenticated customer API journey was exercised. |
-| Nova proposal policy and execution boundary | Backend source `main` `017e53e` (PR #412) includes the strict generated graph, provider-schema validation, bounded proposal repair, actual-plan security/ownership/retention policy, isolated plan-only runner, tenant-state and plan-review contracts, and bounded regional pricing for selected EBS, S3, SQS, RDS MySQL, Lambda, HTTP API, CloudWatch Standard logs, and egress. Hosted control-plane source is PR #411 `a9c5ca1`, applied by run [43685318088](https://github.com/Bepoadewale/davdeploy/actions/runs/43685318088) after plan [43664906950](https://github.com/Bepoadewale/davdeploy/actions/runs/43664906950); PR #412 pricing is not deployed. Open draft PR #399 has green CI, but does not connect or enable Nova customer apply. No authenticated Nova customer plan, applied workload, application probe, update/recovery, or teardown is evidenced. See [`test413.md`](test/test413.md), [`test401.md`](test/test401.md), [`test402.md`](test/test402.md), and [`test404.md`](test/test404.md). |
+| Nova proposal policy and execution boundary | Backend `main` `9951caa` (PR #420) is deployed by protected plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184) and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). It includes the strict generated graph, provider-schema validation, bounded proposal repair, actual-plan security/ownership/retention policy, isolated plan-only runner, tenant-state and plan-review contracts, and partial regional pricing for selected EBS, S3, SQS, RDS MySQL, Lambda, HTTP API, CloudWatch Standard logs, and egress. PRs #417–#420 add safe protected plan summaries. Draft PR #399 has green CI and adds source for credential/input routes, exact-artifact staging, a fixed apply worker, and result reconciliation; its gates remain disabled. No customer apply role or hosted customer plan/apply/health/recovery/cleanup cycle is verified. No Nova customer workload has been applied or certified. See [`test413.md`](test/test413.md), [`test401.md`](test/test401.md), [`test402.md`](test/test402.md), and [`test404.md`](test/test404.md). |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
@@ -76,7 +83,7 @@ establishes a customer Nova plan or workload.
 
 ## Simulated
 
-- Natural-language understanding uses deterministic parsing by default. A governed Nova 2 Lite adapter is implemented and its basic live transport/response shape was verified with two synthetic cases, but it remains disabled for customers until broader evaluation and tenant rollout gates are configured. Source has partial trusted region-bound pricing for EBS gp3, supported S3, SQS Standard/FIFO, selected RDS MySQL, bounded ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled egress (PRs #407–#412). PR #412 is not deployed; unpriced material resources and unsupported settings still block approval.
+- Natural-language understanding uses deterministic parsing by default. A governed Nova 2 Lite adapter is implemented and its basic live transport/response shape was verified with two synthetic cases, but it remains disabled for customers until broader evaluation and tenant rollout gates are configured. Deployed source has partial trusted region-bound pricing for EBS gp3, supported S3, SQS Standard/FIFO, selected RDS MySQL, bounded ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled egress (PRs #407–#420). Unpriced material resources and unsupported settings still block approval.
 - The default planner inventory and pricing remain local fixtures. The separately recorded customer discovery snapshot is live, read-only evidence; it does not grant deployment permission.
 - Customer-plan dry-run deployment, destroy and Day-2 change application are bounded local fixtures, not AWS, Terraform, Docker or Kubernetes execution.
 - Deployment outputs/resource inventory are currently populated from the bounded fixture observer. Real AWS App Runner outputs were proven in PR #42 scripts/evidence, but they are not yet ingested through the product UI execution path.
@@ -95,7 +102,7 @@ GitHub OAuth/install initiation, live GitHub webhooks/reviewed PR writes/checks,
 Terraform describes separate state/lock/budget guardrails plus a private VPC, EKS, ECR, RDS, Secrets Manager and IRSA foundation. Kubernetes describes hardened API replicas, probes, a PDB, default-deny policy and placeholder-only secret/image references. Argo CD describes reviewed desired-state reconciliation. Terraform format, offline-backend initialisation and validation passed. None of those resources or controllers has run in AWS.
 
 GitHub Actions runs lint, tests, OpenAPI drift checks, dependency audit, secret scan, OPA tests, SBOM, filesystem scan, image build, Terraform/Kubernetes contract checks, realistic demo seeding and the full local proof (simple, complex, degraded, Day-2, customer-plan dry-run/destroy, policy/readiness failure, traces and MCP tool discovery). Frontend static-hosting tests run independently in `davdeploy-frontend`. The manual GitHub OIDC workflow has exact plan/apply/destroy confirmations and an account check, and its reviewed saved-plan path has deployed the hosted serverless control plane. It remains distinct from unexecuted customer-workload plan/apply authority.
-# Current merged backend source — 2026-11-12, after PR #381
+# Historical merged backend source snapshot — 2026-11-12, after PR #381
 
 Backend `main` is merge commit `a12205972cc124d08d85845f30c9b574f7cf87fd`;
 merged-main CI run
@@ -107,7 +114,7 @@ No customer role is installed and effective role permissions are not verified.
 PR #102 remains draft/local-fixture work, without authenticated production
 history or lifecycle evidence.
 
-# Latest hosted execution status — 2026-11-12, PR #381 source
+# Historical hosted execution status — 2026-11-12, PR #381 source
 
 Backend source `a12205972cc124d08d85845f30c9b574f7cf87fd` was deployed through
 protected plan [43260003885](https://github.com/Bepoadewale/davdeploy/actions/runs/43260003885)
@@ -372,7 +379,7 @@ workload ran, regional pricing is not integrated, and customer apply/health/
 recovery/teardown remain unproven. Exact evidence is in [`test391.md`](test/test391.md)
 and [`test392.md`](test/test392.md).
 
-## Latest hosted control-plane deployment — 2026-11-14
+## Previous hosted control-plane deployment — 2026-11-14
 
 Backend commit `74016e70aa7a702ebf3338cf1fbb43d4f563a838` (PR #405) was
 deployed in account `654654474502`, region `us-east-1`, using protected plan

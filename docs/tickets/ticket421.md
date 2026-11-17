@@ -43,6 +43,9 @@ deployment, and customer workload acceptance as separate states.
   `76908ebd7ea3453320fe7959c9b4643b3b6632ac`; backend `main` still returns a
   fixed blog author display name and the PR is not cleanly mergeable. Five
   Dependabot PRs (#82–#86) also remain open.
+- `PROJECT_STATUS.md`, `docs/IMPLEMENTATION_STATUS.md`, and
+  `CODEX_BACKLOG.md` still reported a November 13 source/deployment baseline
+  and said regional pricing was not integrated.
 
 ## Research / references used
 
@@ -60,6 +63,7 @@ deployment, and customer workload acceptance as separate states.
 - Record the exact current status of PR #399 and preserve the disabled apply
   boundary.
 - Update pricing and plan-review status notes in the capability matrix.
+- Refresh the stale project, implementation, and backlog status summaries.
 - Record the relevant open frontend PRs and distinguish UI clarity from actual
   lifecycle parity.
 
@@ -73,6 +77,7 @@ deployment, and customer workload acceptance as separate states.
   deleting or altering retained evidence.
 - [x] Follow-up work and safety boundaries are explicit.
 - [x] The open frontend PRs are checked for relevance and dependency status.
+- [x] The three stale project/implementation/backlog summaries are reconciled.
 
 ## Acceptance status
 
@@ -84,6 +89,7 @@ Documentation-only. No runtime evidence file is required.
 
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Final validation after the status-file updates: both checks passed again.
 - No Terraform mutation or customer workload was run.
 
 ## Evidence files produced
