@@ -99,8 +99,10 @@ untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
 - [x] Focused tests, full verification, configured Terraform validation,
   documentation conventions, diff checks, and required hosted CI pass,
   including the fresh-runner `local-e2e` clean integration check.
-- [ ] A separate full local clean-room cycle remains unrun because the final
-  cleanup would delete retained local artifacts without explicit approval.
+- [x] A separate full local clean-room cycle passed in an isolated worktree at
+  `/private/tmp/davdeploy-pr399-cleanroom-20261117`; its project-specific
+  containers were stopped, and its worktree, virtual environment, Compose
+  network, database volume, and images were retained. No cleanup target ran.
 
 ## Acceptance status
 
@@ -656,6 +658,12 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   resource policies with otherwise specific principals. Fresh-head run
   `44142215551` passed all seven required checks, including `local-e2e` and
   Terraform validation.
+- A full `make local-proof VENV=.venv` cycle passed in an isolated worktree at
+  `9739dd4b8df2785dfd782f710bfd216b97e7b529`: smoke, API contract, customer-plan
+  fixture E2E, trace check, and 1,396 tests. Its project containers are stopped;
+  the worktree, virtual environment, Compose network, database volume, and
+  images are retained. This is local fixture evidence, not hosted customer
+  apply or lifecycle proof.
 - References: [IAM ARN formats and wildcard behavior](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html),
   [S3 IAM resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html),
   and [DynamoDB table/index IAM resources](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/iam-policy-specific-table-indexes.html).

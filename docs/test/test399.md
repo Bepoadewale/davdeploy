@@ -511,3 +511,24 @@ Fresh-head hosted CI is required after push.
 - Source commit `33cd509` passed all seven checks in fresh-head run
   `44142215551`, including the S3 and SQS inverse-resource regressions.
 
+## Isolated local clean-room proof — 2026-11-17
+
+- Worktree `/private/tmp/davdeploy-pr399-cleanroom-20261117`, detached at
+  `9739dd4b8df2785dfd782f710bfd216b97e7b529`, ran `make local-proof
+  VENV=.venv` with Compose project `davdeploy-pr399-cleanroom-20261117`,
+  subnet `10.251.253.0/24`, and alternate host ports. Compose configuration,
+  service smoke checks, versioned API/CORS contract, customer-plan fixture
+  end-to-end flow, demo seed, Tempo trace check, and full verification passed;
+  verification reported 1,396 tests passed and one existing
+  Starlette/httpx deprecation warning.
+- The proof used local fixture data only; it did not call AWS, issue customer
+  credentials, run Terraform, change hosted state, or execute a customer
+  workload. It does not prove hosted apply, health, recovery, destroy, or
+  independent absence.
+- `docker compose stop` stopped this project's containers. They are all
+  stopped; no `down`, cleanup target, file removal, volume deletion, or image
+  deletion ran. The isolated worktree, `.venv`, Compose override, project
+  network `davdeploy-pr399-cleanroom-20261117_default`, database volume
+  `davdeploy-pr399-cleanroom-20261117_davdeploy-postgres`, and project images
+  remain retained.
+
