@@ -156,16 +156,66 @@ class SqsPricingUsageAssumptions(BaseModel):
 
 
 class RdsPricingUsageAssumptions(BaseModel):
-    """Bounded monthly RDS backup storage usage; quantities only, never prices."""
+    """Bounded RDS/Aurora usage quantities; prices are never customer supplied."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    monthly_backup_storage_gb_month: MonthlyUsageRange
+    monthly_backup_storage_gb_month: MonthlyUsageRange | None
+    aurora_monthly_storage_gb_month: MonthlyUsageRange | None = None
+    aurora_monthly_io_requests: MonthlyUsageRange | None = None
+    aurora_monthly_backup_overage_gb_month: MonthlyUsageRange | None = None
+    aurora_monthly_secret_api_requests: MonthlyUsageRange | None = None
+    aurora_monthly_inter_az_transfer_gb: MonthlyUsageRange | None = None
+    aurora_monthly_cross_region_transfer_gb: MonthlyUsageRange | None = None
+    aurora_monthly_internet_egress_gb: MonthlyUsageRange | None = None
 
     @model_validator(mode="after")
     def validate_backup_bounds(self) -> RdsPricingUsageAssumptions:
-        if self.monthly_backup_storage_gb_month.maximum > 1_000_000_000:
+        aurora_fields = (
+            self.aurora_monthly_storage_gb_month,
+            self.aurora_monthly_io_requests,
+            self.aurora_monthly_backup_overage_gb_month,
+            self.aurora_monthly_secret_api_requests,
+            self.aurora_monthly_inter_az_transfer_gb,
+            self.aurora_monthly_cross_region_transfer_gb,
+            self.aurora_monthly_internet_egress_gb,
+        )
+        if any(value is not None for value in aurora_fields) and not all(
+            value is not None for value in aurora_fields
+        ):
+            raise ValueError("Aurora storage, I/O, and backup assumptions must be supplied together")
+        if self.monthly_backup_storage_gb_month is None and not all(
+            value is not None for value in aurora_fields
+        ):
+            raise ValueError("RDS backup or complete Aurora usage assumptions are required")
+        if (
+            self.monthly_backup_storage_gb_month is not None
+            and self.monthly_backup_storage_gb_month.maximum > 1_000_000_000
+        ):
             raise ValueError("monthly RDS backup storage usage exceeds the supported bound")
+        if (
+            self.aurora_monthly_storage_gb_month is not None
+            and self.aurora_monthly_storage_gb_month.maximum > 1_000_000_000
+        ) or (
+            self.aurora_monthly_backup_overage_gb_month is not None
+            and self.aurora_monthly_backup_overage_gb_month.maximum > 1_000_000_000
+        ) or (
+            self.aurora_monthly_io_requests is not None
+            and self.aurora_monthly_io_requests.maximum > 1_000_000_000_000_000
+        ) or (
+            self.aurora_monthly_secret_api_requests is not None
+            and self.aurora_monthly_secret_api_requests.maximum > 1_000_000_000_000
+        ) or (
+            self.aurora_monthly_inter_az_transfer_gb is not None
+            and self.aurora_monthly_inter_az_transfer_gb.maximum > 1_000_000_000
+        ) or (
+            self.aurora_monthly_cross_region_transfer_gb is not None
+            and self.aurora_monthly_cross_region_transfer_gb.maximum > 1_000_000_000
+        ) or (
+            self.aurora_monthly_internet_egress_gb is not None
+            and self.aurora_monthly_internet_egress_gb.maximum > 1_000_000_000
+        ):
+            raise ValueError("monthly Aurora usage exceeds the supported bound")
         return self
 
 

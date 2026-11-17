@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-17. Backend `main` is
-`8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422); hosted runtime remains
+`8c7f1deab9e9b9865a25d0fffaf87be2066b8ea4` (PR #423); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -15,15 +15,16 @@ Mainline includes the plan-only runner, tenant-scoped Terraform state, plan
 review, proposal-bound verification requirements, exact workspace artifacts,
 bounded actual-plan policy, and revision-bound regional pricing for selected
 resource families. PRs #417–#420 add safe reviewable protected plan summaries.
-The 26-capability/30-root coverage ledger from PR #413 is merged. Pricing
-coverage remains partial; unknown or unpriced material resources block
-approval.
+The 26-capability/30-root coverage ledger from PR #413 is merged. Draft PR #424
+adds source-only pricing for one bounded Aurora PostgreSQL Serverless v2
+writer shape; it is not merged or deployed. Pricing coverage remains partial;
+unknown or unpriced material resources block approval.
 
 Draft PR #399 is open at
-`72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`. Source includes the separate apply
+`f7f97d877fb086aaec4ad0d07febeefa0f2601ce`. Source includes the separate apply
 credential/input routes, isolated exact-artifact staging, fixed apply worker,
 and result reconciliation. CI run
-[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
+[44061663988](https://github.com/Bepoadewale/davdeploy/actions/runs/44061663988)
 passed all seven checks. Apply and credential gates remain disabled. The
 dedicated customer apply role, its effective least-privilege permissions, and
 the hosted customer apply/health/recovery/cleanup cycle remain unverified. No

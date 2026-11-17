@@ -108,7 +108,7 @@ def test_sqs_usage_assumptions_are_strict_bounded_request_unit_ranges():
 def test_rds_backup_usage_assumptions_are_bounded_and_constraint_input_is_strict():
     usage = {"monthly_backup_storage_gb_month": {"minimum": 2, "maximum": 20}}
     value = RdsPricingUsageAssumptions.model_validate(usage)
-    assert value.model_dump(mode="json") == usage
+    assert value.model_dump(mode="json", exclude_unset=True) == usage
 
     request = InfrastructurePlanConstraintUpdateRequest.model_validate(
         {"rds_pricing_usage_assumptions": usage}
@@ -129,6 +129,34 @@ def test_rds_backup_usage_assumptions_are_bounded_and_constraint_input_is_strict
             "rds_pricing_usage_assumptions": {
                 **usage, "unknown_price": "0.10"
             }
+        })
+
+
+def test_aurora_usage_assumptions_require_storage_io_and_backup_overage_together():
+    usage = {
+        "monthly_backup_storage_gb_month": None,
+        "aurora_monthly_storage_gb_month": {"minimum": 20, "maximum": 50},
+        "aurora_monthly_io_requests": {"minimum": 0, "maximum": 10_000_000},
+        "aurora_monthly_backup_overage_gb_month": {"minimum": 0, "maximum": 5},
+        "aurora_monthly_secret_api_requests": {"minimum": 10, "maximum": 50},
+        "aurora_monthly_inter_az_transfer_gb": {"minimum": 0, "maximum": 0},
+        "aurora_monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+        "aurora_monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+    }
+    value = RdsPricingUsageAssumptions.model_validate(usage)
+    assert value.model_dump(mode="json", exclude_unset=True) == usage
+    assert InfrastructurePlanConstraintUpdateRequest.model_validate(
+        {"rds_pricing_usage_assumptions": usage}
+    ).rds_pricing_usage_assumptions == value
+
+    with pytest.raises(ValidationError):
+        RdsPricingUsageAssumptions.model_validate({
+            "aurora_monthly_storage_gb_month": {"minimum": 20, "maximum": 50},
+        })
+    with pytest.raises(ValidationError):
+        RdsPricingUsageAssumptions.model_validate({
+            **usage,
+            "aurora_monthly_io_requests": {"minimum": 10, "maximum": 1},
         })
 
 

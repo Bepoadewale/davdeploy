@@ -250,7 +250,9 @@ class GeneratedPlanPricingEvidence:
             rds_usage = (
                 None
                 if raw_rds_usage is None
-                else RdsPricingUsageAssumptions.model_validate(raw_rds_usage).model_dump(mode="json")
+                else RdsPricingUsageAssumptions.model_validate(raw_rds_usage).model_dump(
+                    mode="json", exclude_unset=True
+                )
             )
             if rds_usage != raw_rds_usage:
                 raise ValueError("non-canonical RDS usage assumptions")
@@ -455,7 +457,7 @@ class TrustedPlanPricingContext:
             try:
                 rds_usage_assumptions = RdsPricingUsageAssumptions.model_validate(
                     raw_rds_usage_assumptions
-                ).model_dump(mode="json")
+                ).model_dump(mode="json", exclude_unset=True)
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid RDS pricing usage assumptions") from None
         if raw_serverless_usage_assumptions is None:
@@ -635,6 +637,90 @@ class AwsPriceListCatalog:
                 ("regionCode", region),
             ],
             "GB-Mo",
+        )
+
+    def aurora_serverless_v2_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            "aurora-postgresql-serverless-v2-standard",
+            [
+                ("productFamily", "ServerlessV2"),
+                ("databaseEngine", "Aurora PostgreSQL"),
+                ("usagetype", "Aurora:ServerlessV2Usage"),
+                ("regionCode", region),
+            ],
+            "ACU-Hr",
+        )
+
+    def aurora_standard_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            "aurora-postgresql-standard-storage",
+            [
+                ("productFamily", "Database Storage"),
+                ("databaseEngine", "Aurora PostgreSQL"),
+                ("volumeType", "General Purpose-Aurora"),
+                ("usagetype", "Aurora:StorageUsage"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def aurora_standard_io_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            "aurora-postgresql-standard-io",
+            [
+                ("productFamily", "System Operation"),
+                ("databaseEngine", "Aurora PostgreSQL"),
+                ("group", "Aurora I/O Operation"),
+                ("usagetype", "Aurora:StorageIOUsage"),
+                ("regionCode", region),
+            ],
+            "IOs",
+        )
+
+    def aurora_backup_overage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonRDS",
+            region,
+            "aurora-postgresql-backup-storage",
+            [
+                ("productFamily", "Storage Snapshot"),
+                ("databaseEngine", "Aurora PostgreSQL"),
+                ("usagetype", "Aurora:BackupUsage"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
+    def aurora_secret_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AWSSecretsManager",
+            region,
+            "aurora-managed-secret-storage",
+            [
+                ("productFamily", "Secret"),
+                ("group", "AWSSecretsManager-Secret"),
+                ("regionCode", region),
+            ],
+            "Secrets",
+        )
+
+    def aurora_secret_api_request_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AWSSecretsManager",
+            region,
+            "aurora-managed-secret-api-requests",
+            [
+                ("productFamily", "API Request"),
+                ("group", "AWSSecretsManager-APIRequest"),
+                ("regionCode", region),
+            ],
+            "API Requests",
         )
 
     def dynamodb_read_request_rate(self, region: str) -> CatalogRate:
@@ -845,6 +931,7 @@ ZERO_DIRECT_CHARGE_RESOURCE_TYPES = frozenset(
         "aws_route_table",
         "aws_route",
         "aws_route_table_association",
+        "aws_db_subnet_group",
         "aws_main_route_table_association",
         "aws_security_group",
         "aws_security_group_rule",
@@ -1053,6 +1140,8 @@ def evaluate_generated_plan_pricing(
     s3_buckets: list[dict[str, Any]] = []
     sqs_queues: list[dict[str, Any]] = []
     rds_instances: list[dict[str, Any]] = []
+    aurora_clusters: list[dict[str, Any]] = []
+    aurora_instances: list[dict[str, Any]] = []
     dynamodb_tables: list[dict[str, Any]] = []
     lambda_functions: list[dict[str, Any]] = []
     http_apis: list[dict[str, Any]] = []
@@ -1071,6 +1160,12 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_db_instance":
             rds_instances.append(resource)
+            continue
+        if resource_type == "aws_rds_cluster":
+            aurora_clusters.append(resource)
+            continue
+        if resource_type == "aws_rds_cluster_instance":
+            aurora_instances.append(resource)
             continue
         if resource_type == "aws_dynamodb_table":
             dynamodb_tables.append(resource)
@@ -1365,6 +1460,90 @@ def evaluate_generated_plan_pricing(
                                 "DavDeploy could not identify one exact regional SQS request price.",
                             ))
 
+    if aurora_clusters or aurora_instances:
+        address = aurora_clusters[0]["address"] if aurora_clusters else aurora_instances[0]["address"]
+        if rds_instances:
+            findings.append(PlanPricingFinding(
+                "rds_mixed_engine_shape_unpriced", address,
+                "A plan cannot mix Aurora cluster and standalone RDS pricing shapes.",
+            ))
+        elif len(aurora_clusters) != 1 or len(aurora_instances) != 1:
+            findings.append(PlanPricingFinding(
+                "aurora_topology_unpriced", address,
+                "Only one Aurora cluster with one Serverless v2 writer is priced.",
+            ))
+        elif trusted_context.rds_usage_assumptions is None:
+            findings.append(PlanPricingFinding(
+                "aurora_usage_assumptions_missing", address,
+                "Explicit monthly Aurora storage, I/O, and billable backup-overage ranges are required.",
+            ))
+        else:
+            try:
+                usage = RdsPricingUsageAssumptions.model_validate(
+                    trusted_context.rds_usage_assumptions
+                )
+                if (
+                    usage.monthly_backup_storage_gb_month is not None
+                    or usage.aurora_monthly_storage_gb_month is None
+                    or usage.aurora_monthly_io_requests is None
+                    or usage.aurora_monthly_backup_overage_gb_month is None
+                    or usage.aurora_monthly_secret_api_requests is None
+                    or usage.aurora_monthly_inter_az_transfer_gb is None
+                    or usage.aurora_monthly_cross_region_transfer_gb is None
+                    or usage.aurora_monthly_internet_egress_gb is None
+                ):
+                    raise ValueError("Aurora usage assumptions do not match")
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "aurora_usage_assumptions_invalid", address,
+                    "Persisted Aurora storage, I/O, and backup assumptions must all be explicit.",
+                ))
+            else:
+                cluster, instance = aurora_clusters[0], aurora_instances[0]
+                error = (
+                    ("aurora_transfer_usage_unpriced", "Aurora inter-AZ, cross-region, and internet transfer must be explicitly bounded at zero for this pricing release.")
+                    if usage.aurora_monthly_inter_az_transfer_gb.maximum > 0
+                    or usage.aurora_monthly_cross_region_transfer_gb.maximum > 0
+                    or usage.aurora_monthly_internet_egress_gb.maximum > 0
+                    else _validate_aurora_cluster(
+                        cluster["values"], changes.get(cluster["address"])
+                    ) or _validate_aurora_instance(
+                        instance["values"], changes.get(instance["address"])
+                    )
+                )
+                if error:
+                    findings.append(PlanPricingFinding(error[0], address, error[1]))
+                else:
+                    try:
+                        if pricing_catalog is None:
+                            pricing_catalog = AwsPriceListCatalog()
+                        lines.extend(_aurora_cost_lines(
+                            cluster_address=cluster["address"],
+                            region=region,
+                            cluster_values=cluster["values"],
+                            usage=usage,
+                            catalog=pricing_catalog,
+                        ))
+                    except PriceListUnavailableError:
+                        unavailable = True
+                        findings.append(PlanPricingFinding(
+                            "regional_price_lookup_unavailable", address,
+                            "DavDeploy could not verify current regional Aurora prices.",
+                        ))
+                    except (PlanPricingError, KeyError, IndexError, TypeError, ValueError):
+                        findings.append(PlanPricingFinding(
+                            "regional_price_ambiguous", address,
+                            "DavDeploy could not identify exact regional Aurora prices.",
+                        ))
+    elif (
+        trusted_context.rds_usage_assumptions is not None
+        and any(key.startswith("aurora_") for key in trusted_context.rds_usage_assumptions)
+    ):
+        findings.append(PlanPricingFinding(
+            "aurora_usage_assumptions_stale", None,
+            "Aurora usage assumptions do not match any cluster in this plan.",
+        ))
+
     if rds_instances:
         usage_document = trusted_context.rds_usage_assumptions
         if usage_document is None:
@@ -1405,6 +1584,22 @@ def evaluate_generated_plan_pricing(
                     findings.append(
                         PlanPricingFinding(error[0], instance["address"], error[1])
                     )
+                elif usage.monthly_backup_storage_gb_month is None or any(
+                    value is not None
+                    for value in (
+                        usage.aurora_monthly_storage_gb_month,
+                        usage.aurora_monthly_io_requests,
+                        usage.aurora_monthly_backup_overage_gb_month,
+                        usage.aurora_monthly_secret_api_requests,
+                        usage.aurora_monthly_cross_region_transfer_gb,
+                        usage.aurora_monthly_internet_egress_gb,
+                    )
+                ):
+                    findings.append(PlanPricingFinding(
+                        "rds_usage_assumptions_invalid",
+                        rds_instances[0]["address"],
+                        "Standalone RDS pricing requires backup storage assumptions only.",
+                    ))
                 elif any(
                     instance["values"].get("backup_retention_period", 0) > 0
                     for instance in rds_instances
@@ -2183,6 +2378,73 @@ def pricing_evidence_is_approval_eligible(
             RdsPricingUsageAssumptions.model_validate(trusted_context.rds_usage_assumptions)
         except (TypeError, ValueError):
             return False
+        if (
+            trusted_context.rds_usage_assumptions.get("monthly_backup_storage_gb_month") is None
+            or any(key.startswith("aurora_") for key in trusted_context.rds_usage_assumptions)
+        ):
+            return False
+    aurora_lines = [line for line in lines if line.get("resource_type") == "aws_rds_cluster"]
+    if aurora_lines:
+        if trusted_context.rds_usage_assumptions is None:
+            return False
+        try:
+            aurora_usage = RdsPricingUsageAssumptions.model_validate(
+                trusted_context.rds_usage_assumptions
+            )
+        except (TypeError, ValueError):
+            return False
+        if (
+            aurora_usage.monthly_backup_storage_gb_month is not None
+            or aurora_usage.aurora_monthly_storage_gb_month is None
+            or aurora_usage.aurora_monthly_io_requests is None
+            or aurora_usage.aurora_monthly_backup_overage_gb_month is None
+            or aurora_usage.aurora_monthly_secret_api_requests is None
+            or aurora_usage.aurora_monthly_inter_az_transfer_gb is None
+            or aurora_usage.aurora_monthly_cross_region_transfer_gb is None
+            or aurora_usage.aurora_monthly_internet_egress_gb is None
+            or aurora_usage.aurora_monthly_inter_az_transfer_gb.maximum > 0
+            or aurora_usage.aurora_monthly_cross_region_transfer_gb.maximum > 0
+            or aurora_usage.aurora_monthly_internet_egress_gb.maximum > 0
+        ):
+            return False
+        expected_aurora_lines = {
+            "Aurora PostgreSQL Serverless v2 ACU-hours": (365, 1460, "ACU-Hr"),
+            "Aurora Standard storage": (
+                aurora_usage.aurora_monthly_storage_gb_month.minimum,
+                aurora_usage.aurora_monthly_storage_gb_month.maximum,
+                "GB-Mo",
+            ),
+            "Aurora Standard I/O requests": (
+                aurora_usage.aurora_monthly_io_requests.minimum,
+                aurora_usage.aurora_monthly_io_requests.maximum,
+                "IOs",
+            ),
+            "Aurora billable backup storage overage": (
+                aurora_usage.aurora_monthly_backup_overage_gb_month.minimum,
+                aurora_usage.aurora_monthly_backup_overage_gb_month.maximum,
+                "GB-Mo",
+            ),
+            "AWS Secrets Manager secret storage for the RDS-managed credential": (1, 1, "Secrets"),
+            "AWS Secrets Manager API requests for credential reads and rotation": (
+                aurora_usage.aurora_monthly_secret_api_requests.minimum,
+                aurora_usage.aurora_monthly_secret_api_requests.maximum,
+                "API Requests",
+            ),
+        }
+        actual_aurora_lines = {line.get("description"): line for line in aurora_lines}
+        if len(aurora_lines) != len(expected_aurora_lines) or set(actual_aurora_lines) != set(expected_aurora_lines):
+            return False
+        for description, (quantity, quantity_max, unit) in expected_aurora_lines.items():
+            line = actual_aurora_lines[description]
+            if (
+                line.get("quantity") != quantity
+                or line.get("quantity_max") != quantity_max
+                or line.get("low_cost_quantity") != quantity
+                or line.get("unit") != unit
+                or not isinstance(line.get("address"), str)
+                or line["address"].rsplit(".", 2)[-2] != "aws_rds_cluster"
+            ):
+                return False
     if s3_lines:
         if trusted_context.usage_assumptions is None:
             return False
@@ -2327,6 +2589,178 @@ def pricing_evidence_is_approval_eligible(
         else high <= trusted_context.monthly_budget_minor
     )
     return document.get("within_budget") is expected_within_budget
+
+
+def _validate_aurora_cluster(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "aurora_plan_change_metadata_missing", "The Aurora cluster lacks final pricing metadata."
+    plan_change = change["change"]
+    after, unknown = plan_change.get("after"), plan_change.get("after_unknown")
+    required = (
+        "engine", "engine_mode", "storage_type", "manage_master_user_password",
+        "storage_encrypted", "backup_retention_period", "serverlessv2_scaling_configuration",
+        "engine_lifecycle_support", "enable_http_endpoint", "kms_key_id",
+        "master_user_secret_kms_key_id", "global_cluster_identifier",
+        "enabled_cloudwatch_logs_exports",
+    )
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+        or any(_path_contains_unknown(unknown, (key,)) for key in required)
+    ):
+        return "aurora_cost_driver_unknown", "The Aurora plan has missing or unknown price-driving settings."
+    scaling = values.get("serverlessv2_scaling_configuration")
+    try:
+        min_capacity = Decimal(str(scaling[0].get("min_capacity"))) if isinstance(scaling, list) and scaling and isinstance(scaling[0], dict) else None
+        max_capacity = Decimal(str(scaling[0].get("max_capacity"))) if isinstance(scaling, list) and scaling and isinstance(scaling[0], dict) else None
+    except (InvalidOperation, TypeError, ValueError):
+        return "aurora_configuration_unpriced", "Only the private, encrypted Aurora PostgreSQL Serverless v2 Standard shape is priced."
+    if (
+        values.get("engine") != "aurora-postgresql"
+        or values.get("engine_mode") != "provisioned"
+        or values.get("storage_type") != "aurora"
+        or values.get("manage_master_user_password") is not True
+        or values.get("storage_encrypted") is not True
+        or values.get("engine_lifecycle_support") != "open-source-rds-extended-support-disabled"
+        or values.get("enable_http_endpoint") is not False
+        or values.get("kms_key_id") is not None
+        or values.get("master_user_secret_kms_key_id") is not None
+        or values.get("global_cluster_identifier") is not None
+        or values.get("enabled_cloudwatch_logs_exports") not in ([], None)
+        or not isinstance(scaling, list)
+        or len(scaling) != 1
+        or not isinstance(scaling[0], dict)
+        or min_capacity != Decimal("0.5")
+        or max_capacity != Decimal(2)
+        or scaling[0].get("seconds_until_auto_pause") is not None
+    ):
+        return "aurora_configuration_unpriced", "Only the private, encrypted Aurora PostgreSQL Serverless v2 Standard shape is priced."
+    return None
+
+
+def _validate_aurora_instance(
+    values: dict[str, Any], change: dict[str, Any] | None
+) -> tuple[str, str] | None:
+    if change is None or not isinstance(change.get("change"), dict):
+        return "aurora_plan_change_metadata_missing", "The Aurora writer lacks final pricing metadata."
+    plan_change = change["change"]
+    after, unknown = plan_change.get("after"), plan_change.get("after_unknown")
+    required = (
+        "engine", "instance_class", "publicly_accessible", "monitoring_interval",
+        "performance_insights_enabled",
+    )
+    if (
+        not isinstance(after, dict)
+        or not isinstance(unknown, dict)
+        or not _valid_unknown_tree(unknown)
+        or any(key not in values or key not in after or values[key] != after[key] for key in required)
+        or any(_path_contains_unknown(unknown, (key,)) for key in required)
+    ):
+        return "aurora_cost_driver_unknown", "The Aurora writer plan has missing or unknown price-driving settings."
+    if (
+        values.get("engine") != "aurora-postgresql"
+        or values.get("instance_class") != "db.serverless"
+        or values.get("publicly_accessible") is not False
+        or values.get("monitoring_interval") not in (0, None)
+        or values.get("performance_insights_enabled") is not False
+    ):
+        return "aurora_instance_shape_unpriced", "Only one private Serverless v2 writer without paid monitoring add-ons is priced."
+    return None
+
+
+def _aurora_cost_lines(
+    *,
+    cluster_address: str,
+    region: str,
+    cluster_values: dict[str, Any],
+    usage: RdsPricingUsageAssumptions,
+    catalog: AwsPriceListCatalog,
+) -> list[PlanCostLine]:
+    capacity_rate = catalog.aurora_serverless_v2_rate(region)
+    storage_rate = catalog.aurora_standard_storage_rate(region)
+    io_rate = catalog.aurora_standard_io_rate(region)
+    backup_rate = catalog.aurora_backup_overage_rate(region)
+    secret_storage_rate = catalog.aurora_secret_storage_rate(region)
+    secret_api_rate = catalog.aurora_secret_api_request_rate(region)
+    scaling = cluster_values["serverlessv2_scaling_configuration"][0]
+    quantities = (
+        (
+            "Aurora PostgreSQL Serverless v2 ACU-hours",
+            "ACU-Hr",
+            int(Decimal(str(scaling["min_capacity"])) * 730),
+            int(Decimal(str(scaling["max_capacity"])) * 730),
+            Decimal(capacity_rate.unit_price_usd),
+            capacity_rate,
+        ),
+        (
+            "Aurora Standard storage",
+            "GB-Mo",
+            usage.aurora_monthly_storage_gb_month.minimum,
+            usage.aurora_monthly_storage_gb_month.maximum,
+            Decimal(storage_rate.unit_price_usd),
+            storage_rate,
+        ),
+        (
+            "Aurora Standard I/O requests",
+            "IOs",
+            usage.aurora_monthly_io_requests.minimum,
+            usage.aurora_monthly_io_requests.maximum,
+            Decimal(io_rate.unit_price_usd),
+            io_rate,
+        ),
+        (
+            "Aurora billable backup storage overage",
+            "GB-Mo",
+            usage.aurora_monthly_backup_overage_gb_month.minimum,
+            usage.aurora_monthly_backup_overage_gb_month.maximum,
+            Decimal(backup_rate.unit_price_usd),
+            backup_rate,
+        ),
+        (
+            "AWS Secrets Manager secret storage for the RDS-managed credential",
+            "Secrets",
+            1,
+            1,
+            Decimal(secret_storage_rate.unit_price_usd),
+            secret_storage_rate,
+        ),
+        (
+            "AWS Secrets Manager API requests for credential reads and rotation",
+            "API Requests",
+            usage.aurora_monthly_secret_api_requests.minimum,
+            usage.aurora_monthly_secret_api_requests.maximum,
+            Decimal(secret_api_rate.unit_price_usd),
+            secret_api_rate,
+        ),
+    )
+    result: list[PlanCostLine] = []
+    for description, unit, quantity, quantity_max, unit_price, rate in quantities:
+        result.append(PlanCostLine(
+            address=cluster_address,
+            resource_type="aws_rds_cluster",
+            description=description,
+            quantity=quantity,
+            quantity_max=quantity_max,
+            unit=unit,
+            unit_price_usd=format(unit_price, "f"),
+            monthly_cost_minor=int(
+                (unit_price * quantity * 100).quantize(Decimal(1), rounding=ROUND_FLOOR)
+            ),
+            monthly_cost_max_minor=int(
+                (unit_price * quantity_max * 100).quantize(Decimal(1), rounding=ROUND_CEILING)
+            ),
+            unit_price_low_usd=format(unit_price, "f"),
+            low_cost_quantity=quantity,
+            catalog_sku=rate.sku,
+            catalog_product_sha256=rate.product_digest,
+            catalog_published_at=rate.published_at,
+            catalog_effective_at=rate.effective_at,
+        ))
+    return result
 
 
 def _validate_rds_instance(
