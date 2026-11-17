@@ -751,6 +751,13 @@ def _check_s3(
                         address,
                         "The storage policy uses an inverse resource scope that cannot be safely bounded.",
                     )
+                elif _has_unbounded_resource_arn_allow(policy, "s3"):
+                    _deny(
+                        findings,
+                        "s3_resource_arn_unbounded",
+                        address,
+                        "The storage policy resource must use a complete, bounded S3 ARN.",
+                    )
 
 
 def _check_iam(
@@ -1452,6 +1459,19 @@ def _has_unbounded_resource_allow(policy: dict[str, Any]) -> bool:
     )
 
 
+def _has_unbounded_resource_arn_allow(
+    policy: dict[str, Any], service: str
+) -> bool:
+    return any(
+        str(statement.get("Effect", "")).lower() == "allow"
+        and any(
+            _unbounded_data_resource(resource, service)
+            for resource in _string_list(statement.get("Resource"))
+        )
+        for statement in _statements(policy, require_resource=True)
+    )
+
+
 def _has_not_action_allow(policy: dict[str, Any]) -> bool:
     return any(
         str(statement.get("Effect", "")).lower() == "allow"
@@ -1538,6 +1558,13 @@ def _check_sqs_queue_policies(
                     "sqs_not_resource_policy_denied",
                     address,
                     "The queue policy uses an inverse resource scope that cannot be safely bounded.",
+                )
+            elif _has_unbounded_resource_arn_allow(policy, "sqs"):
+                _deny(
+                    findings,
+                    "sqs_resource_arn_unbounded",
+                    address,
+                    "The queue policy resource must use a complete, bounded SQS ARN.",
                 )
 
 
@@ -1785,19 +1812,30 @@ def _check_iam_permissions(
                 )
 
 
-def _unbounded_data_resource(resource: str) -> bool:
+def _unbounded_data_resource(resource: str, service: str | None = None) -> bool:
     """Allow complete data ARNs and only the exact S3/DynamoDB child scopes."""
     partition = r"aws(?:-[a-z0-9-]+)?"
     bucket = r"[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])"
-    allowed_patterns = (
-        rf"arn:{partition}:s3:::{bucket}(?:/[^*?]+)?",
-        rf"arn:{partition}:s3:::{bucket}/\*",
-        rf"arn:{partition}:sqs:[a-z0-9-]+:\d{{12}}:(?:[A-Za-z0-9_-]{{1,80}}|[A-Za-z0-9_-]{{1,75}}\.fifo)",
-        rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}",
-        rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/[A-Za-z0-9_.-]{{3,255}}",
-        rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/\*",
+    allowed_patterns = {
+        "s3": (
+            rf"arn:{partition}:s3:::{bucket}(?:/[^*?]+)?",
+            rf"arn:{partition}:s3:::{bucket}/\*",
+        ),
+        "sqs": (
+            rf"arn:{partition}:sqs:[a-z0-9-]+:\d{{12}}:(?:[A-Za-z0-9_-]{{1,80}}|[A-Za-z0-9_-]{{1,75}}\.fifo)",
+        ),
+        "dynamodb": (
+            rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}",
+            rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/[A-Za-z0-9_.-]{{3,255}}",
+            rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/\*",
+        ),
+    }
+    patterns = (
+        allowed_patterns.get(service, ())
+        if service is not None
+        else tuple(pattern for group in allowed_patterns.values() for pattern in group)
     )
-    return not any(re.fullmatch(pattern, resource) for pattern in allowed_patterns)
+    return not any(re.fullmatch(pattern, resource) for pattern in patterns)
 
 
 def _same_account_role_resources(resources: tuple[str, ...], account_id: str) -> bool:

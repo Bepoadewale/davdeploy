@@ -645,11 +645,13 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - S3 bucket and SQS queue resource policies accept only same-account AWS
   identities or verified AWS service principal shapes. Cross-account AWS
   principals are currently denied; the source does not yet model an explicit
-  cross-account sharing contract or prove the other account's policy.
+  cross-account sharing contract or prove the other account's policy. Their
+  `Resource` values must also be complete, service-matching ARNs with bounded
+  scopes; an S3 bucket policy cannot use `Resource: "*"` or an incomplete ARN.
 - Regression tests exercise wildcard actions, inverse action/resource scopes,
   external resource-policy principals, incomplete and unbounded resource ARNs,
   and allowed exact bucket, object, queue, table, and index scopes. Full local
-  verification passed 1,400 tests,
+  verification passed 1,402 tests,
   Ruff, Actions configuration, OpenAPI snapshot, and Compose validation.
 - This is source and local test evidence. No live customer role was available
   for authorization checks. It does not establish effective AWS permissions

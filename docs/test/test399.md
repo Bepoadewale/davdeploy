@@ -491,14 +491,15 @@ Fresh-head hosted CI is required after push.
 
 ## IAM data policy wildcard bounds — 2026-11-17
 
-- `tests/test_generated_plan_policy.py`: 205 focused tests passed, including
+- `tests/test_generated_plan_policy.py`: 207 focused tests passed, including
   new cases rejecting `s3:*`, `sqs:*`, and `dynamodb:Put*`; wildcard or
   incomplete S3/SQS/DynamoDB resource ARNs; IAM Allow statements using
   `NotResource` and `NotAction` in identity, S3 bucket, and SQS queue policies;
-  external AWS principals in S3/SQS policies; and cases retaining exact S3
-  bucket/object, SQS queue, and DynamoDB table/index scopes.
+  external AWS principals and unbounded Resource ARNs in S3/SQS policies; and
+  cases retaining exact S3 bucket/object, SQS queue, and DynamoDB table/index
+  scopes.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
-  passed 1,400 tests, Ruff, Actions configuration, OpenAPI snapshot, and
+  passed 1,402 tests, Ruff, Actions configuration, OpenAPI snapshot, and
   Compose validation. `git diff --check` passed.
 - These tests validate source policy evaluation only. They use no live
   customer AWS role and do not establish effective permissions or apply
