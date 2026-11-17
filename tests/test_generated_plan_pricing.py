@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from botocore.exceptions import ClientError
+from davdeploy.domain import RdsPricingUsageAssumptions
 from davdeploy.generated_plan_pricing import (
     AwsPriceListCatalog,
     GeneratedPlanPricingEvidence,
@@ -49,6 +50,16 @@ def rds_values(**overrides):
 
 
 RDS_USAGE = {"monthly_backup_storage_gb_month": {"minimum": 0, "maximum": 10}}
+AURORA_USAGE = {
+    "monthly_backup_storage_gb_month": None,
+    "aurora_monthly_storage_gb_month": {"minimum": 50, "maximum": 100},
+    "aurora_monthly_io_requests": {"minimum": 1_000_000, "maximum": 10_000_000},
+    "aurora_monthly_backup_overage_gb_month": {"minimum": 0, "maximum": 20},
+    "aurora_monthly_secret_api_requests": {"minimum": 50, "maximum": 200},
+    "aurora_monthly_inter_az_transfer_gb": {"minimum": 0, "maximum": 0},
+    "aurora_monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 0},
+    "aurora_monthly_internet_egress_gb": {"minimum": 0, "maximum": 0},
+}
 
 
 def rds_plan(*, values=None, after_unknown=None):
@@ -65,6 +76,52 @@ def _rds_plan_with_unknown(values, after_unknown):
     return document
 
 
+def aurora_values(**overrides):
+    values = {
+        "engine": "aurora-postgresql",
+        "engine_mode": "provisioned",
+        "storage_type": "aurora",
+        "manage_master_user_password": True,
+        "storage_encrypted": True,
+        "backup_retention_period": 7,
+        "serverlessv2_scaling_configuration": [{
+            "min_capacity": 0.5,
+            "max_capacity": 2,
+            "seconds_until_auto_pause": None,
+        }],
+        "engine_lifecycle_support": "open-source-rds-extended-support-disabled",
+        "enable_http_endpoint": False,
+        "kms_key_id": None,
+        "master_user_secret_kms_key_id": None,
+        "global_cluster_identifier": None,
+        "enabled_cloudwatch_logs_exports": [],
+    }
+    values.update(overrides)
+    return values
+
+
+def aurora_instance_values(**overrides):
+    values = {
+        "engine": "aurora-postgresql",
+        "instance_class": "db.serverless",
+        "publicly_accessible": False,
+        "monitoring_interval": 0,
+        "performance_insights_enabled": False,
+    }
+    values.update(overrides)
+    return values
+
+
+def aurora_plan(*, cluster=None, instance=None):
+    extra = (
+        resource("aws_db_subnet_group.database", "aws_db_subnet_group", {"name": "db"}),
+        resource("aws_security_group.database", "aws_security_group", {"name": "db"}),
+        resource("aws_rds_cluster.this", "aws_rds_cluster", cluster or aurora_values()),
+        resource("aws_rds_cluster_instance.writer", "aws_rds_cluster_instance", instance or aurora_instance_values()),
+    )
+    return plan(resource_type="terraform_data", resource_values={"input": None}, extra_resources=extra)
+
+
 class FakeRdsPriceList:
     def __init__(self):
         self.calls = []
@@ -75,12 +132,24 @@ class FakeRdsPriceList:
         service = kwargs["ServiceCode"]
         family = filters["productFamily"]
         usage_type = filters.get("usagetype")
-        if service != "AmazonRDS":
+        if service == "AWSSecretsManager" and family == "Secret":
+            price, unit, sku = "0.40", "Secrets", "aurora-secret"
+        elif service == "AWSSecretsManager" and family == "API Request":
+            price, unit, sku = "0.000005", "API Requests", "aurora-secret-api"
+        elif service != "AmazonRDS":
             raise AssertionError("unexpected pricing service")
-        if family == "Database Instance":
+        elif family == "ServerlessV2":
+            price, unit, sku = "0.12", "ACU-Hr", "aurora-acu"
+        elif family == "Database Storage" and usage_type == "Aurora:StorageUsage":
+            price, unit, sku = "0.10", "GB-Mo", "aurora-storage"
+        elif family == "System Operation":
+            price, unit, sku = "0.0000002", "IOs", "aurora-io"
+        elif family == "Database Instance":
             price, unit, sku = "0.016", "Hrs", "rds-instance"
         elif family == "Database Storage":
             price, unit, sku = "0.115", "GB-Mo", "rds-gp3"
+        elif family == "Storage Snapshot" and usage_type == "Aurora:BackupUsage":
+            price, unit, sku = "0.021", "GB-Mo", "aurora-backup"
         elif family == "Storage Snapshot":
             price, unit, sku = "0.095", "GB-Mo", "rds-backup"
         else:
@@ -99,7 +168,8 @@ class FakeRdsPriceList:
                 }},
             }}},
         }
-        assert usage_type
+        if service == "AmazonRDS":
+            assert usage_type
         return {"PriceList": [json.dumps(product)]}
 
 
@@ -339,6 +409,7 @@ def evaluate(
     sqs_usage_assumptions=None,
     rds_usage_assumptions=None,
     serverless_usage_assumptions=None,
+    dynamodb_usage_assumptions=None,
     catalog_client=None,
 ):
     client = catalog_client or client or FakePriceList()
@@ -354,6 +425,7 @@ def evaluate(
                 sqs_usage_assumptions=sqs_usage_assumptions,
                 rds_usage_assumptions=rds_usage_assumptions,
                 serverless_usage_assumptions=serverless_usage_assumptions,
+                dynamodb_usage_assumptions=dynamodb_usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -575,6 +647,54 @@ def test_rds_usage_is_extracted_from_integrity_checked_customer_revision():
     )
 
     assert context.rds_usage_assumptions == usage
+
+
+def test_legacy_rds_context_survives_default_null_aurora_fields_in_serialized_workload():
+    expanded_usage = RdsPricingUsageAssumptions.model_validate(RDS_USAGE).model_dump(mode="json")
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"rds_pricing_usage_assumptions": expanded_usage}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+
+    assert context.rds_usage_assumptions == expanded_usage
+    result, _ = evaluate(
+        rds_plan(), rds_usage_assumptions=context.rds_usage_assumptions,
+        context_digest=revision_sha256, catalog_client=FakeRdsPriceList(),
+    )
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=context,
+        now=CAPTURED_AT,
+    )
+
+
+def test_aurora_usage_is_extracted_and_bound_to_integrity_checked_revision():
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"rds_pricing_usage_assumptions": AURORA_USAGE}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.rds_usage_assumptions == AURORA_USAGE
+    changed = {**AURORA_USAGE, "aurora_monthly_storage_gb_month": {"minimum": 20, "maximum": 50}}
+    assert TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256, rds_usage_assumptions=changed
+    ).pricing_context_sha256 != context.pricing_context_sha256
     assert context.pricing_context_sha256 != TrustedPlanPricingContext(
         REGION, "USD", None, revision_sha256
     ).pricing_context_sha256
@@ -1294,6 +1414,137 @@ def test_rds_backup_assumption_tampering_invalidates_approval_context():
         trusted_context=TrustedPlanPricingContext(
             REGION, "USD", 1_500, PERSISTED_CONTEXT_SHA256,
             rds_usage_assumptions=changed_usage,
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+def test_bounded_aurora_serverless_v2_standard_price_is_bound_to_usage_assumptions():
+    result, client = evaluate(
+        aurora_plan(),
+        rds_usage_assumptions=AURORA_USAGE,
+        catalog_client=FakeRdsPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.monthly_low_minor == 4_940
+    assert result.monthly_high_minor == 18_803
+    assert result.rds_usage_assumptions == AURORA_USAGE
+    assert len(result.lines) == 6
+    assert {line.description for line in result.lines} == {
+        "Aurora PostgreSQL Serverless v2 ACU-hours",
+        "Aurora Standard storage",
+        "Aurora Standard I/O requests",
+        "Aurora billable backup storage overage",
+        "AWS Secrets Manager secret storage for the RDS-managed credential",
+        "AWS Secrets Manager API requests for credential reads and rotation",
+    }
+    capacity = next(line for line in result.lines if "ACU-hours" in line.description)
+    assert (capacity.quantity, capacity.quantity_max, capacity.unit) == (365, 1460, "ACU-Hr")
+    assert capacity.catalog_sku == "aurora-acu"
+    assert {call["ServiceCode"] for call in client.calls} == {"AmazonRDS", "AWSSecretsManager"}
+    io_query = next(call for call in client.calls if any(
+        item["Value"] == "Aurora:StorageIOUsage" for item in call["Filters"]
+    ))
+    assert {item["Field"]: item["Value"] for item in io_query["Filters"]} == {
+        "productFamily": "System Operation",
+        "databaseEngine": "Aurora PostgreSQL",
+        "group": "Aurora I/O Operation",
+        "usagetype": "Aurora:StorageIOUsage",
+        "regionCode": REGION,
+    }
+    secret_query = next(
+        call for call in client.calls if call["ServiceCode"] == "AWSSecretsManager"
+        and any(item["Value"] == "AWSSecretsManager-Secret" for item in call["Filters"])
+    )
+    assert {item["Field"]: item["Value"] for item in secret_query["Filters"]} == {
+        "productFamily": "Secret",
+        "group": "AWSSecretsManager-Secret",
+        "regionCode": REGION,
+    }
+    assert pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256,
+            rds_usage_assumptions=AURORA_USAGE,
+        ),
+        now=CAPTURED_AT,
+    )
+    assert GeneratedPlanPricingEvidence.from_manifest_document(
+        result.as_manifest_document()
+    ).as_manifest_document() == result.as_manifest_document()
+
+
+@pytest.mark.parametrize(
+    ("cluster_overrides", "instance_overrides", "expected_code"),
+    [
+        ({"storage_type": "aurora-iopt1"}, {}, "aurora_configuration_unpriced"),
+        ({"enable_http_endpoint": True}, {}, "aurora_configuration_unpriced"),
+        ({"serverlessv2_scaling_configuration": [{"min_capacity": 0.5, "max_capacity": 3, "seconds_until_auto_pause": None}]}, {}, "aurora_configuration_unpriced"),
+        ({}, {"instance_class": "db.r7g.large"}, "aurora_instance_shape_unpriced"),
+        ({"storage_encrypted": False}, {}, "aurora_configuration_unpriced"),
+    ],
+)
+def test_unsupported_aurora_shape_blocks_before_catalog_lookup(
+    cluster_overrides, instance_overrides, expected_code
+):
+    client = FakeRdsPriceList()
+    result, _ = evaluate(
+        aurora_plan(
+            cluster=aurora_values(**cluster_overrides),
+            instance=aurora_instance_values(**instance_overrides),
+        ),
+        rds_usage_assumptions=AURORA_USAGE,
+        catalog_client=client,
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert expected_code in {finding.code for finding in result.findings}
+    assert client.calls == []
+
+
+def test_aurora_missing_or_tampered_usage_ranges_block_approval():
+    client = FakeRdsPriceList()
+    missing, _ = evaluate(aurora_plan(), catalog_client=client)
+    assert missing.status == PlanPricingStatus.INCOMPLETE
+    assert {finding.code for finding in missing.findings} == {"aurora_usage_assumptions_missing"}
+    assert client.calls == []
+
+    transfer_usage = {
+        **AURORA_USAGE,
+        "aurora_monthly_cross_region_transfer_gb": {"minimum": 0, "maximum": 1},
+    }
+    transfer_client = FakeRdsPriceList()
+    transfer, _ = evaluate(
+        aurora_plan(), rds_usage_assumptions=transfer_usage,
+        catalog_client=transfer_client,
+    )
+    assert transfer.status == PlanPricingStatus.INCOMPLETE
+    assert "aurora_transfer_usage_unpriced" in {finding.code for finding in transfer.findings}
+    assert transfer_client.calls == []
+
+    inter_az_usage = {
+        **AURORA_USAGE,
+        "aurora_monthly_inter_az_transfer_gb": {"minimum": 0, "maximum": 1},
+    }
+    inter_az, _ = evaluate(
+        aurora_plan(), rds_usage_assumptions=inter_az_usage,
+        catalog_client=FakeRdsPriceList(),
+    )
+    assert inter_az.status == PlanPricingStatus.INCOMPLETE
+    assert "aurora_transfer_usage_unpriced" in {finding.code for finding in inter_az.findings}
+
+    result, _ = evaluate(
+        aurora_plan(), rds_usage_assumptions=AURORA_USAGE,
+        catalog_client=FakeRdsPriceList(),
+    )
+    changed = {**AURORA_USAGE, "aurora_monthly_io_requests": {"minimum": 1_000_000, "maximum": 11_000_000}}
+    assert not pricing_evidence_is_approval_eligible(
+        result.as_manifest_document(),
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256,
+            rds_usage_assumptions=changed,
         ),
         now=CAPTURED_AT,
     )

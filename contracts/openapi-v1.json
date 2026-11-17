@@ -1116,10 +1116,87 @@
       },
       "RdsPricingUsageAssumptions": {
         "additionalProperties": false,
-        "description": "Bounded monthly RDS backup storage usage; quantities only, never prices.",
+        "description": "Bounded RDS/Aurora usage quantities; prices are never customer supplied.",
         "properties": {
+          "aurora_monthly_backup_overage_gb_month": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aurora_monthly_cross_region_transfer_gb": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aurora_monthly_inter_az_transfer_gb": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aurora_monthly_internet_egress_gb": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aurora_monthly_io_requests": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aurora_monthly_secret_api_requests": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aurora_monthly_storage_gb_month": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "monthly_backup_storage_gb_month": {
-            "$ref": "#/components/schemas/MonthlyUsageRange"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
