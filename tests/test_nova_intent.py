@@ -5,9 +5,18 @@ from typing import Any
 import pytest
 from davdeploy.contracts import ModelResponse, ModelUsage, TenantScope
 from davdeploy.domain import IntentScope
-from davdeploy.intent import IntentOutOfScopeError, NovaIntentProvider
+from davdeploy.intent import (
+    NOVA_INTENT_PROPOSAL_VERSION,
+    IntentOutOfScopeError,
+    NovaIntentProposal,
+    NovaIntentProvider,
+)
 from davdeploy.main import translate
-from davdeploy.model_gateway import NOVA_2_LITE_MODEL_ID, ModelGatewayUnavailable
+from davdeploy.model_gateway import (
+    NOVA_2_LITE_MODEL_ID,
+    ModelGatewayUnavailable,
+    model_input_digest,
+)
 from fastapi import HTTPException
 
 
@@ -74,6 +83,15 @@ class RecordingGateway:
         return isinstance(output, dict)
 
 
+class FixtureRecordingGateway(RecordingGateway):
+    def generate_structured(self, request, document, output_schema=None):
+        response = super().generate_structured(request, document, output_schema)
+        fixture_request = response.request.model_copy(
+            update={"provider": "fixture", "model": "deterministic-fixture"}
+        )
+        return response.model_copy(update={"request": fixture_request})
+
+
 def provider(
     output: dict[str, Any] | list[dict[str, Any]],
     *,
@@ -110,6 +128,21 @@ def test_nova_intent_is_typed_tenant_scoped_and_non_authoritative():
     assert result.spec.unknowns == []
     assert result.spec.requires_kubernetes is False
     assert result.model_metadata["provider"] == "bedrock"
+    validated = NovaIntentProposal.model_validate(proposal())
+    assert result.model_metadata["proposal_version"] == NOVA_INTENT_PROPOSAL_VERSION
+    assert result.model_metadata["proposal_digest"] == model_input_digest(
+        validated.model_dump(mode="json")
+    )
+    equivalent = NovaIntentProposal.model_validate(
+        dict(reversed(list(proposal().items())))
+    )
+    assert model_input_digest(equivalent.model_dump(mode="json")) == result.model_metadata[
+        "proposal_digest"
+    ]
+    changed = NovaIntentProposal.model_validate(proposal(monthly_budget_usd=1600))
+    assert result.model_metadata["proposal_digest"] != model_input_digest(
+        changed.model_dump(mode="json")
+    )
     assert "approval" not in result.spec.model_dump()
 
 
@@ -121,8 +154,24 @@ def test_nova_intent_rejects_unrelated_requests_before_creating_a_workload_spec(
     assert len(gateway.calls) == 1
     assert result.request_scope == IntentScope.OUT_OF_SCOPE
     assert result.spec is None
+    validated = NovaIntentProposal.model_validate(proposal(request_scope="OUT_OF_SCOPE"))
+    assert result.model_metadata["proposal_version"] == NOVA_INTENT_PROPOSAL_VERSION
+    assert result.model_metadata["proposal_digest"] == model_input_digest(
+        validated.model_dump(mode="json")
+    )
     _, document, _ = gateway.calls[0]
     assert "investment picks and financial advice are OUT_OF_SCOPE" in document["task"]
+
+
+def test_fixture_intent_metadata_does_not_claim_nova_proposal_provenance():
+    gateway = FixtureRecordingGateway(proposal())
+    intent_provider = NovaIntentProvider(gateway=gateway)
+
+    result = intent_provider.interpret("Deploy my API.", "example/api", scope())
+
+    assert result.model_metadata["provider"] == "fixture"
+    assert "proposal_version" not in result.model_metadata
+    assert "proposal_digest" not in result.model_metadata
 
 
 def test_model_scope_classification_keeps_deploying_financial_software_in_scope():
@@ -171,13 +220,21 @@ def test_nova_intent_rejects_fields_outside_the_contract():
 
 
 def test_nova_intent_repairs_one_schema_violation_and_records_usage():
+    invalid = proposal(execute_terraform=True)
+    valid = proposal(workload_type="rag_application")
     intent_provider, gateway = provider(
-        [proposal(execute_terraform=True), proposal(workload_type="rag_application")]
+        [invalid, valid]
     )
     result = intent_provider.interpret("Deploy my RAG API.", "example/rag", scope())
     assert len(gateway.calls) == 2
     assert result.spec.workload_type == "rag_application"
     assert result.model_metadata["usage"]["retry_count"] == 1
+    expected = model_input_digest(
+        NovaIntentProposal.model_validate(valid).model_dump(mode="json")
+    )
+    rejected = model_input_digest(invalid)
+    assert result.model_metadata["proposal_digest"] == expected
+    assert result.model_metadata["proposal_digest"] != rejected
 
 
 def test_nova_intent_repair_receives_bounded_validation_diagnostics():

@@ -47,24 +47,25 @@ its apply path.
 
 ## Acceptance criteria
 
-- [ ] Accepted Nova responses include proposal version and stable digest.
-- [ ] A repair sequence hashes the final validated proposal.
-- [ ] Equivalent normalized proposals have the same digest; a changed field
+- [x] Accepted Nova responses include proposal version and stable digest.
+- [x] A repair sequence hashes the final validated proposal.
+- [x] Equivalent normalized proposals have the same digest; a changed field
   changes the digest.
-- [ ] Out-of-scope Nova responses have the same proposal identity evidence.
-- [ ] Fixture behavior does not claim Nova proposal provenance.
-- [ ] Focused tests, full verification, docs conventions, and diff checks pass.
+- [x] Out-of-scope Nova responses have the same proposal identity evidence.
+- [x] Fixture behavior does not claim Nova proposal provenance.
+- [x] Focused tests (23), full verification (1,304), docs conventions, and diff
+  checks pass.
 - [ ] All seven required CI checks pass on the implementation commit.
 
 ## Acceptance status
 
-Ticket and evidence files are committed before implementation. No source
-behavior has changed yet.
+Implementation is complete locally. Focused/full verification and documentation
+checks passed; fresh-head CI is pending.
 
 ## Tests / validation performed
 
-Documentation convention and diff checks will run after the files are added.
-Implementation and source verification are pending.
+Focused tests and full verification passed locally. Final run details are in
+`docs/test/test426.md`; CI evidence will follow after push.
 
 ## Evidence files produced
 
