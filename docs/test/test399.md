@@ -278,5 +278,14 @@ Fresh-head hosted CI is required after push.
 - Apply and credential-broker flags remain false by default; dispatch readiness
   requires both. Dedicated customer-role provisioning/effective permission
   checks and hosted apply, health, recovery, destroy, and independent absence
-  evidence remain incomplete. Fresh-head GitHub CI is required after push.
+  evidence remain incomplete.
+
+## Final-head CI — 2026-11-17
+
+- Commit: `33727c46a025a2440a7393d6a6d331dc84917058`.
+- GitHub Actions run `43995850553` passed all seven required checks,
+  including the hosted clean-runner `local-e2e` check.
+- This is source and CI evidence only. No customer credentials, apply build,
+  workload deployment, health observation, or teardown occurred.
+- PR #399 remains draft and both apply gates remain disabled.
 

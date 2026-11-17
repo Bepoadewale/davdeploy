@@ -270,10 +270,13 @@ AWS deployment or workload mutation is authorized by this PR.
 
 ## Follow-up work
 
-After this source boundary is complete, integrate trusted regional pricing only
-after the user clarifies the held PR #318 direction; verify actual customer-role
-execution permissions and hosted plan behavior; then prove apply, health,
-update, recovery, destroy and independent absence through the hosted API.
+Trusted pricing is now integrated for the currently supported proposal
+profiles. The next apply dependency is a dedicated customer apply role whose
+effective permissions are checked at credential issuance and constrained to
+the approved Terraform plan. The current broker derives the role ARN and
+checks its account/session identity, but it does not attest or scope the role's
+permissions. Keep both apply gates disabled until that permission boundary and
+the full hosted lifecycle evidence are complete.
 
 
 ## Hosted handoff update — 2026-11-14
@@ -393,4 +396,21 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - Evidence is test-double and source validation only: no real credential was
   issued, no CodeBuild apply was started, and no customer AWS resource was
   created or changed. See `docs/test/test399.md` for validation and limitations.
+
+## 2026-11-17 final-head worker evidence
+
+- Source commit `33727c46a025a2440a7393d6a6d331dc84917058` adds the fixed
+  Terraform apply worker, pinned toolchain verification, exact staged artifact
+  restore, customer-role identity check, bounded apply, encrypted conditional
+  result write, and fail-closed result reconciliation.
+- Local `make verify` passed (1,312 tests), Terraform validation passed all
+  configured roots, and formatting, Ruff, OpenAPI, Compose, documentation, and
+  diff checks passed. No AWS role credentials were issued and no apply build
+  or customer workload was started.
+- Fresh-head GitHub run `43995850553` passed all seven required checks.
+  PR #399 remains open and draft; the runner and credential broker remain
+  disabled. Passing source CI does not prove a customer apply or health.
+- Remaining: create and verify the dedicated customer apply role with
+  proposal-bound least-privilege permissions; then establish hosted apply,
+  health, update/recovery, destroy, and independent absence evidence.
 
