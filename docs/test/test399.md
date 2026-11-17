@@ -502,4 +502,7 @@ Fresh-head hosted CI is required after push.
   customer AWS role and do not establish effective permissions or apply
   behavior. No AWS resource, control-plane state, credential, or lineage
   evidence was changed.
+- Fresh-head GitHub Actions run `44134431454` passed all seven required checks
+  on commit `24fa893fdd3d77358861e2bc1451dd4b791fbd0e`, including
+  `local-e2e` and Terraform validation.
 
