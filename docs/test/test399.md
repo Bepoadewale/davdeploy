@@ -392,5 +392,26 @@ Fresh-head hosted CI is required after push.
   `44095877464`; both ran before the regression. Local validation has since
   passed. GitHub Actions run `44103391874` then passed all seven checks on
   implementation commit `ef1e12b`, including the fresh-runner end-to-end job.
-  This evidence-only follow-up requires its own fresh-head check run.
+  The follow-up evidence commit was then verified by run `44107574427` on exact
+  head `526220e2662a0bd85b3b2755608929a87535a4b5`; all seven required jobs
+  passed, including `local-e2e`.
+
+## Final-head AWS and CI recheck — 2026-11-17
+
+- PR #399 head `526220e2662a0bd85b3b2755608929a87535a4b5` remains an open
+  draft based on current `main` `602206ee1fd73b4582015ec30d2b5e472d72baf7`.
+- GitHub Actions run `44107574427` passed all seven required jobs on that
+  exact head: documentation conventions, secrets, supply chain, local end to
+  end, cloud contracts, policy, and Python.
+- Read-only AWS identity verification returned account `654654474502` in
+  `us-east-1`. No `davdeployNovaApply-*` role or active DavDeploy Batch
+  definition was present; the four tagged Batch test definitions remain
+  inactive. SageMaker endpoint, model, and endpoint-configuration lists were
+  empty. The retained DavDeploy SageMaker lineage action and context remain.
+- The Terraform run monitor registry is `{}` and no Terraform apply/destroy
+  process is active. No AWS resource, lineage record, customer credential,
+  apply build, control-plane state, or customer workload was changed.
+- This is source/CI and read-only inventory evidence. It does not prove
+  customer-role effectiveness, hosted apply, health, recovery, teardown, or
+  independent absence. Both apply gates remain disabled.
 

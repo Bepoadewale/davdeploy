@@ -519,3 +519,21 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   and effective least-privilege validation, followed by hosted apply and full
   lifecycle evidence, remain required.
 
+## Final-head reconciliation — 2026-11-17
+
+- PR #399 is still open and draft at `526220e2662a0bd85b3b2755608929a87535a4b5`,
+  based on current `main` `602206ee1fd73b4582015ec30d2b5e472d72baf7`.
+- GitHub Actions run `44107574427` passed all seven required jobs on that exact
+  head, including `local-e2e`. The source tests include the unavailable-pricing
+  credential rejection regression; the run does not exercise AWS credentials,
+  CodeBuild apply, or a customer workload.
+- Read-only AWS checks verified account `654654474502` in `us-east-1`, no
+  dedicated `davdeployNovaApply-*` role, no matching SageMaker endpoint/model/
+  configuration, four inactive tagged Batch test definitions, and the retained
+  SageMaker lineage action/context. The Terraform run monitor is empty. No AWS
+  or control-plane state changed.
+- The apply runner and credential gates remain disabled. Customer role setup
+  and effective permissions, hosted customer apply, application health,
+  recovery, teardown, and independent absence evidence remain unmet. The
+  retained local clean-room artifacts and protected files were not removed.
+
