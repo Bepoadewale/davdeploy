@@ -23,6 +23,12 @@ block approval. Draft PR #399 remains open at
 passed seven jobs. Apply gates remain disabled, and the customer apply role,
 credential issuance, hosted apply, health, recovery, and cleanup are unverified.
 
+Draft PR #422 adds source-only verification of the customer plan role's exact
+trust and bounded inline policy profile during connection verification and
+again before plan credentials are issued. It is not merged or deployed. This
+does not attest every effective AWS permission layer, and existing
+identity-only role records require fresh verification.
+
 This document joins the checked-in architecture catalogue, Terraform
 implementation registry, scenario catalogue and existing evidence. A catalogue
 entry, a Terraform root, provider-schema validation, or an isolated AWS service

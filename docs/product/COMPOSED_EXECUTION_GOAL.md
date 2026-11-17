@@ -32,6 +32,12 @@ have not been provisioned or verified. No customer credentials were issued and
 no Nova customer plan, apply, health check, update, recovery, or destroy has
 been performed.
 
+Draft PR #422 adds a strict check of the customer plan role's current trust and
+bounded inline policy profile at connection verification and before plan
+credentials are issued. This source change is not merged or deployed. It keeps
+older identity-only `VERIFIED` records from becoming plan-ready and does not
+claim full effective AWS permissions or hosted plan-runner readiness.
+
 Read-only inventory in account `654654474502`, region `us-east-1`, found no
 SageMaker endpoint, model, or endpoint configuration. Four tagged DavDeploy
 Batch job definitions remain inactive. One SageMaker lineage action and one

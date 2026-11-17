@@ -8,6 +8,12 @@ Source and the hosted control plane now include durable plan requests, isolated 
 
 Draft PR #399 is open at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`; its current source includes default-off apply credential/input routes, exact artifact staging, a fixed apply worker, and result reconciliation. CI run [43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241) passed seven checks. The apply and credential gates remain disabled. A dedicated customer apply role and its effective least-privilege permissions have not been verified. No Nova customer credentials were issued and no Nova customer plan, apply, health check, update, recovery, or destroy has occurred.
 
+Draft PR #422 adds source-only checks for current plan-role trust and the
+bounded inline policy profile during setup verification and before each plan
+credential issuance. It remains unmerged and undeployed. Existing
+identity-only role records require fresh verification; the profile check does
+not attest every effective AWS permission layer.
+
 Read-only inventory found no SageMaker endpoint, model, or endpoint configuration; four tagged DavDeploy Batch job definitions remain inactive, and one SageMaker lineage action/context remain as retained audit evidence. The Terraform run monitor is empty and no Terraform operation is active. Preserve `--only-show-errors`, `.venv-pr399/`, and lineage evidence. Frontend `main` is `b6cb14bc9563802d9b0b644739a6136336594174`; draft PR #102 makes customer surfaces more truthful but is not merged or an execution path. PR #99 remains dependent on a backend blog-author persistence contract. Five frontend Dependabot PRs remain open.
 The GitHub repository was renamed from `ai-platform-product-strategy` to `davdeploy` and is public at the owner's direction. DavDeploy remains a commercial product.
 

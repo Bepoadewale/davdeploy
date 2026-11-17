@@ -30,6 +30,7 @@ from davdeploy.models import (
     InfrastructurePlanRevision,
 )
 from davdeploy.nova_plan_dispatch import NovaPlanBuild, NovaPlanDispatchError
+from davdeploy.nova_plan_role_profile import NovaPlanRoleProfile
 from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
@@ -130,9 +131,7 @@ class FakeDispatcher:
             matches = [item for item in self.staged if item[2] == key and item[3] == digest]
         else:
             matches = [item for item in self.build_staged if item[2] == key and item[3] == digest]
-        if key != self.input_key(run_id) and not key.startswith(
-            "plans/nova-generated/builds/"
-        ):
+        if key != self.input_key(run_id) and not key.startswith("plans/nova-generated/builds/"):
             raise NovaPlanDispatchError(
                 "fixture input key mismatch", outcome_uncertain=True, phase="input_stage"
             )
@@ -209,9 +208,7 @@ def test_submitted_revision_is_queued_idempotently_then_dispatched_once_by_worke
     wakes = []
     service._wake_worker = lambda kind, job_id: wakes.append((kind, job_id))
 
-    first = service.request_generated_plan_run(
-        founder(), revision.id, revision.content_digest, key
-    )
+    first = service.request_generated_plan_run(founder(), revision.id, revision.content_digest, key)
     second = service.request_generated_plan_run(
         founder(), revision.id, revision.content_digest, key
     )
@@ -245,7 +242,10 @@ def test_submitted_revision_is_queued_idempotently_then_dispatched_once_by_worke
     assert completed_dispatch["proposal_sha256"]
     assert generator.calls == 1
     assert len(dispatcher.staged) == len(dispatcher.started) == 1
-    assert dispatcher.started[0][1] == db.get(GeneratedPlanRun, first["id"]).codebuild_idempotency_token
+    assert (
+        dispatcher.started[0][1]
+        == db.get(GeneratedPlanRun, first["id"]).codebuild_idempotency_token
+    )
     run_id, document, input_key, input_sha, input_version = dispatcher.staged[0]
     assert input_key == dispatcher.input_key(run_id)
     assert document["run_id"] == run_id
@@ -272,8 +272,7 @@ def test_reused_idempotency_key_with_different_revision_is_rejected():
     bindings = db.query(GeneratedPlanRunIdempotencyKey).all()
     assert len(bindings) == 2
     assert any(
-        binding.idempotency_key_sha256
-        == hashlib.sha256(alternate_key.encode("utf-8")).hexdigest()
+        binding.idempotency_key_sha256 == hashlib.sha256(alternate_key.encode("utf-8")).hexdigest()
         and binding.run_id == existing_run.id
         and binding.request_sha256 == existing_run.request_sha256
         for binding in bindings
@@ -664,9 +663,11 @@ def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild
     retry_replay = service.retry_generated_plan_run(founder(), run["id"], retry_key)
     assert retry_replay["state"] == "BUILD_STARTED"
     assert len(dispatcher.started) == 1
-    retry_binding = db.query(GeneratedPlanRunIdempotencyKey).filter_by(
-        idempotency_key_sha256=hashlib.sha256(retry_key.encode()).hexdigest()
-    ).one()
+    retry_binding = (
+        db.query(GeneratedPlanRunIdempotencyKey)
+        .filter_by(idempotency_key_sha256=hashlib.sha256(retry_key.encode()).hexdigest())
+        .one()
+    )
     assert retry_binding.run_id == run["id"]
     db.close()
 
@@ -926,11 +927,12 @@ def test_input_stage_reconciliation_can_abandon_mismatch_then_retry_fresh_key():
     dispatcher.inspect_staged_input = mismatch
     with pytest.raises(NovaPlanDispatchError, match="metadata does not match"):
         service.reconcile_generated_plan_input(founder(), run["id"])
-    assert service.generated_plan_run_detail(founder(), run["id"])["state"] == "RECONCILIATION_REQUIRED"
-
-    abandoned = service.reconcile_generated_plan_input(
-        founder(), run["id"], abandon_attempt=True
+    assert (
+        service.generated_plan_run_detail(founder(), run["id"])["state"]
+        == "RECONCILIATION_REQUIRED"
     )
+
+    abandoned = service.reconcile_generated_plan_input(founder(), run["id"], abandon_attempt=True)
     assert abandoned["state"] == "FAILED"
     assert abandoned["error_code"] == "INPUT_ATTEMPT_ABANDONED"
     old_runner_id = db.get(GeneratedPlanRun, run["id"]).runner_run_id
@@ -1398,6 +1400,7 @@ def test_zero_build_lookup_keeps_start_attempt_blocked_and_non_retryable():
     request = service.request_generated_plan_run(
         founder(), revision.id, revision.content_digest, "nova-plan-start-no-match-0001"
     )
+
     def uncertain_start(_run_id, _idempotency_token):
         raise NovaPlanDispatchError(
             "fixture StartBuild outcome is uncertain",
@@ -1504,18 +1507,21 @@ def test_known_codebuild_id_after_expired_start_is_bound_for_existing_reconciler
     assert service._expire_generated_plan_run_lease(run, datetime.now(UTC)) is True
     build_id = f"{PROJECT}:known-after-lease-expiry"
     _dispatcher.build_run_ids[build_id] = run.runner_run_id
-    assert service._finish_generated_plan_run_claim(
-        run,
-        lease_token,
-        state="RECONCILIATION_REQUIRED",
-        error_code="BUILD_START_RECONCILIATION_REQUIRED",
-        error_summary="Build start response arrived after the lease expired.",
-        action="generated_plan_run.build_start_uncertain",
-        codebuild_build_id=build_id,
-        codebuild_build_arn=_dispatcher.build_arn_for_id(build_id),
-        expected_runner_run_id=runner_run_id,
-        expected_idempotency_token=idempotency_token,
-    ) is True
+    assert (
+        service._finish_generated_plan_run_claim(
+            run,
+            lease_token,
+            state="RECONCILIATION_REQUIRED",
+            error_code="BUILD_START_RECONCILIATION_REQUIRED",
+            error_summary="Build start response arrived after the lease expired.",
+            action="generated_plan_run.build_start_uncertain",
+            codebuild_build_id=build_id,
+            codebuild_build_arn=_dispatcher.build_arn_for_id(build_id),
+            expected_runner_run_id=runner_run_id,
+            expected_idempotency_token=idempotency_token,
+        )
+        is True
+    )
     recovered = db.get(GeneratedPlanRun, request["id"])
     db.refresh(recovered)
     assert recovered.codebuild_build_id == build_id
@@ -1615,9 +1621,7 @@ def test_plan_run_is_not_visible_across_organizations():
     db.close()
 
 
-def _history_run(
-    *, project_id, revision_id, organization_id, requester_subject, created_at, index
-):
+def _history_run(*, project_id, revision_id, organization_id, requester_subject, created_at, index):
     return GeneratedPlanRun(
         id=str(uuid.uuid4()),
         organization_id=organization_id,
@@ -1669,25 +1673,17 @@ def test_plan_history_is_stable_paginated_and_uses_safe_status_projection():
     administrator = Principal("workspace-admin", founder().organization_id, "administrator")
     all_runs = service.generated_plan_run_history(administrator, project.id, limit=10)
 
-    ordered_owner_runs = sorted(
-        requests, key=lambda run: (run.created_at, run.id), reverse=True
-    )
-    assert [item["id"] for item in first["items"]] == [
-        run.id for run in ordered_owner_runs[:2]
-    ]
+    ordered_owner_runs = sorted(requests, key=lambda run: (run.created_at, run.id), reverse=True)
+    assert [item["id"] for item in first["items"]] == [run.id for run in ordered_owner_runs[:2]]
     assert first["next_cursor"] == ordered_owner_runs[1].id
-    assert [item["id"] for item in second["items"]] == [
-        run.id for run in ordered_owner_runs[2:]
-    ]
+    assert [item["id"] for item in second["items"]] == [run.id for run in ordered_owner_runs[2:]]
     assert second["next_cursor"] is None
     ordered_all_runs = sorted(
         [*requests, collaborator_request],
         key=lambda run: (run.created_at, run.id),
         reverse=True,
     )
-    assert [item["id"] for item in all_runs["items"]] == [
-        run.id for run in ordered_all_runs
-    ]
+    assert [item["id"] for item in all_runs["items"]] == [run.id for run in ordered_all_runs]
     expected_fields = {
         "id",
         "project_id",
@@ -1793,9 +1789,7 @@ def test_plan_history_revision_filter_is_exact_and_scopes_cursors():
     db.add_all([second_revision, foreign_plan, foreign_revision, first_run, second_run])
     db.commit()
 
-    exact_first = service.generated_plan_run_history(
-        founder(), project.id, revision_id=revision.id
-    )
+    exact_first = service.generated_plan_run_history(founder(), project.id, revision_id=revision.id)
     exact_second = service.generated_plan_run_history(
         founder(), project.id, revision_id=second_revision.id
     )
@@ -1900,10 +1894,12 @@ def test_plan_history_http_route_returns_safe_page_and_denies_other_tenants(tmp_
         db.close()
 
 
-def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_build(
-    monkeypatch,
+@pytest.mark.parametrize("profile_is_valid", [True, False])
+def test_plan_credential_broker_checks_current_role_profile_before_issuing_credentials(
+    monkeypatch, profile_is_valid
 ):
     service, db, _generator, dispatcher = service_with_dispatcher()
+
     class BrokerGenerator(StaticGenerator):
         def generate(self, **kwargs):
             generated = super().generate(**kwargs)
@@ -1938,6 +1934,7 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         run.result_metadata["codebuild_build_arn"],
     )
     assumed = {}
+    profile_checks = []
     external_id = service.connection_secrets.get_external_id(connection.external_id_secret_ref)
 
     class FakeCodeBuild:
@@ -1971,6 +1968,16 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
                 }
             }
 
+    class FakeRoleProfileDiscovery:
+        def verify_plan_role(self, connection_id, role_arn, supplied_external_id, region):
+            profile_checks.append((connection_id, role_arn, supplied_external_id, region))
+            return NovaPlanRoleProfile(
+                account_id=("654654474502" if profile_is_valid else "999999999999"),
+                role_arn=role_arn,
+                version="nova-plan-role-profile.v1",
+                sha256="d" * 64,
+            )
+
     class FakeSession:
         def __init__(self, **_kwargs):
             pass
@@ -1998,7 +2005,10 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         "from_environment",
         classmethod(lambda _cls: dispatcher),
     )
-    monkeypatch.setattr(api_main, "configured_connection_secret_store", lambda: service.connection_secrets)
+    monkeypatch.setattr(
+        api_main, "configured_connection_secret_store", lambda: service.connection_secrets
+    )
+    monkeypatch.setattr(api_main, "StsAwsDiscovery", FakeRoleProfileDiscovery)
     monkeypatch.setattr(
         api_main.boto3,
         "client",
@@ -2018,11 +2028,21 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
                     )
                 },
             )
+        assert profile_checks == [
+            (connection.id, connection.plan_role_arn, external_id, "us-east-1")
+        ]
+        if not profile_is_valid:
+            assert response.status_code == 403
+            assert assumed == {}
+            assert response.json()["detail"] == "The exact customer plan role could not be verified"
+            return
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["contract"] == "davdeploy.nova-plan-credentials.v1"
         assert body["role_arn"] == connection.plan_role_arn
         assert body["account_id"] == "654654474502"
+        assert body["plan_role_profile_version"] == "nova-plan-role-profile.v1"
+        assert body["plan_role_profile_sha256"] == "d" * 64
         assert body["credentials"]["secret_access_key"] == "A" * 40
         assert "no-store" in response.headers["cache-control"]
         assert external_id not in response.text
@@ -2043,9 +2063,9 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         assert audit_event.actor_subject.endswith(
             f"AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
         )
-        assert audit_event.detail["codebuild_build_arn"] == run.result_metadata[
-            "codebuild_build_arn"
-        ]
+        assert (
+            audit_event.detail["codebuild_build_arn"] == run.result_metadata["codebuild_build_arn"]
+        )
         assert audit_event.detail["revision_sha256"] == run.revision_sha256
         assert external_id not in json.dumps(audit_event.detail)
     finally:
@@ -2053,9 +2073,7 @@ def test_plan_credential_broker_issues_ephemeral_credentials_only_to_exact_live_
         db.close()
 
 
-@pytest.mark.parametrize(
-    "invalid_case", ["caller_supplied_build", "wrong_caller", "wrong_session"]
-)
+@pytest.mark.parametrize("invalid_case", ["caller_supplied_build", "wrong_caller", "wrong_session"])
 def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_role(
     monkeypatch, invalid_case
 ):
@@ -2087,19 +2105,22 @@ def test_plan_credential_broker_rejects_wrong_codebuild_attempt_before_assuming_
         with TestClient(app) as client:
             response = client.post(
                 "/api/v1/nova-plan/credentials",
-                json=({"run_id": run.id, "codebuild_build_id": run.codebuild_build_id}
-                      if invalid_case == "caller_supplied_build" else {"run_id": run.id}),
+                json=(
+                    {"run_id": run.id, "codebuild_build_id": run.codebuild_build_id}
+                    if invalid_case == "caller_supplied_build"
+                    else {"run_id": run.id}
+                ),
                 headers={
                     "x-davdeploy-bootstrap-principal": (
                         "arn:aws:sts::654654474502:assumed-role/"
                         + (
                             "wrong-role/build-session"
                             if invalid_case == "wrong_caller"
-                        else (
-                            "davdeploy-nova-plan-only/AWSCodeBuild-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-                            if invalid_case == "wrong_session"
-                            else f"davdeploy-nova-plan-only/AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
-                        )
+                            else (
+                                "davdeploy-nova-plan-only/AWSCodeBuild-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                                if invalid_case == "wrong_session"
+                                else f"davdeploy-nova-plan-only/AWSCodeBuild-{run.codebuild_build_id.rsplit(':', 1)[1]}"
+                            )
                         )
                     )
                 },
