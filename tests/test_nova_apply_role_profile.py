@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 from davdeploy.nova_apply_access import (
     APPLY_ROLE_ACCESS_TAG,
     APPLY_ROLE_POLICY_NAME,
+    build_nova_apply_access_policy,
     build_nova_apply_role_policy,
 )
 from davdeploy.nova_apply_role_profile import (
@@ -20,6 +22,27 @@ CONNECTION = "connection-123"
 ROLE_ARN = f"arn:aws:iam::{ACCOUNT}:role/davdeployNovaApply-{CONNECTION}"
 BROKER_ARN = f"arn:aws:iam::{ACCOUNT}:role/davdeploy-api"
 EXTERNAL_ID = "customer-external-id"
+
+
+def plan_scope():
+    return build_nova_apply_access_policy(
+        {
+            "resource_changes": [
+                {
+                    "mode": "managed",
+                    "type": "aws_dynamodb_table",
+                    "address": "aws_dynamodb_table.example",
+                    "change": {
+                        "actions": ["create"],
+                        "before": None,
+                        "after": {"name": "pilot-table"},
+                    },
+                }
+            ]
+        },
+        account_id=ACCOUNT,
+        region="us-east-1",
+    ).document
 
 
 class FakeIam:
@@ -66,6 +89,24 @@ class FakeIam:
         assert PolicyName == APPLY_ROLE_POLICY_NAME
         return {"PolicyDocument": self.policy}
 
+    def simulate_principal_policy(self, **request):
+        assert request["PolicySourceArn"] == ROLE_ARN
+        assert request["PermissionsBoundaryPolicyInputList"] == [
+            json.dumps(plan_scope(), sort_keys=True, separators=(",", ":"))
+        ]
+        resource = request["ResourceArns"][0]
+        return {
+            "EvaluationResults": [
+                {
+                    "EvalActionName": action,
+                    "EvalResourceName": resource,
+                    "EvalDecision": "allowed",
+                }
+                for action in request["ActionNames"]
+            ],
+            "IsTruncated": False,
+        }
+
 
 def verify(iam):
     return verify_nova_apply_role_profile(
@@ -74,6 +115,7 @@ def verify(iam):
         connection_id=CONNECTION,
         broker_role_arn=BROKER_ARN,
         external_id=EXTERNAL_ID,
+        session_policy=plan_scope(),
     )
 
 
@@ -82,8 +124,9 @@ def test_apply_role_profile_accepts_exact_trust_tags_and_fixed_permission_ceilin
 
     assert profile.account_id == ACCOUNT
     assert profile.role_arn == ROLE_ARN
-    assert profile.version == "nova-apply-role-profile.v1"
+    assert profile.version == "nova-apply-role-profile.v2"
     assert len(profile.sha256) == 64
+    assert profile.simulated_action_resource_pairs == 4
     assert EXTERNAL_ID not in profile.sha256
 
 
@@ -132,3 +175,65 @@ def test_customer_role_template_matches_the_broker_policy_ceiling():
     )
 
     assert template_actions == expected_actions
+
+
+def test_apply_role_profile_fails_closed_when_plan_permission_is_denied():
+    iam = FakeIam()
+    iam.simulate_principal_policy = lambda **request: {
+        "EvaluationResults": [
+            {
+                "EvalActionName": request["ActionNames"][0],
+                "EvalResourceName": request["ResourceArns"][0],
+                "EvalDecision": "implicitDeny",
+            }
+        ],
+        "IsTruncated": False,
+    }
+
+    with pytest.raises(NovaApplyRoleProfileError, match="exact approved plan scope"):
+        verify(iam)
+
+
+def test_apply_role_profile_fails_closed_when_simulation_is_unavailable():
+    iam = FakeIam()
+    iam.simulate_principal_policy = None
+
+    with pytest.raises(NovaApplyRoleProfileError, match="simulation is unavailable"):
+        verify(iam)
+
+
+def test_apply_role_profile_fails_closed_when_simulation_has_missing_context():
+    iam = FakeIam()
+    iam.simulate_principal_policy = lambda **request: {
+        "EvaluationResults": [
+            {
+                "EvalActionName": action,
+                "EvalResourceName": request["ResourceArns"][0],
+                "EvalDecision": "allowed",
+                "MissingContextValues": ["aws:ResourceAccount"],
+            }
+            for action in request["ActionNames"]
+        ],
+        "IsTruncated": False,
+    }
+
+    with pytest.raises(NovaApplyRoleProfileError, match="exact approved plan scope"):
+        verify(iam)
+
+
+def test_apply_role_profile_rejects_wildcard_plan_scope_before_simulation():
+    iam = FakeIam()
+    unsafe_policy = {
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Action": "dynamodb:*", "Resource": "*"}],
+    }
+
+    with pytest.raises(NovaApplyRoleProfileError, match="action scope is invalid"):
+        verify_nova_apply_role_profile(
+            iam,
+            account_id=ACCOUNT,
+            connection_id=CONNECTION,
+            broker_role_arn=BROKER_ARN,
+            external_id=EXTERNAL_ID,
+            session_policy=unsafe_policy,
+        )

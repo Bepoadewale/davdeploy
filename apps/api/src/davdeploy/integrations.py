@@ -978,9 +978,14 @@ class StsAwsDiscovery:
         )
 
     def verify_apply_role(
-        self, connection_id: str, role_arn: str, external_id: str, region: str
+        self,
+        connection_id: str,
+        role_arn: str,
+        external_id: str,
+        region: str,
+        session_policy: dict[str, object],
     ) -> NovaApplyRoleProfile:
-        """Verify the apply role profile using temporary role-scoped IAM reads."""
+        """Verify the apply role and plan scope using role-scoped IAM inspection."""
         broker_role_arn = os.getenv("DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN", "").strip()
         if not broker_role_arn:
             raise RuntimeError("the discovery broker role identity is not configured")
@@ -1026,6 +1031,7 @@ class StsAwsDiscovery:
             connection_id=connection_id,
             broker_role_arn=broker_role_arn,
             external_id=external_id,
+            session_policy=session_policy,
         )
 
     @staticmethod

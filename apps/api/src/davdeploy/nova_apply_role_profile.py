@@ -28,6 +28,7 @@ class NovaApplyRoleProfile:
     role_arn: str
     version: str
     sha256: str
+    simulated_action_resource_pairs: int
 
 
 def _document(value: Any) -> dict[str, Any]:
@@ -82,6 +83,107 @@ def _policy_names(iam: Any, operation: str, role_name: str) -> list[str]:
     raise NovaApplyRoleProfileError("role policy listing exceeded its page limit")
 
 
+def _simulate_plan_permissions(
+    iam: Any, *, role_arn: str, account_id: str, session_policy: dict[str, Any]
+) -> list[tuple[str, str]]:
+    """Fail closed unless IAM simulates every plan-scoped allow as effective."""
+    if not isinstance(session_policy, dict) or session_policy.get("Version") != "2012-10-17":
+        raise NovaApplyRoleProfileError("approved apply permission scope is invalid")
+    statements = session_policy.get("Statement")
+    if not isinstance(statements, list) or not statements:
+        raise NovaApplyRoleProfileError("approved apply permission scope is invalid")
+
+    actions_by_resource: dict[str, set[str]] = {}
+    for statement in statements:
+        if not isinstance(statement, dict):
+            raise NovaApplyRoleProfileError("approved apply permission scope is invalid")
+        if statement.get("Effect") != "Allow":
+            continue
+        action_value = statement.get("Action")
+        resource_value = statement.get("Resource")
+        actions = [action_value] if isinstance(action_value, str) else action_value
+        resources = [resource_value] if isinstance(resource_value, str) else resource_value
+        if not isinstance(actions, list) or not actions or not all(
+            isinstance(action, str) and action and "*" not in action for action in actions
+        ):
+            raise NovaApplyRoleProfileError("approved apply action scope is invalid")
+        if actions == ["sts:GetCallerIdentity"] and resources == ["*"]:
+            continue
+        if not isinstance(resources, list) or not resources or not all(
+            isinstance(resource, str)
+            and resource.startswith("arn:")
+            and "*" not in resource
+            for resource in resources
+        ):
+            raise NovaApplyRoleProfileError("approved apply resource scope is invalid")
+        for resource in resources:
+            actions_by_resource.setdefault(resource, set()).update(actions)
+    if not actions_by_resource:
+        raise NovaApplyRoleProfileError("approved apply permission scope has no resources")
+
+    simulate = getattr(iam, "simulate_principal_policy", None)
+    if not callable(simulate):
+        raise NovaApplyRoleProfileError("IAM permission simulation is unavailable")
+    boundary = json.dumps(session_policy, sort_keys=True, separators=(",", ":"))
+    verified: list[tuple[str, str]] = []
+    for resource, actions in sorted(actions_by_resource.items()):
+        marker: str | None = None
+        seen_markers: set[str] = set()
+        remaining = set(actions)
+        for _ in range(100):
+            request: dict[str, Any] = {
+                "PolicySourceArn": role_arn,
+                "ActionNames": sorted(actions),
+                "ResourceArns": [resource],
+                "PermissionsBoundaryPolicyInputList": [boundary],
+                "MaxItems": 1000,
+            }
+            if resource.startswith("arn:aws:s3:::"):
+                request["ContextEntries"] = [
+                    {
+                        "ContextKeyName": "aws:ResourceAccount",
+                        "ContextKeyValues": [account_id],
+                        "ContextKeyType": "string",
+                    }
+                ]
+            if marker:
+                request["Marker"] = marker
+            try:
+                response = simulate(**request)
+            except Exception as error:
+                raise NovaApplyRoleProfileError("IAM permission simulation failed") from error
+            results = response.get("EvaluationResults") if isinstance(response, dict) else None
+            if not isinstance(results, list):
+                raise NovaApplyRoleProfileError("IAM permission simulation response is invalid")
+            for result in results:
+                if not isinstance(result, dict):
+                    raise NovaApplyRoleProfileError("IAM permission simulation response is invalid")
+                action = result.get("EvalActionName")
+                if (
+                    not isinstance(action, str)
+                    or action not in remaining
+                    or result.get("EvalResourceName") != resource
+                    or result.get("EvalDecision") != "allowed"
+                    or result.get("MissingContextValues") not in (None, [])
+                ):
+                    raise NovaApplyRoleProfileError(
+                        "customer apply role does not allow the exact approved plan scope"
+                    )
+                remaining.remove(action)
+                verified.append((resource, action))
+            if response.get("IsTruncated") is not True:
+                break
+            marker = response.get("Marker")
+            if not isinstance(marker, str) or not marker or marker in seen_markers:
+                raise NovaApplyRoleProfileError("IAM permission simulation pagination is invalid")
+            seen_markers.add(marker)
+        else:
+            raise NovaApplyRoleProfileError("IAM permission simulation exceeded its page limit")
+        if remaining:
+            raise NovaApplyRoleProfileError("IAM permission simulation omitted plan actions")
+    return sorted(verified)
+
+
 def verify_nova_apply_role_profile(
     iam: Any,
     *,
@@ -89,6 +191,7 @@ def verify_nova_apply_role_profile(
     connection_id: str,
     broker_role_arn: str,
     external_id: str,
+    session_policy: dict[str, Any],
 ) -> NovaApplyRoleProfile:
     """Verify the exact trust, ownership tags, and fixed maximum role policy."""
     if (
@@ -169,6 +272,13 @@ def verify_nova_apply_role_profile(
     if _canonical(policy_document) != _canonical(expected_policy):
         raise NovaApplyRoleProfileError("dedicated customer apply role policy differs from profile")
 
+    simulated_pairs = _simulate_plan_permissions(
+        iam,
+        role_arn=expected_arn,
+        account_id=account_id,
+        session_policy=session_policy,
+    )
+
     redacted_trust = {
         "Version": "2012-10-17",
         "Statement": [
@@ -192,6 +302,10 @@ def verify_nova_apply_role_profile(
                 "trust": _canonical(redacted_trust),
                 "inline_policy_name": APPLY_ROLE_POLICY_NAME,
                 "inline_policy": _canonical(policy_document),
+                "simulated_action_resource_pairs": simulated_pairs,
+                "session_policy_sha256": hashlib.sha256(
+                    json.dumps(session_policy, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest(),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -202,4 +316,5 @@ def verify_nova_apply_role_profile(
         role_arn=expected_arn,
         version=NOVA_APPLY_ROLE_PROFILE_VERSION,
         sha256=profile_digest,
+        simulated_action_resource_pairs=len(simulated_pairs),
     )

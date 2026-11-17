@@ -103,6 +103,7 @@ Resources:
                   - iam:GetRolePolicy
                   - iam:ListAttachedRolePolicies
                   - iam:ListRolePolicies
+                  - iam:SimulatePrincipalPolicy
                 Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/davdeployNovaApply-${ConnectionId}"
               - Effect: Allow
                 Action: sts:GetCallerIdentity
@@ -120,6 +121,7 @@ Resources:
                   - iam:GetRolePolicy
                   - iam:ListAttachedRolePolicies
                   - iam:ListRolePolicies
+                  - iam:SimulatePrincipalPolicy
                   - s3:CreateBucket
                   - s3:DeleteBucket
                   - s3:DeleteBucketPolicy

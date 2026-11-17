@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 NOVA_APPLY_ACCESS_POLICY_VERSION = "nova-apply-plan-scope.v1"
-NOVA_APPLY_ROLE_PROFILE_VERSION = "nova-apply-role-profile.v1"
+NOVA_APPLY_ROLE_PROFILE_VERSION = "nova-apply-role-profile.v2"
 APPLY_ROLE_POLICY_NAME = "davdeployNovaApplyBoundedExecution"
 APPLY_ROLE_ACCESS_TAG = "nova-apply-bounded-v1"
 MAX_SESSION_POLICY_BYTES = 2048
@@ -18,6 +18,7 @@ APPLY_ROLE_INSPECTION_ACTIONS = (
     "iam:GetRolePolicy",
     "iam:ListAttachedRolePolicies",
     "iam:ListRolePolicies",
+    "iam:SimulatePrincipalPolicy",
 )
 
 _SQS_QUEUE_READ_ACTIONS = frozenset(

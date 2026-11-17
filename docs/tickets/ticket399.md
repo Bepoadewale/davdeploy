@@ -88,11 +88,12 @@ untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
   enabled, issues temporary credentials only to the exact active apply build
   after rechecking current approval, pricing evidence, target role, and AWS
   caller identity. Credentials are audited and returned with no-store headers.
-- [x] Source now checks the dedicated customer's exact apply-role profile at
-  credential issuance and supplies a saved-plan-derived STS session policy
-  for the explicitly mapped S3 bucket, SQS queue, and DynamoDB table types.
-  Unsupported resource/action mappings fail closed. This does not attest every
-  AWS effective-permission source or cover every Terraform provider resource.
+- [x] Source checks the dedicated customer's exact apply-role profile and
+  simulates each planned action/resource pair at credential issuance. It also
+  supplies a saved-plan-derived STS session policy for the mapped S3 bucket,
+  SQS queue, and DynamoDB table types. Unsupported mappings and simulator
+  denials fail closed. IAM simulation is supplemental evidence; it does not
+  attest every live AWS authorization source or provider resource.
 - [x] Apply remains disabled by default and no AWS apply/deployment occurred
   during this source-only work.
 - [x] Focused tests, full verification, configured Terraform validation,
@@ -568,6 +569,37 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - GitHub Actions run `44123626109` passed all seven required checks on
   implementation commit `3967b48d105934eb19d055cc78bb99d0f88281ed`, including
   the fresh-runner `local-e2e` job. No customer AWS role or workload was used.
+
+### Per-plan IAM permission simulation — 2026-11-17
+
+- Immediately before returning apply credentials, the API now submits every
+  exact action/resource pair from the approved plan session policy to AWS
+  `SimulatePrincipalPolicy`. It supplies that session policy as the simulated
+  permissions boundary and requires one `allowed` result per pair with no
+  missing context values. An API error, denial, omitted/duplicate result, or
+  invalid pagination fails credential issuance closed.
+- The customer role and verification-session policy grant
+  `iam:SimulatePrincipalPolicy` only for that same role ARN. The plan session
+  has an explicit deny outside its planned actions/resources, so this
+  inspection permission is unavailable to the Terraform worker session.
+- Profile version `nova-apply-role-profile.v2` hashes the role profile, exact
+  session-policy digest, and simulated action/resource pairs. The audit path
+  stores only that digest/version; policy values and credentials are not
+  logged.
+- Focused tests cover allowed pairs, denied permissions, wildcard scope,
+  missing simulator/context, and the fixed CloudFormation permission ceiling.
+  Full local verification passed 1,377 tests, Ruff, OpenAPI snapshot, Actions
+  configuration, and Compose validation. These use test doubles; no customer
+  role was available for a live simulation. AWS CloudFormation
+  `validate-template` accepted the updated template and reported the expected
+  named-IAM capability; no stack was created.
+- AWS documents that the simulator omits resource control policy support,
+  can differ from live authorization, and does not simulate resource policies
+  for IAM roles. This is a fail-closed preflight, not proof of actual apply
+  permissions or customer lifecycle.
+- References: [SimulatePrincipalPolicy API](https://docs.aws.amazon.com/IAM/latest/APIReference/API_SimulatePrincipalPolicy.html),
+  [IAM simulator behavior and limitations](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html),
+  and [role-session policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_boundaries.html).
 
 ### Final documentation-head CI and inventory — 2026-11-17
 

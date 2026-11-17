@@ -957,10 +957,10 @@ def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeyp
             main,
             "StsAwsDiscovery",
             lambda: SimpleNamespace(
-                verify_apply_role=lambda _connection_id, role_arn, _external_id, _region: SimpleNamespace(
+                    verify_apply_role=lambda _connection_id, role_arn, _external_id, _region, _session_policy: SimpleNamespace(
                     account_id=account_id,
                     role_arn=role_arn,
-                    version="nova-apply-role-profile.v1",
+                        version="nova-apply-role-profile.v2",
                     sha256="a" * 64,
                 )
             ),

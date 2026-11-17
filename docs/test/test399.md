@@ -461,3 +461,28 @@ Fresh-head hosted CI is required after push.
   remain unproved. Apply gates remain off; no Nova customer workload is
   certified.
 
+## Per-plan customer permission preflight — source validation
+
+- Before returning apply credentials, the API now checks the exact customer
+  role profile and runs IAM `SimulatePrincipalPolicy` over every action/resource
+  pair in the approved plan scope. The candidate STS session policy is supplied
+  as a simulated permissions boundary. Every pair must be allowed, complete,
+  and returned without pagination errors; failures stop credential issuance.
+- The apply role grants simulator access only for its own role ARN. The apply
+  session policy explicitly denies IAM simulator calls, keeping this
+  inspection permission out of the Terraform worker session.
+- Focused tests passed (28); full `make verify
+  PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` passed 1,377
+  tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose config.
+- AWS CloudFormation `validate-template` accepted the updated apply-role
+  template and reported the expected named-IAM capability; no stack was
+  created. `git diff --check` and documentation conventions passed.
+- No customer apply role exists in the verified inventory, so no live IAM
+  simulation was run. Tests use a fake IAM client. AWS documents that
+  simulation can differ from live authorization, omits resource control policy
+  support, and cannot simulate resource policies attached to IAM roles. This
+  check does not certify effective permissions or a workload.
+- No AWS resource, credential, apply build, control-plane state, or lineage
+  evidence changed. Both apply gates remain disabled; no Nova customer
+  workload has been applied or certified.
+

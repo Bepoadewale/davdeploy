@@ -1030,7 +1030,7 @@ def issue_nova_apply_credentials(
             connection.external_id_secret_ref
         )
         role_profile = StsAwsDiscovery().verify_apply_role(
-            connection.id, role_arn, external_id, artifact.region
+            connection.id, role_arn, external_id, artifact.region, session_policy
         )
         if role_profile.account_id != artifact.target_account_id or role_profile.role_arn != role_arn:
             raise PermissionError("customer apply role profile identity changed")
