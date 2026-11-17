@@ -74,24 +74,27 @@ limits.
 - [x] Focused tests and required repository checks pass.
 - [x] Full `make local-proof` passes from a fresh isolated worktree, including
   the local E2E path and repository verification.
-- [ ] Remove only the generated clean-room files, Compose network, and database
-  volume after proof; this cleanup awaits explicit deletion authorization.
+- [x] Retain the generated clean-room files, Compose network, and database
+  volume because deletion has not been authorized. Do not clean them without
+  explicit approval; this local housekeeping does not block the source PR.
 - [x] No AWS mutation, Terraform operation, feature-gate change, customer
   credential issuance, or customer workload is performed.
 
 ## Acceptance status
 
 Implementation, focused/full checks, and the isolated local proof are complete.
-Cleanup of generated local files and the project network/database volume awaits
-explicit deletion authorization, so this PR remains draft. No hosted
-customer-role or workload evidence is claimed.
+The generated clean-room files and project network/database volume remain
+retained under the deletion-safety boundary. No cleanup was performed, and this
+does not block source review. No hosted customer-role or workload evidence is
+claimed.
 
 ## Tests / validation performed
 
 Commands and results:
 
-- `.venv-pr399/bin/python -m pytest -q tests/test_nova_plan_role_profile.py tests/test_customer_cloud_lifecycle.py tests/test_product.py tests/test_connection_experience.py tests/test_nova_plan_credentials.py tests/test_nova_plan_runs.py` — 152 passed after adding the legacy identity-only list-status regression and the mismatched-profile-identity credential denial assertion.
-- `make verify PY=.venv-pr399/bin/python` — 1,281 passed; Ruff, Actions configuration, OpenAPI, and Compose configuration checks passed.
+- `.venv/bin/python -m pytest -q tests/test_nova_plan_role_profile.py tests/test_customer_cloud_lifecycle.py tests/test_product.py tests/test_connection_experience.py tests/test_nova_plan_credentials.py tests/test_nova_plan_runs.py` — 152 passed after adding the legacy identity-only list-status regression and the mismatched-profile-identity credential denial assertion.
+- `make verify PY=.venv/bin/python` — 1,281 passed; Ruff, Actions configuration, OpenAPI, and Compose configuration checks passed.
+- Final-head GitHub Actions run `44027382887` passed all seven required checks on `cfc8bb9`.
 - `COMPOSE_PROJECT_NAME=davdeploy-pr422-cleanroom-20261117 COMPOSE_FILE=docker-compose.yml:.cleanroom-compose-override.yml make local-proof VENV=.venv PY=.venv/bin/python` from fresh worktree `/private/tmp/davdeploy-pr422-cleanroom-20261117` — smoke checks, API contract, customer-plan E2E, trace check, and repository verification passed (1,280 tests).
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
