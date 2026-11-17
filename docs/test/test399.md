@@ -511,6 +511,8 @@ Fresh-head hosted CI is required after push.
   all seven checks in fresh-head run `44140537111`.
 - Source commit `33cd509` passed all seven checks in fresh-head run
   `44142215551`, including the S3 and SQS inverse-resource regressions.
+- Source commit `7b2b84b` passed all seven checks in fresh-head run
+  `44177455097`, including the cross-account principal regressions.
 
 ## Isolated local clean-room proof — 2026-11-17
 

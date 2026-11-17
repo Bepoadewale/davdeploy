@@ -654,6 +654,9 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - This is source and local test evidence. No live customer role was available
   for authorization checks. It does not establish effective AWS permissions
   or a customer workload; both apply gates remain disabled.
+- Source commit `7b2b84b` passed all seven required GitHub Actions checks in
+  run `44177455097`, including fresh-runner `local-e2e` and Terraform
+  validation.
 - Source commit `24fa893fdd3d77358861e2bc1451dd4b791fbd0e` passed all seven
   required GitHub Actions checks in run `44134431454`, including `local-e2e`
   and Terraform validation.
