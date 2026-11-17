@@ -444,3 +444,20 @@ Fresh-head hosted CI is required after push.
   control-plane state, role, customer credential, apply build, or workload was
   changed. Apply and credential-broker gates remain disabled.
 
+## Final documentation-head CI and AWS recheck — 2026-11-17
+
+- Exact PR head `e0df560b99364f82e5a1caf072d5b9e0bd74f0d0` passed all seven
+  GitHub Actions checks in run `44124793410`, including the fresh-runner
+  `local-e2e` and Terraform validation jobs.
+- Read-only AWS identity remained account `654654474502` in `us-east-1`.
+  SageMaker endpoint/model/configuration lists were empty; four tagged
+  DavDeploy Batch definitions remained inactive. The Terraform monitor was
+  empty and no Terraform apply/destroy process was active.
+- No customer role, credential, apply build, workload, hosted control-plane
+  state, or SageMaker lineage record was created, issued, started, changed, or
+  deleted. Existing lineage evidence remains preserved.
+- This is source, CI, and read-only inventory evidence only. Customer-role
+  effectiveness and the hosted plan/apply/health/recovery/teardown lifecycle
+  remain unproved. Apply gates remain off; no Nova customer workload is
+  certified.
+

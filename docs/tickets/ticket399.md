@@ -569,3 +569,24 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   implementation commit `3967b48d105934eb19d055cc78bb99d0f88281ed`, including
   the fresh-runner `local-e2e` job. No customer AWS role or workload was used.
 
+### Final documentation-head CI and inventory — 2026-11-17
+
+- Documentation commit `e0df560b99364f82e5a1caf072d5b9e0bd74f0d0` passed all
+  seven required GitHub Actions checks in run `44124793410`, including
+  `local-e2e` and Terraform validation. This verifies the exact current PR
+  head; it does not verify live AWS role permissions or a customer workload.
+- PR #399 remains open and draft, based on current `main`
+  `602206ee1fd73b4582015ec30d2b5e472d72baf7`, with no review requests and a
+  clean merge state. Apply and credential-broker gates remain disabled.
+- Read-only AWS inventory again verified account `654654474502` in
+  `us-east-1`. SageMaker endpoint, model, and endpoint-configuration lists
+  were empty; the four tagged DavDeploy Batch definitions remain inactive.
+  The Terraform run monitor returned `{}` and no Terraform apply/destroy
+  process was active. No AWS resource, role, credential, hosted control-plane
+  state, or lineage evidence was changed.
+- Customer-role provisioning and effective permission verification still
+  require a customer target account and the approved onboarding/runtime path.
+  The current handoff boundary prohibits creating a target role or changing
+  the hosted control plane, so those gates remain unmet. No Nova customer
+  workload has been applied or certified.
+
