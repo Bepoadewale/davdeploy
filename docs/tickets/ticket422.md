@@ -20,11 +20,13 @@ limits.
 
 ## Current repo state
 
-- Backend `main` is `b0b46d6a08e973d7eec38ae9c51c05111b86b8d9` (PR #421,
-  documentation reconciliation).
+- Backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422,
+  source merged; not deployed to the hosted control plane).
 - Draft PR #399 contains default-off exact-plan apply credential/input routes,
   artifact staging, worker, and reconciliation. It remains unmerged and its
   gates remain disabled.
+- PR #422 merged as `8c84827`; source profile verification is now in `main`,
+  but remains undeployed. No customer role or hosted plan was verified.
 - `StsAwsDiscovery.verify_plan_role` checked only STS assumption and account
   identity. The customer role template already grants IAM metadata reads and
   explicitly denies actions outside its bounded plan profile.

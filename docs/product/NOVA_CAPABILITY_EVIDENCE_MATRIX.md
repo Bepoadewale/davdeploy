@@ -1,8 +1,9 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `9951caa9244128b1551fea3af66b1bdbf884c800`
-(PR #420), 2026-11-17. PR #413 merged the expanded coverage ledger. The hosted
-control plane was deployed from current `main` by saved-plan apply
+Status snapshot: backend `main` at `8c84827ddbd32f5c937f83a393c177a825afbfb3`
+(PR #422), 2026-11-17; hosted runtime remains at PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`. PR #413 merged the expanded
+coverage ledger. The hosted control plane remains on pre-PR #422 source, using saved-plan apply
 [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184);
 both jobs succeeded, including migrations. Read-only checks found all six
@@ -23,10 +24,10 @@ block approval. Draft PR #399 remains open at
 passed seven jobs. Apply gates remain disabled, and the customer apply role,
 credential issuance, hosted apply, health, recovery, and cleanup are unverified.
 
-Draft PR #422 adds source-only verification of the customer plan role's exact
-trust and bounded inline policy profile during connection verification and
-again before plan credentials are issued. It is not merged or deployed. This
-does not attest every effective AWS permission layer, and existing
+PR #422 merged as `8c84827` and adds source-only verification of the customer
+plan role's exact trust and bounded inline policy profile during connection
+verification and again before plan credentials are issued. It is not deployed.
+This does not attest every effective AWS permission layer, and existing
 identity-only role records require fresh verification.
 
 This document joins the checked-in architecture catalogue, Terraform
