@@ -648,6 +648,9 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - Source commit `24fa893fdd3d77358861e2bc1451dd4b791fbd0e` passed all seven
   required GitHub Actions checks in run `44134431454`, including `local-e2e`
   and Terraform validation.
+- Follow-up source commit `9a241e1` adds fail-closed handling for IAM Allow
+  statements with `NotResource`. Fresh-head run `44140537111` passed all seven
+  required checks, including `local-e2e` and Terraform validation.
 - References: [IAM ARN formats and wildcard behavior](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html),
   [S3 IAM resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html),
   and [DynamoDB table/index IAM resources](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/iam-policy-specific-table-indexes.html).

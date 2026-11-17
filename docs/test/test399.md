@@ -506,4 +506,6 @@ Fresh-head hosted CI is required after push.
 - Fresh-head GitHub Actions run `44134431454` passed all seven required checks
   on commit `24fa893fdd3d77358861e2bc1451dd4b791fbd0e`, including
   `local-e2e` and Terraform validation.
+- Follow-up commit `9a241e1`, including the `NotResource` regression, passed
+  all seven checks in fresh-head run `44140537111`.
 
