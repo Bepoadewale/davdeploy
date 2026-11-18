@@ -33,10 +33,11 @@ def build(*, run_id=RUN_ID, project=PROJECT, build_id=BUILD_ID, arn=BUILD_ARN, s
 
 
 class FakeCodeBuild:
-    def __init__(self, response=None, builds=None, pages=None):
+    def __init__(self, response=None, builds=None, pages=None, batch_responses=None):
         self.response = {"build": build()} if response is None else response
         self.builds = builds if builds is not None else [build()]
         self.pages = pages or [{"ids": [BUILD_ID]}]
+        self.batch_responses = batch_responses
         self.calls = []
 
     def start_build(self, **kwargs):
@@ -45,7 +46,15 @@ class FakeCodeBuild:
 
     def batch_get_builds(self, **kwargs):
         self.calls.append(("batch_get_builds", kwargs))
-        return {"builds": [item for item in self.builds if item["id"] in kwargs["ids"]]}
+        if self.batch_responses is not None:
+            return self.batch_responses.pop(0)
+        return {
+            "builds": [
+                item
+                for item in self.builds
+                if isinstance(item, dict) and item.get("id") in kwargs["ids"]
+            ]
+        }
 
     def list_builds_for_project(self, **kwargs):
         self.calls.append(("list_builds_for_project", kwargs))
@@ -158,6 +167,90 @@ def test_find_build_by_run_id_is_bounded_and_rejects_ambiguous_matches():
 
     with pytest.raises(NovaApplyDispatchError, match="multiple"):
         dispatcher.find_build_by_run_id(RUN_ID)
+
+
+def test_find_build_by_run_id_returns_none_only_after_complete_valid_search():
+    other_run = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    other_build = build(run_id=other_run, build_id=f"{PROJECT}:other")
+    other_build["arn"] = f"arn:aws:codebuild:us-east-1:654654474502:build/{other_build['id']}"
+    codebuild = FakeCodeBuild(builds=[other_build], pages=[{"ids": [other_build["id"]]}])
+    dispatcher = NovaExactPlanApplyDispatcher(project_name=PROJECT, codebuild_client=codebuild)
+
+    assert dispatcher.find_build_by_run_id(RUN_ID) is None
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        None,
+        {},
+        {"ids": ["another-project:build"]},
+        {"ids": [None]},
+        {"ids": [BUILD_ID, BUILD_ID]},
+        {"ids": [], "nextToken": "page-1"},
+    ],
+)
+def test_find_build_by_run_id_fails_closed_on_malformed_lookup_pages(page):
+    pages = (
+        [page, {"ids": [], "nextToken": "page-1"}]
+        if page == {"ids": [], "nextToken": "page-1"}
+        else [page]
+    )
+    dispatcher = NovaExactPlanApplyDispatcher(
+        project_name=PROJECT,
+        codebuild_client=FakeCodeBuild(pages=pages),
+    )
+
+    with pytest.raises(NovaApplyDispatchError) as error:
+        dispatcher.find_build_by_run_id(RUN_ID)
+
+    assert error.value.outcome_uncertain is True
+    assert error.value.phase == "build_start"
+
+
+@pytest.mark.parametrize(
+    "batch_response",
+    [
+        None,
+        [],
+        {},
+        {"builds": []},
+        {"builds": [build()], "buildsNotFound": [BUILD_ID]},
+        {"builds": [build(build_id=f"{PROJECT}:unexpected")]},
+        {"builds": [build(arn="arn:aws:codebuild:us-east-1:654654474502:build/wrong:token")]},
+    ],
+)
+def test_find_build_by_run_id_fails_closed_on_incomplete_or_malformed_build_details(batch_response):
+    dispatcher = NovaExactPlanApplyDispatcher(
+        project_name=PROJECT,
+        codebuild_client=FakeCodeBuild(
+            pages=[{"ids": [BUILD_ID]}],
+            batch_responses=[batch_response],
+        ),
+    )
+
+    with pytest.raises(NovaApplyDispatchError) as error:
+        dispatcher.find_build_by_run_id(RUN_ID)
+
+    assert error.value.outcome_uncertain is True
+    assert error.value.phase == "build_start"
+
+
+def test_find_build_by_run_id_rejects_duplicate_run_identity_fields():
+    malformed = build()
+    malformed["environment"]["environmentVariables"].append(
+        {"name": "DAVDEPLOY_NOVA_APPLY_RUN_ID", "value": RUN_ID, "type": "PLAINTEXT"}
+    )
+    dispatcher = NovaExactPlanApplyDispatcher(
+        project_name=PROJECT,
+        codebuild_client=FakeCodeBuild(builds=[malformed]),
+    )
+
+    with pytest.raises(NovaApplyDispatchError) as error:
+        dispatcher.find_build_by_run_id(RUN_ID)
+
+    assert error.value.outcome_uncertain is True
+    assert error.value.phase == "build_start"
 
 
 def test_dispatcher_stays_disabled_without_explicit_runner_flag(monkeypatch):

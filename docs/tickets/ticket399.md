@@ -16,17 +16,18 @@ CodeBuild project and `customer_executor`.
 Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0` after source-only
 PRs #434–#436 hardened planned S3 bucket transport, default encryption, and
 ownership controls; their merged-main CI runs passed all seven checks. The
-hosted control plane remains on PR #420 commit
-`9951caa9244128b1551fea3af66b1bdbf884c800`; these source changes are not
-deployed. PR #399 remains open/draft. Its branch now includes current `main`
-through merge commit `f677d7a5f36a95472f704f9a15dfd4a7ac6b3fff`. The
-synchronized source head passed local verification and all seven hosted checks;
-the follow-up evidence update also passed all seven hosted checks.
+hosted control plane was last read-only checked on 2026-11-18: API and worker
+Lambda package hashes and modification times were unchanged from the prior
+check, `/healthz` returned HTTP 200, and the apply, credential-broker, and role
+onboarding environment flags were absent. These source changes are not
+deployed. PR #399 is open/draft at `d8ef857517f7e78e5e38d0a3e1ebf0462d29ccb5`,
+based on current `main`. Its latest evidence update passed all seven hosted
+checks in run `44240154810`.
 Apply and credential gates remain disabled. No Nova-hosted customer workload
-or hosted apply evidence is available. The platform account was
-authorized for an isolated direct-Terraform smoke test; that test is recorded
-in `docs/test/test399.md` and is not Nova-hosted evidence. The protected
-untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
+or hosted apply evidence is available. The platform account was authorized
+for an isolated direct-Terraform smoke test; that test is recorded in
+`docs/test/test399.md` and is not Nova-hosted evidence. The protected untracked
+`--only-show-errors` and `.venv-pr399/` must remain untouched.
 
 ## Research / references used
 
@@ -86,6 +87,10 @@ untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
   test doubles; no live CodeBuild or AWS apply has been exercised.
 - [x] The durable dispatcher remains idempotent, and the fixed worker records
   uncertain apply outcomes for reconciliation instead of retrying blindly.
+- [x] Apply-build recovery returns “no build” only after a complete validated
+  CodeBuild search. Malformed or duplicate build IDs, repeated pagination
+  tokens, incomplete batch details, and missing/duplicate durable run identity
+  fields remain uncertain and fail closed.
 - [x] Apply has a separate CodeBuild project and IAM role with explicit denies
   for build override fields; it never reuses `customer_executor`.
 - [x] The separate apply credential broker is gated independently and, when
@@ -752,3 +757,22 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 - PR #399 is synchronized with backend `main` `9bef966a474d059b2d7e9d123da858707628b07b` through merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`. The merge preserves the account-bound S3/SQS policy checks and adds PR #432/#433's CloudFront viewer/origin TLS rules.
 - Focused generated-plan policy tests passed (232); full `make verify` passed (1,442 tests). Documentation conventions, `git diff --check`, and recursive Terraform formatting passed.
 - PR #399 remains open/draft with apply and credential gates disabled. All seven checks passed on synchronized head `0d4d584c4da63ad101854087956f2d16ad94245b` in run `44215860757`. No AWS, Terraform, hosted runtime, customer credential, or customer workload operation occurred.
+
+## Apply-build lookup reconciliation hardening — 2026-11-18
+
+- Review found that `find_build_by_run_id` skipped `ValueError` records and
+  accepted incomplete `BatchGetBuilds` responses. An inconclusive lookup could
+  therefore look like no build existed and allow a duplicate dispatch attempt.
+- The dispatcher now validates project-prefixed unique build IDs, complete
+  pagination with non-repeating tokens, complete batch results, exact build
+  identities, and exactly one canonical durable run ID field per build. Any
+  malformed or incomplete response raises an uncertain `build_start` result;
+  only a complete valid search can return no match.
+- Focused exact-plan apply suite: 84 passed. Full `make verify` passed with
+  1,494 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose
+  validation. Documentation conventions and diff checks passed on the final
+  evidence update. No AWS role, credential, apply build, customer
+  workload, or hosted control-plane state was changed.
+- The full local clean-room cycle has not been rerun for this recovery change.
+  Required fresh-runner CI, including `local-e2e`, is pending for the updated
+  PR head. Existing retained local clean-room artifacts were not cleaned up.

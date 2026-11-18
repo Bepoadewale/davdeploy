@@ -598,3 +598,29 @@ this one isolated resource set. It does not verify Nova proposal generation,
 trusted pricing, hosted approval, the dedicated apply role, CodeBuild
 credential brokering, the Nova worker, application health, or recovery. No
 Nova customer workload is claimed as applied or certified.
+
+## Apply-build lookup reconciliation hardening — 2026-11-18
+
+Execution type: local source tests and static review; no AWS workload run.
+
+Review found the apply dispatcher ignored malformed build records and did not
+require `BatchGetBuilds` to return every ID from the paginated lookup. That
+could make an inconclusive search appear empty during restart reconciliation.
+The dispatcher now validates project identity, unique build IDs, pagination
+tokens, complete batch results, and exactly one canonical durable run ID in
+each build record. Malformed or incomplete responses are reported as uncertain
+and cannot authorize a replacement dispatch.
+
+- Focused apply tests:
+  `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest -q tests/test_nova_apply_clients.py tests/test_nova_apply_workspace.py tests/test_nova_apply_artifacts.py tests/test_nova_apply_role_profile.py tests/test_nova_apply_dispatch.py tests/test_nova_apply_codebuild.py tests/test_nova_apply_access.py tests/test_nova_apply_contract.py`
+  — 84 passed.
+- Full verification:
+  `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`
+  — 1,494 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and
+  Compose validation passed. One existing Starlette/httpx deprecation warning.
+- This patch did not call AWS or alter the hosted control plane. Fresh-runner
+  GitHub CI, including `local-e2e`, is pending. The full local clean-room cycle
+  was not rerun for this recovery change; existing retained clean-room
+  artifacts were left intact.
+
+No Nova customer workload has been applied or certified by this source test.

@@ -285,8 +285,12 @@ class NovaExactPlanApplyDispatcher:
 
     def find_build_by_run_id(self, run_id: str) -> NovaApplyBuild | None:
         run_id = _canonical_run_id(run_id)
-        matches: list[NovaApplyBuild] = []
+        build_ids: list[str] = []
+        seen_build_ids: set[str] = set()
+        seen_tokens: set[str] = set()
         next_token: str | None = None
+        complete = False
+        matches: list[NovaApplyBuild] = []
         try:
             for _ in range(self._MAX_LOOKUP_PAGES):
                 request: dict[str, Any] = {
@@ -296,36 +300,74 @@ class NovaExactPlanApplyDispatcher:
                 if next_token:
                     request["nextToken"] = next_token
                 page = self.codebuild.list_builds_for_project(**request)
-                ids = page.get("ids", []) if isinstance(page, dict) else []
-                if not isinstance(ids, list):
+                ids = page.get("ids") if isinstance(page, dict) else None
+                if not isinstance(ids, list) or any(
+                    not isinstance(build_id, str)
+                    or not build_id.startswith(f"{self.project_name}:")
+                    for build_id in ids
+                ):
                     raise TypeError
-                for offset in range(0, len(ids), 100):
-                    batch = self.codebuild.batch_get_builds(ids=ids[offset : offset + 100])
-                    builds = batch.get("builds", []) if isinstance(batch, dict) else []
-                    if not isinstance(builds, list):
-                        raise TypeError
-                    for build in builds:
-                        if not isinstance(build, dict):
-                            raise TypeError
-                        try:
-                            parsed = self._parse_build(build)
-                        except ValueError:
-                            continue
-                        if parsed.run_id == run_id:
-                            matches.append(parsed)
+                if len(set(ids)) != len(ids) or seen_build_ids.intersection(ids):
+                    raise ValueError
+                build_ids.extend(ids)
+                seen_build_ids.update(ids)
                 next_token = page.get("nextToken")
-                if not next_token:
+                if next_token is None:
+                    complete = True
                     break
-            else:
-                if next_token:
-                    raise NovaApplyDispatchError(
-                        "Nova apply build lookup exceeded its bounded search",
-                        outcome_uncertain=True,
-                        phase="build_start",
-                    )
+                if not isinstance(next_token, str) or not next_token or next_token in seen_tokens:
+                    raise ValueError
+                seen_tokens.add(next_token)
+            if not complete:
+                raise NovaApplyDispatchError(
+                    "Nova apply build lookup exceeded its bounded search",
+                    outcome_uncertain=True,
+                    phase="build_start",
+                )
+
+            for offset in range(0, len(build_ids), 100):
+                batch_ids = build_ids[offset : offset + 100]
+                response = self.codebuild.batch_get_builds(ids=batch_ids)
+                builds = response.get("builds") if isinstance(response, dict) else None
+                builds_not_found = (
+                    response.get("buildsNotFound") if isinstance(response, dict) else None
+                )
+                if (
+                    not isinstance(builds, list)
+                    or len(builds) != len(batch_ids)
+                    or builds_not_found not in (None, [])
+                ):
+                    raise TypeError
+                expected_ids = set(batch_ids)
+                returned_ids: set[str] = set()
+                for build in builds:
+                    if not isinstance(build, dict):
+                        raise TypeError
+                    build_id = build.get("id")
+                    if (
+                        not isinstance(build_id, str)
+                        or build_id not in expected_ids
+                        or build_id in returned_ids
+                        or build.get("projectName") != self.project_name
+                    ):
+                        raise ValueError
+                    parsed = self._parse_build(build)
+                    returned_ids.add(build_id)
+                    if parsed.run_id == run_id:
+                        matches.append(parsed)
+                if returned_ids != expected_ids:
+                    raise ValueError
         except NovaApplyDispatchError:
             raise
-        except (BotoCoreError, ClientError, OSError, TimeoutError, TypeError, ValueError):
+        except (
+            BotoCoreError,
+            ClientError,
+            OSError,
+            TimeoutError,
+            TypeError,
+            ValueError,
+            AttributeError,
+        ):
             raise NovaApplyDispatchError(
                 "Nova apply build lookup is inconclusive; reconcile the durable run",
                 outcome_uncertain=True,
@@ -339,7 +381,9 @@ class NovaExactPlanApplyDispatcher:
             )
         return matches[0] if matches else None
 
-    def _parse_build(self, build: dict[str, Any], *, expected_run_id: str | None = None) -> NovaApplyBuild:
+    def _parse_build(
+        self, build: dict[str, Any], *, expected_run_id: str | None = None
+    ) -> NovaApplyBuild:
         build_id = build.get("id")
         build_arn = build.get("arn")
         if build.get("projectName") != self.project_name:
@@ -359,15 +403,17 @@ class NovaExactPlanApplyDispatcher:
         if build_id != f"{self.project_name}:{match.group(2)}":
             raise ValueError("Nova apply build ID and ARN did not match")
         environment = build.get("environment")
-        variables = environment.get("environmentVariables", []) if isinstance(environment, dict) else []
-        run_id = next(
-            (
-                item.get("value")
-                for item in variables
-                if isinstance(item, dict) and item.get("name") == self._RUN_ID_ENV
-            ),
-            None,
+        variables = (
+            environment.get("environmentVariables") if isinstance(environment, dict) else None
         )
+        if not isinstance(variables, list) or any(not isinstance(item, dict) for item in variables):
+            raise ValueError("Nova apply build environment is invalid")
+        run_id_values = [
+            item.get("value") for item in variables if item.get("name") == self._RUN_ID_ENV
+        ]
+        if len(run_id_values) != 1:
+            raise ValueError("Nova apply build durable identity is ambiguous")
+        run_id = run_id_values[0]
         try:
             run_id = _canonical_run_id(run_id)
         except (TypeError, ValueError):
