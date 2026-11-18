@@ -64,12 +64,14 @@ or certified.
   checks pass.
 - [x] All seven required PR checks pass on implementation commit
   `89d8d684b1bb209e3ada557c6b0af2e7e5047cba` in run `44213004697`.
-- [ ] All seven required checks pass on the final ticket-updated PR head.
+- [x] All seven required checks pass on ticket-evidence head
+  `4567c91` in run `44213644654`.
 
 ## Acceptance status
 
-Implementation and local validation are complete. The implementation commit
-passed all seven checks; the ticket follow-up requires fresh final-head checks.
+Implementation and local validation are complete. All seven checks passed on
+the implementation and ticket-evidence heads. A final status update will
+receive a fresh CI run.
 
 ## Tests / validation performed
 
@@ -80,7 +82,8 @@ Documentation conventions, `git diff --check`, and
 `terraform fmt -check -recursive` passed. The only output warning is the
 existing Starlette/httpx deprecation. Final implementation commit
 `89d8d684b1bb209e3ada557c6b0af2e7e5047cba` passed all seven checks in run
-`44213004697`; the ticket-only follow-up still requires a fresh run.
+`44213004697`. Ticket-evidence head `4567c91` passed all seven checks in run
+`44213644654`; a final status update follows.
 
 ## Evidence files produced
 
