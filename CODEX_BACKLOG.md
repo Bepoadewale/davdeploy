@@ -1,25 +1,25 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-17
+## Nova status snapshot — 2026-11-18
 
-Backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422). The
-hosted control plane remains deployed at `9951caa9244128b1551fea3af66b1bdbf884c800`
-(PR #420), using plan run [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
-and saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-Database migrations passed; all six backend Lambda packages share code hash
-`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz` returned HTTP
-200. PR #413's 26-capability/30-root ledger is merged. Bounded pricing for
-selected resources and protected plan summaries are in the current hosted
-package; cost coverage remains partial.
+Backend `main` is `aef34c0cd6f5fc8a4e87a671246697061f9e9210` (PR #430). The
+hosted control plane remains at PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
+[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+and exact saved-plan apply
+[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
+The recorded deployment passed database migrations; all six Lambda packages
+shared code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz`
+returned HTTP 200. These checks describe the hosted control plane, not a
+customer workload. PR #430 refreshed the 26-capability/30-root evidence map.
 
-Draft PR #399 is at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`. Its source now
-includes the exact-plan apply credential/input APIs, artifact staging, fixed
-worker, and result reconciliation. CI run
-[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
-passed seven jobs. The apply and credential gates remain disabled. A dedicated
-customer apply role and hosted customer lifecycle have not been verified. Do
-not repeat the worker implementation; continue with role permissions and
-hosted plan/apply/health/recovery/cleanup evidence.
+PR #424's bounded Aurora pricing and PRs #425–#429's Nova provenance/schema
+evidence are in backend source but are not deployed by PR #420. Cost coverage
+remains partial. Open/draft PR #399 is at
+`81eabbbccb5f47bbb5e0f6929872d675c8a6ee10`, based on current `main`; its latest
+CI run [44204640591](https://github.com/Bepoadewale/davdeploy/actions/runs/44204640591)
+passed all seven checks. Its apply and credential gates remain disabled. The
+dedicated customer apply role and hosted customer lifecycle are not verified.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
@@ -27,10 +27,9 @@ recorded hosted plan. No Nova customer workload has been applied or certified.
 See [`docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance map.
 
-PR #422 merged as `8c84827` and adds source checks for the exact customer
-plan-role trust and bounded policy profile, including a fresh check before
-plan credentials are issued. It is not deployed, does not establish every
-effective AWS permission layer, and does not replace hosted
+PR #422's exact customer plan-role trust and bounded policy checks, PR #429's
+provider-schema provenance, and PR #424's pricing are source-only. They do not
+establish every effective AWS permission layer or replace hosted
 plan/apply/health/recovery/cleanup evidence.
 
 ## Three-PR delivery plan
@@ -124,7 +123,7 @@ plan/apply/health/recovery/cleanup evidence.
 - [x] PR #379 adds proposal-gated, region-bounded read metadata access for proposed VPCs, subnets, and security groups; this control-plane source is now deployed in the PR #381 release. PR #381 separately published the customer role template, but it has not been installed in a customer account and effective permissions are unverified. Routes, internet gateways, NAT, and VPC endpoints remain unsupported by this profile. Evidence: `docs/test/test379.md` and `docs/test/test382.md`.
 - [x] PR #381 preserves the prior immutable customer plan-role template URL and publishes the content-hash template. PR #392 validates a disposable plan-only role's trust/policy shape and selected IAM simulator decisions, then deletes its exact stack. No persistent customer connection or role was verified; real broker assumption and account-effective permissions remain unproven. Evidence: `docs/test/test382.md` and `docs/test/test392.md`.
 - [ ] Finish the hosted Nova plan-only customer journey and tenant-scoped remote-state path. The isolated runner, plan review, credential broker and state API are deployed, but no authenticated customer request has produced a hosted plan. A disposable IAM policy simulation is evidence only; real customer-role assumption, effective permissions, and service-limit checks remain incomplete. PRs #371/#372 add RDS planner metadata access and PR #379 adds bounded VPC/subnet/security-group metadata reads. No Nova-generated customer plan has been applied.
-- [ ] Extend the deployed regional pricing evaluator and usage contracts to cover all material supported resources and supporting costs. PRs #407–#416 add bounded evidence for selected families; draft PR #424 adds source-only pricing for one Aurora PostgreSQL Serverless v2 writer shape and is not deployed. Unsupported or unpriced material resources continue to block approval. PR #318 remains closed and is not used as current pricing evidence.
+- [ ] Extend the deployed regional pricing evaluator and usage contracts to cover all material supported resources and supporting costs. PRs #407–#416 add bounded evidence for selected families; PR #424 adds source-only pricing for one Aurora PostgreSQL Serverless v2 writer shape and is merged but not deployed. Unsupported or unpriced material resources continue to block approval. PR #318 remains closed and is not used as current pricing evidence.
 - [ ] Define and implement tenant-scoped secret references: bind customer-approved secret identifiers to the trusted deployment context, keep secret values out of Nova prompts and Terraform state, scope runtime reads, and cover rotation/revocation. PRs #365/#367 constrain generated literals and a narrow RDS ARN-reference path; PR #374 denies runtime secret-value grants until policy permissions can be bound to a verified typed reference. Runtime reads remain unavailable.
 - [ ] Prove worker restart/reconciliation, bounded retries, partial-failure recovery, typed output binding, and reverse graph cleanup in the hosted worker. Draft PR #399 has source tests for the fixed apply worker, but no hosted customer build has exercised it.
 - [ ] Dispatch compatible approved module graphs through checked-in renderers with typed outputs, dependency ordering and reverse cleanup. CodeBuild remains single-module and fail-closed until this complete path is validated.
