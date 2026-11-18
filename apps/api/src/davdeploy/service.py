@@ -4622,6 +4622,7 @@ class ProductService:
         if existing is not None:
             if existing.request_sha256 != request_sha256:
                 raise ValueError("apply request conflicts with an existing exact-plan run")
+            self._wake_generated_plan_apply_run(existing)
             return self.generated_plan_apply_run_detail(principal, existing.id)
 
         run_id = str(uuid.uuid4())
@@ -4672,8 +4673,15 @@ class ProductService:
             )
             if existing is None or existing.request_sha256 != request_sha256:
                 raise ValueError("apply request could not be queued once") from error
+            self._wake_generated_plan_apply_run(existing)
             return self.generated_plan_apply_run_detail(principal, existing.id)
+        self._wake_generated_plan_apply_run(run)
         return self.generated_plan_apply_run_detail(principal, run.id)
+
+    def _wake_generated_plan_apply_run(self, run: GeneratedPlanApplyRun) -> None:
+        """Wake the durable worker for queued runs, including safe idempotent retries."""
+        if run.state == "QUEUED":
+            self._wake_worker("generated_plan_apply_run", run.id)
 
     def generated_plan_apply_run_detail(
         self, principal: Principal, apply_run_id: str

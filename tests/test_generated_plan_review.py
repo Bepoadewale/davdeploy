@@ -5,6 +5,7 @@ import json
 import os
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import davdeploy.service as service_module
 import pytest
@@ -726,3 +727,19 @@ def test_generated_plan_apply_worker_stays_inert_until_runner_is_ready(monkeypat
     monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false")
 
     assert service.run_next_generated_plan_apply_run() is False
+
+
+def test_generated_plan_apply_wakeup_only_sends_for_queued_runs():
+    store = ArtifactStoreFixture()
+    service, _db = service_with_artifact_store(store)
+    wakeups = []
+    service._wake_worker = lambda kind, run_id: wakeups.append((kind, run_id))
+
+    queued = SimpleNamespace(id="queued-apply-run", state="QUEUED")
+    service._wake_generated_plan_apply_run(queued)
+    for state in ("DISPATCHING", "BUILD_STARTED", "RECONCILIATION_REQUIRED"):
+        service._wake_generated_plan_apply_run(
+            SimpleNamespace(id=f"{state.lower()}-apply-run", state=state)
+        )
+
+    assert wakeups == [("generated_plan_apply_run", "queued-apply-run")]
