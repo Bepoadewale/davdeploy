@@ -47,24 +47,31 @@ WAF/cache safety, pricing, or workload health.
 
 ## Acceptance criteria
 
-- [ ] `allow-all`, missing, malformed, or unknown viewer policy is denied.
-- [ ] Every default and ordered cache behavior is inspected.
-- [ ] `redirect-to-https` and `https-only` remain accepted.
-- [ ] Findings contain no plan values or sensitive content.
-- [ ] Focused policy tests, full verification, docs conventions, and diff checks
+- [x] `allow-all`, missing, malformed, or unknown viewer policy is denied.
+- [x] Every default and ordered cache behavior is inspected.
+- [x] `redirect-to-https` and `https-only` remain accepted.
+- [x] Findings contain no plan values or sensitive content.
+- [x] Focused policy tests, full verification, docs conventions, and diff checks
   pass.
 - [ ] All seven required CI checks pass on the implementation commit.
 
 ## Acceptance status
 
-Implementation has not started. This is a source policy change only. No AWS
-distribution, Terraform plan/apply, hosted runtime, or customer workload will
-be changed.
+Implementation is complete and locally verified. This is a source policy
+change only; no AWS distribution, Terraform plan/apply, hosted runtime, or
+customer workload was changed.
 
 ## Tests / validation performed
 
-No checks have run for this implementation yet. No `docs/test/test432.md` is
-required because no customer workload is part of this package.
+- Focused `tests/test_generated_plan_policy.py`: 190 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  1,314 passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed.
+- `GITHUB_PR_NUMBER=432 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
+  passed.
+- `git diff --check`: passed.
+- Final-head GitHub checks are pending.
+- No `docs/test/test432.md` is required because no customer workload was part of
+  this package.
 
 ## Evidence files produced
 
