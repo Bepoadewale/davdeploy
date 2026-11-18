@@ -30,6 +30,29 @@ def ownership_scope():
     )
 
 
+def s3_secure_transport_policy(bucket_name):
+    bucket_arn = f"arn:aws:s3:::{bucket_name}"
+    return json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Action": "s3:*",
+                    "Resource": [bucket_arn, f"{bucket_arn}/*"],
+                    "Condition": {
+                        "Bool": {
+                            "aws:SecureTransport": "false",
+                            "aws:PrincipalIsAWSService": "false",
+                        }
+                    },
+                }
+            ],
+        }
+    )
+
+
 def proposal(resources=None, *, backup_required=False):
     resources = resources or [
         {
@@ -56,6 +79,21 @@ def proposal(resources=None, *, backup_required=False):
                 "restrict_public_buckets": True,
             },
             "rationale": "Keep customer files private.",
+        },
+        {
+            "resource_id": "secure-transport-policy",
+            "resource_type": "aws_s3_bucket_policy",
+            "name": "transport_policy",
+            "arguments": {
+                "bucket": {
+                    "kind": "resource_reference",
+                    "resource_id": "bucket",
+                    "output_name": "id",
+                    "value_type": "string",
+                },
+                "policy": s3_secure_transport_policy("private-plan-bucket"),
+            },
+            "rationale": "Deny unencrypted requests while preserving AWS service access.",
         },
     ]
     if resources[0]["resource_type"] == "aws_s3_bucket":
@@ -102,7 +140,11 @@ def change(address, kind, actions=("create",), **metadata):
 
 def plan(resources=None, changes=None, **overrides):
     resources = resources or [
-        resource("aws_s3_bucket.bucket", "aws_s3_bucket", {"bucket": "private-plan-bucket"}),
+        resource(
+            "aws_s3_bucket.bucket",
+            "aws_s3_bucket",
+            {"bucket": "private-plan-bucket", "arn": "arn:aws:s3:::private-plan-bucket"},
+        ),
         resource(
             "aws_s3_bucket_public_access_block.public_access",
             "aws_s3_bucket_public_access_block",
@@ -114,11 +156,20 @@ def plan(resources=None, changes=None, **overrides):
                 "restrict_public_buckets": True,
             },
         ),
+        resource(
+            "aws_s3_bucket_policy.transport_policy",
+            "aws_s3_bucket_policy",
+            {
+                "bucket": "private-plan-bucket",
+                "policy": s3_secure_transport_policy("private-plan-bucket"),
+            },
+        ),
         resource("terraform_data.account_guard", "terraform_data", {"input": None}),
     ]
     changes = changes or [
         change("aws_s3_bucket.bucket", "aws_s3_bucket"),
         change("aws_s3_bucket_public_access_block.public_access", "aws_s3_bucket_public_access_block"),
+        change("aws_s3_bucket_policy.transport_policy", "aws_s3_bucket_policy"),
         change("terraform_data.account_guard", "terraform_data"),
     ]
     document = {
@@ -160,6 +211,24 @@ def evaluate(document=None, proposal_value=None):
             },
         },
     )
+
+
+def plan_with_s3_transport_policy(policy):
+    document = plan()
+    policy_resource = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("address") == "aws_s3_bucket_policy.transport_policy"
+    )
+    policy_resource["values"]["policy"] = policy
+    proposal_resources = [
+        item.model_dump(mode="json") for item in proposal().resources
+    ]
+    proposal_policy = next(
+        item for item in proposal_resources if item["resource_id"] == "secure-transport-policy"
+    )
+    proposal_policy["arguments"]["policy"] = policy
+    return document, proposal(proposal_resources)
 
 
 def add_policy_resource(document, kind, name, arguments, *, after_unknown=None):
@@ -837,6 +906,142 @@ def test_public_s3_policy_is_denied():
     result = evaluate(document, proposal_value)
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "s3_public_policy_denied" in codes(result)
+
+
+def test_planned_s3_bucket_requires_one_same_plan_transport_policy():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("address") != "aws_s3_bucket_policy.transport_policy"
+    ]
+    document["resource_changes"] = [
+        item
+        for item in document["resource_changes"]
+        if item.get("address") != "aws_s3_bucket_policy.transport_policy"
+    ]
+    proposal_resources = [
+        item.model_dump(mode="json")
+        for item in proposal().resources
+        if item.resource_id != "secure-transport-policy"
+    ]
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_secure_transport_policy_missing" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "bucket_arn",
+    [
+        "arn:aws:s3:::different-plan-bucket",
+        "arn:aws-cn:s3:::private-plan-bucket",
+    ],
+)
+def test_s3_transport_policy_rejects_bucket_arn_identity_mismatch(bucket_arn):
+    document = plan()
+    document["planned_values"]["root_module"]["resources"][0]["values"]["arn"] = bucket_arn
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_secure_transport_bucket_unknown" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "missing_service_exclusion",
+        "secure_transport_true",
+        "narrow_action",
+        "missing_bucket_resource",
+        "missing_object_resource",
+        "narrow_principal",
+        "conditional_scope",
+    ],
+)
+def test_s3_transport_policy_must_cover_tls_bucket_and_object_requests(mutation):
+    policy = json.loads(s3_secure_transport_policy("private-plan-bucket"))
+    statement = policy["Statement"][0]
+    if mutation == "missing_service_exclusion":
+        statement["Condition"]["Bool"].pop("aws:PrincipalIsAWSService")
+    elif mutation == "secure_transport_true":
+        statement["Condition"]["Bool"]["aws:SecureTransport"] = "true"
+    elif mutation == "narrow_action":
+        statement["Action"] = "s3:GetObject"
+    elif mutation == "missing_bucket_resource":
+        statement["Resource"] = ["arn:aws:s3:::private-plan-bucket/*"]
+    elif mutation == "missing_object_resource":
+        statement["Resource"] = ["arn:aws:s3:::private-plan-bucket"]
+    elif mutation == "narrow_principal":
+        statement["Principal"] = {"AWS": "arn:aws:iam::654654474502:root"}
+    else:
+        statement["Condition"]["IpAddress"] = {"aws:SourceIp": "192.0.2.0/24"}
+    document, proposal_value = plan_with_s3_transport_policy(json.dumps(policy))
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_secure_transport_policy_incomplete" in codes(result)
+
+
+def test_s3_transport_policy_can_split_bucket_and_object_arns_across_statements():
+    policy = json.loads(s3_secure_transport_policy("private-plan-bucket"))
+    statement = policy["Statement"][0]
+    first = {**statement, "Resource": ["arn:aws:s3:::private-plan-bucket"]}
+    second = {**statement, "Resource": ["arn:aws:s3:::private-plan-bucket/*"]}
+    policy["Statement"] = [first, second]
+    document, proposal_value = plan_with_s3_transport_policy(json.dumps(policy))
+
+    result = evaluate(document, proposal_value)
+
+    assert "s3_secure_transport_policy_incomplete" not in codes(result)
+
+
+def test_s3_transport_policy_rejects_duplicate_bucket_policies():
+    document = plan()
+    duplicate_address = "aws_s3_bucket_policy.duplicate"
+    policy = s3_secure_transport_policy("private-plan-bucket")
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            duplicate_address,
+            "aws_s3_bucket_policy",
+            {"bucket": "private-plan-bucket", "policy": policy},
+        )
+    )
+    document["resource_changes"].append(
+        change(duplicate_address, "aws_s3_bucket_policy")
+    )
+    proposal_resources = [
+        item.model_dump(mode="json") for item in proposal().resources
+    ]
+    proposal_resources.append(
+        {
+            "resource_id": "duplicate-policy",
+            "resource_type": "aws_s3_bucket_policy",
+            "name": "duplicate",
+            "arguments": {"bucket": "private-plan-bucket", "policy": policy},
+            "rationale": "Duplicate policy regression.",
+        }
+    )
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_secure_transport_policy_ambiguous" in codes(result)
+
+
+def test_s3_transport_policy_findings_do_not_echo_policy_values():
+    marker = "s3-policy-sensitive-transport-marker"
+    policy = json.loads(s3_secure_transport_policy("private-plan-bucket"))
+    policy["Statement"][0]["Condition"]["Bool"]["aws:SecureTransport"] = marker
+    document, proposal_value = plan_with_s3_transport_policy(json.dumps(policy))
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert marker not in repr(result)
 
 
 @pytest.mark.parametrize("principal", ["*", {"AWS": "*"}, {"AWS": ["*"]}])
@@ -2525,6 +2730,7 @@ def test_delete_replacement_and_sensitive_change_require_human_review():
     document["resource_changes"] = [
         change("aws_s3_bucket.bucket", "aws_s3_bucket", ("delete",), before_sensitive={"secret": True}),
         change("aws_s3_bucket_public_access_block.public_access", "aws_s3_bucket_public_access_block"),
+        change("aws_s3_bucket_policy.transport_policy", "aws_s3_bucket_policy", ("delete",)),
         change("terraform_data.account_guard", "terraform_data"),
     ]
     result = evaluate(document)

@@ -48,23 +48,30 @@ blocking AWS service principals.
 
 ## Acceptance criteria
 
-- [ ] Every planned S3 bucket has exactly one policy bound to that bucket.
-- [ ] A valid TLS-deny statement covers bucket and object ARNs and excludes
+- [x] Every planned S3 bucket has exactly one policy bound to that bucket.
+- [x] A valid TLS-deny statement covers bucket and object ARNs and excludes
   AWS service principals from the transport condition.
-- [ ] Missing policy, incomplete action/resource coverage, wrong conditions,
+- [x] Missing policy, incomplete action/resource coverage, wrong conditions,
   malformed policy JSON, unknown values, and duplicate policies are denied.
-- [ ] Findings do not expose plan values or sensitive content.
-- [ ] Focused tests, full verification, documentation conventions, and diff
+- [x] Findings do not expose plan values or sensitive content.
+- [x] Focused tests, full verification, documentation conventions, and diff
   checks pass.
 - [ ] All seven required PR checks pass on the final PR head.
 
 ## Acceptance status
 
-Ticket-first bootstrap only. Implementation and validation have not started.
+Implementation and local validation are complete. Final PR checks are pending
+on the implementation commit.
 
 ## Tests / validation performed
 
-Pending ticket-first documentation and diff checks.
+- Focused generated-plan policy tests: 220 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  1,344 passed; one existing Starlette/httpx deprecation warning.
+- Documentation convention checks passed for PR #434.
+- `git diff --check` passed.
+- `terraform fmt -check -recursive` passed.
+- Final PR CI checks remain pending after the implementation commit is pushed.
 
 ## Evidence files produced
 

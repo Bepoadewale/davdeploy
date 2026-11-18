@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-18.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-18.2"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -229,7 +229,7 @@ def _evaluate(
         document, resources, ownership_scope, findings, untagged_resource_ownership
     )
     _check_policy_critical_unknowns(document, findings)
-    _check_s3(document, resources, findings)
+    _check_s3(document, resources, expected_region, findings)
     _check_cloudfront_viewer_tls(resources, findings)
     _check_cloudfront_origin_tls(resources, findings)
     _check_sqs_queue_policies(resources, findings)
@@ -662,6 +662,7 @@ def _check_proposal_inventory(
 def _check_s3(
     document: dict[str, Any],
     resources: tuple[dict[str, Any], ...],
+    expected_region: str,
     findings: list[PlanPolicyFinding],
 ) -> None:
     buckets = {
@@ -734,6 +735,193 @@ def _check_s3(
                     address,
                     "The plan grants direct public access to storage. Serve public files through a private origin instead.",
                 )
+
+    _check_s3_secure_transport(document, resources, expected_region, findings)
+
+
+def _check_s3_secure_transport(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    expected_region: str,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    buckets = [item for item in resources if item.get("type") == "aws_s3_bucket"]
+    policies = [
+        item for item in resources if item.get("type") == "aws_s3_bucket_policy"
+    ]
+    configured_references = _configured_resource_references(document)
+    checked_policy_addresses: set[str] = set()
+
+    for bucket in buckets:
+        address = bucket.get("address")
+        values = bucket.get("values")
+        bucket_name = values.get("bucket") if isinstance(values, dict) else None
+        bucket_arn = _s3_bucket_arn(
+            values.get("arn") if isinstance(values, dict) else None,
+            bucket_name,
+            expected_region,
+        )
+        if bucket_arn is None:
+            _deny(
+                findings,
+                "s3_secure_transport_bucket_unknown",
+                address,
+                "DavDeploy could not verify the identity of an S3 bucket requiring a transport policy.",
+            )
+            continue
+
+        matches = []
+        for policy in policies:
+            policy_values = policy.get("values")
+            policy_bucket = (
+                policy_values.get("bucket") if isinstance(policy_values, dict) else None
+            )
+            policy_bucket_arn = _s3_bucket_arn(
+                policy_bucket, policy_bucket, expected_region
+            )
+            if policy_bucket_arn == bucket_arn or _references_resource(
+                configured_references.get(policy.get("address"), ()), address
+            ):
+                matches.append(policy)
+
+        if not matches:
+            _deny(
+                findings,
+                "s3_secure_transport_policy_missing",
+                address,
+                "Every planned S3 bucket must have a same-plan policy that requires secure transport.",
+            )
+            continue
+        if len(matches) != 1:
+            for policy in matches:
+                policy_address = policy.get("address")
+                if isinstance(policy_address, str):
+                    checked_policy_addresses.add(policy_address)
+            _deny(
+                findings,
+                "s3_secure_transport_policy_ambiguous",
+                address,
+                "DavDeploy could not identify exactly one transport policy for this S3 bucket.",
+            )
+            continue
+
+        policy = matches[0]
+        policy_address = policy.get("address")
+        if isinstance(policy_address, str):
+            checked_policy_addresses.add(policy_address)
+        policy_values = policy.get("values")
+        policy_document = (
+            _json_document(policy_values.get("policy"), findings, policy_address)
+            if isinstance(policy_values, dict)
+            else None
+        )
+        if policy_document is not None and not _s3_policy_requires_secure_transport(
+            policy_document, bucket_arn
+        ):
+            _deny(
+                findings,
+                "s3_secure_transport_policy_incomplete",
+                policy_address,
+                "The S3 bucket policy must deny non-TLS S3 requests to the bucket and its objects while allowing AWS service principals.",
+            )
+
+    for policy in policies:
+        address = policy.get("address")
+        if isinstance(address, str) and address in checked_policy_addresses:
+            continue
+        values = policy.get("values")
+        bucket_identity = values.get("bucket") if isinstance(values, dict) else None
+        bucket_arn = _s3_bucket_arn(
+            bucket_identity, bucket_identity, expected_region
+        )
+        if bucket_arn is None:
+            _deny(
+                findings,
+                "s3_secure_transport_bucket_unknown",
+                address,
+                "DavDeploy could not verify the bucket targeted by an S3 transport policy.",
+            )
+            continue
+        policy_document = (
+            _json_document(values.get("policy"), findings, address)
+            if isinstance(values, dict)
+            else None
+        )
+        if policy_document is not None and not _s3_policy_requires_secure_transport(
+            policy_document, bucket_arn
+        ):
+            _deny(
+                findings,
+                "s3_secure_transport_policy_incomplete",
+                address,
+                "The S3 bucket policy must deny non-TLS S3 requests to the bucket and its objects while allowing AWS service principals.",
+            )
+
+
+def _s3_bucket_arn(identity: Any, bucket_name: Any, region: str) -> str | None:
+    partition = _aws_partition_for_region(region)
+    if partition is None:
+        return None
+    if isinstance(identity, str):
+        match = re.fullmatch(r"arn:([a-z0-9-]+):s3:::([a-z0-9.-]{3,63})", identity)
+        if match:
+            if match.group(1) != partition:
+                return None
+            if (
+                isinstance(bucket_name, str)
+                and re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", bucket_name)
+                and match.group(2) != bucket_name
+            ):
+                return None
+            return identity
+    if not isinstance(bucket_name, str) or not re.fullmatch(
+        r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", bucket_name
+    ):
+        return None
+    return f"arn:{partition}:s3:::{bucket_name}"
+
+
+def _aws_partition_for_region(region: str) -> str | None:
+    if region.startswith("cn-"):
+        return "aws-cn"
+    if region.startswith("us-gov-"):
+        return "aws-us-gov"
+    if region.startswith("us-iso-"):
+        return "aws-iso"
+    if region.startswith("us-isob-"):
+        return "aws-iso-b"
+    if region.startswith("eu-isoe-"):
+        return "aws-iso-e"
+    if region.startswith("us-isof-"):
+        return "aws-iso-f"
+    if region.startswith(("us-", "af-", "ap-", "ca-", "eu-", "me-", "sa-", "il-", "mx-", "eusc-")):
+        return "aws"
+    return None
+
+
+def _s3_policy_requires_secure_transport(
+    policy: dict[str, Any], bucket_arn: str
+) -> bool:
+    required_resources = {bucket_arn, f"{bucket_arn}/*"}
+    try:
+        statements = _statements(policy, require_resource=True, require_principal=True)
+    except GeneratedPlanPolicyError:
+        return False
+    covered_resources: set[str] = set()
+    required_condition = {
+        "aws:SecureTransport": "false",
+        "aws:PrincipalIsAWSService": "false",
+    }
+    for statement in statements:
+        if (
+            statement.get("Effect") != "Deny"
+            or statement.get("Principal") != "*"
+            or _string_list(statement.get("Action")) != ("s3:*",)
+            or statement.get("Condition") != {"Bool": required_condition}
+        ):
+            continue
+        covered_resources.update(_string_list(statement.get("Resource")))
+    return required_resources <= covered_resources
 
 
 def _check_cloudfront_viewer_tls(
