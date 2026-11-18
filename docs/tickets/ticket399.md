@@ -206,9 +206,11 @@ workload, or hosted apply evidence is available. The protected untracked
   tests passed (268); full `make verify` passed (1,478); all configured
   `make terraform-validate` roots, documentation conventions, Terraform
   formatting, and diff checks passed.
+- Synchronized head `21826297a3c480e0c539f2030b2fe0f8ace67ff9` passed all seven
+  required hosted CI checks, including `local-e2e`, in run `44226325612`.
 - The PR is still draft and apply/credential gates remain disabled. No
   customer target, hosted apply, customer workload, or lifecycle proof is
-  available. Fresh hosted CI is required after pushing the synchronized branch.
+  available. The hosted result validates source integration only.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and
