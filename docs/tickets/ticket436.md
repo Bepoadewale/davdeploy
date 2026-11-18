@@ -56,24 +56,31 @@ flow.
 
 ## Acceptance criteria
 
-- [ ] Every planned S3 bucket has exactly one same-plan ownership-controls
+- [x] Every planned S3 bucket has exactly one same-plan ownership-controls
   resource.
-- [ ] The resource has one rule with `object_ownership = "BucketOwnerEnforced"`.
-- [ ] Unknown, missing, duplicate, incomplete, mismatched, and ambiguous
+- [x] The resource has one rule with `object_ownership = "BucketOwnerEnforced"`.
+- [x] Unknown, missing, duplicate, incomplete, mismatched, and ambiguous
   controls are denied without echoing plan values.
-- [ ] `aws-file-storage` permits the ownership resource and `modules/artifacts`
+- [x] `aws-file-storage` permits the ownership resource and `modules/artifacts`
   configures it.
-- [ ] Focused tests, full verification, documentation conventions, diff checks,
+- [x] Focused tests, full verification, documentation conventions, diff checks,
   and recursive Terraform formatting pass.
 - [ ] All seven required PR checks pass on the final PR head.
 
 ## Acceptance status
 
-Ticket-first bootstrap only. Implementation and validation have not started.
+Implementation and local validation are complete. Merge is gated on all seven
+required checks passing on the final PR head.
 
 ## Tests / validation performed
 
-Ticket-first documentation convention and diff checks pending.
+- Focused generated-plan policy and planner tests: 268 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  1,367 passed; one existing Starlette/httpx deprecation warning.
+- Documentation convention checks passed for PR #436.
+- `git diff --check` passed.
+- `terraform fmt -check -recursive` passed.
+- Final PR check status is recorded on the open pull request.
 
 ## Evidence files produced
 

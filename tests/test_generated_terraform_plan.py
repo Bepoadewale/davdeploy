@@ -302,6 +302,7 @@ def test_plan_runs_pinned_backend_free_flow_and_returns_digests(tmp_path, monkey
         "s3_public_access_block_missing",
         "s3_secure_transport_policy_missing",
         "s3_default_encryption_configuration_missing",
+        "s3_ownership_controls_missing",
     }
     assert result.target_account_id == "654654474502"
     assert result.region == "us-east-1"

@@ -79,6 +79,10 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("rule",),
         ("rule", "apply_server_side_encryption_by_default", "sse_algorithm"),
     ),
+    "aws_s3_bucket_ownership_controls": (
+        ("rule",),
+        ("rule", "object_ownership"),
+    ),
     "aws_iam_policy": (("policy",),),
     "aws_iam_role": (("assume_role_policy",),),
     "aws_iam_role_policy": (("policy",),),
@@ -742,6 +746,7 @@ def _check_s3(
 
     _check_s3_secure_transport(document, resources, expected_region, findings)
     _check_s3_default_encryption(document, resources, findings)
+    _check_s3_ownership_controls(document, resources, findings)
 
 
 def _check_s3_default_encryption(
@@ -874,6 +879,121 @@ def _check_s3_default_encryption_configuration(
             "s3_default_encryption_algorithm_unsupported",
             address,
             "The S3 default encryption algorithm is not supported by this policy.",
+        )
+
+
+def _check_s3_ownership_controls(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    buckets = [item for item in resources if item.get("type") == "aws_s3_bucket"]
+    controls = [
+        item
+        for item in resources
+        if item.get("type") == "aws_s3_bucket_ownership_controls"
+    ]
+    configured_references = _configured_resource_references(document)
+    checked_addresses: set[str] = set()
+
+    for bucket in buckets:
+        address = bucket.get("address")
+        values = bucket.get("values")
+        bucket_name = values.get("bucket") if isinstance(values, dict) else None
+        if not isinstance(bucket_name, str) or not bucket_name:
+            _deny(
+                findings,
+                "s3_ownership_bucket_unknown",
+                address,
+                "DavDeploy could not verify the bucket identity for its ownership controls.",
+            )
+            continue
+
+        matches = []
+        for control in controls:
+            control_values = control.get("values")
+            control_bucket = (
+                control_values.get("bucket") if isinstance(control_values, dict) else None
+            )
+            references_bucket = _references_resource(
+                configured_references.get(control.get("address"), ()), address
+            )
+            if control_bucket == bucket_name or (
+                control_bucket is None and references_bucket
+            ):
+                matches.append(control)
+
+        if not matches:
+            _deny(
+                findings,
+                "s3_ownership_controls_missing",
+                address,
+                "Every planned S3 bucket must explicitly enforce bucket-owner-enforced object ownership.",
+            )
+            continue
+        if len(matches) != 1:
+            checked_addresses.update(
+                control.get("address")
+                for control in matches
+                if isinstance(control.get("address"), str)
+            )
+            _deny(
+                findings,
+                "s3_ownership_controls_ambiguous",
+                address,
+                "DavDeploy could not identify exactly one ownership-controls resource for this S3 bucket.",
+            )
+            continue
+
+        control = matches[0]
+        control_address = control.get("address")
+        if isinstance(control_address, str):
+            checked_addresses.add(control_address)
+        _check_s3_ownership_control_configuration(control, control_address, findings)
+
+    for control in controls:
+        address = control.get("address")
+        if isinstance(address, str) and address in checked_addresses:
+            continue
+        _deny(
+            findings,
+            "s3_ownership_bucket_unknown",
+            address,
+            "A planned S3 ownership-controls resource is not bound to exactly one planned bucket.",
+        )
+
+
+def _check_s3_ownership_control_configuration(
+    control: dict[str, Any],
+    address: Any,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    values = control.get("values")
+    rules = values.get("rule") if isinstance(values, dict) else None
+    if not isinstance(rules, list) or len(rules) != 1 or not isinstance(rules[0], dict):
+        _deny(
+            findings,
+            "s3_ownership_controls_incomplete",
+            address,
+            "S3 ownership controls must have exactly one complete rule.",
+        )
+        return
+
+    object_ownership = rules[0].get("object_ownership")
+    if not isinstance(object_ownership, str) or not object_ownership:
+        _deny(
+            findings,
+            "s3_object_ownership_unknown",
+            address,
+            "The S3 object ownership setting is missing or unknown.",
+        )
+        return
+    if object_ownership != "BucketOwnerEnforced":
+        _deny(
+            findings,
+            "s3_object_ownership_unsupported",
+            address,
+            "S3 buckets must disable ACLs and enforce bucket ownership of all objects.",
         )
 
 

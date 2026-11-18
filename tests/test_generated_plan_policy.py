@@ -63,6 +63,10 @@ def s3_default_encryption(algorithm="AES256"):
     ]
 
 
+def s3_ownership_control(object_ownership="BucketOwnerEnforced"):
+    return [{"object_ownership": object_ownership}]
+
+
 def proposal(resources=None, *, backup_required=False):
     resources = resources or [
         {
@@ -119,6 +123,21 @@ def proposal(resources=None, *, backup_required=False):
                 "rule": s3_default_encryption(),
             },
             "rationale": "Declare the default server-side encryption mode for stored objects.",
+        },
+        {
+            "resource_id": "bucket-ownership",
+            "resource_type": "aws_s3_bucket_ownership_controls",
+            "name": "ownership",
+            "arguments": {
+                "bucket": {
+                    "kind": "resource_reference",
+                    "resource_id": "bucket",
+                    "output_name": "id",
+                    "value_type": "string",
+                },
+                "rule": s3_ownership_control(),
+            },
+            "rationale": "Disable ACLs and make the bucket owner responsible for every stored object.",
         },
     ]
     if resources[0]["resource_type"] == "aws_s3_bucket":
@@ -197,6 +216,14 @@ def plan(resources=None, changes=None, **overrides):
                 "rule": s3_default_encryption(),
             },
         ),
+        resource(
+            "aws_s3_bucket_ownership_controls.ownership",
+            "aws_s3_bucket_ownership_controls",
+            {
+                "bucket": "private-plan-bucket",
+                "rule": s3_ownership_control(),
+            },
+        ),
         resource("terraform_data.account_guard", "terraform_data", {"input": None}),
     ]
     changes = changes or [
@@ -207,6 +234,7 @@ def plan(resources=None, changes=None, **overrides):
             "aws_s3_bucket_server_side_encryption_configuration.encryption",
             "aws_s3_bucket_server_side_encryption_configuration",
         ),
+        change("aws_s3_bucket_ownership_controls.ownership", "aws_s3_bucket_ownership_controls"),
         change("terraform_data.account_guard", "terraform_data"),
     ]
     document = {
@@ -285,6 +313,26 @@ def plan_with_s3_default_encryption(rule, *, configured_bucket="private-plan-buc
     )
     proposal_encryption["arguments"]["bucket"] = configured_bucket
     proposal_encryption["arguments"]["rule"] = rule
+    return document, proposal(proposal_resources)
+
+
+def plan_with_s3_ownership_control(rule, *, configured_bucket="private-plan-bucket"):
+    document = plan()
+    control_resource = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") == "aws_s3_bucket_ownership_controls"
+    )
+    control_resource["values"]["bucket"] = configured_bucket
+    control_resource["values"]["rule"] = rule
+    proposal_resources = [
+        item.model_dump(mode="json") for item in proposal().resources
+    ]
+    proposal_control = next(
+        item for item in proposal_resources if item["resource_id"] == "bucket-ownership"
+    )
+    proposal_control["arguments"]["bucket"] = configured_bucket
+    proposal_control["arguments"]["rule"] = rule
     return document, proposal(proposal_resources)
 
 
@@ -746,6 +794,131 @@ def test_s3_default_encryption_reference_cannot_override_conflicting_bucket_iden
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "s3_default_encryption_configuration_missing" in codes(result)
+
+
+def test_planned_s3_bucket_requires_bucket_owner_enforced_controls():
+    result = evaluate()
+
+    assert "s3_ownership_controls_missing" not in codes(result)
+    assert "s3_object_ownership_unsupported" not in codes(result)
+
+
+def test_s3_ownership_controls_require_one_same_plan_resource():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") != "aws_s3_bucket_ownership_controls"
+    ]
+    document["resource_changes"] = [
+        item
+        for item in document["resource_changes"]
+        if item.get("type") != "aws_s3_bucket_ownership_controls"
+    ]
+    proposal_resources = [
+        item.model_dump(mode="json")
+        for item in proposal().resources
+        if item.resource_id != "bucket-ownership"
+    ]
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_ownership_controls_missing" in codes(result)
+
+
+@pytest.mark.parametrize("ownership", ["BucketOwnerPreferred", "ObjectWriter"])
+def test_s3_ownership_controls_reject_acl_enabled_modes(ownership):
+    document, proposal_value = plan_with_s3_ownership_control(
+        s3_ownership_control(ownership)
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_object_ownership_unsupported" in codes(result)
+
+
+@pytest.mark.parametrize("rule", [[], [{"object_ownership": None}], [{"object_ownership": "BucketOwnerEnforced"}, {"object_ownership": "ObjectWriter"}]])
+def test_s3_ownership_controls_reject_incomplete_or_unknown_rules(rule):
+    document, proposal_value = plan_with_s3_ownership_control(rule)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert {
+        "s3_ownership_controls_incomplete",
+        "s3_object_ownership_unknown",
+    } & codes(result)
+
+
+def test_s3_ownership_controls_reject_duplicate_resources():
+    document = plan()
+    duplicate_address = "aws_s3_bucket_ownership_controls.duplicate"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            duplicate_address,
+            "aws_s3_bucket_ownership_controls",
+            {"bucket": "private-plan-bucket", "rule": s3_ownership_control()},
+        )
+    )
+    document["resource_changes"].append(
+        change(duplicate_address, "aws_s3_bucket_ownership_controls")
+    )
+    proposal_resources = [
+        item.model_dump(mode="json") for item in proposal().resources
+    ]
+    proposal_resources.append(
+        {
+            "resource_id": "duplicate-ownership",
+            "resource_type": "aws_s3_bucket_ownership_controls",
+            "name": "duplicate",
+            "arguments": {
+                "bucket": "private-plan-bucket",
+                "rule": s3_ownership_control(),
+            },
+            "rationale": "Duplicate ownership-controls regression.",
+        }
+    )
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_ownership_controls_ambiguous" in codes(result)
+
+
+def test_s3_ownership_reference_cannot_override_conflicting_bucket_identity():
+    document, proposal_value = plan_with_s3_ownership_control(
+        s3_ownership_control(), configured_bucket="another-plan-bucket"
+    )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": "aws_s3_bucket_ownership_controls.ownership",
+                "expressions": {"bucket": {"references": ["aws_s3_bucket.bucket.id"]}},
+            }
+        ]
+    }
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_ownership_controls_missing" in codes(result)
+
+
+def test_unknown_s3_ownership_rule_is_denied():
+    document = plan()
+    ownership_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_s3_bucket_ownership_controls"
+    )
+    ownership_change["change"]["after_unknown"] = {"rule": True}
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 @pytest.mark.parametrize(
@@ -2959,6 +3132,11 @@ def test_delete_replacement_and_sensitive_change_require_human_review():
         change(
             "aws_s3_bucket_server_side_encryption_configuration.encryption",
             "aws_s3_bucket_server_side_encryption_configuration",
+            ("delete",),
+        ),
+        change(
+            "aws_s3_bucket_ownership_controls.ownership",
+            "aws_s3_bucket_ownership_controls",
             ("delete",),
         ),
         change("terraform_data.account_guard", "terraform_data"),
