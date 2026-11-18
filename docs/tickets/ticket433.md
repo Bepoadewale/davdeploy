@@ -62,12 +62,14 @@ or certified.
 - [x] Findings do not expose plan values or sensitive content.
 - [x] Focused tests, full verification, documentation conventions, and diff
   checks pass.
-- [ ] All seven required PR checks pass on the final PR head.
+- [x] All seven required PR checks pass on implementation commit
+  `89d8d684b1bb209e3ada557c6b0af2e7e5047cba` in run `44213004697`.
+- [ ] All seven required checks pass on the final ticket-updated PR head.
 
 ## Acceptance status
 
-Implementation and local validation are complete. Final-head GitHub checks are
-pending.
+Implementation and local validation are complete. The implementation commit
+passed all seven checks; the ticket follow-up requires fresh final-head checks.
 
 ## Tests / validation performed
 
@@ -76,7 +78,9 @@ with `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
 1,331 passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed.
 Documentation conventions, `git diff --check`, and
 `terraform fmt -check -recursive` passed. The only output warning is the
-existing Starlette/httpx deprecation.
+existing Starlette/httpx deprecation. Final implementation commit
+`89d8d684b1bb209e3ada557c6b0af2e7e5047cba` passed all seven checks in run
+`44213004697`; the ticket-only follow-up still requires a fresh run.
 
 ## Evidence files produced
 
