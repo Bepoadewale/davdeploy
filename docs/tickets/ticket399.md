@@ -19,8 +19,9 @@ ownership controls; their merged-main CI runs passed all seven checks. The
 hosted control plane remains on PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`; these source changes are not
 deployed. PR #399 remains open/draft. Its branch now includes current `main`
-through merge commit `f677d7a5f36a95472f704f9a15dfd4a7ac6b3fff`; local
-verification passed and fresh hosted CI is pending after the branch push.
+through merge commit `f677d7a5f36a95472f704f9a15dfd4a7ac6b3fff`. The
+synchronized source head passed local verification and all seven hosted checks;
+the follow-up evidence update also passed all seven hosted checks.
 Apply and credential gates remain disabled. No customer target, Nova customer
 workload, or hosted apply evidence is available. The protected untracked
 `--only-show-errors` and `.venv-pr399/` must remain untouched.
@@ -208,6 +209,8 @@ workload, or hosted apply evidence is available. The protected untracked
   formatting, and diff checks passed.
 - Synchronized head `21826297a3c480e0c539f2030b2fe0f8ace67ff9` passed all seven
   required hosted CI checks, including `local-e2e`, in run `44226325612`.
+- Ticket evidence update head `744020c6ee45c142cb068c10d410e03485cee183`
+  passed all seven hosted checks in run `44226859521`.
 - The PR is still draft and apply/credential gates remain disabled. No
   customer target, hosted apply, customer workload, or lifecycle proof is
   available. The hosted result validates source integration only.
