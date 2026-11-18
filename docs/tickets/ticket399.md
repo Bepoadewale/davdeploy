@@ -13,14 +13,14 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `9bef966a474d059b2d7e9d123da858707628b07b` after source-only
-PR #433 added CloudFront custom-origin TLS checks; merged-main CI run
-`44214917939` passed all seven checks. The hosted control plane remains on PR
-#420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`; these source changes are
-not deployed. PR #399 remains open/draft, synchronized with current `main` in
-merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`; synchronized head
-`0d4d584c4da63ad101854087956f2d16ad94245b` passed all seven checks in run
-`44215860757`.
+Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0` after source-only
+PRs #434–#436 hardened planned S3 bucket transport, default encryption, and
+ownership controls; their merged-main CI runs passed all seven checks. The
+hosted control plane remains on PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`; these source changes are not
+deployed. PR #399 remains open/draft. Its branch now includes current `main`
+through merge commit `f677d7a5f36a95472f704f9a15dfd4a7ac6b3fff`; local
+verification passed and fresh hosted CI is pending after the branch push.
 Apply and credential gates remain disabled. No customer target, Nova customer
 workload, or hosted apply evidence is available. The protected untracked
 `--only-show-errors` and `.venv-pr399/` must remain untouched.
@@ -195,6 +195,20 @@ workload, or hosted apply evidence is available. The protected untracked
   `make terraform-validate` roots, Ruff, OpenAPI, Compose, documentation
   conventions, Terraform formatting, and `git diff --check`. Fresh-head GitHub
   CI remains required after push.
+
+### Current-base synchronization — 2026-11-18
+
+- Resolved the S3 policy integration conflicts between PR #399 and current
+  `main`, preserving PR #399's account-bound policy checks and main's secure
+  transport, default encryption, and bucket ownership checks.
+- Merge commit `f677d7a5f36a95472f704f9a15dfd4a7ac6b3fff` brings in main
+  `ec937ed257eec5eb0a21f69519df337a90bd79c0`. Focused generated-plan policy
+  tests passed (268); full `make verify` passed (1,478); all configured
+  `make terraform-validate` roots, documentation conventions, Terraform
+  formatting, and diff checks passed.
+- The PR is still draft and apply/credential gates remain disabled. No
+  customer target, hosted apply, customer workload, or lifecycle proof is
+  available. Fresh hosted CI is required after pushing the synchronized branch.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and
