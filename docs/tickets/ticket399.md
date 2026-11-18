@@ -774,5 +774,7 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   evidence update. No AWS role, credential, apply build, customer
   workload, or hosted control-plane state was changed.
 - The full local clean-room cycle has not been rerun for this recovery change.
-  Required fresh-runner CI, including `local-e2e`, is pending for the updated
-  PR head. Existing retained local clean-room artifacts were not cleaned up.
+  Fresh-head CI run `44257747819` passed all seven checks on code commit
+  `1a03a577a6420e5f33ef40d44d2fd4432f090334`, including `local-e2e` and
+  `cloud-contracts`. Existing retained local clean-room artifacts were not
+  cleaned up.

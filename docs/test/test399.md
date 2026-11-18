@@ -618,9 +618,10 @@ and cannot authorize a replacement dispatch.
   `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`
   — 1,494 tests passed; Ruff, Actions configuration, OpenAPI snapshot, and
   Compose validation passed. One existing Starlette/httpx deprecation warning.
-- This patch did not call AWS or alter the hosted control plane. Fresh-runner
-  GitHub CI, including `local-e2e`, is pending. The full local clean-room cycle
-  was not rerun for this recovery change; existing retained clean-room
-  artifacts were left intact.
+- This patch did not call AWS or alter the hosted control plane. Fresh-head
+  GitHub Actions run `44257747819` passed all seven checks on code commit
+  `1a03a577a6420e5f33ef40d44d2fd4432f090334`, including `local-e2e` and
+  `cloud-contracts`. The full local clean-room cycle was not rerun for this
+  recovery change; existing retained clean-room artifacts were left intact.
 
 No Nova customer workload has been applied or certified by this source test.
