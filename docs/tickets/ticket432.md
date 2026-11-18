@@ -18,7 +18,8 @@ Backend `main` is `87c4b25d9aa57d6ce26aa921884dcfbf5210abf5`; hosted runtime
 remains PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`. PR #399 is
 open/draft, source-only and execution-gated off, at
 `7d657d2cbb6b312b2f473ddcc6745423d237219b`; fresh CI run `44208035004` is
-pending. No Nova customer workload has been applied or certified.
+green on all seven checks. No Nova customer workload has been applied or
+certified.
 
 ## Research / references used
 
@@ -60,7 +61,8 @@ WAF/cache safety, pricing, or workload health.
 
 Implementation is complete and verified. All seven required checks passed on
 implementation commit `f73835de1ece9a482003fa00814fdbf31cd05b45` in run
-`44208891956`. The ticket-only follow-up will receive fresh CI. This is a
+`44208891956`; all seven checks also passed on final PR head
+`cb8d5dcc40261f0a85cd62586ef249754a39fa04` in run `44209578884`. This is a
 source policy change only; no AWS distribution, Terraform plan/apply, hosted
 runtime, or customer workload was changed.
 
@@ -73,8 +75,9 @@ runtime, or customer workload was changed.
   passed.
 - `git diff --check`: passed.
 - Final-head GitHub CI run `44208891956` passed all seven checks on
-  `f73835de1ece9a482003fa00814fdbf31cd05b45`; the ticket-only follow-up is
-  pending.
+  `f73835de1ece9a482003fa00814fdbf31cd05b45`; final PR-head CI run
+  `44209578884` passed all seven checks on
+  `cb8d5dcc40261f0a85cd62586ef249754a39fa04` after the ticket update.
 - No `docs/test/test432.md` is required because no customer workload was part of
   this package.
 
