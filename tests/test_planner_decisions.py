@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from davdeploy.domain import CloudInventorySnapshot, EnvironmentName, WorkloadSpec
@@ -190,10 +191,22 @@ def test_universal_modules_have_typed_resource_and_policy_contracts():
     assert "aws_cognito_user_pool" in contracts["aws-identity"].resources
     assert "mfa_policy" in contracts["aws-identity"].policy_controls
     assert "aws_s3_bucket" in contracts["aws-file-storage"].resources
+    assert "aws_s3_bucket_ownership_controls" in contracts["aws-file-storage"].resources
     assert contracts["aws-file-storage"].destroy_supported is True
-    assert {"block_public_access", "tls_only", "versioning"} <= set(
+    assert {
+        "block_public_access",
+        "tls_only",
+        "versioning",
+        "bucket_owner_enforced",
+    } <= set(
         contracts["aws-file-storage"].policy_controls
     )
+    artifacts_module = (
+        Path(__file__).resolve().parents[1]
+        / "infrastructure/terraform/modules/artifacts/main.tf"
+    ).read_text()
+    assert 'resource "aws_s3_bucket_ownership_controls" "this"' in artifacts_module
+    assert 'object_ownership = "BucketOwnerEnforced"' in artifacts_module
     assert contracts["aws-managed-application"].destroy_supported is True
 
 
