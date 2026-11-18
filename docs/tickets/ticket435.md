@@ -13,6 +13,11 @@ known bucket identity or a trusted Terraform reference. Require exactly one
 rule with a known supported default algorithm: `AES256`, `aws:kms`, or
 `aws:kms:dsse`.
 
+Amazon S3 currently encrypts new objects by default with SSE-S3 even when a
+bucket-specific rule is absent. Requiring a declared plan configuration keeps
+the selected default explicit and reviewable rather than relying on an implicit
+service default.
+
 ## Current repo state
 
 Backend `main` is `66d19ab14a33d9a2e16f70bfab1001485158a924`; PR #434 adds
@@ -53,22 +58,29 @@ prove existing object encryption, KMS key authorization, or upload behavior.
 
 ## Acceptance criteria
 
-- [ ] Every planned bucket has exactly one same-plan encryption configuration.
-- [ ] The configuration has one rule with `AES256`, `aws:kms`, or `aws:kms:dsse`.
-- [ ] Missing, duplicate, malformed, unknown, unsupported, mismatched, and
+- [x] Every planned bucket has exactly one same-plan encryption configuration.
+- [x] The configuration has one rule with `AES256`, `aws:kms`, or `aws:kms:dsse`.
+- [x] Missing, duplicate, malformed, unknown, unsupported, mismatched, and
   ambiguous configurations are denied.
-- [ ] Findings do not expose plan values or sensitive content.
-- [ ] Focused tests, full verification, documentation conventions, diff checks,
+- [x] Findings do not expose plan values or sensitive content.
+- [x] Focused tests, full verification, documentation conventions, diff checks,
   and recursive Terraform formatting pass.
 - [ ] All seven required PR checks pass on the final PR head.
 
 ## Acceptance status
 
-Ticket-first bootstrap only. Implementation and validation have not started.
+Implementation and local validation are complete. Merge is gated on all seven
+required checks passing on the final PR head.
 
 ## Tests / validation performed
 
-Ticket-first documentation convention and diff checks pending.
+- Focused generated-plan policy tests: 233 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  1,357 passed; one existing Starlette/httpx deprecation warning.
+- Documentation convention checks passed for PR #435.
+- `git diff --check` passed.
+- `terraform fmt -check -recursive` passed.
+- Final PR check status is recorded on the open pull request.
 
 ## Evidence files produced
 

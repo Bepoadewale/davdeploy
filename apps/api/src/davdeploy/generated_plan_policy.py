@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-18.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-18.3"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -67,12 +67,16 @@ S3_PUBLIC_BLOCK_FLAGS = (
     "ignore_public_acls",
     "restrict_public_buckets",
 )
+S3_SUPPORTED_DEFAULT_ENCRYPTION_ALGORITHMS = frozenset(
+    {"AES256", "aws:kms", "aws:kms:dsse"}
+)
 POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_s3_bucket": (("bucket",),),
     "aws_s3_bucket_acl": (("acl",),),
     "aws_s3_bucket_policy": (("policy",),),
     "aws_s3_bucket_public_access_block": tuple((flag,) for flag in S3_PUBLIC_BLOCK_FLAGS),
     "aws_s3_bucket_server_side_encryption_configuration": (
+        ("rule",),
         ("rule", "apply_server_side_encryption_by_default", "sse_algorithm"),
     ),
     "aws_iam_policy": (("policy",),),
@@ -737,6 +741,140 @@ def _check_s3(
                 )
 
     _check_s3_secure_transport(document, resources, expected_region, findings)
+    _check_s3_default_encryption(document, resources, findings)
+
+
+def _check_s3_default_encryption(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    buckets = [item for item in resources if item.get("type") == "aws_s3_bucket"]
+    configurations = [
+        item
+        for item in resources
+        if item.get("type") == "aws_s3_bucket_server_side_encryption_configuration"
+    ]
+    configured_references = _configured_resource_references(document)
+    checked_addresses: set[str] = set()
+
+    for bucket in buckets:
+        address = bucket.get("address")
+        values = bucket.get("values")
+        bucket_name = values.get("bucket") if isinstance(values, dict) else None
+        if not isinstance(bucket_name, str) or not bucket_name:
+            _deny(
+                findings,
+                "s3_default_encryption_bucket_unknown",
+                address,
+                "DavDeploy could not verify the bucket identity for its encryption configuration.",
+            )
+            continue
+
+        matches = []
+        for configuration in configurations:
+            configuration_values = configuration.get("values")
+            configured_bucket = (
+                configuration_values.get("bucket")
+                if isinstance(configuration_values, dict)
+                else None
+            )
+            references_bucket = _references_resource(
+                configured_references.get(configuration.get("address"), ()), address
+            )
+            if configured_bucket == bucket_name or (
+                configured_bucket is None and references_bucket
+            ):
+                matches.append(configuration)
+
+        if not matches:
+            _deny(
+                findings,
+                "s3_default_encryption_configuration_missing",
+                address,
+                "Every planned S3 bucket must have a same-plan default-encryption configuration.",
+            )
+            continue
+        if len(matches) != 1:
+            checked_addresses.update(
+                configuration.get("address")
+                for configuration in matches
+                if isinstance(configuration.get("address"), str)
+            )
+            _deny(
+                findings,
+                "s3_default_encryption_configuration_ambiguous",
+                address,
+                "DavDeploy could not identify exactly one default-encryption configuration for this S3 bucket.",
+            )
+            continue
+
+        configuration = matches[0]
+        configuration_address = configuration.get("address")
+        if isinstance(configuration_address, str):
+            checked_addresses.add(configuration_address)
+        _check_s3_default_encryption_configuration(
+            configuration, configuration_address, findings
+        )
+
+    for configuration in configurations:
+        address = configuration.get("address")
+        if isinstance(address, str) and address in checked_addresses:
+            continue
+        _deny(
+            findings,
+            "s3_default_encryption_bucket_unknown",
+            address,
+            "A planned S3 encryption configuration is not bound to exactly one planned bucket.",
+        )
+
+
+def _check_s3_default_encryption_configuration(
+    configuration: dict[str, Any],
+    address: Any,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    values = configuration.get("values")
+    rules = values.get("rule") if isinstance(values, dict) else None
+    if not isinstance(rules, list) or len(rules) != 1 or not isinstance(rules[0], dict):
+        _deny(
+            findings,
+            "s3_default_encryption_configuration_incomplete",
+            address,
+            "S3 default encryption must have exactly one complete rule.",
+        )
+        return
+
+    default_settings = rules[0].get("apply_server_side_encryption_by_default")
+    if (
+        not isinstance(default_settings, list)
+        or len(default_settings) != 1
+        or not isinstance(default_settings[0], dict)
+    ):
+        _deny(
+            findings,
+            "s3_default_encryption_configuration_incomplete",
+            address,
+            "S3 default encryption must declare exactly one default encryption mode.",
+        )
+        return
+
+    algorithm = default_settings[0].get("sse_algorithm")
+    if not isinstance(algorithm, str) or not algorithm:
+        _deny(
+            findings,
+            "s3_default_encryption_algorithm_unknown",
+            address,
+            "The S3 default encryption algorithm is missing or unknown.",
+        )
+        return
+    if algorithm not in S3_SUPPORTED_DEFAULT_ENCRYPTION_ALGORITHMS:
+        _deny(
+            findings,
+            "s3_default_encryption_algorithm_unsupported",
+            address,
+            "The S3 default encryption algorithm is not supported by this policy.",
+        )
 
 
 def _check_s3_secure_transport(
