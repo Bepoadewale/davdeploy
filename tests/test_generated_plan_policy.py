@@ -258,11 +258,29 @@ def add_sqs_queue_policy(document, policy, **change_metadata):
     return document
 
 
-def cloudfront_case(default_behavior, ordered_behaviors=(), *, after_unknown=None):
+def cloudfront_case(
+    default_behavior, ordered_behaviors=None, *, origins=None, after_unknown=None
+):
     document = plan()
     arguments = {
         "default_cache_behavior": default_behavior,
-        "ordered_cache_behavior": ordered_behaviors,
+        "ordered_cache_behavior": []
+        if ordered_behaviors is None
+        else ordered_behaviors,
+        "origin": origins
+        if origins is not None
+        else [
+            {
+                "domain_name": "origin.example.com",
+                "origin_id": "origin",
+                "custom_origin_config": [
+                    {
+                        "origin_protocol_policy": "https-only",
+                        "origin_ssl_protocols": ["TLSv1.2"],
+                    }
+                ],
+            }
+        ],
     }
     proposal_value = add_policy_resource(
         document,
@@ -1355,6 +1373,7 @@ def test_cloudfront_allow_all_viewer_policy_is_denied(field):
     [
         ([], []),
         ([{"viewer_protocol_policy": "future-value"}], []),
+        ([{"viewer_protocol_policy": ["https-only"]}], []),
         ([{"viewer_protocol_policy": "https-only"}], [{"viewer_protocol_policy": None}]),
     ],
 )
@@ -1385,6 +1404,171 @@ def test_cloudfront_unknown_viewer_policy_fails_closed_without_echoing_values():
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "policy_critical_value_unknown" in codes(result)
     assert "viewer_protocol_policy" not in repr(result)
+
+
+@pytest.mark.parametrize("origin_policy", ["https-only", "match-viewer"])
+def test_cloudfront_custom_origin_requires_https(origin_policy):
+    origins = [
+        {
+            "domain_name": "origin.example.com",
+            "origin_id": "origin",
+            "custom_origin_config": [
+                {
+                    "origin_protocol_policy": origin_policy,
+                    "origin_ssl_protocols": ["TLSv1.2"],
+                }
+            ],
+        }
+    ]
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "redirect-to-https"}], origins=origins
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not {
+        "cloudfront_cleartext_origin_access",
+        "cloudfront_origin_protocol_unknown",
+        "cloudfront_origin_tls_protocol_weak_or_unknown",
+        "cloudfront_origin_settings_unknown",
+    } & codes(result)
+
+
+@pytest.mark.parametrize(
+    ("origin_policy", "expected_code"),
+    [
+        ("http-only", "cloudfront_cleartext_origin_access"),
+        ("future-value", "cloudfront_origin_protocol_unknown"),
+        (["https-only"], "cloudfront_origin_protocol_unknown"),
+        (None, "cloudfront_origin_protocol_unknown"),
+    ],
+)
+def test_cloudfront_custom_origin_cleartext_or_unknown_protocol_is_denied(
+    origin_policy, expected_code
+):
+    origins = [
+        {
+            "domain_name": "origin.example.com",
+            "origin_id": "origin",
+            "custom_origin_config": [
+                {
+                    "origin_protocol_policy": origin_policy,
+                    "origin_ssl_protocols": ["TLSv1.2"],
+                }
+            ],
+        }
+    ]
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "https-only"}], origins=origins
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+    if isinstance(origin_policy, str):
+        assert origin_policy not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "ssl_protocols", [[], ["TLSv1.1"], ["TLSv1.1", "TLSv1.2"], None]
+)
+def test_cloudfront_custom_origin_rejects_weak_or_unknown_tls(ssl_protocols):
+    origins = [
+        {
+            "domain_name": "origin.example.com",
+            "origin_id": "origin",
+            "custom_origin_config": [
+                {
+                    "origin_protocol_policy": "https-only",
+                    "origin_ssl_protocols": ssl_protocols,
+                }
+            ],
+        }
+    ]
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "https-only"}], origins=origins
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "cloudfront_origin_tls_protocol_weak_or_unknown" in codes(result)
+
+
+@pytest.mark.parametrize("origins", [[], [{}], [None]])
+def test_cloudfront_origin_inventory_must_be_complete(origins):
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "https-only"}], origins=origins
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "cloudfront_origin_settings_unknown" in codes(result)
+
+
+def test_cloudfront_standard_s3_origin_uses_enforced_viewer_https():
+    origins = [
+        {
+            "domain_name": "private-bucket.s3.us-east-1.amazonaws.com",
+            "origin_id": "private-bucket",
+            "s3_origin_config": [{"origin_access_identity": ""}],
+        }
+    ]
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "https-only"}], origins=origins
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "cloudfront_origin_settings_unknown" not in codes(result)
+
+
+def test_cloudfront_match_viewer_origin_still_requires_secure_viewer_policy():
+    origins = [
+        {
+            "domain_name": "origin.example.com",
+            "origin_id": "origin",
+            "custom_origin_config": [
+                {
+                    "origin_protocol_policy": "match-viewer",
+                    "origin_ssl_protocols": ["TLSv1.2"],
+                }
+            ],
+        }
+    ]
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "allow-all"}], origins=origins
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "cloudfront_cleartext_viewer_access" in codes(result)
+
+
+def test_cloudfront_unknown_origin_tls_settings_fail_closed_without_echoing_values():
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "https-only"}],
+        after_unknown={
+            "origin": [
+                {
+                    "custom_origin_config": [
+                        {"origin_ssl_protocols": True},
+                    ]
+                }
+            ]
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert "origin_ssl_protocols" not in repr(result)
 
 
 @pytest.mark.parametrize("metadata", [None, "missing"])
