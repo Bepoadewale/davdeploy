@@ -949,6 +949,29 @@ def test_s3_transport_policy_rejects_bucket_arn_identity_mismatch(bucket_arn):
     assert "s3_secure_transport_bucket_unknown" in codes(result)
 
 
+def test_s3_transport_policy_reference_cannot_override_conflicting_bucket_identity():
+    document = plan()
+    policy = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") == "aws_s3_bucket_policy"
+    )
+    policy["values"]["bucket"] = "another-plan-bucket"
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": "aws_s3_bucket_policy.transport_policy",
+                "expressions": {"bucket": {"references": ["aws_s3_bucket.bucket.id"]}},
+            }
+        ]
+    }
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_secure_transport_policy_missing" in codes(result)
+
+
 @pytest.mark.parametrize(
     "mutation",
     [

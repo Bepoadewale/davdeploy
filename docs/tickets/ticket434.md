@@ -65,9 +65,9 @@ on the implementation commit.
 
 ## Tests / validation performed
 
-- Focused generated-plan policy tests: 220 passed.
+- Focused generated-plan policy tests: 221 passed.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
-  1,344 passed; one existing Starlette/httpx deprecation warning.
+  1,345 passed; one existing Starlette/httpx deprecation warning.
 - Documentation convention checks passed for PR #434.
 - `git diff --check` passed.
 - `terraform fmt -check -recursive` passed.

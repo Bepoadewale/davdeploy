@@ -779,8 +779,11 @@ def _check_s3_secure_transport(
             policy_bucket_arn = _s3_bucket_arn(
                 policy_bucket, policy_bucket, expected_region
             )
-            if policy_bucket_arn == bucket_arn or _references_resource(
+            policy_references_bucket = _references_resource(
                 configured_references.get(policy.get("address"), ()), address
+            )
+            if policy_bucket_arn == bucket_arn or (
+                policy_bucket is None and policy_references_bucket
             ):
                 matches.append(policy)
 
