@@ -20,9 +20,9 @@ hosted control plane was last read-only checked on 2026-11-18: API and worker
 Lambda package hashes and modification times were unchanged from the prior
 check, `/healthz` returned HTTP 200, and the apply, credential-broker, and role
 onboarding environment flags were absent. These source changes are not
-deployed. PR #399 is open/draft at `d8ef857517f7e78e5e38d0a3e1ebf0462d29ccb5`,
+deployed. PR #399 is open/draft at `ca303d4ad413b69713fc6f6eb7be5934c8de8e88`,
 based on current `main`. Its latest evidence update passed all seven hosted
-checks in run `44240154810`.
+checks in run `44259744310`.
 Apply and credential gates remain disabled. No Nova-hosted customer workload
 or hosted apply evidence is available. The platform account was authorized
 for an isolated direct-Terraform smoke test; that test is recorded in
@@ -129,7 +129,8 @@ for an isolated direct-Terraform smoke test; that test is recorded in
   issuance has occurred. No apply CodeBuild or Nova customer workload has run.
 - Source verification is strong but not hosted evidence: local `make verify`
   passed 1,494 tests; the focused exact-plan apply suite passed 84; fresh-head
-  CI run `44258954947` passed all seven checks on `2319601e6e30981a5674d5514456c12f495de5f3`.
+  CI run `44259744310` passed all seven checks on
+  `ca303d4ad413b69713fc6f6eb7be5934c8de8e88`.
   The existing full local clean-room proof predates this recovery change; the
   current code commit's fresh-runner `local-e2e` passed in run `44257747819`.
 - Trusted pricing remains limited to the supported resource/settings matrix.
