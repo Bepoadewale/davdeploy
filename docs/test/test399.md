@@ -625,3 +625,52 @@ and cannot authorize a replacement dispatch.
   recovery change; existing retained clean-room artifacts were left intact.
 
 No Nova customer workload has been applied or certified by this source test.
+
+## Customer-side App Runner attempt — 2026-11-18
+
+At the user's direction, the same AWS account was used as an isolated customer
+target, without using the hosted API, its Terraform backend, its worker, or its
+runtime. The account guard verified `654654474502` in `us-east-1`. A temporary
+copy of `infrastructure/terraform/customer-workload-app-runner-pilot` used
+local Terraform state under
+`/private/tmp/davdeploy-customer-e2e-20261118-a1`; it did not use the platform
+state bucket or lock table.
+
+### Provisioning and service attempt
+
+- Saved customer foundation plan: 21 adds, 0 changes, 0 destroys. Monitored
+  create run `nova-customer-test-create-20261118-a1` used Terraform PID `73672`
+  and supervisor PID `73671`, exited 0, and added all 21 resources. Log:
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-test-create-20261118-a1.log`.
+- The new ECR repository was tagged with the run identifier. A minimal
+  `/healthz` image was built from an isolated local source commit
+  `6d8538f501997c129a80ff6933ef1cbee508822d`; the final ECR image digest was
+  `sha256:eddd97f1a6675180f0f90f7e0b9f004b7cf71dc0c9d8044e8140760f223df869`.
+  A host-local HTTP check returned `{"status":"ok"}`. The container-local
+  check did not return a health response, so this is not container runtime
+  health evidence.
+- The saved service plan proposed one App Runner service and in-place source
+  evidence tag updates on the 15 foundation resources; it proposed no
+  destroys. Monitored run `nova-customer-test-service-20261118-a1` exited 1.
+  AWS rejected `CreateService` with HTTP 400 `InvalidRequestException`:
+  “Account 654654474502 can't create new App Runner services.” The service
+  never became available and the image was not health-checked in AWS. Log:
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-test-service-20261118-a1.log`.
+
+### Teardown and independent absence
+
+- After the user's authorization, a saved destroy plan listed only the 21
+  customer-test resources. Monitored execution applied that exact plan as
+  `nova-customer-test-destroy-20261118-a1`, using Terraform PID `77809` and
+  supervisor PID `77808`. It exited 0 with 0 added, 0 changed, and 21
+  destroyed. The NAT gateway deletion took 30 minutes 18 seconds. Log:
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-test-destroy-20261118-a1.log`.
+- Independent AWS queries returned no matching customer VPC, subnets, NAT
+  gateway, App Runner service or connector, ECR repository, log group, or
+  test roles. Local `terraform state list` was empty and `terraform output
+  -json` returned `{}`.
+- The hosted control plane and its state, runtime, and queues were not used or
+  changed. This was direct account-side Terraform, not a Nova-generated or
+  hosted apply. AWS's account-level App Runner restriction prevented the
+  workload health step; no Nova customer workload has been applied or
+  certified.

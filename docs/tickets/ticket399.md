@@ -772,3 +772,19 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   `1a03a577a6420e5f33ef40d44d2fd4432f090334`, including `local-e2e` and
   `cloud-contracts`. Existing retained local clean-room artifacts were not
   cleaned up.
+
+### Customer-side AWS attempt — 2026-11-18
+
+- At the user's direction, a fresh same-account customer sandbox was created
+  with isolated local Terraform state. The hosted control plane and its state,
+  runtime, and queues were not used or changed.
+- Terraform create run `nova-customer-test-create-20261118-a1` succeeded with
+  21 resources. The follow-up App Runner service attempt failed because AWS
+  returned `Account 654654474502 can't create new App Runner services`; no
+  service health or hosted Nova execution was established.
+- After the user's explicit cleanup authorization, the exact 21-resource
+  destroy plan succeeded in run `nova-customer-test-destroy-20261118-a1`.
+  Independent AWS absence checks passed and local Terraform state is empty.
+- Full execution detail and limitations are recorded in
+  `docs/test/test399.md`. PR #399 remains draft; this direct customer-account
+  attempt does not meet its hosted Nova apply/lifecycle acceptance gates.
