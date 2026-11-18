@@ -18,7 +18,9 @@ PR #433 added CloudFront custom-origin TLS checks; merged-main CI run
 `44214917939` passed all seven checks. The hosted control plane remains on PR
 #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`; these source changes are
 not deployed. PR #399 remains open/draft, synchronized with current `main` in
-merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`; its new CI is pending.
+merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`; synchronized head
+`0d4d584c4da63ad101854087956f2d16ad94245b` passed all seven checks in run
+`44215860757`.
 Apply and credential gates remain disabled. No customer target, Nova customer
 workload, or hosted apply evidence is available. The protected untracked
 `--only-show-errors` and `.venv-pr399/` must remain untouched.
@@ -694,4 +696,4 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
 
 - PR #399 is synchronized with backend `main` `9bef966a474d059b2d7e9d123da858707628b07b` through merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`. The merge preserves the account-bound S3/SQS policy checks and adds PR #432/#433's CloudFront viewer/origin TLS rules.
 - Focused generated-plan policy tests passed (232); full `make verify` passed (1,442 tests). Documentation conventions, `git diff --check`, and recursive Terraform formatting passed.
-- PR #399 remains open/draft with apply and credential gates disabled. Fresh-head GitHub checks are pending. No AWS, Terraform, hosted runtime, customer credential, or customer workload operation occurred.
+- PR #399 remains open/draft with apply and credential gates disabled. All seven checks passed on synchronized head `0d4d584c4da63ad101854087956f2d16ad94245b` in run `44215860757`. No AWS, Terraform, hosted runtime, customer credential, or customer workload operation occurred.
