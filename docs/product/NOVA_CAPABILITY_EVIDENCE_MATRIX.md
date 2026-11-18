@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `b7c15b4940c9a059be8964abff2187f0f05947e7`
-(PR #429), 2026-11-18; hosted runtime remains at PR #420 commit
+Status snapshot: backend `main` at `aef34c0cd6f5fc8a4e87a671246697061f9e9210`
+(PR #430), 2026-11-18; hosted runtime remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`. PR #413 merged the expanded
 coverage ledger. The hosted control plane remains on pre-PR #422 source, using saved-plan apply
 [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -25,11 +25,13 @@ records the supported Terraform provider-schema format and canonical digest of
 the full schema document in plan evidence. These changes are source-only and
 are not deployed. Unsupported material costs and settings still block approval.
 Draft PR #399 remains open at
-`86584d491a0208cd42c7d91bfd63b9f21f4db09f`, based on current `main`; its latest
-CI run [44201512025](https://github.com/Bepoadewale/davdeploy/actions/runs/44201512025)
+`81eabbbccb5f47bbb5e0f6929872d675c8a6ee10`, based on current `main`; its latest
+CI run [44204640591](https://github.com/Bepoadewale/davdeploy/actions/runs/44204640591)
 passed all seven checks. Apply gates remain disabled, and the customer apply
 role, credential issuance, hosted apply, health, recovery, and cleanup are
-unverified.
+unverified. The last read-only AWS inventory, on 2026-11-17, found no tested
+SageMaker endpoint/model/configuration and no active Terraform operation; the
+inactive Batch definitions and lineage evidence remain preserved.
 
 PR #422 merged as `8c84827` and adds source-only verification of the customer
 plan role's exact trust and bounded inline policy profile during connection

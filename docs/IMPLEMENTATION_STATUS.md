@@ -1,7 +1,7 @@
 # Implementation Status
 
-Status snapshot: 2026-11-17. Backend `main` is
-`8c7f1deab9e9b9865a25d0fffaf87be2066b8ea4` (PR #423); hosted runtime remains
+Status snapshot: 2026-11-18. Backend `main` is
+`aef34c0cd6f5fc8a4e87a671246697061f9e9210` (PR #430); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -15,18 +15,19 @@ Mainline includes the plan-only runner, tenant-scoped Terraform state, plan
 review, proposal-bound verification requirements, exact workspace artifacts,
 bounded actual-plan policy, and revision-bound regional pricing for selected
 resource families. PRs #417–#420 add safe reviewable protected plan summaries.
-The 26-capability/30-root coverage ledger from PR #413 is merged. Draft PR #424
-adds source-only pricing for one bounded Aurora PostgreSQL Serverless v2
-writer shape; it is not merged or deployed. Pricing coverage remains partial;
-unknown or unpriced material resources block approval.
+PR #424's bounded Aurora PostgreSQL Serverless v2 pricing and PRs #425–#429's
+Nova provenance/schema evidence are merged in backend source but are not part
+of deployed PR #420. PR #430 refreshed the 26-capability/30-root evidence map.
+Pricing coverage remains partial; unknown or unpriced material resources block
+approval.
 
 Draft PR #399 is open at
-`f7f97d877fb086aaec4ad0d07febeefa0f2601ce`. Source includes the separate apply
-credential/input routes, isolated exact-artifact staging, fixed apply worker,
-and result reconciliation. CI run
-[44061663988](https://github.com/Bepoadewale/davdeploy/actions/runs/44061663988)
+`81eabbbccb5f47bbb5e0f6929872d675c8a6ee10`, based on main `aef34c0`. It contains
+the separate apply credential/input routes, isolated exact-artifact staging,
+fixed apply worker, result reconciliation, and simulator preflight. Current-head
+CI run [44204640591](https://github.com/Bepoadewale/davdeploy/actions/runs/44204640591)
 passed all seven checks. Apply and credential gates remain disabled. The
-dedicated customer apply role, its effective least-privilege permissions, and
+designated customer apply role, its effective least-privilege permissions, and
 the hosted customer apply/health/recovery/cleanup cycle remain unverified. No
 Nova customer plan or workload has been applied, operated, or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
@@ -37,12 +38,13 @@ plan-role trust and the bounded inline policy profile, repeated before plan
 credentials are issued. The change is not deployed. This is not full effective
 AWS permission attestation, and no customer plan has run.
 
-Read-only inventory in account `654654474502`, region `us-east-1`, found no
-SageMaker endpoint, model, or endpoint configuration; four tagged DavDeploy
-Batch job definitions are inactive; one SageMaker lineage action and context
-remain as retained evidence. The Terraform run monitor is empty and no
-Terraform operation is active. Preserve the protected untracked `--only-show-errors`
-file, `.venv-pr399/`, and lineage evidence.
+Last read-only inventory on 2026-11-17 in account `654654474502`, region
+`us-east-1`, found no tested SageMaker endpoint, model, or endpoint
+configuration; four tagged DavDeploy Batch job definitions were inactive; one
+SageMaker lineage action/context and associated evidence remain preserved. The
+Terraform monitor was empty and no Terraform operation was active at that
+check. Preserve the protected untracked `--only-show-errors` file,
+`.venv-pr399/`, and lineage evidence.
 
 ## Executed locally
 
