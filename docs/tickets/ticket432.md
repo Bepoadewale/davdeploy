@@ -53,13 +53,16 @@ WAF/cache safety, pricing, or workload health.
 - [x] Findings contain no plan values or sensitive content.
 - [x] Focused policy tests, full verification, docs conventions, and diff checks
   pass.
-- [ ] All seven required CI checks pass on the implementation commit.
+- [x] All seven required CI checks pass on implementation commit
+  `f73835de1ece9a482003fa00814fdbf31cd05b45` in run `44208891956`.
 
 ## Acceptance status
 
-Implementation is complete and locally verified. This is a source policy
-change only; no AWS distribution, Terraform plan/apply, hosted runtime, or
-customer workload was changed.
+Implementation is complete and verified. All seven required checks passed on
+implementation commit `f73835de1ece9a482003fa00814fdbf31cd05b45` in run
+`44208891956`. The ticket-only follow-up will receive fresh CI. This is a
+source policy change only; no AWS distribution, Terraform plan/apply, hosted
+runtime, or customer workload was changed.
 
 ## Tests / validation performed
 
@@ -69,7 +72,9 @@ customer workload was changed.
 - `GITHUB_PR_NUMBER=432 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
   passed.
 - `git diff --check`: passed.
-- Final-head GitHub checks are pending.
+- Final-head GitHub CI run `44208891956` passed all seven checks on
+  `f73835de1ece9a482003fa00814fdbf31cd05b45`; the ticket-only follow-up is
+  pending.
 - No `docs/test/test432.md` is required because no customer workload was part of
   this package.
 
