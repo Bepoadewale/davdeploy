@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-17.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-18.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -129,6 +129,8 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_cloudfront_distribution": (
         ("default_cache_behavior", "viewer_protocol_policy"),
         ("ordered_cache_behavior", "viewer_protocol_policy"),
+        ("origin", "custom_origin_config", "origin_protocol_policy"),
+        ("origin", "custom_origin_config", "origin_ssl_protocols"),
     ),
     "aws_network_acl": (("ingress",),),
     "aws_default_network_acl": (("ingress",),),
@@ -229,6 +231,7 @@ def _evaluate(
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings, expected_account_id)
     _check_cloudfront_viewer_tls(resources, findings)
+    _check_cloudfront_origin_tls(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
@@ -806,7 +809,7 @@ def _check_cloudfront_viewer_tls(
                     )
                     continue
                 viewer_policy = behavior.get("viewer_protocol_policy")
-                if viewer_policy in secure_policies:
+                if isinstance(viewer_policy, str) and viewer_policy in secure_policies:
                     continue
                 if viewer_policy == "allow-all":
                     _deny(
@@ -822,6 +825,103 @@ def _check_cloudfront_viewer_tls(
                         address,
                         "The plan does not make a CloudFront viewer protocol policy clear.",
                     )
+
+
+def _check_cloudfront_origin_tls(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    secure_origin_policies = {"https-only", "match-viewer"}
+    for item in resources:
+        if item.get("type") != "aws_cloudfront_distribution":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        origins = values.get("origin") if isinstance(values, dict) else None
+        if not isinstance(origins, list) or not origins:
+            _deny(
+                findings,
+                "cloudfront_origin_settings_unknown",
+                address,
+                "The plan does not make CloudFront origin protocol settings clear.",
+            )
+            continue
+
+        for origin in origins:
+            if not isinstance(origin, dict):
+                _deny(
+                    findings,
+                    "cloudfront_origin_settings_unknown",
+                    address,
+                    "The plan does not make every CloudFront origin protocol setting clear.",
+                )
+                continue
+
+            custom_configs = origin.get("custom_origin_config")
+            s3_configs = origin.get("s3_origin_config")
+            custom_absent = custom_configs is None or custom_configs == []
+            s3_absent = s3_configs is None or s3_configs == []
+            if (
+                isinstance(custom_configs, list)
+                and len(custom_configs) == 1
+                and s3_absent
+            ):
+                custom = custom_configs[0]
+                if not isinstance(custom, dict):
+                    _deny(
+                        findings,
+                        "cloudfront_origin_settings_unknown",
+                        address,
+                        "The plan does not make a CloudFront custom origin protocol setting clear.",
+                    )
+                    continue
+                protocol_policy = custom.get("origin_protocol_policy")
+                ssl_protocols = custom.get("origin_ssl_protocols")
+                if protocol_policy == "http-only":
+                    _deny(
+                        findings,
+                        "cloudfront_cleartext_origin_access",
+                        address,
+                        "A CloudFront custom origin can receive requests over cleartext HTTP.",
+                    )
+                elif (
+                    not isinstance(protocol_policy, str)
+                    or protocol_policy not in secure_origin_policies
+                ):
+                    _deny(
+                        findings,
+                        "cloudfront_origin_protocol_unknown",
+                        address,
+                        "The plan does not make a CloudFront custom origin protocol policy clear.",
+                    )
+                if ssl_protocols != ["TLSv1.2"]:
+                    _deny(
+                        findings,
+                        "cloudfront_origin_tls_protocol_weak_or_unknown",
+                        address,
+                        "A CloudFront custom origin must allow only TLS 1.2.",
+                    )
+                continue
+
+            if (
+                isinstance(s3_configs, list)
+                and len(s3_configs) == 1
+                and custom_absent
+            ):
+                if not isinstance(s3_configs[0], dict):
+                    _deny(
+                        findings,
+                        "cloudfront_origin_settings_unknown",
+                        address,
+                        "The plan does not make a CloudFront S3 origin setting clear.",
+                    )
+                continue
+
+            _deny(
+                findings,
+                "cloudfront_origin_settings_unknown",
+                address,
+                "The plan uses an unsupported or ambiguous CloudFront origin configuration.",
+            )
 
 
 def _check_iam(
