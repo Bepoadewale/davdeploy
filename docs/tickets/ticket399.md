@@ -115,34 +115,27 @@ for an isolated direct-Terraform smoke test; that test is recorded in
 
 ## Acceptance status
 
-- In progress on draft PR #399. The pure preflight contract is implemented;
-  exact encrypted, version-pinned artifact download and bounded workspace
-  restoration are implemented. Source now also contains a disabled-by-default
-  separate apply CodeBuild project, isolated service role, restricted artifact
-  paths, an IAM-authenticated credential route permission, fixed run-ID-only
-  dispatch policy, and explicit StartBuild override denies. A fixed worker and
-  CodeBuild buildspec are now present in source, but remain behind the default-
-  off project and credential gates. They have not run against AWS. Dedicated
-  customer role setup/effective permissions and callback result verification
-  remain incomplete in the committed source at the time of this snapshot.
-  The role also has project/build-scoped permission and trusted project
-  settings for remote-state credential bootstrap, which exact-plan apply needs;
-  The state API now has an apply-run authorization path, but no apply-request
-  API or caller creates those records yet. Terraform validate passed for both affected roots, and focused apply
-  contract/workspace/infrastructure tests passed (19 tests). These checks do
-  not prove AWS IAM behavior or hosted apply.
-- The state-credential path rechecks the immutable approval/artifact,
-  pricing-complete marker, current administrator roles, latest revision and
-  expiry, verified customer account, target, and tenant-scoped remote-state
-  digest before issuing or reusing state credentials. Credentials bind both
-  the source plan run and apply run, and become unusable when that exact
-  CodeBuild build is no longer active. Runtime gates remain disabled, and no
-  apply-request API or worker creates these records yet.
-- Read-only apply-run detail and project-history routes expose the durable
-  record with organization/project/revision scoping, requester/admin
-  visibility, bounded cursors, and a fixed safe field projection. No route
-  creates or dispatches apply runs; these routes have no real customer
-  execution data until dispatch and lifecycle observation are implemented.
+- In progress on draft PR #399. Source includes the administrator-authorized
+  apply-request API, durable run records and worker leases, fixed CodeBuild
+  dispatch, exact saved-plan/workspace restoration, tenant-scoped state
+  bootstrap, separately gated customer credentials, apply-role onboarding and
+  profile verification, an executable fixed worker, encrypted immutable result
+  writing, and result reconciliation. The apply-build lookup now treats
+  malformed or incomplete CodeBuild responses as uncertain instead of
+  permitting a duplicate dispatch.
+- Apply and credential-broker gates remain disabled in hosted runtime. The
+  apply-role CloudFormation template validates, but no dedicated customer role
+  is installed and no live effective-permission check or customer credential
+  issuance has occurred. No apply CodeBuild or Nova customer workload has run.
+- Source verification is strong but not hosted evidence: local `make verify`
+  passed 1,494 tests; the focused exact-plan apply suite passed 84; fresh-head
+  CI run `44258954947` passed all seven checks on `2319601e6e30981a5674d5514456c12f495de5f3`.
+  The existing full local clean-room proof predates this recovery change; the
+  current code commit's fresh-runner `local-e2e` passed in run `44257747819`.
+- Trusted pricing remains limited to the supported resource/settings matrix.
+  Unpriced or unsupported material resources still block approval. The direct
+  platform-account S3 smoke is separate from Nova and does not prove hosted
+  approval, apply, health, recovery, destroy, or independent absence.
 
 ### Apply credential broker — 2026-11-17
 
