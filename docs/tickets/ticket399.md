@@ -214,6 +214,21 @@ workload, or hosted apply evidence is available. The protected untracked
 - The PR is still draft and apply/credential gates remain disabled. No
   customer target, hosted apply, customer workload, or lifecycle proof is
   available. The hosted result validates source integration only.
+
+### Durable apply worker wake-up — 2026-11-18
+
+- Source commit `5512c5d88c36a8d1d3ef606b7bfd1176d9a8f5c8` now sends the
+  non-sensitive SQS wake-up after the apply-run transaction commits. An
+  idempotent retry also wakes an existing run while it is still `QUEUED`, so
+  a failed message send can be retried without creating another run. The
+  durable database remains the worker's source of truth.
+- The worker wake helper emits messages only for queued runs. Focused wake-up
+  and default-off worker tests passed (2 tests); full `make verify` passed
+  (1,479 tests), including Ruff, Actions configuration, OpenAPI snapshot, and
+  Compose validation. No customer credentials, CodeBuild runs, AWS applies, or
+  customer workload were exercised.
+- This closes a source-level queue wake-up gap. It does not enable the worker
+  or establish hosted apply, application health, recovery, or cleanup proof.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and
