@@ -539,3 +539,62 @@ Fresh-head hosted CI is required after push.
   network `davdeploy-pr399-cleanroom-20261117_default`, database volume
   `davdeploy-pr399-cleanroom-20261117_davdeploy-postgres`, and project images
   remain retained.
+
+## Platform-account private S3 smoke — 2026-11-18
+
+At the user's direction, AWS account `654654474502`, region `us-east-1`, was
+used as the test target. The hosted control plane, its Terraform state, and its
+runtime were not changed. This was a direct Terraform smoke test using profile
+`ai-platform-pilot-key`, not a Nova-generated or hosted apply. No dedicated
+`davdeployNovaApply-*` role or CodeBuild runner was used.
+
+The source root `infrastructure/terraform/customer-workload-private-s3` was
+copied to `/private/tmp/davdeploy-platform-account-test-20261118-1d8d82b4b8d9`.
+The copy's S3 backend declaration was removed so it used isolated local state;
+the DavDeploy Terraform state bucket and lock table were not used. The unique
+connection/project tags were `nova-test-1d8d82b4b8d94ca5` and
+`private-s3-smoke-1d8d82b4b8d94ca5`. The generated bucket was
+`davdeploy-654654474502-us-east-1-32a75065270f7d5ca247`.
+
+### Create and live checks
+
+- Saved Terraform plan: 7 adds, 0 changes, 0 destroys. The account guard read
+  caller account `654654474502` before creating resources.
+- Monitored create run `nova-platform-s3-create-20261118-1d8d82b4b8d9`:
+  Terraform PID `17594`, supervisor PID `17593`, exit code 0. Log:
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-platform-s3-create-20261118-1d8d82b4b8d9.log`.
+- AWS readback confirmed all four public-access-block settings `true`, default
+  encryption `AES256`, object ownership `BucketOwnerEnforced`, versioning
+  `Enabled`, and `PolicyStatus.IsPublic=false`.
+- A 33-byte object uploaded and downloaded over HTTPS with expected bucket
+  owner `654654474502`. Both local file SHA-256 values matched:
+  `2d5d5368503ca5b6c5e8832d115b58e538cdd7776cac80b2fb99cce7bff2be16`.
+  S3 reported `AES256`. The exact object version was deleted before bucket
+  teardown; `list-object-versions` then returned no versions or delete markers.
+
+### Cleanup and absence
+
+- A saved destroy plan contained only the 7 test resources. The first
+  monitored attempt used `terraform destroy <saved-plan>` and failed before
+  mutation because Terraform requires `terraform apply <saved-destroy-plan>`.
+- The same saved plan then succeeded through monitored run
+  `nova-platform-s3-destroyplan-apply-20261118-1d8d82b4b8d9`: Terraform PID
+  `22831`, supervisor PID `22830`, exit code 0; 0 added, 0 changed, 7
+  destroyed. Log:
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-platform-s3-destroyplan-apply-20261118-1d8d82b4b8d9.log`.
+- Independent `s3api list-buckets` lookup returned no matching bucket.
+  `terraform state list` returned no resources and `terraform output -json`
+  returned `{}`.
+- The first failed monitor record is
+  `nova-platform-s3-destroy-20261118-1d8d82b4b8d9` (exit code 1); its log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-platform-s3-destroy-20261118-1d8d82b4b8d9.log`
+  records only the command-shape error. The successful create/destroy run
+  records and isolated local plans/state were retained.
+
+### Limits
+
+This verifies the checked-in private-S3 Terraform root against live AWS for
+this one isolated resource set. It does not verify Nova proposal generation,
+trusted pricing, hosted approval, the dedicated apply role, CodeBuild
+credential brokering, the Nova worker, application health, or recovery. No
+Nova customer workload is claimed as applied or certified.

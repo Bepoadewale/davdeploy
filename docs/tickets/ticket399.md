@@ -22,9 +22,11 @@ deployed. PR #399 remains open/draft. Its branch now includes current `main`
 through merge commit `f677d7a5f36a95472f704f9a15dfd4a7ac6b3fff`. The
 synchronized source head passed local verification and all seven hosted checks;
 the follow-up evidence update also passed all seven hosted checks.
-Apply and credential gates remain disabled. No customer target, Nova customer
-workload, or hosted apply evidence is available. The protected untracked
-`--only-show-errors` and `.venv-pr399/` must remain untouched.
+Apply and credential gates remain disabled. No Nova-hosted customer workload
+or hosted apply evidence is available. The platform account was
+authorized for an isolated direct-Terraform smoke test; that test is recorded
+in `docs/test/test399.md` and is not Nova-hosted evidence. The protected
+untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
 
 ## Research / references used
 
@@ -229,6 +231,25 @@ workload, or hosted apply evidence is available. The protected untracked
   customer workload were exercised.
 - This closes a source-level queue wake-up gap. It does not enable the worker
   or establish hosted apply, application health, recovery, or cleanup proof.
+
+### Platform-account resource smoke — 2026-11-18
+
+- At the user's direction, account `654654474502` was used as the isolated
+  test target while the hosted control plane remained untouched. A copy of
+  `customer-workload-private-s3` used local Terraform state and the existing
+  AWS profile; no customer role, hosted API, Nova runner, or control-plane
+  state was used.
+- The test created a uniquely tagged private S3 bucket from a saved plan
+  (7 adds, 0 changes, 0 destroys), verified its public-access block, AES256
+  encryption, owner-enforced ownership, versioning, non-public policy status,
+  and an HTTPS object round-trip, then applied a saved destroy plan (7
+  destroys). The initial `terraform destroy <saved-plan>` invocation was
+  rejected before mutation; the same plan succeeded through monitored
+  `terraform apply <saved-destroy-plan>`.
+- Independent account inventory found the bucket absent after cleanup, and
+  the isolated Terraform state has no remaining resources. See
+  `docs/test/test399.md` for run IDs, logs, and exact evidence. This direct
+  smoke test is not a Nova-generated hosted customer workload or certification.
 - PR head `d239e37` (2026-11-15) added a fixed-project CodeBuild
   dispatcher with run-ID-only overrides, bounded build reconciliation, and
   explicit uncertain outcomes. It is not called by the product service and
