@@ -53,6 +53,16 @@ def s3_secure_transport_policy(bucket_name):
     )
 
 
+def s3_default_encryption(algorithm="AES256"):
+    return [
+        {
+            "apply_server_side_encryption_by_default": [
+                {"sse_algorithm": algorithm}
+            ]
+        }
+    ]
+
+
 def proposal(resources=None, *, backup_required=False):
     resources = resources or [
         {
@@ -94,6 +104,21 @@ def proposal(resources=None, *, backup_required=False):
                 "policy": s3_secure_transport_policy("private-plan-bucket"),
             },
             "rationale": "Deny unencrypted requests while preserving AWS service access.",
+        },
+        {
+            "resource_id": "bucket-encryption",
+            "resource_type": "aws_s3_bucket_server_side_encryption_configuration",
+            "name": "encryption",
+            "arguments": {
+                "bucket": {
+                    "kind": "resource_reference",
+                    "resource_id": "bucket",
+                    "output_name": "id",
+                    "value_type": "string",
+                },
+                "rule": s3_default_encryption(),
+            },
+            "rationale": "Declare the default server-side encryption mode for stored objects.",
         },
     ]
     if resources[0]["resource_type"] == "aws_s3_bucket":
@@ -164,12 +189,24 @@ def plan(resources=None, changes=None, **overrides):
                 "policy": s3_secure_transport_policy("private-plan-bucket"),
             },
         ),
+        resource(
+            "aws_s3_bucket_server_side_encryption_configuration.encryption",
+            "aws_s3_bucket_server_side_encryption_configuration",
+            {
+                "bucket": "private-plan-bucket",
+                "rule": s3_default_encryption(),
+            },
+        ),
         resource("terraform_data.account_guard", "terraform_data", {"input": None}),
     ]
     changes = changes or [
         change("aws_s3_bucket.bucket", "aws_s3_bucket"),
         change("aws_s3_bucket_public_access_block.public_access", "aws_s3_bucket_public_access_block"),
         change("aws_s3_bucket_policy.transport_policy", "aws_s3_bucket_policy"),
+        change(
+            "aws_s3_bucket_server_side_encryption_configuration.encryption",
+            "aws_s3_bucket_server_side_encryption_configuration",
+        ),
         change("terraform_data.account_guard", "terraform_data"),
     ]
     document = {
@@ -228,6 +265,26 @@ def plan_with_s3_transport_policy(policy):
         item for item in proposal_resources if item["resource_id"] == "secure-transport-policy"
     )
     proposal_policy["arguments"]["policy"] = policy
+    return document, proposal(proposal_resources)
+
+
+def plan_with_s3_default_encryption(rule, *, configured_bucket="private-plan-bucket"):
+    document = plan()
+    encryption_resource = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") == "aws_s3_bucket_server_side_encryption_configuration"
+    )
+    encryption_resource["values"]["bucket"] = configured_bucket
+    encryption_resource["values"]["rule"] = rule
+    proposal_resources = [
+        item.model_dump(mode="json") for item in proposal().resources
+    ]
+    proposal_encryption = next(
+        item for item in proposal_resources if item["resource_id"] == "bucket-encryption"
+    )
+    proposal_encryption["arguments"]["bucket"] = configured_bucket
+    proposal_encryption["arguments"]["rule"] = rule
     return document, proposal(proposal_resources)
 
 
@@ -560,6 +617,135 @@ def test_secure_composed_s3_plan_is_eligible_only_for_human_review():
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert result.human_approval_required is True
     assert result.findings == ()
+
+
+@pytest.mark.parametrize("algorithm", ["AES256", "aws:kms", "aws:kms:dsse"])
+def test_s3_default_encryption_accepts_supported_algorithms(algorithm):
+    document, proposal_value = plan_with_s3_default_encryption(
+        s3_default_encryption(algorithm)
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert "s3_default_encryption_algorithm_unsupported" not in codes(result)
+    assert "s3_default_encryption_algorithm_unknown" not in codes(result)
+
+
+def test_planned_s3_bucket_requires_one_same_plan_encryption_configuration():
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") != "aws_s3_bucket_server_side_encryption_configuration"
+    ]
+    document["resource_changes"] = [
+        item
+        for item in document["resource_changes"]
+        if item.get("type") != "aws_s3_bucket_server_side_encryption_configuration"
+    ]
+    proposal_resources = [
+        item.model_dump(mode="json")
+        for item in proposal().resources
+        if item.resource_id != "bucket-encryption"
+    ]
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_default_encryption_configuration_missing" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        [],
+        [{"apply_server_side_encryption_by_default": []}],
+        [
+            {"apply_server_side_encryption_by_default": [{"sse_algorithm": "AES256"}]},
+            {"apply_server_side_encryption_by_default": [{"sse_algorithm": "aws:kms"}]},
+        ],
+        [{"apply_server_side_encryption_by_default": [{"sse_algorithm": None}]}],
+    ],
+)
+def test_s3_default_encryption_requires_one_complete_known_rule(rule):
+    document, proposal_value = plan_with_s3_default_encryption(rule)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert {
+        "s3_default_encryption_configuration_incomplete",
+        "s3_default_encryption_algorithm_unknown",
+    } & codes(result)
+
+
+def test_s3_default_encryption_rejects_unsupported_algorithm_without_echoing_value():
+    marker = "private-unapproved-encryption-marker"
+    document, proposal_value = plan_with_s3_default_encryption(
+        s3_default_encryption(marker)
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_default_encryption_algorithm_unsupported" in codes(result)
+    assert marker not in repr(result)
+
+
+def test_s3_default_encryption_rejects_duplicate_configurations():
+    document = plan()
+    duplicate_address = (
+        "aws_s3_bucket_server_side_encryption_configuration.duplicate"
+    )
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(
+            duplicate_address,
+            "aws_s3_bucket_server_side_encryption_configuration",
+            {"bucket": "private-plan-bucket", "rule": s3_default_encryption()},
+        )
+    )
+    document["resource_changes"].append(
+        change(duplicate_address, "aws_s3_bucket_server_side_encryption_configuration")
+    )
+    proposal_resources = [
+        item.model_dump(mode="json") for item in proposal().resources
+    ]
+    proposal_resources.append(
+        {
+            "resource_id": "duplicate-encryption",
+            "resource_type": "aws_s3_bucket_server_side_encryption_configuration",
+            "name": "duplicate",
+            "arguments": {
+                "bucket": "private-plan-bucket",
+                "rule": s3_default_encryption(),
+            },
+            "rationale": "Duplicate encryption configuration regression.",
+        }
+    )
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_default_encryption_configuration_ambiguous" in codes(result)
+
+
+def test_s3_default_encryption_reference_cannot_override_conflicting_bucket_identity():
+    document, proposal_value = plan_with_s3_default_encryption(
+        s3_default_encryption(), configured_bucket="another-plan-bucket"
+    )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": "aws_s3_bucket_server_side_encryption_configuration.encryption",
+                "expressions": {"bucket": {"references": ["aws_s3_bucket.bucket.id"]}},
+            }
+        ]
+    }
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_default_encryption_configuration_missing" in codes(result)
 
 
 @pytest.mark.parametrize(
@@ -1544,6 +1730,22 @@ def test_unresolved_kms_key_reference_is_outside_encryption_algorithm_unknown_ga
         unknowns,
         ("rule", "apply_server_side_encryption_by_default", "sse_algorithm"),
     )
+
+
+def test_unknown_s3_default_encryption_rule_is_denied():
+    document = plan()
+    encryption_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type")
+        == "aws_s3_bucket_server_side_encryption_configuration"
+    )
+    encryption_change["change"]["after_unknown"] = {"rule": True}
+
+    result = evaluate(document)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 def test_malformed_unknown_metadata_fails_closed():
@@ -2754,6 +2956,11 @@ def test_delete_replacement_and_sensitive_change_require_human_review():
         change("aws_s3_bucket.bucket", "aws_s3_bucket", ("delete",), before_sensitive={"secret": True}),
         change("aws_s3_bucket_public_access_block.public_access", "aws_s3_bucket_public_access_block"),
         change("aws_s3_bucket_policy.transport_policy", "aws_s3_bucket_policy", ("delete",)),
+        change(
+            "aws_s3_bucket_server_side_encryption_configuration.encryption",
+            "aws_s3_bucket_server_side_encryption_configuration",
+            ("delete",),
+        ),
         change("terraform_data.account_guard", "terraform_data"),
     ]
     result = evaluate(document)
