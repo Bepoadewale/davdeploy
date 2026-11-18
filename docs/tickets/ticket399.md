@@ -13,16 +13,15 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `602206ee1fd73b4582015ec30d2b5e472d72baf7` after PRs #422,
-#423, #413, and #424. PR #424 adds bounded Aurora Serverless v2 Standard
-writer pricing; it does not remove other unsupported or unpriced-resource
-blocks. PR #413's coverage ledger is merged. The hosted control plane remains
-on PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by
-plan run `43981566184` and apply run `43982396577`; these source changes are not
-deployed. PR #399 is open and draft; its latest synchronization with current
-`main` is merge commit `29957e14ce13fb7df7000f3e1a7244cbb1c5154f`. Apply gates
-remain disabled. No Nova customer workload has been applied. The protected
-untracked `--only-show-errors` and `.venv-pr399/` must remain untouched.
+Backend `main` is `9bef966a474d059b2d7e9d123da858707628b07b` after source-only
+PR #433 added CloudFront custom-origin TLS checks; merged-main CI run
+`44214917939` passed all seven checks. The hosted control plane remains on PR
+#420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`; these source changes are
+not deployed. PR #399 remains open/draft, synchronized with current `main` in
+merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`; its new CI is pending.
+Apply and credential gates remain disabled. No customer target, Nova customer
+workload, or hosted apply evidence is available. The protected untracked
+`--only-show-errors` and `.venv-pr399/` must remain untouched.
 
 ## Research / references used
 
@@ -690,3 +689,9 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   [S3 IAM resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html),
   [SQS cross-account access requirements](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-overview-of-managing-access.html),
   and [DynamoDB table/index IAM resources](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/iam-policy-specific-table-indexes.html).
+
+## 18 November 2026 synchronization after PR #433
+
+- PR #399 is synchronized with backend `main` `9bef966a474d059b2d7e9d123da858707628b07b` through merge commit `4e123069271add460e550ee8ebba17ed0d31a3a6`. The merge preserves the account-bound S3/SQS policy checks and adds PR #432/#433's CloudFront viewer/origin TLS rules.
+- Focused generated-plan policy tests passed (232); full `make verify` passed (1,442 tests). Documentation conventions, `git diff --check`, and recursive Terraform formatting passed.
+- PR #399 remains open/draft with apply and credential gates disabled. Fresh-head GitHub checks are pending. No AWS, Terraform, hosted runtime, customer credential, or customer workload operation occurred.
