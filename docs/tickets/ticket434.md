@@ -56,12 +56,14 @@ blocking AWS service principals.
 - [x] Findings do not expose plan values or sensitive content.
 - [x] Focused tests, full verification, documentation conventions, and diff
   checks pass.
-- [ ] All seven required PR checks pass on the final PR head.
+- [x] All seven required PR checks passed on implementation commit `bbb3b8e`;
+  CI for the ticket evidence update must also pass before merge.
 
 ## Acceptance status
 
-Implementation and local validation are complete. Final PR checks are pending
-on the implementation commit.
+Implementation and local validation are complete. All seven required PR checks
+passed on implementation commit `bbb3b8e` in run `44218592136`. The ticket
+evidence update will be checked on the final PR head before merge.
 
 ## Tests / validation performed
 
@@ -71,7 +73,9 @@ on the implementation commit.
 - Documentation convention checks passed for PR #434.
 - `git diff --check` passed.
 - `terraform fmt -check -recursive` passed.
-- Final PR CI checks remain pending after the implementation commit is pushed.
+- All seven required PR checks passed on `bbb3b8e` in run `44218592136`:
+  docs-conventions, python, policy, secrets, cloud-contracts, supply-chain, and
+  local-e2e. The ticket evidence update is pending final-head CI.
 
 ## Evidence files produced
 
