@@ -34,9 +34,9 @@ setting. Standard S3 origins use the already-enforced viewer HTTPS policy.
 Backend `main` is `5de5aff56159fa2968a8dcd3c31557cb955b0068` (PR #432,
 source-only viewer HTTPS policy). Hosted runtime remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`. PR #399 is open/draft and
-execution-gated off at `135176e1c5c4a55e8fff7c93c67278ba6a4655a6`; fresh CI is
-running in run `44211520776`. No Nova customer workload has been applied or
-certified.
+execution-gated off at `135176e1c5c4a55e8fff7c93c67278ba6a4655a6`; all seven
+checks passed in run `44211520776`. No Nova customer workload has been applied
+or certified.
 
 ## Work planned for the PR
 
@@ -52,30 +52,37 @@ certified.
 
 ## Acceptance criteria
 
-- [ ] Every custom origin is inspected; malformed or absent origin settings
+- [x] Every custom origin is inspected; malformed or absent origin settings
   fail closed.
-- [ ] `https-only` plus TLS 1.2 is eligible for human review.
-- [ ] `match-viewer` is accepted only alongside CloudFront viewer policies that
+- [x] `https-only` plus TLS 1.2 is eligible for human review.
+- [x] `match-viewer` is accepted only alongside CloudFront viewer policies that
   require HTTPS.
-- [ ] `http-only`, legacy TLS, missing TLS settings, and unknown values are
+- [x] `http-only`, legacy TLS, missing TLS settings, and unknown values are
   denied.
-- [ ] Findings do not expose plan values or sensitive content.
-- [ ] Focused tests, full verification, documentation conventions, and diff
+- [x] Findings do not expose plan values or sensitive content.
+- [x] Focused tests, full verification, documentation conventions, and diff
   checks pass.
 - [ ] All seven required PR checks pass on the final PR head.
 
 ## Acceptance status
 
-Ticket-first bootstrap only. Implementation and required validation have not
-started.
+Implementation and local validation are complete. Final-head GitHub checks are
+pending.
 
 ## Tests / validation performed
 
-Pending ticket-first documentation and diff checks.
+Focused `tests/test_generated_plan_policy.py`: 207 passed. Full verification
+with `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+1,331 passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed.
+Documentation conventions, `git diff --check`, and
+`terraform fmt -check -recursive` passed. The only output warning is the
+existing Starlette/httpx deprecation.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket433.md`
+- CloudFront origin policy implementation and generated-plan tests
+- Updated CloudFront rows in `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
 
 ## Boundaries
 
