@@ -52,11 +52,14 @@ remain preserved. This PR does not perform a new AWS inventory or mutation.
 - [x] AWS inventory claims have their 2026-11-17 check date and lineage evidence
   remains marked as retained.
 - [x] Documentation conventions and diff checks pass.
-- [ ] All seven required CI checks pass on the status reconciliation commit.
+- [x] All seven required CI checks pass on status reconciliation commit
+  `9cc8690c61aceeea5572c63374db9486a195e3f6` in run `44205925703`.
 
 ## Acceptance status
 
-Implementation is complete and documentation checks pass. This PR changes
+Implementation is complete and verified. All seven required checks passed on
+status reconciliation commit `9cc8690c61aceeea5572c63374db9486a195e3f6` in run
+`44205925703`. The ticket-only follow-up will receive fresh CI. This PR changes
 documentation snapshots only; no AWS, Terraform, or hosted runtime operation
 was performed.
 
@@ -65,7 +68,9 @@ was performed.
 - `GITHUB_PR_NUMBER=431 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
   passed.
 - `git diff --check`: passed.
-- Final-head GitHub checks are pending.
+- Final-head GitHub CI run `44205925703` passed all seven checks on
+  `9cc8690c61aceeea5572c63374db9486a195e3f6`; the ticket-only follow-up is
+  pending.
 - No `docs/test/test431.md` is required because no customer workload was part of
   this package.
 
