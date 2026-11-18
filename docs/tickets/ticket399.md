@@ -690,4 +690,3 @@ Next: implement and verify the executable fixed-project buildspec, then prove cr
   [S3 IAM resource ARNs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/security_iam_service-with-iam.html),
   [SQS cross-account access requirements](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-overview-of-managing-access.html),
   and [DynamoDB table/index IAM resources](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/iam-policy-specific-table-indexes.html).
-

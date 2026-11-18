@@ -539,4 +539,3 @@ Fresh-head hosted CI is required after push.
   network `davdeploy-pr399-cleanroom-20261117_default`, database volume
   `davdeploy-pr399-cleanroom-20261117_davdeploy-postgres`, and project images
   remain retained.
-

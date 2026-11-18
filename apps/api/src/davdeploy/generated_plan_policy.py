@@ -126,6 +126,10 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("point_in_time_recovery", "enabled"),
         ("point_in_time_recovery", "recovery_period_in_days"),
     ),
+    "aws_cloudfront_distribution": (
+        ("default_cache_behavior", "viewer_protocol_policy"),
+        ("ordered_cache_behavior", "viewer_protocol_policy"),
+    ),
     "aws_network_acl": (("ingress",),),
     "aws_default_network_acl": (("ingress",),),
     "aws_network_acl_rule": (
@@ -224,6 +228,7 @@ def _evaluate(
     )
     _check_policy_critical_unknowns(document, findings)
     _check_s3(document, resources, findings, expected_account_id)
+    _check_cloudfront_viewer_tls(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
@@ -757,6 +762,65 @@ def _check_s3(
                         "s3_resource_arn_unbounded",
                         address,
                         "The storage policy resource must use a complete, bounded S3 ARN.",
+                    )
+
+
+def _check_cloudfront_viewer_tls(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    secure_policies = {"https-only", "redirect-to-https"}
+    behavior_fields = (
+        ("default_cache_behavior", True),
+        ("ordered_cache_behavior", False),
+    )
+    for item in resources:
+        if item.get("type") != "aws_cloudfront_distribution":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "cloudfront_viewer_behavior_unknown",
+                address,
+                "The plan does not make CloudFront viewer protocol settings clear.",
+            )
+            continue
+        for field, required in behavior_fields:
+            behaviors = values.get(field)
+            if not isinstance(behaviors, list) or (required and len(behaviors) != 1):
+                _deny(
+                    findings,
+                    "cloudfront_viewer_behavior_unknown",
+                    address,
+                    "The plan does not make every CloudFront cache behavior clear.",
+                )
+                continue
+            for behavior in behaviors:
+                if not isinstance(behavior, dict):
+                    _deny(
+                        findings,
+                        "cloudfront_viewer_behavior_unknown",
+                        address,
+                        "The plan does not make every CloudFront cache behavior clear.",
+                    )
+                    continue
+                viewer_policy = behavior.get("viewer_protocol_policy")
+                if viewer_policy in secure_policies:
+                    continue
+                if viewer_policy == "allow-all":
+                    _deny(
+                        findings,
+                        "cloudfront_cleartext_viewer_access",
+                        address,
+                        "A CloudFront cache behavior allows viewers to use cleartext HTTP.",
+                    )
+                else:
+                    _deny(
+                        findings,
+                        "cloudfront_viewer_protocol_unknown",
+                        address,
+                        "The plan does not make a CloudFront viewer protocol policy clear.",
                     )
 
 

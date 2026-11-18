@@ -258,6 +258,22 @@ def add_sqs_queue_policy(document, policy, **change_metadata):
     return document
 
 
+def cloudfront_case(default_behavior, ordered_behaviors=(), *, after_unknown=None):
+    document = plan()
+    arguments = {
+        "default_cache_behavior": default_behavior,
+        "ordered_cache_behavior": ordered_behaviors,
+    }
+    proposal_value = add_policy_resource(
+        document,
+        "aws_cloudfront_distribution",
+        "cdn",
+        arguments,
+        after_unknown=after_unknown,
+    )
+    return document, proposal_value
+
+
 def add_lambda_permission(document, values, **change_metadata):
     address = "aws_lambda_permission.function_access"
     document["planned_values"]["root_module"]["resources"].append(
@@ -1510,6 +1526,77 @@ def test_non_boolean_unknown_leaf_fails_closed():
     result = evaluate(document)
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "policy_critical_unknown_structure_invalid" in codes(result)
+
+
+@pytest.mark.parametrize("viewer_policy", ["https-only", "redirect-to-https"])
+def test_cloudfront_all_cache_behaviors_require_https(viewer_policy):
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": viewer_policy}],
+        [{"viewer_protocol_policy": viewer_policy}],
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not {
+        "cloudfront_cleartext_viewer_access",
+        "cloudfront_viewer_protocol_unknown",
+        "cloudfront_viewer_behavior_unknown",
+        "policy_critical_value_unknown",
+    } & codes(result)
+
+
+@pytest.mark.parametrize("field", ["default", "ordered"])
+def test_cloudfront_allow_all_viewer_policy_is_denied(field):
+    default_behaviors = [{"viewer_protocol_policy": "https-only"}]
+    ordered_behaviors = [{"viewer_protocol_policy": "https-only"}]
+    if field == "default":
+        default_behaviors[0]["viewer_protocol_policy"] = "allow-all"
+    else:
+        ordered_behaviors[0]["viewer_protocol_policy"] = "allow-all"
+    document, proposal_value = cloudfront_case(default_behaviors, ordered_behaviors)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "cloudfront_cleartext_viewer_access" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("default_behaviors", "ordered_behaviors"),
+    [
+        ([], []),
+        ([{"viewer_protocol_policy": "future-value"}], []),
+        ([{"viewer_protocol_policy": "https-only"}], [{"viewer_protocol_policy": None}]),
+    ],
+)
+def test_cloudfront_missing_or_unrecognized_viewer_policy_is_denied(
+    default_behaviors, ordered_behaviors
+):
+    document, proposal_value = cloudfront_case(default_behaviors, ordered_behaviors)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert {
+        "cloudfront_viewer_protocol_unknown",
+        "cloudfront_viewer_behavior_unknown",
+    } & codes(result)
+
+
+def test_cloudfront_unknown_viewer_policy_fails_closed_without_echoing_values():
+    document, proposal_value = cloudfront_case(
+        [{"viewer_protocol_policy": "https-only"}],
+        after_unknown={
+            "default_cache_behavior": [{"viewer_protocol_policy": True}],
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert "viewer_protocol_policy" not in repr(result)
 
 
 @pytest.mark.parametrize("metadata", [None, "missing"])

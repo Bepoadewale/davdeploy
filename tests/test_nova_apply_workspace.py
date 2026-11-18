@@ -278,4 +278,3 @@ def test_refuses_workspace_with_a_different_approved_lockfile_digest(tmp_path):
             expected_kms_key_arn=KMS_KEY,
             workspace_root=tmp_path / "apply-workspace",
         )
-
