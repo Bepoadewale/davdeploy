@@ -46,23 +46,28 @@ remain preserved. This PR does not perform a new AWS inventory or mutation.
 
 ## Acceptance criteria
 
-- [ ] Current backend `main` and hosted PR #420 are reported separately.
-- [ ] PR #399 head `81eabbb` and successful run `44204640591` are recorded.
-- [ ] PR #429 schema evidence is source-only; no customer workload is claimed.
-- [ ] AWS inventory claims have their 2026-11-17 check date and lineage evidence
+- [x] Current backend `main` and hosted PR #420 are reported separately.
+- [x] PR #399 head `81eabbb` and successful run `44204640591` are recorded.
+- [x] PR #429 schema evidence is source-only; no customer workload is claimed.
+- [x] AWS inventory claims have their 2026-11-17 check date and lineage evidence
   remains marked as retained.
-- [ ] Documentation conventions and diff checks pass.
+- [x] Documentation conventions and diff checks pass.
 - [ ] All seven required CI checks pass on the status reconciliation commit.
 
 ## Acceptance status
 
-Implementation has not started. This PR changes documentation snapshots only;
-no AWS, Terraform, or hosted runtime operation is planned.
+Implementation is complete and documentation checks pass. This PR changes
+documentation snapshots only; no AWS, Terraform, or hosted runtime operation
+was performed.
 
 ## Tests / validation performed
 
-No checks have run for this documentation update yet. No `docs/test/test431.md`
-is required because no customer workload is part of this package.
+- `GITHUB_PR_NUMBER=431 .venv-pr399/bin/python scripts/check_doc_conventions.py`:
+  passed.
+- `git diff --check`: passed.
+- Final-head GitHub checks are pending.
+- No `docs/test/test431.md` is required because no customer workload was part of
+  this package.
 
 ## Evidence files produced
 
