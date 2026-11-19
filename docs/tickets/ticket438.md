@@ -12,7 +12,7 @@ PR #381 retains older template objects, but its current-object resource does not
 - PR #381 is merged. The template host uses a content-hash S3 key, a distinct current-object resource, and a manually maintained map of older keys with `prevent_destroy`.
 - The currently configured source template hash is `8c5d1c82682b3bb90ff1f45d121b475e7b33b484f556feabafbf387c335aea4e`.
 - Existing URLs are customer-facing setup inputs and must continue to resolve unchanged.
-- This work is source, documentation, and automated regression coverage. The first protected-state, lock-free read-only plan attempt failed with an ambiguous Terraform move graph before producing a plan; no lock was acquired and no AWS state/resource changed. No successful plan or apply has run.
+- This work is source, documentation, and automated regression coverage. The initial lock-free read-only plan failed with an ambiguous move graph before producing a plan; no lock or AWS change occurred. After the move correction, a lock-free plan against actual protected state showed four address moves and `0 to add, 0 to change, 0 to destroy`. No apply has run.
 
 ## Research / references used
 
@@ -36,12 +36,12 @@ PR #381 retains older template objects, but its current-object resource does not
 - [x] Existing template URLs remain unchanged; the output still points to the current source hash.
 - [x] Focused regression tests, Terraform format/validation, and documentation conventions pass.
 - [x] All seven PR CI checks passed in run `44504126648` on commit `98c8477`.
-- [ ] A fresh protected-state plan succeeds and has zero existing-object changes, replacements, or deletions.
+- [x] The corrected lock-free protected-state plan shows exactly four object address moves, `0 to add, 0 to change, 0 to destroy`, and no prior-object replacement or deletion.
 - [x] No live AWS resources were modified, and no deployment is claimed.
 
 ## Acceptance status
 
-The implementation and local/static validation pass. The first protected-state lock-free plan failed during move-graph validation with `Ambiguous move statements` at `main.tf` lines 116, 121, and 126; Terraform produced no plan, acquired no lock, and changed no AWS state or resource. The move graph has been corrected; a fresh protected-state plan remains pending. PR #438 remains draft and no apply is claimed.
+The implementation, local/static validation, and corrected lock-free plan against actual protected state pass. The initial plan attempt failed with `Ambiguous move statements` at `main.tf` lines 116, 121, and 126, before producing a plan. After correction, exactly four object addresses moved with `0 to add, 0 to change, 0 to destroy`. Neither attempt acquired a state lock or changed AWS resources/state. PR #438 remains draft; no apply is claimed.
 
 ## Tests / validation performed
 

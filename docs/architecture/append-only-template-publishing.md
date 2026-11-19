@@ -1,6 +1,6 @@
 # Append-only CloudFormation template publishing
 
-**State: proposed source design. The first lock-free protected-state plan attempt failed on an ambiguous move graph before producing a plan; no state lock or AWS resource was changed. See [test438](../test/test438.md).**
+**State: source design validated by a lock-free protected-state plan. The first attempt failed on an ambiguous move graph; the corrected plan showed four address moves and zero adds, changes, or destroys. No lock or AWS resource/state was changed, and no apply ran. See [test438](../test/test438.md).**
 
 DavDeploy hosts its public, non-secret customer connection template in a versioned S3 bucket. Setup links and customer CloudFormation stacks can keep using a published URL after a newer template is released, so every published key must remain available and unchanged.
 
@@ -16,7 +16,7 @@ This is Terraform-level deletion protection. It does not protect against an admi
 
 ## State migration
 
-The existing state uses a separate current-object address and a retained-object map. Use static `moved` blocks to move historical `customer_discovery_role`, `active_customer_discovery_role`, and `published_customer_discovery_role` addresses to their original retained-map addresses. Then move each retained-map instance, plus the current `8c5d…` object, to the new key-derived resource addresses. Each `from` address must appear exactly once. These moves change Terraform state addresses only; they must not change S3 keys or object contents. A reviewed template-host plan must show those moves, at most one new object, and zero updates, replacements, or deletions of existing template objects. An earlier attempt failed with an ambiguous move graph before Terraform produced a plan; the corrected graph requires a fresh plan. Do not apply a plan that proposes replacing an existing key.
+The existing state uses a separate current-object address and a retained-object map. Use static `moved` blocks to move historical `customer_discovery_role`, `active_customer_discovery_role`, and `published_customer_discovery_role` addresses to their original retained-map addresses. Then move each retained-map instance, plus the current `8c5d…` object, to the new key-derived resource addresses. Each `from` address must appear exactly once. These moves change Terraform state addresses only; they must not change S3 keys or object contents. The corrected lock-free template-host plan showed the current object and three retained objects moving addresses, with zero adds, changes, or destroys. The earlier attempt failed with an ambiguous move graph before Terraform produced a plan. Any apply remains separate and requires explicit approval. Do not apply a plan that proposes replacing an existing key.
 
 After this migration, each release adds the prior current key to the manifest and introduces the new content-hash instance. No move is required for newly published objects because they are created directly at their permanent address. Keep all historical keys in the manifest indefinitely while customer URLs or stacks may depend on them; removal requires a separate explicit retention decision and must not be part of routine publishing.
 
