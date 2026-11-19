@@ -59,7 +59,12 @@ Customer-side creation, live health, and Terraform teardown passed in account
 ECS service is retained by AWS as `INACTIVE` history with zero tasks, and an
 empty default cluster record remains. Update/recovery was not tested. This is
 direct Terraform evidence, not a Nova-initiated apply; the hosted control plane
-was untouched.
+was untouched. On 2026-11-19, the goal owner accepted this isolated run as the
+customer-side plan, apply, health, and teardown evidence for the general Nova
+infrastructure goal. This acceptance substitutes for a hosted Nova run
+under the required control-plane isolation; it does not establish Nova
+generation, authorization, dispatch, cross-account isolation, or update and
+recovery behavior.
 
 ## Tests / validation performed
 
@@ -89,5 +94,5 @@ the same-account VPC cross-account isolation.
 ## Follow-up work
 
 Run a separately reviewed update/recovery test only if required by the accepted
-customer-side lifecycle scope. Keep PR #399 draft unless its acceptance gates
-are explicitly revised; no hosted Nova apply was attempted.
+customer-side lifecycle scope. No hosted Nova apply was attempted, and no Nova
+customer workload is claimed as applied or certified.

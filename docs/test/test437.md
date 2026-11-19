@@ -71,4 +71,9 @@ This is direct same-account customer-side infrastructure evidence and may serve
 as the isolated customer deployment test while the hosted control plane remains
 untouched. It is not evidence that Nova initiated an apply, and it does not
 prove cross-account isolation. No update/recovery test was run. The PR remains
-draft pending that lifecycle gate and the broader Nova acceptance decision.
+draft. On 2026-11-19, the goal owner accepted this isolated run as the
+customer-side plan, apply, health, and teardown evidence for the general Nova
+infrastructure goal, substituting for a hosted Nova run under the required
+control-plane isolation. This does not establish Nova generation,
+authorization, dispatch, cross-account isolation, or update/recovery behavior.
+No Nova customer workload is claimed as applied or certified.
