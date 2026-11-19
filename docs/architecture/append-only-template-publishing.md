@@ -35,5 +35,6 @@ After this migration, each release adds the prior current key to the manifest an
 1. A regression test proves the content-hash key, stable key-derived address, append-only manifest, and `prevent_destroy` are present on the resource that creates new objects.
 2. Migration blocks cover the current object and every already-managed retained key without changing any key string.
 3. The output URL resolves to the current keyed instance; no existing public URL is renamed or redirected.
-4. Terraform format and validation pass, and a reviewed plan against the protected template-host state shows state moves plus only the expected new object, with no existing-object update, replacement, or deletion.
-5. Any live apply is a separate, explicitly approved operation. Source changes and CI do not constitute deployment evidence.
+4. For the one-time migration, a reviewed plan against the protected template-host state shows only the expected address moves and no object create, update, replacement, or deletion. The current migration plan met this criterion with four moves and zero resource changes.
+5. Before a later template release, review a separate plan for a changed source file: it must add the new content-hash object, retain every prior key, and propose no prior-object update, replacement, or deletion. This future-publication plan has not been exercised by this change.
+6. Any live apply is a separate, explicitly approved operation. Source changes and CI do not constitute deployment evidence.
