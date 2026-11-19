@@ -27,4 +27,4 @@ See [the customer AWS connection](customer-connection/README.md) before using it
 
 A future cloud operator supplies account-specific values outside Git, reviews an authenticated plan and uses Terraform for both creation and teardown. The product API never runs Terraform.
 
-The template host is deliberately separate from Terraform state. Its bucket exposes only `s3:GetObject` for versioned YAML below `cloudformation/`; it does not expose state, customer data, object listing or write permissions. Run `make customer-aws-template-host-plan` before any separately confirmed apply.
+The template host is deliberately separate from Terraform state. Its bucket exposes only `s3:GetObject` for versioned YAML below `cloudformation/`; it does not expose state, customer data, object listing or write permissions. Published objects use SHA-256-derived keys, stable key-derived Terraform addresses, an append-only key manifest, and `prevent_destroy` from creation. See [the append-only publishing design](../../docs/architecture/append-only-template-publishing.md). Run `make customer-aws-template-host-plan` before any separately confirmed apply.
