@@ -1,6 +1,6 @@
 # ticket438 — publish customer CloudFormation templates append-only
 
-PR: pending
+PR: [#438](https://github.com/Bepoadewale/davdeploy/pull/438) (open, draft)
 Branch: `docs/template-host-append-only-20261119`
 
 ## Problem / goal
@@ -35,13 +35,13 @@ PR #381 retains older template objects, but its current-object resource does not
 - [x] Existing current, retained, and historical state addresses have explicit moves to the new resource shape without renaming S3 keys.
 - [x] Existing template URLs remain unchanged; the output still points to the current source hash.
 - [x] Focused regression tests, Terraform format/validation, and documentation conventions pass.
-- [x] PR CI passes: all seven checks passed in run `44495901056`.
+- [x] PR CI passed all seven checks on the prior source head in run `44496579412`; the latest documentation-only head is pending CI.
 - [ ] A future approved protected-state plan has zero existing-object changes, replacements, or deletions.
-- [ ] No live AWS resource is modified without separate explicit approval; no deployment is claimed.
+- [x] No live AWS resources were modified, and no deployment is claimed.
 
 ## Acceptance status
 
-Implementation, local/static validation, and all seven PR CI checks pass. The future protected-state plan remains pending. No live plan or apply is claimed.
+The implementation, local/static validation, and prior seven-check CI run pass. PR #438 remains draft; CI for the latest documentation-only commit is pending. The future protected-state plan remains pending. No live plan or apply is claimed.
 
 ## Tests / validation performed
 
