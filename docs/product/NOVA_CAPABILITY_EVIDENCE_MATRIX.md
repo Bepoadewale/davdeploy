@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`
-(through PR #399), 2026-11-19. PR #413 merged this 26-architecture-entry /
+Status snapshot: backend `main` at `48911bfb74fafc626076d216f6ed78a21f3be4ee`
+(through PR #441), 2026-11-19. PR #413 merged this 26-architecture-entry /
 30-root coverage ledger. The last recorded hosted release remains PR #420
 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -43,6 +43,13 @@ No Nova customer workload is claimed as applied or certified. PR #438 merged as
 `cb78865`; its append-only template hosting is source-only, and its
 protected-state plan had four address moves and zero resource changes. PR #399
 and PR #438 have not changed hosted runtime or enabled customer execution.
+
+PR #441 merged as `48911bf`; all seven checks passed in
+[run 44608565238](https://github.com/Bepoadewale/davdeploy/actions/runs/44608565238).
+It adds a source-only generated-plan requirement for known SQS-managed
+server-side encryption. The rule does not cover KMS-backed encryption,
+visibility/retry/DLQ contracts, queue consumers, or hosted lifecycle behavior;
+it has not been deployed to the control plane.
 
 PR #422 merged as `8c84827` and adds source-only verification of the customer
 plan role's exact trust and bounded inline policy profile during connection
