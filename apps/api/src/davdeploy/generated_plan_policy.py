@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-18.3"
+POLICY_VERSION = "nova-generated-plan-2026-11-19.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -87,6 +87,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_iam_role": (("assume_role_policy",),),
     "aws_iam_role_policy": (("policy",),),
     "aws_sqs_queue_policy": (("policy",),),
+    "aws_sqs_queue": (("sqs_managed_sse_enabled",),),
     "aws_lambda_permission": (
         ("action",),
         ("function_name",),
@@ -240,6 +241,7 @@ def _evaluate(
     _check_s3(document, resources, expected_region, findings, expected_account_id)
     _check_cloudfront_viewer_tls(resources, findings)
     _check_cloudfront_origin_tls(resources, findings)
+    _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
@@ -2179,6 +2181,30 @@ def _check_sqs_queue_policies(
                     address,
                     "The queue policy resource must use a complete, bounded SQS ARN.",
                 )
+
+
+def _check_sqs_queue_encryption(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_sqs_queue":
+            continue
+        values = item.get("values")
+        address = item.get("address")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "sqs_queue_encryption_unknown",
+                address,
+                "The plan does not show whether the SQS queue uses server-side encryption.",
+            )
+        elif values.get("sqs_managed_sse_enabled") is not True:
+            _deny(
+                findings,
+                "sqs_queue_encryption_required",
+                address,
+                "The SQS queue must enable SQS-managed server-side encryption.",
+            )
 
 
 def _check_lambda_permissions(

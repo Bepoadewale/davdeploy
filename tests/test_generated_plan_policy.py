@@ -432,6 +432,66 @@ def add_sqs_queue_policy(document, policy, **change_metadata):
     return document
 
 
+def sqs_queue_case(sqs_managed_sse_enabled, *, after_unknown=None):
+    document = plan()
+    address = "aws_sqs_queue.queue"
+    values = {
+        "name": "async-work",
+        "sqs_managed_sse_enabled": sqs_managed_sse_enabled,
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, "aws_sqs_queue", values)
+    )
+    document["resource_changes"].append(
+        change(address, "aws_sqs_queue", after_unknown=after_unknown or {})
+    )
+    resources = [item.model_dump(mode="json") for item in proposal().resources]
+    resources.append(
+        {
+            "resource_id": "queue",
+            "resource_type": "aws_sqs_queue",
+            "name": "queue",
+            "arguments": {
+                "name": "async-work",
+                "sqs_managed_sse_enabled": sqs_managed_sse_enabled,
+            },
+            "rationale": "Use SQS-managed encryption for queued application data.",
+        }
+    )
+    return document, proposal(resources)
+
+
+def test_sqs_queue_requires_sqs_managed_encryption():
+    document, proposal_value = sqs_queue_case(False)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_queue_encryption_required" in codes(result)
+
+
+def test_sqs_queue_unknown_encryption_is_denied():
+    document, proposal_value = sqs_queue_case(
+        None,
+        after_unknown={"sqs_managed_sse_enabled": True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert "sqs_queue_encryption_required" in codes(result)
+
+
+def test_sqs_queue_with_sqs_managed_encryption_remains_reviewable():
+    document, proposal_value = sqs_queue_case(True)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "sqs_queue_encryption_required" not in codes(result)
+
+
 def cloudfront_case(
     default_behavior, ordered_behaviors=None, *, origins=None, after_unknown=None
 ):
