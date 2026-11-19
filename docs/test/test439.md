@@ -25,15 +25,17 @@ customer-resource changes.
 - `git diff --check` — passed.
 - Acceptance-matrix count check — 26 architecture rows and 30 Terraform-root
   rows.
-- Required hosted CI for PR #439 is pending.
+- Required hosted CI run [44513682112](https://github.com/Bepoadewale/davdeploy/actions/runs/44513682112)
+  passed all seven checks on documentation head `0ba1e41`. A later status
+  refresh records PR #437's newest head; its own required checks are pending.
 
 ## Observed result
 
 The current source base is `ec937ed257eec5eb0a21f69519df337a90bd79c0`.
 PR #399 is open/draft at `086d3afe0504adde0384275a6a3c713e2a42a75a`; its seven
 checks passed in run `44297591687`. PR #437 is open/draft at
-`a1cecca156d5baac124750f8dd3d2c6721758ac5`; its seven checks passed in run
-`44510517423`. Its isolated customer-side ECS Express plan/apply/health/teardown
+`bc59160bbce3143ecf5e54938531f0637b60cb8f`; its seven checks passed in run
+`44514674934`. Its isolated customer-side ECS Express plan/apply/health/teardown
 run is accepted by the goal owner for the general goal's customer-side gate.
 It was direct Terraform, not Nova-generated; it did not test update/recovery or
 cross-account isolation. PR #438 is open/draft at

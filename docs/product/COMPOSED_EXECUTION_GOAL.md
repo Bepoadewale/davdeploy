@@ -22,9 +22,9 @@ It contains a separate, default-off exact-plan apply path. No Nova apply build,
 credential issuance, or Nova-generated customer workload is claimed. Apply and
 credential gates remain disabled.
 
-PR #437 is open and draft at `a1cecca156d5baac124750f8dd3d2c6721758ac5`;
+PR #437 is open and draft at `bc59160bbce3143ecf5e54938531f0637b60cb8f`;
 all seven checks passed in
-[run 44510517423](https://github.com/Bepoadewale/davdeploy/actions/runs/44510517423).
+[run 44514674934](https://github.com/Bepoadewale/davdeploy/actions/runs/44514674934).
 Its isolated customer-account ECS Express run used local Terraform state,
 reached live health, then removed its Terraform-managed resources and
 independently checked absence. The goal owner accepts this as the general
@@ -89,8 +89,8 @@ execution strategy. Dated release details below remain historical records.
   default-off Nova apply worker and credential broker. The customer apply role
   and its effective permissions are not verified; no Nova apply build or
   credential issuance is claimed.
-- PR #437 is open/draft at `a1cecca156d5baac124750f8dd3d2c6721758ac5`, with
-  seven checks passing in run `44510517423`. Its same-account ECS Express run
+- PR #437 is open/draft at `bc59160bbce3143ecf5e54938531f0637b60cb8f`, with
+  seven checks passing in run `44514674934`. Its same-account ECS Express run
   is accepted for general-goal customer-side plan/apply/health/teardown
   evidence. It did not test update/recovery and did not use Nova.
 - PR #438 is open/draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`, with

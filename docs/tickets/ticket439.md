@@ -19,8 +19,8 @@ visible.
 - PR #399 is open and draft at `086d3afe0504adde0384275a6a3c713e2a42a75a`;
   its required checks passed in run `44297591687`. Apply and credential gates
   remain disabled; this PR's Nova-specific execution path has not been run.
-- PR #437 is open and draft at `a1cecca156d5baac124750f8dd3d2c6721758ac5`;
-  all seven checks passed in run `44510517423`. Its direct AWS evidence records
+- PR #437 is open and draft at `bc59160bbce3143ecf5e54938531f0637b60cb8f`;
+  all seven checks passed in run `44514674934`. Its direct AWS evidence records
   a saved plan, isolated same-account ECS Express create, live health, teardown,
   and independent absence. The user accepted it for the general goal's
   customer-side plan/apply/health/teardown gate. It does not prove Nova
@@ -67,23 +67,27 @@ visible.
       broader per-entry requirements are not marked complete by the ECS pilot.
 - [x] Remaining Nova-specific source, pricing, policy, role, and capability
       gaps are stated accurately.
-- [ ] Documentation conventions, diff checks, and required PR CI pass.
+- [ ] Documentation conventions, diff checks, and required PR CI pass on the
+      final content head. Earlier content head `0ba1e41` passed all seven checks
+      in run `44513682112`.
 - [x] No runtime, Terraform state/lock, AWS resource, or feature gate changes.
 
 ## Acceptance status
 
 The handoff and matrix now reflect current source and accepted customer-side
 evidence without shrinking the 26/30 scope or attributing the direct run to
-Nova. Local documentation checks passed; required CI on the final PR head is
-pending. No AWS resource or hosted control-plane state was changed. See
-`docs/test/test439.md`.
+Nova. Local documentation checks passed. Earlier content head `0ba1e41` passed
+all seven checks in run `44513682112`; the current evidence refresh requires
+its own final CI run. No AWS resource or hosted control-plane state was changed.
+See `docs/test/test439.md`.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=439 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 - Matrix integrity check — 26 architecture rows and 30 Terraform-root rows.
-- Required hosted CI is monitored on the PR's final head.
+- Required hosted CI run `44513682112` passed all seven checks on content head
+  `0ba1e41`; PR checks for the current status refresh are pending.
 
 ## Evidence files produced
 

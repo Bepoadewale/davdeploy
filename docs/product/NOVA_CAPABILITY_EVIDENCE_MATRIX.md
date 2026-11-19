@@ -25,9 +25,12 @@ Draft PR #399 is open at
 `086d3afe0504adde0384275a6a3c713e2a42a75a`; all seven checks passed in
 [run 44297591687](https://github.com/Bepoadewale/davdeploy/actions/runs/44297591687).
 Apply and credential gates remain disabled, and its Nova-specific apply path
-has not been exercised. PR #437 records an isolated same-account ECS Express
-customer test with saved-plan apply, live health, teardown, and independent
-absence. The goal owner accepts it as the general goal's customer-side
+has not been exercised. PR #437 is open at
+`bc59160bbce3143ecf5e54938531f0637b60cb8f`; all seven checks passed in
+[run 44514674934](https://github.com/Bepoadewale/davdeploy/actions/runs/44514674934).
+It records an isolated same-account ECS Express customer test with saved-plan
+apply, live health, teardown, and independent absence. The goal owner accepts it
+as the general goal's customer-side
 plan/apply/health/teardown evidence under the control-plane isolation boundary.
 It does not prove Nova generation, authorization, dispatch, cross-account
 isolation, or update/recovery. No Nova customer workload is claimed as applied
