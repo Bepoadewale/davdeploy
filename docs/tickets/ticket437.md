@@ -13,11 +13,12 @@ control-plane separation.
 
 ## Current repo state
 
-Commit `5a5a464` adds a Terraform root for a dedicated customer VPC, ECR image
+Commit `33c8e08` adds a Terraform root for a dedicated customer VPC, ECR image
 repository, ECS task execution and infrastructure roles, and an opt-in ECS
 Express Mode service. It uses local Terraform state, a one-task ceiling, public
-subnets, no NAT gateway, and no ECS task role. Account-side service and
-lifecycle validation is still outstanding.
+subnets, no NAT gateway, and no ECS task role. A direct same-account customer
+run now proves creation, live health, and teardown without using the hosted
+control plane.
 
 ## Research / references used
 
@@ -30,8 +31,9 @@ lifecycle validation is still outstanding.
 
 Validate the full Terraform root set in CI. Prepare a fresh same-account ECS
 Express customer run using local state, build and push the health fixture by
-immutable digest, verify live health and update/recovery behavior, then review
-a saved destroy plan and verify absence after explicit cleanup authorization.
+immutable digest, verify live health, then apply a reviewed saved destroy plan
+and independently verify that billable workload resources are absent. Update
+and recovery behavior remains a follow-up.
 
 ## Acceptance criteria
 
@@ -39,20 +41,25 @@ a saved destroy plan and verify absence after explicit cleanup authorization.
   Terraform validation script.
 - Account and Region guards fail closed; customer resources retain the
   same-account boundary, unique run ID, and separate roles.
-- ECS Express Mode starts the exact image digest, reaches steady state, and
-  returns the expected `/healthz` response.
+- ECS Express Mode started the exact image digest, reached steady state, and
+  returned the expected `/healthz` response. **Passed.**
 - A saved plan can update the workload and demonstrate recovery from a failed
-  revision.
-- A reviewed saved destroy plan removes only the test resources. Independent
-  AWS inventory and local Terraform state prove absence.
+  revision. **Not tested in this cost-bounded run.**
+- A reviewed saved destroy plan removed all 15 Terraform-managed test
+  resources. Independent AWS reads and empty local Terraform state confirm no
+  running workload, VPC, load balancer, image repository, role, or log group.
+  AWS retains inactive service and stopped-task history plus an empty cluster.
 - The hosted control plane and its state, runtime, queues, and API remain
   untouched. No hosted Nova apply or cross-account isolation is claimed.
 
 ## Acceptance status
 
-In progress. The new root passes local Terraform validation and the health
-fixture returns the expected response when run locally. Live ECS Express
-service, update/recovery, destroy, and absence evidence are pending.
+Customer-side creation, live health, and Terraform teardown passed in account
+`654654474502`; independent reads confirm no billable workload remains. The
+ECS service is retained by AWS as `INACTIVE` history with zero tasks, and an
+empty default cluster record remains. Update/recovery was not tested. This is
+direct Terraform evidence, not a Nova-initiated apply; the hosted control plane
+was untouched.
 
 ## Tests / validation performed
 
@@ -73,14 +80,14 @@ service, update/recovery, destroy, and absence evidence are pending.
 ## Boundaries
 
 Do not modify the existing hosted control plane, its Terraform state or locks,
-runtime, queues, or service configuration. The ECS pilot uses a fresh
-same-account customer VPC and local Terraform state. Do not enable Nova apply,
-claim a Nova customer workload was applied, or describe the same-account VPC
-as cross-account isolation. Do not delete customer resources or local files
-without explicit approval.
+runtime, queues, or service configuration. The ECS pilot used a fresh
+same-account customer VPC and local Terraform state, then removed its billable
+workload resources after health verification. Describe this as direct
+customer-side Terraform evidence; do not claim Nova initiated the apply or call
+the same-account VPC cross-account isolation.
 
 ## Follow-up work
 
-Run the customer lifecycle test with a reviewed plan. Obtain explicit cleanup
-authorization for the exact ECS Express resources before teardown. Keep PR #399
-draft until its separate hosted Nova acceptance gates are met.
+Run a separately reviewed update/recovery test only if required by the accepted
+customer-side lifecycle scope. Keep PR #399 draft unless its acceptance gates
+are explicitly revised; no hosted Nova apply was attempted.
