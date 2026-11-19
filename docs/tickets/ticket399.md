@@ -139,7 +139,7 @@ workload is claimed. Preserve the protected untracked `--only-show-errors` and
   CI run `44259744310` passed all seven checks on the prior head. The current
   update's focused template-host tests passed (11), Ruff passed, Terraform
   format/validation passed with AWS provider 5.100.0, and documentation
-  conventions passed. Fresh hosted CI is required after this update is pushed.
+  conventions passed. Fresh-head CI run `44597473742` passed all seven checks on source head `1dea894`.
   The existing full local clean-room proof predates this recovery change; the
   prior code commit's fresh-runner `local-e2e` passed in run `44257747819`.
 - Trusted pricing remains limited to the supported resource/settings matrix.
