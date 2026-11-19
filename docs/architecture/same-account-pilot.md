@@ -7,7 +7,7 @@ separate placement contracts inside account `654654474502`:
 | Placement | Scope tag | VPC CIDR | Terraform state key |
 | --- | --- | --- | --- |
 | davdeploy platform | `platform` | `10.42.0.0/16` | `davdeploy/platform/app-runner-runtime.tfstate` |
-| Customer sandbox | `customer-sandbox` | `10.84.0.0/16` | `davdeploy/customer-sandbox/workload-app-runner.tfstate` |
+| Customer sandbox | `customer-sandbox` | `10.84.0.0/16` | local state for the ECS Express Mode pilot |
 
 Both placements carry `AccountBoundary=same-account-pilot`. The customer
 sandbox output states `SAME_ACCOUNT_PILOT_NOT_CROSS_ACCOUNT`; UI, audit and test
@@ -18,13 +18,20 @@ evidence must preserve that limitation.
 - Exact account and Region checks run before Terraform operations.
 - Platform and customer resources use different names, VPCs, subnets, security
   groups, IAM roles, tags and state keys.
-- The customer workload VPC has private subnets, no internet gateway and no NAT
-  gateway. Its App Runner VPC connector has no default egress rule.
-- The customer workload runtime role has no cloud permissions.
+- The ECS Express customer test has a dedicated VPC with two public subnets and
+  an internet gateway. It has no NAT gateway. ECS Express Mode creates the
+  service load balancer, task security group, Fargate service and scaling
+  resources for the test.
+- The task has no AWS task role. Separate execution and infrastructure roles
+  use the AWS managed policies required by ECS Express Mode.
 - Destructive commands require exact confirmation text.
-- Customer teardown verifies absence of its App Runner service, ECR repository,
-  tagged VPC and named runtime roles.
+- Customer teardown verifies absence of its ECS Express service, ECR repository,
+  tagged VPC and named roles.
 - No automation creates or invites an AWS Organizations account.
+
+AWS closed App Runner to new customers on April 30, 2026. The App Runner pilot
+root is retained as a historical design; new customer pilots use
+[ECS Express Mode](../../infrastructure/terraform/customer-workload-ecs-express-pilot/README.md).
 
 ## What this does not prove
 

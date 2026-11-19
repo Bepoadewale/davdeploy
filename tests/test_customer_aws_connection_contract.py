@@ -120,67 +120,93 @@ def test_plan_role_broker_permissions_are_explicit_follow_up_not_added_to_existi
     assert "davdeployPlan-*" not in executor
 
 
-def test_public_template_host_allows_only_versioned_template_reads_and_is_confirmation_gated():
+def test_public_template_host_publishes_append_only_hash_keyed_objects():
     configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
     variables = Path("infrastructure/terraform/connection-template-host/variables.tf").read_text()
+    outputs = Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
     script = Path("scripts/customer-aws-template-host.sh").read_text()
+
     assert 'actions   = ["s3:GetObject"]' in configuration
     assert 'resources = ["${aws_s3_bucket.templates.arn}/cloudformation/*"]' in configuration
     assert "s3:ListBucket" not in configuration
-    assert 'resource "aws_s3_object" "current_customer_discovery_role"' in configuration
-    assert 'resource "aws_s3_object" "retained_customer_templates"' in configuration
-    assert "from = aws_s3_object.active_customer_discovery_role" in configuration
-    assert "aws_s3_object.active_customer_discovery_role" not in (
-        Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
-    )
+    assert 'resource "aws_s3_object" "published_customer_templates"' in configuration
+    assert "for_each = local.published_keys" in configuration
+    assert "published_keys = setunion(var.retained_template_keys, toset(keys(local.current_template_sources)))" in configuration
+    assert 'key    = each.key' in configuration
+    assert 'source       = lookup(local.current_template_sources, each.key, null)' in configuration
+    assert "(local.template_key)            = local.template_source" in configuration
+    assert "(local.nova_apply_template_key) = local.nova_apply_template_source" in configuration
+    assert "contains(keys(local.current_template_sources), each.key)" in configuration
     assert "prevent_destroy = true" in configuration
-    assert "retained_template_keys" in variables
+    assert "ignore_changes  = all" in configuration
+    assert 'resource "aws_s3_object" "current_customer_discovery_role"' not in configuration
+    assert 'resource "aws_s3_object" "retained_customer_templates"' not in configuration
+
     current_live_key = (
         "cloudformation/customer-discovery-role-"
-        "7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"
+        "8c5d1c82682b3bb90ff1f45d121b475e7b33b484f556feabafbf387c335aea4e.yaml"
     )
-    assert current_live_key in variables
-    assert (
-        f'to   = aws_s3_object.retained_customer_templates["{current_live_key}"]'
-        in configuration
+    moves = re.findall(
+        r"(?ms)^moved\s*\{\s*from\s*=\s*(.+?)\s*to\s*=\s*(.+?)\s*\}",
+        configuration,
     )
-    previously_published_key = (
-        "cloudformation/customer-discovery-role-"
-        "f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"
+    move_sources = [source for source, _ in moves]
+    assert len(move_sources) == len(set(move_sources)), "each Terraform source address must have one move destination"
+
+    expected_moves = {
+        "aws_s3_object.current_customer_discovery_role": (
+            f'aws_s3_object.published_customer_templates["{current_live_key}"]'
+        ),
+        "aws_s3_object.customer_discovery_role": (
+            'aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-'
+            '600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]'
+        ),
+        "aws_s3_object.active_customer_discovery_role": (
+            'aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-'
+            '7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]'
+        ),
+        "aws_s3_object.published_customer_discovery_role": (
+            'aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-'
+            'f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]'
+        ),
+    }
+    prior_keys = (
+        "cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml",
+        "cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml",
+        "cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml",
     )
-    assert previously_published_key in variables
-    assert (
-        "  from = aws_s3_object.published_customer_discovery_role\n"
-        f'  to   = aws_s3_object.retained_customer_templates["{previously_published_key}"]'
-        in configuration
+    for prior_key in prior_keys:
+        assert prior_key in variables
+        retained_address = f'aws_s3_object.retained_customer_templates["{prior_key}"]'
+        published_address = f'aws_s3_object.published_customer_templates["{prior_key}"]'
+        expected_moves[retained_address] = published_address
+
+    assert dict(moves) == expected_moves
+
+    assert re.search(r"template_hash\s*=\s*filesha256\(local\.template_source\)", configuration)
+    assert re.search(
+        r'template_key\s*=\s*"cloudformation/customer-discovery-role-\$\{local\.template_hash\}\.yaml"',
+        configuration,
     )
-    assert (
-        "from = aws_s3_object.active_customer_discovery_role\n"
-        in configuration
-    )
-    assert 'resource "aws_s3_object" "published_customer_discovery_role"' not in configuration
-    assert "customer-discovery-role-0e3209bff02286acf582ec3ed73858266261b294ae0c7e0d30ae37550a8926b2.yaml" not in variables
-    outputs = Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
-    assert "aws_s3_object.current_customer_discovery_role.key" in outputs
+    assert "aws_s3_object.published_customer_templates[local.template_key].key" in outputs
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
 
 
-def test_public_template_host_publishes_separate_immutable_apply_role_template():
+def test_public_template_host_publishes_nova_apply_role_in_protected_collection():
     configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
     variables = Path("infrastructure/terraform/connection-template-host/variables.tf").read_text()
     outputs = Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
 
     assert "customer-nova-apply-role.yaml" in configuration
-    assert 'resource "aws_s3_object" "current_customer_nova_apply_role"' in configuration
     assert "customer-nova-apply-role-${local.nova_apply_template_hash}.yaml" in configuration
-    apply_object = configuration.split(
-        'resource "aws_s3_object" "current_customer_nova_apply_role"', 1
-    )[1].split('resource "aws_s3_object" "retained_customer_templates"', 1)[0]
-    assert "prevent_destroy = true" in apply_object
+    assert "(local.nova_apply_template_key) = local.nova_apply_template_source" in configuration
+    assert 'resource "aws_s3_object" "current_customer_nova_apply_role"' not in configuration
+    assert "prevent_destroy = true" in configuration
+    assert "ignore_changes  = all" in configuration
     assert "nova-apply-role" in variables
     assert "customer_nova_apply_role_template_url" in outputs
-    assert "current_customer_nova_apply_role.key" in outputs
+    assert "published_customer_templates[local.nova_apply_template_key].key" in outputs
 
 
 def test_nova_apply_role_onboarding_is_default_off_and_uses_public_template_configuration():

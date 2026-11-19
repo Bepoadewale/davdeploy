@@ -5,6 +5,11 @@ locals {
   nova_apply_template_source = "${path.module}/../../cloudformation/customer-nova-apply-role.yaml"
   nova_apply_template_hash   = filesha256(local.nova_apply_template_source)
   nova_apply_template_key    = "cloudformation/customer-nova-apply-role-${local.nova_apply_template_hash}.yaml"
+  current_template_sources = {
+    (local.template_key)            = local.template_source
+    (local.nova_apply_template_key) = local.nova_apply_template_source
+  }
+  published_keys = setunion(var.retained_template_keys, toset(keys(local.current_template_sources)))
   tags = {
     Project   = "davdeploy"
     ManagedBy = "terraform"
@@ -67,50 +72,25 @@ resource "aws_s3_bucket_policy" "templates" {
   depends_on = [aws_s3_bucket_public_access_block.templates]
 }
 
-# Each newly published content-hash object needs a fresh Terraform address.
-# The former address is moved into the immutable retained-object map below.
-resource "aws_s3_object" "current_customer_discovery_role" {
-  bucket       = aws_s3_bucket.templates.id
-  key          = local.template_key
-  source       = local.template_source
-  etag         = filemd5(local.template_source)
-  content_type = "application/x-yaml"
-  tags         = local.tags
-  depends_on = [
-    aws_s3_bucket_ownership_controls.templates,
-    aws_s3_bucket_server_side_encryption_configuration.templates,
-    aws_s3_bucket_versioning.templates,
-  ]
-}
-
-# This separate immutable template installs only the dedicated default-off
-# Nova apply role. It never replaces or broadens the discovery/plan-only roles.
-resource "aws_s3_object" "current_customer_nova_apply_role" {
-  bucket       = aws_s3_bucket.templates.id
-  key          = local.nova_apply_template_key
-  source       = local.nova_apply_template_source
-  etag         = filemd5(local.nova_apply_template_source)
-  content_type = "application/x-yaml"
-  tags         = local.tags
-  depends_on = [
-    aws_s3_bucket_ownership_controls.templates,
-    aws_s3_bucket_server_side_encryption_configuration.templates,
-    aws_s3_bucket_versioning.templates,
-  ]
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-# Preserve previously published immutable template objects. A customer may
-# still have an active CloudFormation stack or saved Quick Create URL pointing
-# at one of these keys, so replacing the current template must never delete it.
-resource "aws_s3_object" "retained_customer_templates" {
-  for_each = var.retained_template_keys
+# One instance per immutable content-hash key gives each object a stable state
+# address. Each current source is uploaded only at its matching hash key; older
+# instances stay represented by key in retained_template_keys.
+resource "aws_s3_object" "published_customer_templates" {
+  for_each = local.published_keys
 
   bucket = aws_s3_bucket.templates.id
-  key    = each.value
+  key    = each.key
+
+  source       = lookup(local.current_template_sources, each.key, null)
+  etag         = contains(keys(local.current_template_sources), each.key) ? filemd5(local.current_template_sources[each.key]) : null
+  content_type = "application/x-yaml"
+  tags         = local.tags
+
+  depends_on = [
+    aws_s3_bucket_ownership_controls.templates,
+    aws_s3_bucket_server_side_encryption_configuration.templates,
+    aws_s3_bucket_versioning.templates,
+  ]
 
   lifecycle {
     prevent_destroy = true
@@ -118,22 +98,39 @@ resource "aws_s3_object" "retained_customer_templates" {
   }
 }
 
-# Retain the currently published template referenced by customer stacks and
-# saved Quick Create URLs when this newer role template is published.
+# Migrate existing Terraform addresses without changing their S3 keys. Every
+# template now uses the same protected, key-derived address from publication.
+moved {
+  from = aws_s3_object.current_customer_discovery_role
+  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-8c5d1c82682b3bb90ff1f45d121b475e7b33b484f556feabafbf387c335aea4e.yaml"]
+}
+
+moved {
+  from = aws_s3_object.customer_discovery_role
+  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]
+}
+
 moved {
   from = aws_s3_object.active_customer_discovery_role
   to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]
 }
 
-# Keep the most recently published URL available to customer setup links while
-# publishing the next content-hash object.
 moved {
   from = aws_s3_object.published_customer_discovery_role
   to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]
 }
 
-# Preserve the original object address from the first published template.
 moved {
-  from = aws_s3_object.customer_discovery_role
-  to   = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]
+  from = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]
+  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]
+}
+
+moved {
+  from = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]
+  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]
+}
+
+moved {
+  from = aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]
+  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]
 }

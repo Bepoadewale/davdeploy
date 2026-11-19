@@ -13,21 +13,23 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0` after source-only
-PRs #434–#436 hardened planned S3 bucket transport, default encryption, and
-ownership controls; their merged-main CI runs passed all seven checks. The
-hosted control plane was last read-only checked on 2026-11-18: API and worker
-Lambda package hashes and modification times were unchanged from the prior
-check, `/healthz` returned HTTP 200, and the apply, credential-broker, and role
-onboarding environment flags were absent. These source changes are not
-deployed. PR #399 is open/draft at `ca303d4ad413b69713fc6f6eb7be5934c8de8e88`,
-based on current `main`. Its latest evidence update passed all seven hosted
-checks in run `44259744310`.
-Apply and credential gates remain disabled. No Nova-hosted customer workload
-or hosted apply evidence is available. The platform account was authorized
-for an isolated direct-Terraform smoke test; that test is recorded in
-`docs/test/test399.md` and is not Nova-hosted evidence. The protected untracked
-`--only-show-errors` and `.venv-pr399/` must remain untouched.
+Backend `main` is `cb78865b66815287478892fe012257cf964413db` (through PR #438).
+PR #437 adds the isolated customer-side ECS Express pilot; PR #438 adds the
+append-only content-hash template collection. PR #438's protected-state plan
+was read-only; no template-host apply or live change ran. The PR #399 update
+synchronizes with current `main` and places both discovery and default-off Nova
+apply-role templates in the same protected content-hash collection. The
+current template-host changes remain source-only; no live plan or apply was
+run. PR #399 remains open and draft with apply/credential gates disabled.
+
+The owner accepts PR #437's isolated direct-Terraform ECS lifecycle as the
+general goal's customer-side plan/apply/health/update/recovery/teardown evidence
+under control-plane isolation. It does not exercise Nova generation,
+authorization, dispatch, credential issuance, or the dedicated customer apply
+role. Apply and credential gates remain disabled; no control-plane mutation,
+Nova apply build, customer credential issuance, or Nova-generated customer
+workload is claimed. Preserve the protected untracked `--only-show-errors` and
+`.venv-pr399/`.
 
 ## Research / references used
 
@@ -122,21 +124,30 @@ for an isolated direct-Terraform smoke test; that test is recorded in
   profile verification, an executable fixed worker, encrypted immutable result
   writing, and result reconciliation. The apply-build lookup now treats
   malformed or incomplete CodeBuild responses as uncertain instead of
-  permitting a duplicate dispatch.
+  permitting a duplicate dispatch. The template-host source now applies the
+  append-only key-derived address and `prevent_destroy` policy to both current
+  customer templates, including the default-off Nova apply-role template.
 - Apply and credential-broker gates remain disabled in hosted runtime. The
   apply-role CloudFormation template validates, but no dedicated customer role
   is installed and no live effective-permission check or customer credential
-  issuance has occurred. No apply CodeBuild or Nova customer workload has run.
+  issuance has occurred. PR #437 satisfies the general goal's customer-side
+  infrastructure lifecycle gate through a separate isolated direct-Terraform
+  run; it did not use the Nova apply path. No apply CodeBuild or Nova customer
+  workload has run.
 - Source verification is strong but not hosted evidence: local `make verify`
   passed 1,494 tests; the focused exact-plan apply suite passed 84; fresh-head
-  CI run `44259744310` passed all seven checks on
-  `ca303d4ad413b69713fc6f6eb7be5934c8de8e88`.
+  CI run `44259744310` passed all seven checks on the prior head. The current
+  update's focused template-host tests passed (11), Ruff passed, Terraform
+  format/validation passed with AWS provider 5.100.0, and documentation
+  conventions passed. Fresh hosted CI is required after this update is pushed.
   The existing full local clean-room proof predates this recovery change; the
-  current code commit's fresh-runner `local-e2e` passed in run `44257747819`.
+  prior code commit's fresh-runner `local-e2e` passed in run `44257747819`.
 - Trusted pricing remains limited to the supported resource/settings matrix.
   Unpriced or unsupported material resources still block approval. The direct
-  platform-account S3 smoke is separate from Nova and does not prove hosted
-  approval, apply, health, recovery, destroy, or independent absence.
+  platform-account S3 and ECS tests were isolated customer-side runs. ECS is
+  accepted for the general goal's customer-side plan/apply/health/lifecycle
+  evidence; neither test proves Nova approval, dispatch, credentials, or a
+  Nova-generated workload.
 
 ### Apply credential broker — 2026-11-17
 
