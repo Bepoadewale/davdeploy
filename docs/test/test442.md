@@ -19,8 +19,10 @@ None. This PR changes documentation only.
 - `gh pr view 441` and `gh pr checks 441` — merged state and seven passing
   checks in run `44608565238`
 - `python3 scripts/terraform_run_monitor.py status` — no active Terraform run
-- Documentation conventions, `git diff --check`, and 26/30 matrix count
-  validation are pending.
+- `GITHUB_PR_NUMBER=442 python3 scripts/check_doc_conventions.py` — passed
+- `git diff --check` — passed
+- Matrix count validation — 26 architecture entries and 30 Terraform roots
+- GitHub Actions run `44610232683` — all seven required checks passed
 
 ## Observed result
 

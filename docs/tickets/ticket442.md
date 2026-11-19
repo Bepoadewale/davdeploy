@@ -56,7 +56,7 @@ and 30-root scope and the accepted customer-side ECS evidence.
 - [x] The accepted direct ECS test is counted for the general customer-side
       lifecycle gate and attributed to direct Terraform.
 - [x] The 26 architecture entries and 30 Terraform roots remain intact.
-- [ ] Documentation conventions, diff checks, matrix counts, and final PR CI
+- [x] Documentation conventions, diff checks, 26/30 matrix counts, and PR CI
       pass.
 - [x] No hosted control-plane, AWS, Terraform state/lock, runtime, or gate
       mutation.
@@ -64,13 +64,16 @@ and 30-root scope and the accepted customer-side ECS evidence.
 ## Acceptance status
 
 The canonical handoff and matrix now identify PR #441's merged source and
-preserve the remaining goal scope. Local documentation and matrix checks are
-pending. No AWS or hosted control-plane mutation is part of this PR.
+preserve the remaining goal scope. Documentation conventions and diff checks
+pass, the matrix retains 26/30 entries, and all seven checks passed in run
+`44610232683`. No AWS or hosted control-plane mutation is part of this PR.
 
 ## Tests / validation performed
 
-- Pending documentation conventions, `git diff --check`, 26/30 matrix counts,
-  and PR CI.
+- `GITHUB_PR_NUMBER=442 python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Matrix count validation — 26 architecture entries and 30 Terraform roots.
+- GitHub Actions run `44610232683` — all seven required checks passed.
 - Current GitHub PR and required-check state verified for PR #441.
 - Terraform run monitor inspected; no active run was reported.
 
