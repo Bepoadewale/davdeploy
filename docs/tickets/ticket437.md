@@ -25,15 +25,19 @@ control plane.
 - [AWS App Runner availability change](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html)
 - [Amazon ECS Express Mode overview](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html)
 - [ECS Express Mode creation and IAM roles](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-getting-started.html)
+- [Updating an ECS Express Mode service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-update-full.html)
+- [ECS Express Mode best practices and rollback](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-best-practices.html)
 - [Terraform `aws_ecs_express_gateway_service`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_express_gateway_service)
 
 ## Work planned for the PR
 
-Validate the full Terraform root set in CI. Prepare a fresh same-account ECS
-Express customer run using local state, build and push the health fixture by
-immutable digest, verify live health, then apply a reviewed saved destroy plan
-and independently verify that billable workload resources are absent. Update
-and recovery behavior remains a follow-up.
+Validate the full Terraform root set in CI. Add a health fixture that reports
+its release version and can deliberately fail readiness. Run a fresh
+same-account ECS Express lifecycle using local state and immutable image
+digests: create and verify v1, update to healthy v2, deploy a failed-health
+revision and observe service rollback, restore v2, then apply a reviewed saved
+destroy plan and independently verify absence. Do not use or modify the hosted
+control plane.
 
 ## Acceptance criteria
 
@@ -43,8 +47,9 @@ and recovery behavior remains a follow-up.
   same-account boundary, unique run ID, and separate roles.
 - ECS Express Mode started the exact image digest, reached steady state, and
   returned the expected `/healthz` response. **Passed.**
-- A saved plan can update the workload and demonstrate recovery from a failed
-  revision. **Not tested in this cost-bounded run.**
+- A saved plan updates the workload to v2; a controlled failed-health revision
+  rolls back to the prior healthy service, and the service recovers to v2.
+  **Pending the second customer-side lifecycle run.**
 - A reviewed saved destroy plan removed all 15 Terraform-managed test
   resources. Independent AWS reads and empty local Terraform state confirm no
   running workload, VPC, load balancer, image repository, role, or log group.
@@ -93,6 +98,8 @@ the same-account VPC cross-account isolation.
 
 ## Follow-up work
 
-Run a separately reviewed update/recovery test only if required by the accepted
-customer-side lifecycle scope. No hosted Nova apply was attempted, and no Nova
-customer workload is claimed as applied or certified.
+The update/recovery lifecycle test is required for the broader container-service
+acceptance. Run it only with the isolated customer-side account/state boundary,
+then record exact image digests, saved plans, monitored run IDs, health results,
+rollback/recovery, teardown, and independent absence. No hosted Nova apply is
+authorized or claimed by this PR.
