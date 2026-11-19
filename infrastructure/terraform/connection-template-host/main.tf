@@ -1,8 +1,15 @@
 locals {
-  template_source = "${path.module}/../../cloudformation/customer-discovery-role.yaml"
-  template_hash   = filesha256(local.template_source)
-  template_key    = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"
-  published_keys  = setunion(var.retained_template_keys, toset([local.template_key]))
+  template_source            = "${path.module}/../../cloudformation/customer-discovery-role.yaml"
+  template_hash              = filesha256(local.template_source)
+  template_key               = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"
+  nova_apply_template_source = "${path.module}/../../cloudformation/customer-nova-apply-role.yaml"
+  nova_apply_template_hash   = filesha256(local.nova_apply_template_source)
+  nova_apply_template_key    = "cloudformation/customer-nova-apply-role-${local.nova_apply_template_hash}.yaml"
+  current_template_sources = {
+    (local.template_key)            = local.template_source
+    (local.nova_apply_template_key) = local.nova_apply_template_source
+  }
+  published_keys = setunion(var.retained_template_keys, toset(keys(local.current_template_sources)))
   tags = {
     Project   = "davdeploy"
     ManagedBy = "terraform"
@@ -66,7 +73,7 @@ resource "aws_s3_bucket_policy" "templates" {
 }
 
 # One instance per immutable content-hash key gives each object a stable state
-# address. The current source is uploaded only at its matching hash key; older
+# address. Each current source is uploaded only at its matching hash key; older
 # instances stay represented by key in retained_template_keys.
 resource "aws_s3_object" "published_customer_templates" {
   for_each = local.published_keys
@@ -74,8 +81,8 @@ resource "aws_s3_object" "published_customer_templates" {
   bucket = aws_s3_bucket.templates.id
   key    = each.key
 
-  source       = each.key == local.template_key ? local.template_source : null
-  etag         = each.key == local.template_key ? filemd5(local.template_source) : null
+  source       = lookup(local.current_template_sources, each.key, null)
+  etag         = contains(keys(local.current_template_sources), each.key) ? filemd5(local.current_template_sources[each.key]) : null
   content_type = "application/x-yaml"
   tags         = local.tags
 

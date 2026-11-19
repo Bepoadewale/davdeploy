@@ -50,6 +50,10 @@ from davdeploy.generated_provider_validation import (
     provider_schema_provenance,
     validate_generated_proposal,
 )
+from davdeploy.nova_apply_access import (
+    NovaApplyAccessPolicyError,
+    build_nova_apply_access_policy,
+)
 from davdeploy.nova_terraform_state_client import TerraformHTTPBackend
 from davdeploy.terraform_state import TerraformStateError, terraform_state_scope_digest
 
@@ -86,6 +90,9 @@ class GeneratedTerraformPlan:
     untagged_resource_ownership: tuple[UntaggedResourceOwnershipRecord, ...] = ()
     plan_access_policy_version: str = "NOT_APPLICABLE"
     plan_access_policy_sha256: str = "0" * 64
+    apply_access_policy_version: str = "UNAVAILABLE"
+    apply_access_policy_sha256: str = "0" * 64
+    apply_access_policy_document: dict[str, Any] | None = None
     pricing: GeneratedPlanPricingEvidence | None = None
 
 
@@ -292,6 +299,12 @@ class GeneratedTerraformPlanRunner:
             untagged_resource_ownership=untagged_resource_ownership,
         )
         try:
+            apply_access = build_nova_apply_access_policy(
+                document, account_id=expected_account_id, region=region
+            )
+        except NovaApplyAccessPolicyError:
+            apply_access = None
+        try:
             pricing = evaluate_generated_plan_pricing(
                 document,
                 trusted_context=trusted_pricing_context,
@@ -333,6 +346,15 @@ class GeneratedTerraformPlanRunner:
             untagged_resource_ownership=untagged_resource_ownership,
             plan_access_policy_version=plan_access_policy_version,
             plan_access_policy_sha256=plan_access_policy_sha256,
+            apply_access_policy_version=(
+                apply_access.version if apply_access is not None else "UNAVAILABLE"
+            ),
+            apply_access_policy_sha256=(
+                apply_access.sha256 if apply_access is not None else "0" * 64
+            ),
+            apply_access_policy_document=(
+                apply_access.document if apply_access is not None else None
+            ),
             pricing=pricing,
         )
 

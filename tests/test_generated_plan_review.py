@@ -5,6 +5,7 @@ import json
 import os
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import davdeploy.service as service_module
 import pytest
@@ -29,7 +30,7 @@ from davdeploy.generated_plan_pricing import (
 )
 from davdeploy.generated_terraform_plan import GeneratedTerraformPlan
 from davdeploy.main import app, product_service
-from davdeploy.models import GeneratedPlanApproval, GeneratedPlanArtifact
+from davdeploy.models import GeneratedPlanApplyRun, GeneratedPlanApproval, GeneratedPlanArtifact
 from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
@@ -702,3 +703,43 @@ def test_generated_plan_review_routes_are_tenant_scoped_and_admin_only(tmp_path)
             )
     finally:
         app.dependency_overrides.pop(product_service, None)
+
+
+def test_generated_plan_apply_request_is_closed_until_runner_is_ready(tmp_path, monkeypatch):
+    store = ArtifactStoreFixture()
+    service, db = service_with_artifact_store(store)
+    monkeypatch.delenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", raising=False)
+
+    with pytest.raises(ValueError, match="runner is not ready"):
+        service.create_generated_plan_apply_run(
+            administrator(),
+            "missing-artifact",
+            "a" * 64,
+            "request-key-for-apply-001",
+        )
+
+    assert db.scalar(select(GeneratedPlanApplyRun.id)) is None
+
+
+def test_generated_plan_apply_worker_stays_inert_until_runner_is_ready(monkeypatch):
+    store = ArtifactStoreFixture()
+    service, _db = service_with_artifact_store(store)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false")
+
+    assert service.run_next_generated_plan_apply_run() is False
+
+
+def test_generated_plan_apply_wakeup_only_sends_for_queued_runs():
+    store = ArtifactStoreFixture()
+    service, _db = service_with_artifact_store(store)
+    wakeups = []
+    service._wake_worker = lambda kind, run_id: wakeups.append((kind, run_id))
+
+    queued = SimpleNamespace(id="queued-apply-run", state="QUEUED")
+    service._wake_generated_plan_apply_run(queued)
+    for state in ("DISPATCHING", "BUILD_STARTED", "RECONCILIATION_REQUIRED"):
+        service._wake_generated_plan_apply_run(
+            SimpleNamespace(id=f"{state.lower()}-apply-run", state=state)
+        )
+
+    assert wakeups == [("generated_plan_apply_run", "queued-apply-run")]

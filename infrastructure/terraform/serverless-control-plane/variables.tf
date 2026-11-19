@@ -144,6 +144,65 @@ variable "enable_nova_plan_only_runner" {
   }
 }
 
+variable "enable_nova_exact_plan_apply_runner" {
+  type        = bool
+  description = "Provision the separate disabled-by-default CodeBuild boundary for exact saved-plan apply. The API dispatch readiness flag remains closed until both this runner and the separate credential broker are enabled; customer role permission verification and lifecycle certification are still required."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_runner || var.enable_nova_plan_only_runner
+    error_message = "Nova exact-plan apply requires the isolated Nova plan-only boundary."
+  }
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_runner || var.enable_nova_plan_reviews
+    error_message = "Nova exact-plan apply requires encrypted plan review artifacts."
+  }
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_runner || var.enable_nova_terraform_state_api
+    error_message = "Nova exact-plan apply requires tenant-scoped remote state and locking."
+  }
+}
+
+variable "enable_nova_exact_plan_apply_credential_broker" {
+  type        = bool
+  description = "Allow only the exact active apply build to request short-lived credentials for its verified customer execution role. Keep disabled until the fixed apply worker and lifecycle gates are independently verified."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_exact_plan_apply_credential_broker || var.enable_nova_exact_plan_apply_runner
+    error_message = "The Nova apply credential broker requires the separate exact-plan apply runner."
+  }
+}
+
+variable "enable_nova_apply_role_onboarding" {
+  type        = bool
+  description = "Allow workspace administrators to generate a CloudFormation Quick Create link for the dedicated customer Nova apply role. This does not provision the role or enable apply."
+  default     = false
+
+  validation {
+    condition     = !var.enable_nova_apply_role_onboarding || var.enable_nova_plan_role_verification
+    error_message = "Nova apply-role onboarding requires customer plan-role verification to be configured."
+  }
+}
+
+variable "nova_apply_role_template_url" {
+  type        = string
+  description = "Public immutable content-hash URL for the separate customer Nova apply-role template."
+  default     = ""
+
+  validation {
+    condition     = var.nova_apply_role_template_url == "" || can(regex("^https://[a-z0-9.-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/cloudformation/customer-nova-apply-role-[0-9a-f]{64}\\.yaml$", var.nova_apply_role_template_url))
+    error_message = "nova_apply_role_template_url must be an immutable content-hash S3 template URL."
+  }
+
+  validation {
+    condition     = !var.enable_nova_apply_role_onboarding || var.nova_apply_role_template_url != ""
+    error_message = "Nova apply-role onboarding requires the published customer role template URL."
+  }
+}
+
 variable "enable_nova_terraform_state_storage" {
   type        = bool
   description = "Provision the private versioned KMS state bucket. This does not enable the HTTP API or change the backend-free Nova runner."

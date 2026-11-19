@@ -237,10 +237,10 @@ def _evaluate(
         document, resources, ownership_scope, findings, untagged_resource_ownership
     )
     _check_policy_critical_unknowns(document, findings)
-    _check_s3(document, resources, expected_region, findings)
+    _check_s3(document, resources, expected_region, findings, expected_account_id)
     _check_cloudfront_viewer_tls(resources, findings)
     _check_cloudfront_origin_tls(resources, findings)
-    _check_sqs_queue_policies(resources, findings)
+    _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
     _check_iam(resources, findings, expected_account_id)
@@ -672,6 +672,7 @@ def _check_s3(
     resources: tuple[dict[str, Any], ...],
     expected_region: str,
     findings: list[PlanPolicyFinding],
+    expected_account_id: str,
 ) -> None:
     buckets = {
         item.get("values", {}).get("bucket"): item
@@ -736,13 +737,44 @@ def _check_s3(
             _deny(findings, "s3_public_acl", address, "The plan grants public access through an S3 access control list.")
         if kind == "aws_s3_bucket_policy":
             policy = _json_document(values.get("policy"), findings, address)
-            if policy is not None and _has_public_allow(policy):
-                _deny(
-                    findings,
-                    "s3_public_policy_denied",
-                    address,
-                    "The plan grants direct public access to storage. Serve public files through a private origin instead.",
-                )
+            if policy is not None:
+                if _has_public_allow(policy):
+                    _deny(
+                        findings,
+                        "s3_public_policy_denied",
+                        address,
+                        "The plan grants direct public access to storage. Serve public files through a private origin instead.",
+                    )
+                elif _has_unverified_resource_policy_principal(
+                    policy, expected_account_id
+                ):
+                    _deny(
+                        findings,
+                        "s3_unverified_policy_principal_denied",
+                        address,
+                        "The storage policy names an external or unverified principal.",
+                    )
+                elif _has_not_action_allow(policy):
+                    _deny(
+                        findings,
+                        "s3_not_action_policy_denied",
+                        address,
+                        "The storage policy uses an inverse action scope that cannot be safely bounded.",
+                    )
+                elif _has_unbounded_resource_allow(policy):
+                    _deny(
+                        findings,
+                        "s3_not_resource_policy_denied",
+                        address,
+                        "The storage policy uses an inverse resource scope that cannot be safely bounded.",
+                    )
+                elif _has_unbounded_resource_arn_allow(policy, "s3"):
+                    _deny(
+                        findings,
+                        "s3_resource_arn_unbounded",
+                        address,
+                        "The storage policy resource must use a complete, bounded S3 ARN.",
+                    )
 
     _check_s3_secure_transport(document, resources, expected_region, findings)
     _check_s3_default_encryption(document, resources, findings)
@@ -2032,8 +2064,68 @@ def _has_public_allow(policy: dict[str, Any]) -> bool:
     return False
 
 
+def _has_unbounded_resource_allow(policy: dict[str, Any]) -> bool:
+    return any(
+        str(statement.get("Effect", "")).lower() == "allow"
+        and "NotResource" in statement
+        for statement in _statements(policy, require_resource=True)
+    )
+
+
+def _has_unbounded_resource_arn_allow(
+    policy: dict[str, Any], service: str
+) -> bool:
+    return any(
+        str(statement.get("Effect", "")).lower() == "allow"
+        and any(
+            _unbounded_data_resource(resource, service)
+            for resource in _string_list(statement.get("Resource"))
+        )
+        for statement in _statements(policy, require_resource=True)
+    )
+
+
+def _has_not_action_allow(policy: dict[str, Any]) -> bool:
+    return any(
+        str(statement.get("Effect", "")).lower() == "allow"
+        and "NotAction" in statement
+        for statement in _statements(policy, require_resource=True)
+    )
+
+
+def _has_unverified_resource_policy_principal(
+    policy: dict[str, Any], expected_account_id: str
+) -> bool:
+    service_pattern = r"[a-z0-9-]+(?:\.[a-z0-9-]+)*\.amazonaws\.com(?:\.cn)?"
+    for statement in _statements(policy, require_resource=True, require_principal=True):
+        if str(statement.get("Effect", "")).lower() != "allow" or "NotPrincipal" in statement:
+            continue
+        principal = statement.get("Principal")
+        if principal == "*":
+            continue
+        principals = principal if isinstance(principal, dict) else {"AWS": principal}
+        for principal_type, raw_values in principals.items():
+            values = _string_list(raw_values)
+            if not values or any("*" in value or "?" in value for value in values):
+                return True
+            if principal_type == "AWS":
+                if any(
+                    not _is_same_account_principal(value, expected_account_id)
+                    for value in values
+                ):
+                    return True
+            elif principal_type == "Service":
+                if any(not re.fullmatch(service_pattern, value) for value in values):
+                    return True
+            else:
+                return True
+    return False
+
+
 def _check_sqs_queue_policies(
-    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
 ) -> None:
     for item in resources:
         if item.get("type") != "aws_sqs_queue_policy":
@@ -2049,13 +2141,44 @@ def _check_sqs_queue_policies(
             continue
         address = item.get("address")
         policy = _json_document(values.get("policy"), findings, address)
-        if policy is not None and _has_public_allow(policy):
-            _deny(
-                findings,
-                "sqs_public_policy_denied",
-                address,
-                "The plan grants public or unbounded access to an SQS queue.",
-            )
+        if policy is not None:
+            if _has_public_allow(policy):
+                _deny(
+                    findings,
+                    "sqs_public_policy_denied",
+                    address,
+                    "The plan grants public or unbounded access to an SQS queue.",
+                )
+            elif _has_unverified_resource_policy_principal(
+                policy, expected_account_id
+            ):
+                _deny(
+                    findings,
+                    "sqs_unverified_policy_principal_denied",
+                    address,
+                    "The queue policy names an external or unverified principal.",
+                )
+            elif _has_not_action_allow(policy):
+                _deny(
+                    findings,
+                    "sqs_not_action_policy_denied",
+                    address,
+                    "The queue policy uses an inverse action scope that cannot be safely bounded.",
+                )
+            elif _has_unbounded_resource_allow(policy):
+                _deny(
+                    findings,
+                    "sqs_not_resource_policy_denied",
+                    address,
+                    "The queue policy uses an inverse resource scope that cannot be safely bounded.",
+                )
+            elif _has_unbounded_resource_arn_allow(policy, "sqs"):
+                _deny(
+                    findings,
+                    "sqs_resource_arn_unbounded",
+                    address,
+                    "The queue policy resource must use a complete, bounded SQS ARN.",
+                )
 
 
 def _check_lambda_permissions(
@@ -2187,6 +2310,14 @@ def _check_iam_permissions(
     for statement in _statements(policy, require_resource=True):
         if str(statement.get("Effect", "")).lower() != "allow":
             continue
+        if "NotResource" in statement:
+            _deny(
+                findings,
+                "iam_not_resource_policy_denied",
+                address,
+                "An IAM allow policy uses NotResource, so its effective resource scope cannot be safely bounded.",
+            )
+            continue
         if "NotAction" in statement:
             _deny(
                 findings,
@@ -2211,12 +2342,36 @@ def _check_iam_permissions(
             )
         wildcard_resource = any("*" in item or "?" in item for item in resources)
         pass_role = "iam:passrole" in normalized_actions
-        if "*" in actions or "iam:*" in normalized_actions:
+        broad_assume_role = any(
+            action == "sts:*"
+            or action.startswith("sts:assume") and action != "sts:assumerole"
+            for action in normalized_actions
+        )
+        if broad_assume_role:
+            _deny(
+                findings,
+                "sts_assume_role_unbounded_denied",
+                address,
+                "The plan uses a wildcard role-assumption action that cannot be safely bounded.",
+            )
+            continue
+        if any("*" in action or "?" in action for action in actions):
             _deny(
                 findings,
                 "iam_privileged_wildcard",
                 address,
-                "The plan grants broad IAM administration. Narrow the permissions to required actions and resources.",
+                "The plan grants wildcard IAM permissions. Name each required action explicitly.",
+            )
+            continue
+        if any(
+            action.startswith(("s3:", "sqs:", "dynamodb:"))
+            for action in normalized_actions
+        ) and any(_unbounded_data_resource(resource) for resource in resources):
+            _deny(
+                findings,
+                "iam_data_resource_unbounded",
+                address,
+                "The plan grants data-service access outside an exact bucket, queue, table, or table index scope.",
             )
             continue
         iam_mutations = {
@@ -2251,18 +2406,7 @@ def _check_iam_permissions(
                     "The plan passes a specific role to a named AWS service; confirm the role permissions and service use before approval.",
                 )
         assume_role = "sts:assumerole" in normalized_actions
-        broad_assume_role = any(
-            action == "sts:*" or action.startswith("sts:assume") and action != "sts:assumerole"
-            for action in normalized_actions
-        )
-        if broad_assume_role:
-            _deny(
-                findings,
-                "sts_assume_role_unbounded_denied",
-                address,
-                "The plan uses a wildcard role-assumption action that cannot be safely bounded.",
-            )
-        elif assume_role:
+        if assume_role:
             if wildcard_resource or not _same_account_role_resources(
                 resources, expected_account_id
             ):
@@ -2279,6 +2423,32 @@ def _check_iam_permissions(
                     address,
                     "The plan grants role assumption for a specific same-account role; review the target trust and application need.",
                 )
+
+
+def _unbounded_data_resource(resource: str, service: str | None = None) -> bool:
+    """Allow complete data ARNs and only the exact S3/DynamoDB child scopes."""
+    partition = r"aws(?:-[a-z0-9-]+)?"
+    bucket = r"[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])"
+    allowed_patterns = {
+        "s3": (
+            rf"arn:{partition}:s3:::{bucket}(?:/[^*?]+)?",
+            rf"arn:{partition}:s3:::{bucket}/\*",
+        ),
+        "sqs": (
+            rf"arn:{partition}:sqs:[a-z0-9-]+:\d{{12}}:(?:[A-Za-z0-9_-]{{1,80}}|[A-Za-z0-9_-]{{1,75}}\.fifo)",
+        ),
+        "dynamodb": (
+            rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}",
+            rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/[A-Za-z0-9_.-]{{3,255}}",
+            rf"arn:{partition}:dynamodb:[a-z0-9-]+:\d{{12}}:table/[A-Za-z0-9_.-]{{3,255}}/index/\*",
+        ),
+    }
+    patterns = (
+        allowed_patterns.get(service, ())
+        if service is not None
+        else tuple(pattern for group in allowed_patterns.values() for pattern in group)
+    )
+    return not any(re.fullmatch(pattern, resource) for pattern in patterns)
 
 
 def _same_account_role_resources(resources: tuple[str, ...], account_id: str) -> bool:

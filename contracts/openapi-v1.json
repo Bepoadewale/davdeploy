@@ -111,7 +111,7 @@
         "properties": {
           "access_mode": {
             "default": "discovery",
-            "pattern": "^(discovery|plan-only|administrator-pilot)$",
+            "pattern": "^(discovery|plan-only|administrator-pilot|nova-apply)$",
             "title": "Access Mode",
             "type": "string"
           },
@@ -123,6 +123,11 @@
           "acknowledge_administrator_access": {
             "default": false,
             "title": "Acknowledge Administrator Access",
+            "type": "boolean"
+          },
+          "acknowledge_nova_apply_role_setup": {
+            "default": false,
+            "title": "Acknowledge Nova Apply Role Setup",
             "type": "boolean"
           }
         },
@@ -4466,6 +4471,53 @@
         "summary": "Get Recommendation"
       }
     },
+    "/api/v1/generated-plan-apply-runs/{apply_run_id}": {
+      "get": {
+        "description": "Return safe status for one organization-owned exact-plan apply request.",
+        "operationId": "get_generated_plan_apply_run_api_v1_generated_plan_apply_runs__apply_run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "apply_run_id",
+            "required": true,
+            "schema": {
+              "title": "Apply Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Generated Plan Apply Run"
+      }
+    },
     "/api/v1/generated-plan-artifacts/{artifact_id}": {
       "get": {
         "description": "Return safe review evidence only; never return saved-plan bytes or object references.",
@@ -4511,6 +4563,72 @@
           }
         },
         "summary": "Get Generated Plan Artifact"
+      }
+    },
+    "/api/v1/generated-plan-artifacts/{artifact_id}/apply": {
+      "post": {
+        "description": "Queue an exact-plan apply request tied to an existing admin approval.",
+        "operationId": "create_generated_plan_apply_run_api_v1_generated_plan_artifacts__artifact_id__apply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratedPlanArtifactApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Generated Plan Apply Run"
       }
     },
     "/api/v1/generated-plan-artifacts/{artifact_id}/approve": {
@@ -5391,6 +5509,101 @@
           }
         },
         "summary": "Create Desired State Publication"
+      }
+    },
+    "/api/v1/projects/{project_id}/generated-plan-apply-runs": {
+      "get": {
+        "description": "List safe exact-plan apply status for one authorized project.",
+        "operationId": "list_generated_plan_apply_runs_api_v1_projects__project_id__generated_plan_apply_runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 36,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Revision Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": true,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Generated Plan Apply Runs"
       }
     },
     "/api/v1/projects/{project_id}/generated-plan-runs": {

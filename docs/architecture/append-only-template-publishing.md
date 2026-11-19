@@ -6,17 +6,17 @@ DavDeploy hosts its public, non-secret customer connection template in a version
 
 ## Publishing model
 
-- Name each object `cloudformation/customer-discovery-role-<sha256>.yaml`, where the digest is computed from the source template bytes.
-- Manage every published key through one `aws_s3_object.published_customer_templates` resource using the object key as the `for_each` key. Terraform therefore gives that object a stable address such as `aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-<digest>.yaml"]`.
-- Include the current key automatically and keep previous keys in the append-only `retained_template_keys` manifest. Before publishing a changed template, add the formerly current key to that manifest in the same source change.
-- Set `prevent_destroy = true` on the shared resource so the protection applies at the first creation of each current object as well as to every retained object. Ignore later provider-side object drift; a changed template has a different SHA-256 key and becomes a new instance.
-- Keep the output URL pointed at the current content hash. The S3 bucket name, old keys, and their URLs remain unchanged.
+- Name each object `cloudformation/customer-<template-name>-<sha256>.yaml`, where the digest is computed from the source template bytes. Current examples are `customer-discovery-role` and the default-off `customer-nova-apply-role` template.
+- Manage every published key through one `aws_s3_object.published_customer_templates` resource using the object key as the `for_each` key. Terraform therefore gives each object a stable address such as `aws_s3_object.published_customer_templates["cloudformation/customer-nova-apply-role-<digest>.yaml"]`.
+- Include each current key from its source map and keep previous keys in the append-only `retained_template_keys` manifest. Before publishing a changed template, add its formerly current key to that manifest in the same source change.
+- Set `prevent_destroy = true` on the shared resource so the protection applies at the first creation of every current object as well as to every retained object. Ignore later provider-side object drift; a changed template has a different SHA-256 key and becomes a new instance.
+- Keep each output URL pointed at its respective current content-hash key. The S3 bucket name, old keys, and their URLs remain unchanged.
 
 This is Terraform-level deletion protection. It does not protect against an administrator deleting objects outside Terraform, losing Terraform state, or deliberately removing lifecycle protection from source. S3 versioning remains an additional recovery mechanism, not a substitute for the append-only manifest.
 
 ## State migration
 
-The existing state uses a separate current-object address and a retained-object map. Use static `moved` blocks to move historical `customer_discovery_role`, `active_customer_discovery_role`, and `published_customer_discovery_role` addresses to their original retained-map addresses. Then move each retained-map instance, plus the current `8c5d…` object, to the new key-derived resource addresses. Each `from` address must appear exactly once. These moves change Terraform state addresses only; they must not change S3 keys or object contents. The corrected lock-free template-host plan showed the current object and three retained objects moving addresses, with zero adds, changes, or destroys. The earlier attempt failed with an ambiguous move graph before Terraform produced a plan. Any apply remains separate and requires explicit approval. Do not apply a plan that proposes replacing an existing key.
+The existing discovery-template state uses a separate current-object address and a retained-object map. Use static `moved` blocks to move historical `customer_discovery_role`, `active_customer_discovery_role`, and `published_customer_discovery_role` addresses to their original retained-map addresses. Then move each retained-map instance, plus the current `8c5d…` object, to the new key-derived resource addresses. Each `from` address must appear exactly once. These moves change Terraform state addresses only; they must not change S3 keys or object contents. The corrected lock-free template-host plan showed the current discovery object and three retained objects moving addresses, with zero adds, changes, or destroys. The newly introduced Nova apply-role template has no prior managed state address and joins the collection at its content-hash key on first publication. The earlier attempt failed with an ambiguous move graph before Terraform produced a plan. Any apply remains separate and requires explicit approval. Do not apply a plan that proposes replacing an existing key.
 
 After this migration, each release adds the prior current key to the manifest and introduces the new content-hash instance. No move is required for newly published objects because they are created directly at their permanent address. Keep all historical keys in the manifest indefinitely while customer URLs or stacks may depend on them; removal requires a separate explicit retention decision and must not be part of routine publishing.
 
@@ -32,9 +32,9 @@ After this migration, each release adds the prior current key to the manifest an
 
 ## Acceptance criteria
 
-1. A regression test proves the content-hash key, stable key-derived address, append-only manifest, and `prevent_destroy` are present on the resource that creates new objects.
-2. Migration blocks cover the current object and every already-managed retained key without changing any key string.
-3. The output URL resolves to the current keyed instance; no existing public URL is renamed or redirected.
+1. Regression tests prove each current template uses its content-hash key in the shared stable-address collection and receives `prevent_destroy` on first creation.
+2. Migration blocks cover the existing discovery object and every already-managed retained key without changing any key string; a new template with no prior state is created at its permanent address.
+3. Each output URL resolves to its respective current keyed instance; no existing public URL is renamed or redirected.
 4. For the one-time migration, a reviewed plan against the protected template-host state shows only the expected address moves and no object create, update, replacement, or deletion. The current migration plan met this criterion with four moves and zero resource changes.
 5. Before a later template release, review a separate plan for a changed source file: it must add the new content-hash object, retain every prior key, and propose no prior-object update, replacement, or deletion. This future-publication plan has not been exercised by this change.
 6. Any live apply is a separate, explicitly approved operation. Source changes and CI do not constitute deployment evidence.

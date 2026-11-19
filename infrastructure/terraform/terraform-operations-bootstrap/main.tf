@@ -83,6 +83,82 @@ resource "aws_iam_policy" "nova_plan_only_start_build_overrides" {
   })
 }
 
+resource "aws_iam_policy" "nova_exact_plan_apply_start_build_overrides" {
+  name        = "nova-exact-plan-apply-start-build-overrides"
+  description = "Deny caller overrides on the fixed DavDeploy Nova exact-plan apply CodeBuild project"
+  tags        = merge(local.common_tags, { Purpose = "nova-exact-plan-apply-start-build-guard" })
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        for condition_key in local.nova_plan_only_blocked_start_build_keys : {
+          Effect   = "Deny"
+          Action   = ["codebuild:StartBuild"]
+          Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-saved-plan-apply"
+          Condition = {
+            Null = { (condition_key) = "false" }
+          }
+        }
+      ],
+      [
+        {
+          Effect   = "Deny"
+          Action   = ["codebuild:StartBuild"]
+          Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-saved-plan-apply"
+          Condition = {
+            "ForAnyValue:StringNotEquals" = {
+              "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_APPLY_RUN_ID"]
+            }
+          }
+        }
+      ]
+    )
+  })
+}
+
+resource "aws_iam_policy" "nova_exact_plan_apply_codebuild" {
+  name        = "nova-exact-plan-apply-codebuild"
+  description = "Allow only the DavDeploy API to start the fixed Nova exact-plan apply project with its durable run ID"
+  tags        = merge(local.common_tags, { Purpose = "nova-exact-plan-apply-dispatch" })
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["codebuild:StartBuild"]
+        Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-saved-plan-apply"
+        Condition = {
+          Null = {
+            "codebuild:environment.environmentVariables.name"                              = "false"
+            "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_APPLY_RUN_ID.value" = "false"
+          }
+          "ForAllValues:StringEquals" = {
+            "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_APPLY_RUN_ID"]
+          }
+          StringLike = {
+            "codebuild:environment.environmentVariables/DAVDEPLOY_NOVA_APPLY_RUN_ID.value" = "?*"
+          }
+        }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["codebuild:BatchGetBuilds"]
+        Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-saved-plan-apply"
+      },
+      {
+        Effect   = "Deny"
+        Action   = ["codebuild:StartBuild"]
+        Resource = "arn:${data.aws_partition.current.partition}:codebuild:${var.region}:${data.aws_caller_identity.current.account_id}:project/davdeploy-nova-saved-plan-apply"
+        Condition = {
+          "ForAnyValue:StringNotEquals" = {
+            "codebuild:environment.environmentVariables.name" = ["DAVDEPLOY_NOVA_APPLY_RUN_ID"]
+          }
+        }
+      },
+    ]
+  })
+}
+
 resource "aws_kms_key" "plans" {
   description             = "Encrypt davdeploy saved Terraform plans"
   deletion_window_in_days = 30

@@ -21,7 +21,10 @@ variable "retained_template_keys" {
   description = "Immutable public template keys retained for existing CloudFormation stacks and setup links."
 
   validation {
-    condition     = alltrue([for key in var.retained_template_keys : can(regex("^cloudformation/customer-discovery-role-[0-9a-f]{64}\\.yaml$", key))])
-    error_message = "Retained template keys must be immutable customer-discovery-role CloudFormation object keys."
+    condition = alltrue([for key in var.retained_template_keys : can(regex(
+      "^cloudformation/customer-(discovery-role|nova-apply-role)-[0-9a-f]{64}\\.yaml$",
+      key
+    ))])
+    error_message = "Retained template keys must be immutable customer discovery or Nova apply-role CloudFormation object keys."
   }
 }

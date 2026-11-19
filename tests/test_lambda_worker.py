@@ -38,6 +38,9 @@ def test_worker_wakeup_drains_a_bounded_durable_backlog(monkeypatch):
         def run_next_cloud_execution(self):
             return False
 
+        def run_next_generated_plan_apply_run(self):
+            return False
+
         def run_next_job(self):
             return False
 
@@ -74,6 +77,9 @@ def test_worker_wakeup_clamps_an_invalid_or_excessive_drain_limit(monkeypatch):
             calls.append("cloud_execution")
             return False
 
+        def run_next_generated_plan_apply_run(self):
+            return False
+
         def run_next_job(self):
             calls.append("legacy")
             return False
@@ -107,6 +113,9 @@ def test_worker_ignores_a_malformed_wakeup_without_redriving_the_batch(monkeypat
         def run_next_cloud_execution(self):
             return False
 
+        def run_next_generated_plan_apply_run(self):
+            return False
+
         def run_next_job(self):
             return False
 
@@ -137,6 +146,9 @@ def test_worker_wakeup_drains_a_durable_nova_plan_request(monkeypatch):
             return False
 
         def run_next_cloud_execution(self):
+            return False
+
+        def run_next_generated_plan_apply_run(self):
             return False
 
         def run_next_job(self):
@@ -181,6 +193,9 @@ def test_worker_wakeup_uses_a_durable_cursor_with_a_one_job_cap(monkeypatch):
         def run_next_cloud_execution(self):
             calls.append("cloud_execution")
             return True
+
+        def run_next_generated_plan_apply_run(self):
+            return False
 
         def run_next_job(self):
             calls.append("legacy")

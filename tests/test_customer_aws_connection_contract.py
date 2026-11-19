@@ -131,9 +131,12 @@ def test_public_template_host_publishes_append_only_hash_keyed_objects():
     assert "s3:ListBucket" not in configuration
     assert 'resource "aws_s3_object" "published_customer_templates"' in configuration
     assert "for_each = local.published_keys" in configuration
-    assert "published_keys  = setunion(var.retained_template_keys, toset([local.template_key]))" in configuration
+    assert "published_keys = setunion(var.retained_template_keys, toset(keys(local.current_template_sources)))" in configuration
     assert 'key    = each.key' in configuration
-    assert 'source       = each.key == local.template_key ? local.template_source : null' in configuration
+    assert 'source       = lookup(local.current_template_sources, each.key, null)' in configuration
+    assert "(local.template_key)            = local.template_source" in configuration
+    assert "(local.nova_apply_template_key) = local.nova_apply_template_source" in configuration
+    assert "contains(keys(local.current_template_sources), each.key)" in configuration
     assert "prevent_destroy = true" in configuration
     assert "ignore_changes  = all" in configuration
     assert 'resource "aws_s3_object" "current_customer_discovery_role"' not in configuration
@@ -180,11 +183,45 @@ def test_public_template_host_publishes_append_only_hash_keyed_objects():
 
     assert dict(moves) == expected_moves
 
-    assert "template_hash   = filesha256(local.template_source)" in configuration
-    assert 'template_key    = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"' in configuration
+    assert re.search(r"template_hash\s*=\s*filesha256\(local\.template_source\)", configuration)
+    assert re.search(
+        r'template_key\s*=\s*"cloudformation/customer-discovery-role-\$\{local\.template_hash\}\.yaml"',
+        configuration,
+    )
     assert "aws_s3_object.published_customer_templates[local.template_key].key" in outputs
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
+
+
+def test_public_template_host_publishes_nova_apply_role_in_protected_collection():
+    configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
+    variables = Path("infrastructure/terraform/connection-template-host/variables.tf").read_text()
+    outputs = Path("infrastructure/terraform/connection-template-host/outputs.tf").read_text()
+
+    assert "customer-nova-apply-role.yaml" in configuration
+    assert "customer-nova-apply-role-${local.nova_apply_template_hash}.yaml" in configuration
+    assert "(local.nova_apply_template_key) = local.nova_apply_template_source" in configuration
+    assert 'resource "aws_s3_object" "current_customer_nova_apply_role"' not in configuration
+    assert "prevent_destroy = true" in configuration
+    assert "ignore_changes  = all" in configuration
+    assert "nova-apply-role" in variables
+    assert "customer_nova_apply_role_template_url" in outputs
+    assert "published_customer_templates[local.nova_apply_template_key].key" in outputs
+
+
+def test_nova_apply_role_onboarding_is_default_off_and_uses_public_template_configuration():
+    configuration = Path("infrastructure/terraform/serverless-control-plane/main.tf").read_text()
+    variables = Path("infrastructure/terraform/serverless-control-plane/variables.tf").read_text()
+
+    assert 'variable "enable_nova_apply_role_onboarding"' in variables
+    onboarding = variables.split(
+        'variable "enable_nova_apply_role_onboarding"', 1
+    )[1].split("variable ", 1)[0]
+    assert "default     = false" in onboarding
+    assert 'variable "nova_apply_role_template_url"' in variables
+    assert "DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED" in configuration
+    assert "DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL" in configuration
+    assert "DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN" in configuration
 
 
 def test_control_plane_identity_can_assume_the_quick_create_role_name_pattern():

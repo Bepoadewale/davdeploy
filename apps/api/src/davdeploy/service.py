@@ -124,6 +124,7 @@ from davdeploy.models import (
     Environment,
     EnvironmentOutput,
     ExecutionJob,
+    GeneratedPlanApplyRun,
     GeneratedPlanApproval,
     GeneratedPlanArtifact,
     GeneratedPlanRun,
@@ -159,6 +160,7 @@ from davdeploy.module_ports import (
     validate_module_inputs,
     validate_module_outputs,
 )
+from davdeploy.nova_apply_dispatch import NovaApplyDispatchError, NovaExactPlanApplyDispatcher
 from davdeploy.nova_plan_access import (
     NovaPlanAccessError,
     build_nova_plan_access_policy,
@@ -186,6 +188,7 @@ CLOUD_EXECUTION_WORKER_LEASE_SECONDS = 900
 CLOUD_EXECUTION_WORKER_HEARTBEAT_SECONDS = 60
 CLOUD_EXECUTION_LEASE_SCAN_SECONDS = 30
 NOVA_PLAN_PREPARATION_LEASE_SECONDS = 180
+NOVA_APPLY_WORKER_LEASE_SECONDS = 900
 NOVA_PLAN_WORKER_HEARTBEAT_SECONDS = 30
 NOVA_PLAN_MAX_EXPLICIT_RETRIES = 3
 NOVA_PLAN_UNCERTAIN_ERROR_CODES = frozenset(
@@ -235,6 +238,7 @@ class ProductService:
         terraform_generator: NovaTerraformGenerator | None = None,
         generated_plan_artifact_store: Any | None = None,
         nova_plan_dispatcher: NovaPlanOnlyDispatcher | None = None,
+        nova_apply_dispatcher: NovaExactPlanApplyDispatcher | None = None,
     ):
         self.db = db
         self.intent_provider = intent_provider or configured_intent_provider()
@@ -251,6 +255,7 @@ class ProductService:
         self.terraform_generator = terraform_generator or NovaTerraformGenerator()
         self.generated_plan_artifact_store = generated_plan_artifact_store
         self.nova_plan_dispatcher = nova_plan_dispatcher
+        self.nova_apply_dispatcher = nova_apply_dispatcher
 
     def _wake_worker(self, kind: str, job_id: str) -> None:
         """Send a non-sensitive wake-up after durable work has committed.
@@ -4475,6 +4480,400 @@ class ProductService:
             "revision_number": revision_number,
         }
 
+    def create_generated_plan_apply_run(
+        self,
+        principal: Principal,
+        artifact_id: str,
+        provided_manifest_sha256: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Queue one exact saved-plan apply request after its immutable approval."""
+        if principal.role != "administrator":
+            raise PermissionError("workspace administrator role required for exact-plan apply")
+        if os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true":
+            raise ValueError("Nova exact-plan apply runner is not ready")
+        project = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{1,254}", project):
+            raise ValueError("Nova exact-plan apply project is not configured")
+        if not isinstance(idempotency_key, str) or not re.fullmatch(
+            r"[A-Za-z0-9._:-]{16,128}", idempotency_key
+        ):
+            raise ValueError("apply idempotency key is invalid")
+
+        artifact = self.db.scalar(
+            select(GeneratedPlanArtifact)
+            .where(
+                GeneratedPlanArtifact.id == artifact_id,
+                GeneratedPlanArtifact.organization_id == principal.organization_id,
+            )
+            .with_for_update()
+        )
+        if artifact is None:
+            raise PermissionError("generated plan artifact not found in this organization")
+        if artifact.manifest_sha256 != provided_manifest_sha256:
+            raise ValueError("generated plan apply digest does not match this artifact")
+        manifest = artifact.manifest
+        if canonical_json_digest(manifest) != artifact.manifest_sha256:
+            raise ValueError("generated plan manifest failed integrity verification")
+        approval = self.db.scalar(
+            select(GeneratedPlanApproval)
+            .where(
+                GeneratedPlanApproval.artifact_id == artifact.id,
+                GeneratedPlanApproval.organization_id == principal.organization_id,
+            )
+            .with_for_update()
+        )
+        source_run = self.db.get(GeneratedPlanRun, artifact.run_id)
+        revision = self.db.get(InfrastructurePlanRevision, artifact.revision_id)
+        plan = self.db.get(InfrastructurePlan, revision.infrastructure_plan_id) if revision else None
+        tenant = manifest.get("tenant") or {}
+        target = manifest.get("target") or {}
+        boundary = manifest.get("planning_boundary") or {}
+        digests = manifest.get("digests") or {}
+        if (
+            approval is None
+            or source_run is None
+            or revision is None
+            or plan is None
+            or approval.approved_manifest_sha256 != artifact.manifest_sha256
+            or approval.project_id != artifact.project_id
+            or approval.revision_id != artifact.revision_id
+            or approval.creator_subject != artifact.created_by_subject
+            or source_run.organization_id != artifact.organization_id
+            or source_run.project_id != artifact.project_id
+            or source_run.revision_id != artifact.revision_id
+            or revision.organization_id != artifact.organization_id
+            or revision.state != "APPROVED"
+            or revision.content_digest != digests.get("customer_revision_sha256")
+            or revision.content_digest != plan_hash(revision.content)
+            or plan.organization_id != artifact.organization_id
+            or plan.project_id != artifact.project_id
+            or tenant.get("organization_id") != artifact.organization_id
+            or tenant.get("project_id") != artifact.project_id
+            or tenant.get("revision_id") != artifact.revision_id
+            or target.get("account_id") != artifact.target_account_id
+            or target.get("region") != artifact.region
+            or boundary.get("approval_allowed") is not True
+            or boundary.get("execution_allowed") is not True
+            or not has_complete_pricing_evidence(manifest)
+        ):
+            raise ValueError("current exact-plan approval and execution bindings are required")
+        if artifact.expires_at <= datetime.now(UTC):
+            raise ValueError("generated plan artifact has expired")
+        if not all(
+            (
+                artifact.artifact_bucket,
+                artifact.artifact_key,
+                artifact.artifact_version_id,
+                artifact.saved_plan_sha256,
+                artifact.workspace_artifact_bucket,
+                artifact.workspace_artifact_key,
+                artifact.workspace_artifact_version_id,
+                artifact.workspace_sha256,
+            )
+        ):
+            raise ValueError("stored saved plan and execution workspace are required")
+
+        request_document = {
+            "contract_version": 1,
+            "organization_id": artifact.organization_id,
+            "project_id": artifact.project_id,
+            "revision_id": artifact.revision_id,
+            "revision_sha256": revision.content_digest,
+            "source_plan_run_id": source_run.id,
+            "artifact_id": artifact.id,
+            "approval_id": approval.id,
+            "manifest_sha256": artifact.manifest_sha256,
+            "target": {
+                "account_id": artifact.target_account_id,
+                "region": artifact.region,
+            },
+            "digests": digests,
+            "saved_plan": {
+                "bucket": artifact.artifact_bucket,
+                "key": artifact.artifact_key,
+                "version_id": artifact.artifact_version_id,
+                "size_bytes": artifact.artifact_size_bytes,
+                "sha256": artifact.saved_plan_sha256,
+            },
+            "execution_workspace": {
+                "bucket": artifact.workspace_artifact_bucket,
+                "key": artifact.workspace_artifact_key,
+                "version_id": artifact.workspace_artifact_version_id,
+                "size_bytes": artifact.workspace_artifact_size_bytes,
+                "sha256": artifact.workspace_sha256,
+            },
+            "requester_subject": principal.subject,
+        }
+        request_sha256 = canonical_json_digest(request_document)
+        idempotency_sha256 = hashlib.sha256(idempotency_key.encode()).hexdigest()
+        existing = self.db.scalar(
+            select(GeneratedPlanApplyRun).where(
+                GeneratedPlanApplyRun.organization_id == artifact.organization_id,
+                GeneratedPlanApplyRun.idempotency_key_sha256 == idempotency_sha256,
+            )
+        )
+        if existing is None:
+            existing = self.db.scalar(
+                select(GeneratedPlanApplyRun).where(
+                    GeneratedPlanApplyRun.artifact_id == artifact.id
+                )
+            )
+        if existing is not None:
+            if existing.request_sha256 != request_sha256:
+                raise ValueError("apply request conflicts with an existing exact-plan run")
+            self._wake_generated_plan_apply_run(existing)
+            return self.generated_plan_apply_run_detail(principal, existing.id)
+
+        run_id = str(uuid.uuid4())
+        run = GeneratedPlanApplyRun(
+            id=run_id,
+            organization_id=artifact.organization_id,
+            project_id=artifact.project_id,
+            revision_id=artifact.revision_id,
+            source_plan_run_id=source_run.id,
+            artifact_id=artifact.id,
+            approval_id=approval.id,
+            requester_subject=principal.subject,
+            idempotency_key_sha256=idempotency_sha256,
+            request_sha256=request_sha256,
+            manifest_sha256=artifact.manifest_sha256,
+            runner_run_id=run_id,
+            codebuild_idempotency_token=hashlib.sha256(
+                f"davdeploy:nova-exact-plan-apply:{run_id}".encode()
+            ).hexdigest(),
+            codebuild_project=project,
+            state="QUEUED",
+            request_document=request_document,
+        )
+        self.db.add(run)
+        self.audit(
+            principal,
+            "generated_plan_apply.requested",
+            "generated_plan_apply_run",
+            run_id,
+            {
+                "artifact_id": artifact.id,
+                "approval_id": approval.id,
+                "manifest_sha256": artifact.manifest_sha256,
+                "request_sha256": request_sha256,
+                "target_account_id": artifact.target_account_id,
+                "region": artifact.region,
+            },
+        )
+        try:
+            self.db.commit()
+        except IntegrityError as error:
+            self.db.rollback()
+            existing = self.db.scalar(
+                select(GeneratedPlanApplyRun).where(
+                    GeneratedPlanApplyRun.organization_id == artifact.organization_id,
+                    GeneratedPlanApplyRun.artifact_id == artifact.id,
+                )
+            )
+            if existing is None or existing.request_sha256 != request_sha256:
+                raise ValueError("apply request could not be queued once") from error
+            self._wake_generated_plan_apply_run(existing)
+            return self.generated_plan_apply_run_detail(principal, existing.id)
+        self._wake_generated_plan_apply_run(run)
+        return self.generated_plan_apply_run_detail(principal, run.id)
+
+    def _wake_generated_plan_apply_run(self, run: GeneratedPlanApplyRun) -> None:
+        """Wake the durable worker for queued runs, including safe idempotent retries."""
+        if run.state == "QUEUED":
+            self._wake_worker("generated_plan_apply_run", run.id)
+
+    def generated_plan_apply_run_detail(
+        self, principal: Principal, apply_run_id: str
+    ) -> dict[str, Any]:
+        try:
+            canonical_id = str(uuid.UUID(apply_run_id))
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("apply run identifier is invalid") from None
+        row = self.db.execute(
+            select(GeneratedPlanApplyRun, InfrastructurePlan.title,
+                   InfrastructurePlanRevision.revision_number)
+            .join(
+                InfrastructurePlanRevision,
+                GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+            )
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+            )
+            .where(
+                GeneratedPlanApplyRun.id == canonical_id,
+                GeneratedPlanApplyRun.organization_id == principal.organization_id,
+                GeneratedPlanApplyRun.project_id == InfrastructurePlan.project_id,
+                GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+                InfrastructurePlan.organization_id == principal.organization_id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+        ).one_or_none()
+        if row is None:
+            raise PermissionError("apply run not found in this organization")
+        apply_run, plan_title, revision_number = row
+        if (
+            not self._is_workspace_administrator(principal)
+            and apply_run.requester_subject != principal.subject
+        ):
+            raise PermissionError("apply run is not visible to this user")
+        return self._generated_plan_apply_run_payload(
+            apply_run, plan_title, revision_number
+        )
+
+    def generated_plan_apply_run_history(
+        self,
+        principal: Principal,
+        project_id: str,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+        revision_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List bounded, tenant-scoped status for exact-plan apply requests."""
+        project = self._project(principal, project_id)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("apply history page size must be between 1 and 100")
+
+        visibility = [
+            GeneratedPlanApplyRun.organization_id == principal.organization_id,
+            GeneratedPlanApplyRun.project_id == project.id,
+        ]
+        if not self._is_workspace_administrator(principal):
+            visibility.append(GeneratedPlanApplyRun.requester_subject == principal.subject)
+        if revision_id is not None:
+            try:
+                canonical_revision_id = str(uuid.UUID(revision_id))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("apply history revision is invalid") from None
+            revision_exists = self.db.scalar(
+                select(InfrastructurePlanRevision.id)
+                .join(
+                    InfrastructurePlan,
+                    InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+                )
+                .where(
+                    InfrastructurePlanRevision.id == canonical_revision_id,
+                    InfrastructurePlanRevision.organization_id == principal.organization_id,
+                    InfrastructurePlan.organization_id == principal.organization_id,
+                    InfrastructurePlan.project_id == project.id,
+                )
+            )
+            if revision_exists is None:
+                raise PermissionError("plan revision not found for this project")
+            visibility.append(GeneratedPlanApplyRun.revision_id == canonical_revision_id)
+
+        query = (
+            select(
+                GeneratedPlanApplyRun,
+                InfrastructurePlan.title,
+                InfrastructurePlanRevision.revision_number,
+            )
+            .join(
+                InfrastructurePlanRevision,
+                GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+            )
+            .join(
+                InfrastructurePlan,
+                InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+            )
+            .where(
+                *visibility,
+                InfrastructurePlan.project_id == project.id,
+                InfrastructurePlan.organization_id == principal.organization_id,
+                InfrastructurePlanRevision.organization_id == principal.organization_id,
+            )
+        )
+        if cursor is not None:
+            try:
+                canonical_cursor = str(uuid.UUID(cursor))
+            except (AttributeError, TypeError, ValueError):
+                raise ValueError("apply history cursor is invalid") from None
+            anchor = self.db.scalar(
+                select(GeneratedPlanApplyRun)
+                .join(
+                    InfrastructurePlanRevision,
+                    GeneratedPlanApplyRun.revision_id == InfrastructurePlanRevision.id,
+                )
+                .join(
+                    InfrastructurePlan,
+                    InfrastructurePlanRevision.infrastructure_plan_id == InfrastructurePlan.id,
+                )
+                .where(
+                    *visibility,
+                    GeneratedPlanApplyRun.id == canonical_cursor,
+                    GeneratedPlanApplyRun.project_id == InfrastructurePlan.project_id,
+                    InfrastructurePlan.project_id == project.id,
+                    InfrastructurePlan.organization_id == principal.organization_id,
+                    InfrastructurePlanRevision.organization_id == principal.organization_id,
+                )
+            )
+            if anchor is None:
+                raise PermissionError("apply history cursor is not visible")
+            query = query.where(
+                or_(
+                    GeneratedPlanApplyRun.created_at < anchor.created_at,
+                    and_(
+                        GeneratedPlanApplyRun.created_at == anchor.created_at,
+                        GeneratedPlanApplyRun.id < anchor.id,
+                    ),
+                )
+            )
+
+        selected = list(
+            self.db.execute(
+                query.order_by(
+                    GeneratedPlanApplyRun.created_at.desc(), GeneratedPlanApplyRun.id.desc()
+                ).limit(limit + 1)
+            )
+        )
+        has_more = len(selected) > limit
+        page = selected[:limit]
+        return {
+            "project_id": project.id,
+            "items": [
+                self._generated_plan_apply_run_payload(apply_run, title, revision_number)
+                for apply_run, title, revision_number in page
+            ],
+            "next_cursor": page[-1][0].id if has_more and page else None,
+        }
+
+    @staticmethod
+    def _generated_plan_apply_run_payload(
+        apply_run: GeneratedPlanApplyRun, plan_title: str, revision_number: int
+    ) -> dict[str, Any]:
+        """Return customer-safe run status, never build inputs or artifact locations."""
+        error_code = (
+            apply_run.error_code
+            if isinstance(apply_run.error_code, str)
+            and re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", apply_run.error_code)
+            else None
+        )
+        return {
+            "id": apply_run.id,
+            "project_id": apply_run.project_id,
+            "plan_title": plan_title,
+            "revision_id": apply_run.revision_id,
+            "revision_number": revision_number,
+            "source_plan_run_id": apply_run.source_plan_run_id,
+            "artifact_id": apply_run.artifact_id,
+            "state": apply_run.state,
+            "created_at": apply_run.created_at.isoformat() if apply_run.created_at else None,
+            "started_at": apply_run.started_at.isoformat() if apply_run.started_at else None,
+            "finished_at": apply_run.finished_at.isoformat() if apply_run.finished_at else None,
+            "error_code": error_code,
+            "error_summary": (
+                "The apply did not complete successfully. Verify the run outcome before retrying."
+                if error_code
+                else None
+            ),
+            "execution_boundary": (
+                "An apply-run status does not establish application health or successful "
+                "resource cleanup; those require separate observed lifecycle evidence."
+            ),
+        }
+
     @staticmethod
     def _generated_plan_run_payload(run: GeneratedPlanRun) -> dict[str, Any]:
         return {
@@ -5109,19 +5508,19 @@ class ProductService:
         }
         expected_manifest_version = (
             (
+                22
+                if untagged_records
+                else 21
+                if boundary_mode == "TENANT_ISOLATED_HTTP_STATE"
+                else 20
+            )
+            if pricing_document is not None
+            else (
                 19
                 if untagged_records
                 else 18
                 if boundary_mode == "TENANT_ISOLATED_HTTP_STATE"
                 else 17
-            )
-            if pricing_document is not None
-            else (
-                16
-                if untagged_records
-                else 15
-                if boundary_mode == "TENANT_ISOLATED_HTTP_STATE"
-                else 14
             )
         )
         if manifest.get("manifest_version") != expected_manifest_version:
@@ -6197,6 +6596,10 @@ class ProductService:
     ) -> dict[str, object]:
         """Generate a one-click AWS Console setup; it does not create AWS resources itself."""
         connection = self._cloud_connection(principal, connection_id)
+        if access_mode == "nova-apply":
+            return self._nova_apply_role_quick_create_setup(
+                principal, connection, account_id
+            )
         if access_mode == "plan-only":
             self._require_workspace_admin(principal)
             if connection.execution_role_arn:
@@ -6314,6 +6717,82 @@ class ProductService:
                 "This action only creates a setup link. The customer template grants bounded metadata reads, and each fixed Nova planner session adds a proposal-scoped explicit-deny policy. Profile verification checks current role trust and policy shape and repeats before plan credentials are issued; it does not attest every effective AWS permission layer."
                 if access_mode == "plan-only"
                 else "This action only creates a setup link. Discovery is read-only; administrator-pilot creates a separate execution role that can modify customer AWS resources after product approval."
+            ),
+        }
+
+    def _nova_apply_role_quick_create_setup(
+        self, principal: Principal, connection: CloudConnection, account_id: str
+    ) -> dict[str, object]:
+        """Create a guarded setup link for a separate exact-plan apply role."""
+        self._require_workspace_admin(principal)
+        if os.getenv("DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED", "false").lower() != "true":
+            raise RuntimeError("Nova apply-role onboarding is disabled for this control plane")
+        broker_role_arn = os.getenv("DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN", "").strip()
+        template_url = os.getenv("DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL", "").strip()
+        if not broker_role_arn or not template_url:
+            raise RuntimeError("Nova apply-role onboarding is not configured")
+        if (
+            connection.provider != "aws"
+            or connection.setup_state != "VERIFIED"
+            or connection.account_id != account_id
+            or not connection.discovery_role_arn
+            or not connection.external_id_secret_ref
+            or connection.execution_role_arn
+        ):
+            raise ValueError(
+                "Nova apply-role setup requires a verified discovery-only connection for this account"
+            )
+        expected_plan_role_arn = (
+            f"arn:aws:iam::{account_id}:role/davdeployPlan-{connection.id}"
+        )
+        if (
+            connection.plan_role_arn != expected_plan_role_arn
+            or connection.plan_role_setup_state != "PROFILE_VERIFIED"
+        ):
+            raise ValueError(
+                "verify the exact plan-only role profile before setting up the separate apply role"
+            )
+        external_id = self.connection_secrets.get_external_id(
+            connection.external_id_secret_ref
+        )
+        if not isinstance(external_id, str) or not external_id:
+            raise RuntimeError("the verified AWS connection external ID is unavailable")
+
+        role_arn = f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection.id}"
+        stack_name = f"davdeploy-NovaApply-{connection.id}"
+        parameters = {
+            "davdeployApplyBrokerRoleArn": broker_role_arn,
+            "ExternalId": external_id,
+            "ConnectionId": connection.id,
+        }
+        quick_create_url = (
+            "https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?"
+            + urlencode({"templateURL": template_url, "stackName": stack_name})
+            + "&"
+            + urlencode({f"param_{key}": value for key, value in parameters.items()})
+        )
+        self.audit(
+            principal,
+            "cloud_connection.nova_apply_role_setup_link_generated",
+            "cloud_connection",
+            connection.id,
+            {"account_id": account_id, "stack_name": stack_name},
+        )
+        self.db.commit()
+        return {
+            "connection_id": connection.id,
+            "account_id": account_id,
+            "stack_name": stack_name,
+            "template_path": "infrastructure/cloudformation/customer-nova-apply-role.yaml",
+            "apply_role_arn": role_arn,
+            "quick_create_url": quick_create_url,
+            "customer_steps": [
+                "Open the AWS Quick Create link for the already verified account.",
+                "Review the dedicated exact-plan apply role and its fixed S3, SQS, and DynamoDB permission ceiling before acknowledging IAM resource creation.",
+                "Create the stack, then return to DavDeploy; apply credentials remain unavailable until the role profile and each exact approved plan are verified.",
+            ],
+            "boundary": (
+                "This action only creates a no-store setup link. The customer must review and create the role in AWS. The role is limited to the checked-in action ceiling and a per-plan STS session policy for supported resources; unsupported plans fail closed. This profile check is not complete effective-permissions attestation, and apply remains disabled by default."
             ),
         }
 
@@ -9288,6 +9767,395 @@ class ProductService:
         # the bounded worker can claim the newly queued run without polling.
         self._wake_worker("cloud_execution", run.id)
         return self._cloud_execution_run_payload(run)
+
+    def run_next_generated_plan_apply_run(self) -> bool:
+        """Dispatch one approved saved plan through the fixed CodeBuild project."""
+        if os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false").lower() != "true":
+            return False
+        dispatcher = self.nova_apply_dispatcher or NovaExactPlanApplyDispatcher.from_environment()
+        if dispatcher is None:
+            return False
+        self._reconcile_expired_generated_plan_apply_leases()
+        claim = self._claim_next_generated_plan_apply_run()
+        if claim is None:
+            return False
+        run, lease_token = claim
+        if (
+            run.codebuild_project != dispatcher.project_name
+            or run.request_sha256 != canonical_json_digest(run.request_document)
+            or run.request_document.get("manifest_sha256") != run.manifest_sha256
+            or run.request_document.get("artifact_id") != run.artifact_id
+        ):
+            self._finish_generated_plan_apply_dispatch(
+                run.id,
+                lease_token,
+                None,
+                error_code="APPLY_REQUEST_BINDING_INVALID",
+                error_summary="durable apply request failed integrity validation",
+            )
+            return True
+        try:
+            build = dispatcher.find_build_by_run_id(run.runner_run_id)
+            if build is None:
+                build = dispatcher.start_build(
+                    run.runner_run_id, run.codebuild_idempotency_token
+                )
+        except NovaApplyDispatchError as error:
+            self._finish_generated_plan_apply_dispatch(
+                run.id,
+                lease_token,
+                None,
+                error_code="APPLY_BUILD_OUTCOME_UNCERTAIN",
+                error_summary=f"CodeBuild {error.phase or 'dispatch'} outcome requires reconciliation",
+            )
+            return True
+        if (
+            build.project_name != run.codebuild_project
+            or build.run_id != run.runner_run_id
+        ):
+            self._finish_generated_plan_apply_dispatch(
+                run.id,
+                lease_token,
+                None,
+                error_code="APPLY_BUILD_IDENTITY_UNCONFIRMED",
+                error_summary="CodeBuild identity did not match the durable apply request",
+            )
+            return True
+        self._finish_generated_plan_apply_dispatch(run.id, lease_token, build)
+        if build.status == "SUCCEEDED":
+            self.reconcile_generated_plan_apply_build(build.build_id)
+        return True
+
+    def _claim_next_generated_plan_apply_run(
+        self,
+    ) -> tuple[GeneratedPlanApplyRun, str] | None:
+        """Atomically claim one queued apply and assign an expiring worker lease."""
+        candidate = self.db.scalar(
+            select(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.state == "QUEUED")
+            .order_by(GeneratedPlanApplyRun.created_at, GeneratedPlanApplyRun.id)
+            .limit(1)
+        )
+        if candidate is None:
+            return None
+        now = datetime.now(UTC)
+        lease_token = secrets.token_hex(32)
+        claimed = self.db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(
+                GeneratedPlanApplyRun.id == candidate.id,
+                GeneratedPlanApplyRun.organization_id == candidate.organization_id,
+                GeneratedPlanApplyRun.project_id == candidate.project_id,
+                GeneratedPlanApplyRun.request_sha256 == candidate.request_sha256,
+                GeneratedPlanApplyRun.state == "QUEUED",
+                GeneratedPlanApplyRun.worker_claim_version == candidate.worker_claim_version,
+            )
+            .values(
+                state="DISPATCHING",
+                worker_claim_version=GeneratedPlanApplyRun.worker_claim_version + 1,
+                worker_lease_token=lease_token,
+                worker_lease_expires_at=now
+                + timedelta(seconds=NOVA_APPLY_WORKER_LEASE_SECONDS),
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            self.db.rollback()
+            return None
+        self.db.commit()
+        run = self.db.scalar(
+            select(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.id == candidate.id)
+            .execution_options(populate_existing=True)
+        )
+        return (run, lease_token) if run is not None else None
+
+    def _reconcile_expired_generated_plan_apply_leases(self) -> None:
+        now = datetime.now(UTC)
+        expired_ids = self.db.scalars(
+            select(GeneratedPlanApplyRun.id).where(
+                GeneratedPlanApplyRun.state == "DISPATCHING",
+                GeneratedPlanApplyRun.worker_lease_expires_at <= now,
+            )
+        ).all()
+        for run_id in expired_ids:
+            self.db.execute(
+                update(GeneratedPlanApplyRun)
+                .where(
+                    GeneratedPlanApplyRun.id == run_id,
+                    GeneratedPlanApplyRun.state == "DISPATCHING",
+                    GeneratedPlanApplyRun.worker_lease_expires_at <= now,
+                )
+                .values(
+                    state="RECONCILIATION_REQUIRED",
+                    worker_lease_token=None,
+                    worker_lease_expires_at=None,
+                    error_code="APPLY_DISPATCH_LEASE_EXPIRED",
+                    error_summary="worker lease expired; build outcome must be reconciled",
+                    updated_at=now,
+                )
+                .execution_options(synchronize_session=False)
+            )
+        if expired_ids:
+            self.db.commit()
+
+    def _finish_generated_plan_apply_dispatch(
+        self,
+        run_id: str,
+        lease_token: str,
+        build,
+        *,
+        error_code: str | None = None,
+        error_summary: str | None = None,
+    ) -> None:
+        now = datetime.now(UTC)
+        state = "RECONCILIATION_REQUIRED"
+        result_metadata = None
+        finished_at = now
+        if build is not None:
+            result_metadata = {
+                "codebuild_status": build.status,
+                "codebuild_build_arn": build.build_arn,
+            }
+            finished_at = None
+            if build.status == "SUCCEEDED":
+                # A successful CodeBuild status is only transport evidence. The
+                # durable state advances after the exact encrypted result object
+                # has been read and matched against the approved manifest.
+                state = "BUILD_STARTED"
+                finished_at = None
+                error_code = None
+                error_summary = None
+            elif build.status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
+                error_code = "APPLY_BUILD_FAILED"
+                error_summary = (
+                    "Terraform apply build failed; inspect state before any repair or retry"
+                )
+                finished_at = now
+            else:
+                state = "BUILD_STARTED"
+                error_code = None
+                error_summary = None
+        changed = self.db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(
+                GeneratedPlanApplyRun.id == run_id,
+                GeneratedPlanApplyRun.state == "DISPATCHING",
+                GeneratedPlanApplyRun.worker_lease_token == lease_token,
+                GeneratedPlanApplyRun.worker_lease_expires_at > now,
+            )
+            .values(
+                state=state,
+                codebuild_build_id=build.build_id if build is not None else None,
+                codebuild_build_arn=build.build_arn if build is not None else None,
+                worker_lease_token=None,
+                worker_lease_expires_at=None,
+                result_metadata=result_metadata,
+                error_code=error_code,
+                error_summary=error_summary,
+                started_at=now if build is not None else None,
+                finished_at=finished_at,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if changed.rowcount == 1:
+            self.db.commit()
+        else:
+            self.db.rollback()
+
+    def reconcile_generated_plan_apply_build(self, build_id: str) -> bool:
+        """Reconcile an event by querying the fixed CodeBuild project, never its payload."""
+        project = os.getenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "").strip()
+        if not project:
+            return False
+        try:
+            dispatcher = self.nova_apply_dispatcher or NovaExactPlanApplyDispatcher.from_environment()
+            if dispatcher is None:
+                return False
+            build = dispatcher.describe_build(build_id)
+        except (NovaApplyDispatchError, ValueError):
+            return False
+        run = self.db.scalar(
+            select(GeneratedPlanApplyRun).where(
+                GeneratedPlanApplyRun.runner_run_id == build.run_id
+            )
+        )
+        if (
+            run is None
+            or run.codebuild_project != project
+            or (run.codebuild_build_id and run.codebuild_build_id != build.build_id)
+            or (run.codebuild_build_arn and run.codebuild_build_arn != build.build_arn)
+            or run.state
+            not in {"DISPATCHING", "BUILD_STARTED", "RECONCILIATION_REQUIRED"}
+        ):
+            return False
+        now = datetime.now(UTC)
+        state = "BUILD_STARTED"
+        result_metadata: dict[str, Any] | None = None
+        error_code = None
+        error_summary = None
+        finished_at = None
+        if build.status == "SUCCEEDED":
+            try:
+                artifact = self.db.get(GeneratedPlanArtifact, run.artifact_id)
+                manifest = artifact.manifest if artifact is not None else None
+                request_document = run.request_document
+                tenant = manifest.get("tenant") if isinstance(manifest, dict) else None
+                remote_state = manifest.get("remote_state") if isinstance(manifest, dict) else None
+                target = manifest.get("target") if isinstance(manifest, dict) else None
+                saved_plan = request_document.get("saved_plan") if isinstance(request_document, dict) else None
+                workspace = (
+                    request_document.get("execution_workspace")
+                    if isinstance(request_document, dict)
+                    else None
+                )
+                if (
+                    artifact is None
+                    or not isinstance(manifest, dict)
+                    or not isinstance(request_document, dict)
+                    or canonical_json_digest(manifest) != run.manifest_sha256
+                    or artifact.manifest_sha256 != run.manifest_sha256
+                    or artifact.organization_id != run.organization_id
+                    or artifact.project_id != run.project_id
+                    or artifact.revision_id != run.revision_id
+                    or artifact.run_id != run.source_plan_run_id
+                    or canonical_json_digest(request_document) != run.request_sha256
+                    or request_document.get("manifest_sha256") != run.manifest_sha256
+                    or request_document.get("artifact_id") != run.artifact_id
+                    or request_document.get("source_plan_run_id") != run.source_plan_run_id
+                    or request_document.get("organization_id") != run.organization_id
+                    or request_document.get("project_id") != run.project_id
+                    or request_document.get("revision_id") != run.revision_id
+                    or request_document.get("digests") != manifest.get("digests")
+                    or request_document.get("target") != manifest.get("target")
+                    or not isinstance(tenant, dict)
+                    or tenant.get("organization_id") != run.organization_id
+                    or tenant.get("project_id") != run.project_id
+                    or tenant.get("revision_id") != run.revision_id
+                    or not isinstance(saved_plan, dict)
+                    or saved_plan.get("bucket") != artifact.artifact_bucket
+                    or saved_plan.get("key") != artifact.artifact_key
+                    or saved_plan.get("version_id") != artifact.artifact_version_id
+                    or saved_plan.get("size_bytes") != artifact.artifact_size_bytes
+                    or saved_plan.get("sha256") != artifact.saved_plan_sha256
+                    or not isinstance(workspace, dict)
+                    or workspace.get("bucket") != artifact.workspace_artifact_bucket
+                    or workspace.get("key") != artifact.workspace_artifact_key
+                    or workspace.get("version_id") != artifact.workspace_artifact_version_id
+                    or workspace.get("size_bytes") != artifact.workspace_artifact_size_bytes
+                    or workspace.get("sha256") != artifact.workspace_sha256
+                    or not isinstance(remote_state, dict)
+                    or not isinstance(target, dict)
+                    or target.get("account_id") != artifact.target_account_id
+                    or target.get("region") != artifact.region
+                    or not isinstance(remote_state.get("state_id"), str)
+                    or not isinstance(remote_state.get("scope_sha256"), str)
+                    or not isinstance(target.get("account_id"), str)
+                    or not isinstance(target.get("region"), str)
+                ):
+                    raise ValueError
+                result, result_version_id, result_sha256 = dispatcher.read_result(
+                    run.runner_run_id,
+                    request_document,
+                    build.build_id,
+                    build.build_arn,
+                    expected_state_id=remote_state["state_id"],
+                    expected_state_scope_sha256=remote_state["scope_sha256"],
+                    expected_account_id=target["account_id"],
+                    expected_region=target["region"],
+                )
+                if (
+                    result["terraform_version"] != artifact.terraform_version
+                    or result["aws_provider_version"] != artifact.aws_provider_version
+                ):
+                    raise ValueError
+                state = "APPLIED_UNVERIFIED"
+                finished_at = now
+                result_metadata = {
+                    "codebuild_status": build.status,
+                    "codebuild_build_arn": build.build_arn,
+                    "result_key": dispatcher.result_key(build.build_arn),
+                    "result_version_id": result_version_id,
+                    "result_sha256": result_sha256,
+                    "manifest_sha256": run.manifest_sha256,
+                    "execution_status": result["execution_status"],
+                    "state_id": result["state_id"],
+                    "state_scope_sha256": result["state_scope_sha256"],
+                }
+            except (
+                BotoCoreError,
+                ClientError,
+                NovaApplyDispatchError,
+                OSError,
+                TypeError,
+                ValueError,
+                KeyError,
+            ):
+                state = "RECONCILIATION_REQUIRED"
+                error_code = "APPLY_RESULT_NOT_VERIFIED"
+                error_summary = (
+                    "The successful build result could not be matched to the approved saved plan; reconcile before any retry."
+                )
+                finished_at = now
+        elif build.status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}:
+            state = "RECONCILIATION_REQUIRED"
+            error_code = "APPLY_BUILD_FAILED"
+            error_summary = "Terraform apply build failed; inspect state before any repair or retry"
+            finished_at = now
+        changed = self.db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(
+                GeneratedPlanApplyRun.id == run.id,
+                GeneratedPlanApplyRun.runner_run_id == build.run_id,
+                GeneratedPlanApplyRun.state.in_(
+                    {"DISPATCHING", "BUILD_STARTED", "RECONCILIATION_REQUIRED"}
+                ),
+                or_(
+                    GeneratedPlanApplyRun.codebuild_build_id.is_(None),
+                    GeneratedPlanApplyRun.codebuild_build_id == build.build_id,
+                ),
+            )
+            .values(
+                state=state,
+                codebuild_build_id=build.build_id,
+                codebuild_build_arn=build.build_arn,
+                worker_lease_token=None,
+                worker_lease_expires_at=None,
+                result_metadata=result_metadata or {
+                    "codebuild_status": build.status,
+                    "codebuild_build_arn": build.build_arn,
+                },
+                error_code=error_code,
+                error_summary=error_summary,
+                started_at=run.started_at or now,
+                finished_at=finished_at,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if changed.rowcount == 1:
+            self.audit(
+                Principal("system-nova-apply-worker", run.organization_id, "operator"),
+                "generated_plan_apply.build_reconciled",
+                "generated_plan_apply_run",
+                run.id,
+                {
+                    "codebuild_project": project,
+                    "codebuild_build_id": build.build_id,
+                    "build_status": build.status,
+                    "state": state,
+                    "result_sha256": result_metadata.get("result_sha256")
+                    if result_metadata
+                    else None,
+                    "error_code": error_code,
+                },
+            )
+            self.db.commit()
+            return True
+        self.db.rollback()
+        return False
 
     def run_next_cloud_execution(self) -> bool:
         """Claim and process one queued run without permitting duplicate owners."""

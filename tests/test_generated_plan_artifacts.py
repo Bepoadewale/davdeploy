@@ -458,7 +458,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
     )
     assert manifest["artifact"]["version_id"] == "v42"
     assert manifest["digests"]["policy_sha256"] == evidence_digest
-    assert manifest["manifest_version"] == 14
+    assert manifest["manifest_version"] == 17
     assert manifest["toolchain"]["provider_schema_format_version"] == "1.0"
     assert manifest["toolchain"]["provider_schema_sha256"] == "8" * 64
     assert manifest["execution_workspace"]["sha256"] == "c" * 64
@@ -565,7 +565,7 @@ def test_canonical_manifest_digest_is_stable_and_binds_artifact_and_policy():
         created_at="2026-11-04T00:00:00Z",
         remote_state=remote_state,
     )
-    assert owned_manifest["manifest_version"] == 16
+    assert owned_manifest["manifest_version"] == 19
     assert owned_manifest["remote_state"] == remote_state
     assert owned_manifest["ownership_inventory"] == {
         "version": 1,

@@ -15,6 +15,7 @@ from davdeploy.service import ProductService
 
 WORKER_QUEUE_METHODS = (
     "run_next_generated_plan_run",
+    "run_next_generated_plan_apply_run",
     "run_next_discovery_job",
     "run_next_cloud_execution",
     "run_next_job",
@@ -45,6 +46,8 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
                 reconciled = service.reconcile_cloud_execution_build(str(build_id))
                 if not reconciled:
                     reconciled = service.reconcile_generated_plan_build(str(build_id))
+                if not reconciled:
+                    reconciled = service.reconcile_generated_plan_apply_build(str(build_id))
                 if reconciled:
                     processed_events += 1
 

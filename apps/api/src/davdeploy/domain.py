@@ -608,9 +608,11 @@ class CloudConnectionRequest(BaseModel):
 class AwsQuickCreateRequest(BaseModel):
     account_id: str = Field(pattern=r"^[0-9]{12}$")
     access_mode: str = Field(
-        default="discovery", pattern=r"^(discovery|plan-only|administrator-pilot)$"
+        default="discovery",
+        pattern=r"^(discovery|plan-only|administrator-pilot|nova-apply)$",
     )
     acknowledge_administrator_access: bool = False
+    acknowledge_nova_apply_role_setup: bool = False
 
 
 class AwsExistingRoleRequest(BaseModel):
@@ -660,6 +662,22 @@ class TerraformStateCredentialRequest(BaseModel):
 
 class NovaPlanCredentialRequest(BaseModel):
     """Only a durable run ID is caller-provided; build identity comes from SigV4."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+
+
+class NovaApplyCredentialRequest(BaseModel):
+    """Only a durable apply run ID is caller-provided; build identity comes from SigV4."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+
+
+class NovaApplyInputRequest(BaseModel):
+    """Only a durable apply run ID is caller-provided; build identity comes from SigV4."""
 
     model_config = ConfigDict(extra="forbid")
 

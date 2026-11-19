@@ -9,20 +9,32 @@ from uuid import uuid4
 
 import pytest
 from davdeploy import main
+from davdeploy.generated_plan_artifacts import (
+    S3GeneratedPlanArtifactStore,
+    pricing_evidence_safe_summary,
+)
+from davdeploy.generated_plan_pricing import PlanPricingStatus, _evidence
 from davdeploy.models import (
     AuditEvent,
     Base,
+    CloudConnection,
     Environment,
+    GeneratedPlanApplyRun,
+    GeneratedPlanApproval,
+    GeneratedPlanArtifact,
     GeneratedPlanRun,
     InfrastructurePlan,
     InfrastructurePlanRevision,
     Organization,
+    ProductUser,
     Project,
     TerraformRemoteState,
     TerraformStateCredential,
     TerraformStateLock,
     TerraformStateWrite,
 )
+from davdeploy.nova_apply_access import build_nova_apply_access_policy
+from davdeploy.nova_apply_contract import ApplyArtifactObject, validate_nova_apply_request
 from davdeploy.terraform_state import (
     TerraformStateError,
     TerraformStateLocked,
@@ -38,7 +50,7 @@ from davdeploy.terraform_state import (
 )
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -451,6 +463,756 @@ def test_state_bootstrap_issues_scope_bound_credential_and_rejects_other_state(m
         assert cross_tenant.status_code == 401
 
     assert len(codebuild.calls) == 1
+    db.close()
+
+
+def test_state_bootstrap_binds_exact_plan_apply_to_active_approved_build(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    db = Session(engine, expire_on_commit=False)
+    plan_id = "d1dd65f5-4f21-4e26-85b7-74d75fc7db8c"
+    revision_id = "fdac3a35-9b91-4b45-84a7-c6067106d485"
+    plan_run_id = "7d1d82be-9e2a-4de1-8dd1-c78c9241a3a0"
+    artifact_id = "ed350f1b-61b1-4edc-9799-35332aa96283"
+    approval_id = "8f7c5f1e-9200-4d9c-91d9-8afdd81ec52f"
+    state_id = "11111111-1111-4111-8111-111111111111"
+    apply_run_id = "12345678-1234-4234-8234-123456789abc"
+    build_uuid = "abcdefff-1234-4234-8234-123456789abc"
+    build_id = f"fixed-apply:{build_uuid}"
+    build_arn = f"arn:aws:codebuild:us-east-1:654654474502:build/{build_id}"
+    apply_role = "arn:aws:iam::654654474502:role/fixed-apply"
+    assumed_apply_role = (
+        f"arn:aws:sts::654654474502:assumed-role/fixed-apply/AWSCodeBuild-{build_uuid}"
+    )
+    connection_id = "66b3854d-745f-4553-90bf-46e5c4da390f"
+    account_id = "654654474502"
+    region = "us-east-1"
+    revision_content = {
+        "target": {
+            "connection_id": connection_id,
+            "environment_id": ENVIRONMENT,
+            "account_id": account_id,
+            "region": region,
+        }
+    }
+    revision_digest = main.plan_hash(revision_content)
+    state_scope = terraform_state_scope_digest(
+        organization_id=ORG,
+        project_id=PROJECT,
+        environment_id=ENVIRONMENT,
+        target_account_id=account_id,
+        region=region,
+    )
+    pricing_evidence = _evidence(
+        status=PlanPricingStatus.COMPLETE,
+        region=region,
+        currency="USD",
+        captured_at=datetime.now(UTC).isoformat(),
+        budget=None,
+        document={},
+        lines=(),
+        findings=(),
+        persisted_context_sha256="b" * 64,
+    )
+    pricing_document = pricing_evidence.as_manifest_document()
+    apply_access = build_nova_apply_access_policy(
+        {
+            "resource_changes": [
+                {
+                    "mode": "managed",
+                    "type": "aws_s3_bucket",
+                    "address": "aws_s3_bucket.example",
+                    "change": {
+                        "actions": ["create"],
+                        "before": None,
+                        "after": {"bucket": "nova-test-bucket"},
+                    },
+                }
+            ]
+        },
+        account_id=account_id,
+        region=region,
+    )
+    plan_sha256 = "2" * 64
+    workspace_sha256 = "6" * 64
+    artifact_bucket = "davdeploy-plans-654654474502"
+    plan_build_arn = "arn:aws:codebuild:us-east-1:654654474502:build/fixed-plan:old-plan-run"
+    plan_key = S3GeneratedPlanArtifactStore._key(
+        ORG,
+        PROJECT,
+        revision_id,
+        plan_run_id,
+        plan_sha256,
+        build_arn=plan_build_arn,
+    )
+    workspace_key = S3GeneratedPlanArtifactStore._key(
+        ORG,
+        PROJECT,
+        revision_id,
+        plan_run_id,
+        workspace_sha256,
+        build_arn=plan_build_arn,
+        artifact_kind="workspace",
+    )
+    digests = {
+        "customer_revision_sha256": revision_digest,
+        "saved_plan_sha256": plan_sha256,
+        "workspace_sha256": workspace_sha256,
+        "pricing_evidence_sha256": pricing_document["evidence_sha256"],
+        "pricing_context_sha256": pricing_document["pricing_context_sha256"],
+        "plan_json_sha256": pricing_document["plan_json_sha256"],
+    }
+    manifest = {
+        "tenant": {
+            "organization_id": ORG,
+            "project_id": PROJECT,
+            "revision_id": revision_id,
+            "environment_id": ENVIRONMENT,
+        },
+        "target": {"account_id": account_id, "region": region},
+        "remote_state": {"state_id": state_id, "scope_sha256": state_scope},
+        "pricing": pricing_evidence.safe_summary(),
+        "pricing_evidence": pricing_document,
+        "customer_apply_access": {
+            "status": "READY",
+            "version": apply_access.version,
+            "session_policy_sha256": apply_access.sha256,
+            "session_policy": apply_access.document,
+        },
+        "policy": {"human_approval_required": True, "verdict": "REVIEW_REQUIRED"},
+        "planning_boundary": {"approval_allowed": True, "execution_allowed": True},
+        "artifact": {
+            "bucket": artifact_bucket,
+            "key": plan_key,
+            "version_id": "plan-version",
+            "size_bytes": 10,
+            "sha256": plan_sha256,
+        },
+        "execution_workspace": {
+            "bucket": artifact_bucket,
+            "key": workspace_key,
+            "version_id": "workspace-version",
+            "size_bytes": 11,
+            "sha256": workspace_sha256,
+        },
+        "digests": digests,
+    }
+    manifest_digest = main.canonical_json_digest(manifest)
+    request_document = {
+        "contract_version": 1,
+        "organization_id": ORG,
+        "project_id": PROJECT,
+        "revision_id": revision_id,
+        "revision_sha256": revision_digest,
+        "source_plan_run_id": plan_run_id,
+        "artifact_id": artifact_id,
+        "approval_id": approval_id,
+        "manifest_sha256": manifest_digest,
+        "target": {"account_id": account_id, "region": region},
+        "digests": digests,
+        "saved_plan": {
+            "bucket": artifact_bucket,
+            "key": plan_key,
+            "version_id": "plan-version",
+            "size_bytes": 10,
+            "sha256": plan_sha256,
+        },
+        "execution_workspace": {
+            "bucket": artifact_bucket,
+            "key": workspace_key,
+            "version_id": "workspace-version",
+            "size_bytes": 11,
+            "sha256": workspace_sha256,
+        },
+        "requester_subject": "admin",
+    }
+    db.add_all(
+        [
+            Organization(id=ORG, name="state-apply-test-org"),
+            Project(id=PROJECT, organization_id=ORG, name="state-apply-test-project"),
+            Environment(
+                id=ENVIRONMENT,
+                organization_id=ORG,
+                project_id=PROJECT,
+                name="production",
+                environment_type="production",
+                state="READY",
+                desired_state={},
+                observed_state={},
+            ),
+            ProductUser(id="apply-admin-user", organization_id=ORG, subject="admin", role="administrator"),
+            CloudConnection(
+                id=connection_id,
+                organization_id=ORG,
+                provider="aws",
+                display_name="Verified account",
+                account_id=account_id,
+                execution_role_arn=f"arn:aws:iam::{account_id}:role/davdeployExecution-legacy",
+                external_id_secret_ref="customer-connection-secret-ref",
+                setup_state="VERIFIED",
+            ),
+            InfrastructurePlan(
+                id=plan_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                creator_subject="admin",
+                title="Apply state test",
+            ),
+            InfrastructurePlanRevision(
+                id=revision_id,
+                infrastructure_plan_id=plan_id,
+                organization_id=ORG,
+                revision_number=1,
+                state="APPROVED",
+                content=revision_content,
+                content_digest=revision_digest,
+            ),
+            GeneratedPlanRun(
+                id=plan_run_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                requester_subject="admin",
+                idempotency_key_sha256="b" * 64,
+                request_sha256="c" * 64,
+                request_document={"target_account_id": account_id, "region": region},
+                runner_run_id=plan_run_id,
+                revision_sha256=revision_digest,
+                state="PLAN_READY_REVIEW_ONLY",
+                codebuild_project="fixed-plan",
+                codebuild_build_id="fixed-plan:old-plan-run",
+                input_key="plan-input.json",
+                result_key="plan-result.json",
+            ),
+            GeneratedPlanArtifact(
+                id=artifact_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                run_id=plan_run_id,
+                target_account_id=account_id,
+                region=region,
+                terraform_version="1.14.7",
+                aws_provider_version="6.0.0",
+                provider_lockfile_sha256="d" * 64,
+                proposal_sha256="e" * 64,
+                context_sha256="f" * 64,
+                configuration_sha256="1" * 64,
+                saved_plan_sha256=plan_sha256,
+                policy_sha256="3" * 64,
+                manifest_sha256=manifest_digest,
+                manifest=manifest,
+                policy_version="generated-plan-policy-v1",
+                policy_verdict="REVIEW_REQUIRED",
+                artifact_bucket=artifact_bucket,
+                artifact_key=plan_key,
+                artifact_version_id="plan-version",
+                artifact_size_bytes=10,
+                workspace_artifact_bucket=artifact_bucket,
+                workspace_artifact_key=workspace_key,
+                workspace_artifact_version_id="workspace-version",
+                workspace_artifact_size_bytes=11,
+                workspace_sha256=workspace_sha256,
+                created_by_subject="admin",
+                expires_at=datetime.now(UTC) + timedelta(minutes=30),
+            ),
+            GeneratedPlanApproval(
+                id=approval_id,
+                artifact_id=artifact_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                approved_manifest_sha256=manifest_digest,
+                approver_subject="admin",
+                creator_subject="admin",
+                is_self_approval=True,
+                authorization_policy="workspace-administrator-self-approval-allowed",
+            ),
+            GeneratedPlanApplyRun(
+                id=apply_run_id,
+                organization_id=ORG,
+                project_id=PROJECT,
+                revision_id=revision_id,
+                source_plan_run_id=plan_run_id,
+                artifact_id=artifact_id,
+                approval_id=approval_id,
+                requester_subject="admin",
+                idempotency_key_sha256="4" * 64,
+                request_sha256=main.canonical_json_digest(request_document),
+                manifest_sha256=manifest_digest,
+                runner_run_id=apply_run_id,
+                codebuild_idempotency_token=apply_run_id,
+                codebuild_project="fixed-apply",
+                codebuild_build_id=build_id,
+                codebuild_build_arn=build_arn,
+                state="BUILD_STARTED",
+                request_document=request_document,
+            ),
+        ]
+    )
+    db.commit()
+
+    def override_session():
+        yield db
+
+    class FakeCodeBuild:
+        def __init__(self):
+            self.calls = []
+
+        def batch_get_builds(self, *, ids):
+            self.calls.append(ids)
+            return {
+                "builds": [
+                    {
+                        "id": build_id,
+                        "projectName": "fixed-apply",
+                        "serviceRole": apply_role,
+                        "buildStatus": "IN_PROGRESS",
+                        "arn": build_arn,
+                        "environment": {
+                            "environmentVariables": [
+                                {"name": "DAVDEPLOY_NOVA_APPLY_RUN_ID", "value": apply_run_id}
+                            ]
+                        },
+                    }
+                ]
+            }
+
+    codebuild = FakeCodeBuild()
+    monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_ENABLED", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "true")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN", apply_role)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT", "fixed-apply")
+    monkeypatch.setenv("DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET", artifact_bucket)
+    monkeypatch.setenv("DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER", account_id)
+    monkeypatch.setenv(
+        "DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN",
+        f"arn:aws:kms:{region}:{account_id}:key/11111111-2222-3333-4444-555555555555",
+    )
+    monkeypatch.setenv("DAVDEPLOY_TERRAFORM_STATE_API_URL", "https://api.davdeploy.tech")
+    monkeypatch.setattr(main, "ensure_aurora_ready", lambda: None)
+    staged_prefix = (
+        "plans/nova-generated/apply-builds/"
+        f"{build_arn}/artifacts/{apply_run_id}/"
+    )
+    monkeypatch.setattr(
+        main,
+        "stage_nova_apply_artifacts",
+        lambda _request, **_kwargs: (
+            ApplyArtifactObject(
+                bucket=artifact_bucket,
+                key=staged_prefix + "saved.tfplan",
+                version_id="staged-plan-version",
+                size_bytes=10,
+                sha256=plan_sha256,
+            ),
+            ApplyArtifactObject(
+                bucket=artifact_bucket,
+                key=staged_prefix + "execution-workspace.tar.gz",
+                version_id="staged-workspace-version",
+                size_bytes=11,
+                sha256=workspace_sha256,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        main.boto3,
+        "client",
+        lambda name, **_kwargs: codebuild if name == "codebuild" else None,
+    )
+    monkeypatch.setitem(main.app.dependency_overrides, main.session, override_session)
+
+    with TestClient(main.app) as client:
+        monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "false")
+        input_disabled = client.post(
+            "/api/v1/nova-apply/input",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert input_disabled.status_code == 404
+        monkeypatch.setenv("DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY", "true")
+
+        apply_input = client.post(
+            "/api/v1/nova-apply/input",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert apply_input.status_code == 200
+        assert apply_input.headers["cache-control"] == "no-store"
+        validated_input = validate_nova_apply_request(
+            apply_input.json(),
+            expected_run_id=apply_run_id,
+            expected_codebuild_project="fixed-apply",
+            expected_codebuild_build_arn=build_arn,
+            expected_artifact_bucket=artifact_bucket,
+            now=datetime.now(UTC),
+            require_staged_artifacts=True,
+        )
+        assert validated_input.saved_plan.key == plan_key
+        assert validated_input.execution_workspace.key == workspace_key
+        assert validated_input.staged_saved_plan.key == staged_prefix + "saved.tfplan"
+        input_event = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "nova_apply_input.issued")
+        )
+        assert input_event is not None
+        assert input_event.entity_id == apply_run_id
+
+        broker_disabled = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert broker_disabled.status_code == 404
+
+        response = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert response.status_code == 200
+        assert codebuild.calls == [[build_id], [build_id]]
+        credential_document = response.json()
+        credential = db.scalar(
+            select(TerraformStateCredential).where(
+                TerraformStateCredential.username == credential_document["username"]
+            )
+        )
+        assert credential is not None
+        assert credential.run_id == plan_run_id
+        assert credential.apply_run_id == apply_run_id
+        state_credential, authorized_run = main._terraform_state_authorization(
+            credential.state_id,
+            SimpleNamespace(
+                username=credential_document["username"],
+                password=credential_document["password"],
+            ),
+            db,
+        )
+        assert state_credential.id == credential.id
+        assert authorized_run.id == plan_run_id
+        event = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "terraform_state_credentials.issued")
+        )
+        assert event is not None
+        assert event.entity_type == "generated_plan_apply_run"
+        assert event.entity_id == apply_run_id
+
+        expiration = datetime.now(UTC) + timedelta(minutes=15)
+
+        class FakeSts:
+            def __init__(self):
+                self.calls = []
+
+            def assume_role(self, **kwargs):
+                self.calls.append(kwargs)
+                return {
+                    "Credentials": {
+                        "AccessKeyId": "ASIAEXAMPLE",
+                        "SecretAccessKey": "secret-example",
+                        "SessionToken": "session-example",
+                        "Expiration": expiration,
+                    }
+                }
+
+        fake_sts = FakeSts()
+
+        class FakeSession:
+            identity_account = account_id
+
+            def __init__(self, **_kwargs):
+                pass
+
+            def client(self, name):
+                assert name == "sts"
+                return SimpleNamespace(
+                    get_caller_identity=lambda: {
+                        "Account": self.identity_account,
+                        "Arn": f"arn:aws:sts::{account_id}:assumed-role/"
+                        f"davdeployNovaApply-{connection_id}/davdeploy-nova-apply-{apply_run_id}",
+                    }
+                )
+
+        monkeypatch.setenv(
+            "DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED", "true"
+        )
+        monkeypatch.setattr(
+            main,
+            "configured_connection_secret_store",
+            lambda: SimpleNamespace(
+                get_external_id=lambda secret_ref: (
+                    "customer-external-id" if secret_ref == "customer-connection-secret-ref" else None
+                )
+            ),
+        )
+        monkeypatch.setattr(
+            main.boto3,
+            "client",
+            lambda name, **_kwargs: codebuild if name == "codebuild" else fake_sts,
+        )
+        monkeypatch.setattr(
+            main,
+            "StsAwsDiscovery",
+            lambda: SimpleNamespace(
+                    verify_apply_role=lambda _connection_id, role_arn, _external_id, _region, _session_policy: SimpleNamespace(
+                    account_id=account_id,
+                    role_arn=role_arn,
+                        version="nova-apply-role-profile.v2",
+                    sha256="a" * 64,
+                )
+            ),
+        )
+        monkeypatch.setattr(main.boto3, "Session", FakeSession)
+        apply_credentials = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert apply_credentials.status_code == 200
+        assert apply_credentials.headers["cache-control"] == "no-store"
+        assert apply_credentials.json() == {
+            "contract": "davdeploy.nova-apply-credentials.v1",
+            "role_arn": f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}",
+            "account_id": account_id,
+            "region": region,
+            "policy_version": apply_access.version,
+            "policy_sha256": apply_access.sha256,
+            "credentials": {
+                "access_key_id": "ASIAEXAMPLE",
+                "secret_access_key": "secret-example",
+                "session_token": "session-example",
+                "expires_at": expiration.isoformat(),
+            },
+        }
+        assert fake_sts.calls == [
+            {
+                "RoleArn": f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}",
+                "RoleSessionName": f"davdeploy-nova-apply-{apply_run_id}",
+                "ExternalId": "customer-external-id",
+                "DurationSeconds": 900,
+                "Policy": json.dumps(
+                    apply_access.document, sort_keys=True, separators=(",", ":")
+                ),
+            }
+        ]
+        apply_event = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "nova_apply_credentials.issued")
+        )
+        assert apply_event is not None
+        assert apply_event.entity_id == apply_run_id
+        assert (
+            apply_event.detail["execution_role_arn"]
+            == f"arn:aws:iam::{account_id}:role/davdeployNovaApply-{connection_id}"
+        )
+
+        FakeSession.identity_account = "000000000000"
+        wrong_account = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert wrong_account.status_code == 403
+        assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
+        FakeSession.identity_account = account_id
+        expiration = datetime.now(UTC) - timedelta(minutes=1)
+        expired_credentials = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert expired_credentials.status_code == 403
+        assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
+        artifact_record = db.get(GeneratedPlanArtifact, artifact_id)
+        apply_run_record = db.get(GeneratedPlanApplyRun, apply_run_id)
+        original_manifest = artifact_record.manifest
+        original_manifest_sha256 = artifact_record.manifest_sha256
+        original_request_document = apply_run_record.request_document
+        original_request_sha256 = apply_run_record.request_sha256
+        incomplete_pricing = _evidence(
+            status=PlanPricingStatus.UNAVAILABLE,
+            region=region,
+            currency="USD",
+            captured_at=datetime.now(UTC).isoformat(),
+            budget=None,
+            document={},
+            lines=(),
+            findings=(),
+            persisted_context_sha256="b" * 64,
+        ).as_manifest_document()
+        incomplete_manifest = json.loads(json.dumps(original_manifest))
+        incomplete_manifest["pricing_evidence"] = incomplete_pricing
+        incomplete_manifest["pricing"] = pricing_evidence_safe_summary(incomplete_pricing)
+        incomplete_manifest["digests"]["pricing_evidence_sha256"] = incomplete_pricing[
+            "evidence_sha256"
+        ]
+        incomplete_manifest["digests"]["pricing_context_sha256"] = incomplete_pricing[
+            "pricing_context_sha256"
+        ]
+        incomplete_manifest["digests"]["plan_json_sha256"] = incomplete_pricing[
+            "plan_json_sha256"
+        ]
+        incomplete_manifest_sha256 = main.canonical_json_digest(incomplete_manifest)
+        incomplete_request_document = json.loads(json.dumps(original_request_document))
+        incomplete_request_document["manifest_sha256"] = incomplete_manifest_sha256
+        incomplete_request_document["digests"] = incomplete_manifest["digests"]
+        db.execute(
+            update(GeneratedPlanArtifact)
+            .where(GeneratedPlanArtifact.id == artifact_id)
+            .values(
+                manifest=incomplete_manifest,
+                manifest_sha256=incomplete_manifest_sha256,
+            )
+        )
+        db.execute(
+            update(GeneratedPlanApproval)
+            .where(GeneratedPlanApproval.id == approval_id)
+            .values(approved_manifest_sha256=incomplete_manifest_sha256)
+        )
+        db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.id == apply_run_id)
+            .values(
+                manifest_sha256=incomplete_manifest_sha256,
+                request_document=incomplete_request_document,
+                request_sha256=main.canonical_json_digest(incomplete_request_document),
+            )
+        )
+        db.commit()
+        db.expire_all()
+        calls_before_incomplete_pricing = len(fake_sts.calls)
+        incomplete_pricing_credentials = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert incomplete_pricing_credentials.status_code == 403
+        assert len(fake_sts.calls) == calls_before_incomplete_pricing
+        assert db.query(AuditEvent).filter_by(action="nova_apply_credentials.issued").count() == 1
+
+        db.execute(
+            update(GeneratedPlanArtifact)
+            .where(GeneratedPlanArtifact.id == artifact_id)
+            .values(
+                manifest=original_manifest,
+                manifest_sha256=original_manifest_sha256,
+            )
+        )
+        db.execute(
+            update(GeneratedPlanApproval)
+            .where(GeneratedPlanApproval.id == approval_id)
+            .values(approved_manifest_sha256=original_manifest_sha256)
+        )
+        db.execute(
+            update(GeneratedPlanApplyRun)
+            .where(GeneratedPlanApplyRun.id == apply_run_id)
+            .values(
+                manifest_sha256=original_manifest_sha256,
+                request_document=original_request_document,
+                request_sha256=original_request_sha256,
+            )
+        )
+        db.commit()
+        db.expire_all()
+
+        db.get(ProductUser, "apply-admin-user").role = "developer"
+        db.commit()
+        revoked_admin = client.post(
+            "/api/v1/nova-apply/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert revoked_admin.status_code == 403
+        codebuild.calls.clear()
+        with pytest.raises(HTTPException, match="Current workspace administrator authorization"):
+            main._terraform_state_authorization(
+                credential.state_id,
+                SimpleNamespace(
+                    username=credential_document["username"],
+                    password=credential_document["password"],
+                ),
+                db,
+            )
+        assert codebuild.calls == []
+        denied = client.post(
+            "/api/v1/terraform-state/credentials",
+            headers={"x-davdeploy-bootstrap-principal": assumed_apply_role},
+            json={"run_id": apply_run_id},
+        )
+        assert denied.status_code == 403
+        assert codebuild.calls == []
+
+    from davdeploy.nova_apply_dispatch import NovaApplyBuild
+
+    class SuccessfulApplyResultReader:
+        project_name = "fixed-apply"
+
+        def describe_build(self, requested_build_id):
+            assert requested_build_id == build_id
+            return NovaApplyBuild(
+                build_id=build_id,
+                project_name="fixed-apply",
+                status="SUCCEEDED",
+                run_id=apply_run_id,
+                build_arn=build_arn,
+            )
+
+        def read_result(self, requested_run_id, request, requested_build_id, requested_build_arn, **kwargs):
+            assert requested_run_id == apply_run_id
+            assert request == request_document
+            assert requested_build_id == build_id
+            assert requested_build_arn == build_arn
+            assert kwargs == {
+                "expected_state_id": state_id,
+                "expected_state_scope_sha256": state_scope,
+                "expected_account_id": account_id,
+                "expected_region": region,
+            }
+            return (
+                {
+                    "execution_status": "APPLIED_UNVERIFIED",
+                    "state_id": state_id,
+                    "state_scope_sha256": state_scope,
+                    "terraform_version": "1.14.7",
+                    "aws_provider_version": "6.0.0",
+                },
+                "result-version-1",
+                "a" * 64,
+            )
+
+        @staticmethod
+        def result_key(requested_build_arn):
+            return f"plans/nova-generated/apply-builds/{requested_build_arn}/result.json"
+
+    reconciler = main.ProductService(db, nova_apply_dispatcher=SuccessfulApplyResultReader())
+    assert reconciler.reconcile_generated_plan_apply_build(build_id) is True
+    db.expire_all()
+    reconciled_run = db.get(GeneratedPlanApplyRun, apply_run_id)
+    assert reconciled_run.state == "APPLIED_UNVERIFIED"
+    assert reconciled_run.result_metadata == {
+        "codebuild_status": "SUCCEEDED",
+        "codebuild_build_arn": build_arn,
+        "result_key": f"plans/nova-generated/apply-builds/{build_arn}/result.json",
+        "result_version_id": "result-version-1",
+        "result_sha256": "a" * 64,
+        "manifest_sha256": manifest_digest,
+        "execution_status": "APPLIED_UNVERIFIED",
+        "state_id": state_id,
+        "state_scope_sha256": state_scope,
+    }
+    reconcile_event = db.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "generated_plan_apply.build_reconciled"
+        )
+    )
+    assert reconcile_event is not None
+    assert reconcile_event.entity_id == apply_run_id
+    assert reconcile_event.detail["result_sha256"] == "a" * 64
+
     db.close()
     engine.dispose()
 

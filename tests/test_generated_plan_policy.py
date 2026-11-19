@@ -1267,6 +1267,150 @@ def test_public_s3_policy_is_denied():
     assert "s3_public_policy_denied" in codes(result)
 
 
+def test_s3_policy_allow_with_not_resource_is_denied_for_specific_principal():
+    document = plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::654654474502:role/app"},
+                "Action": "s3:GetObject",
+                "NotResource": "arn:aws:s3:::private-plan-bucket/private.json",
+            }
+        ],
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "bucket-policy",
+                "resource_type": "aws_s3_bucket_policy",
+                "name": "policy",
+                "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+                "rationale": "Scoped access for the application role.",
+            },
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_not_resource_policy_denied" in codes(result)
+
+
+def test_s3_policy_allow_with_not_action_is_denied_for_specific_principal():
+    document = plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::654654474502:role/app"},
+                "NotAction": "s3:DeleteObject",
+                "Resource": "arn:aws:s3:::private-plan-bucket/*",
+            }
+        ],
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "bucket-policy",
+                "resource_type": "aws_s3_bucket_policy",
+                "name": "policy",
+                "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+                "rationale": "Scoped access for the application role.",
+            },
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_not_action_policy_denied" in codes(result)
+
+
+def test_s3_policy_external_aws_principal_is_denied():
+    document = plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::999999999999:root"},
+                "Action": "s3:GetObject",
+                "Resource": "arn:aws:s3:::private-plan-bucket/*",
+            }
+        ],
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "bucket-policy",
+                "resource_type": "aws_s3_bucket_policy",
+                "name": "policy",
+                "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+                "rationale": "Share storage with a separate account.",
+            },
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_unverified_policy_principal_denied" in codes(result)
+
+
+def test_s3_policy_unbounded_resource_arn_is_denied():
+    document = plan()
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::654654474502:role/app"},
+                "Action": "s3:GetObject",
+                "Resource": "*",
+            }
+        ],
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy", {"policy": json.dumps(policy)})
+    )
+    document["resource_changes"].append(change("aws_s3_bucket_policy.policy", "aws_s3_bucket_policy"))
+    proposal_value = proposal(
+        [
+            *(item.model_dump(mode="json") for item in proposal().resources),
+            {
+                "resource_id": "bucket-policy",
+                "resource_type": "aws_s3_bucket_policy",
+                "name": "policy",
+                "arguments": {"bucket": "private-plan-bucket", "policy": json.dumps(policy)},
+                "rationale": "Scope application access to one bucket.",
+            },
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "s3_resource_arn_unbounded" in codes(result)
+
+
 def test_planned_s3_bucket_requires_one_same_plan_transport_policy():
     document = plan()
     document["planned_values"]["root_module"]["resources"] = [
@@ -1425,7 +1569,6 @@ def test_s3_transport_policy_findings_do_not_echo_policy_values():
     assert result.verdict == PlanPolicyVerdict.DENY
     assert marker not in repr(result)
 
-
 @pytest.mark.parametrize("principal", ["*", {"AWS": "*"}, {"AWS": ["*"]}])
 def test_public_sqs_queue_policy_is_denied(principal):
     policy = {
@@ -1442,6 +1585,74 @@ def test_public_sqs_queue_policy_is_denied(principal):
     document = add_sqs_queue_policy(plan(), json.dumps(policy))
 
     assert "sqs_public_policy_denied" in codes(evaluate(document))
+
+
+def test_sqs_queue_policy_allow_with_not_resource_is_denied_for_specific_principal():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "NotResource": "arn:aws:sqs:us-east-1:654654474502:excluded-queue",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_not_resource_policy_denied" in codes(evaluate(document))
+
+
+def test_sqs_queue_policy_allow_with_not_action_is_denied_for_specific_principal():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "NotAction": "sqs:DeleteMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_not_action_policy_denied" in codes(evaluate(document))
+
+
+def test_sqs_queue_policy_external_aws_principal_is_denied():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "arn:aws:iam::999999999999:root"},
+                "Action": "sqs:SendMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_unverified_policy_principal_denied" in codes(evaluate(document))
+
+
+def test_sqs_queue_policy_unbounded_resource_arn_is_denied():
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": "*",
+            }
+        ],
+    }
+    document = add_sqs_queue_policy(plan(), json.dumps(policy))
+
+    assert "sqs_resource_arn_unbounded" in codes(evaluate(document))
 
 
 def test_sqs_queue_policy_allow_with_not_principal_is_denied():
@@ -2477,6 +2688,16 @@ def test_publicly_routable_security_group_cidr_is_not_limited_to_world_open_cidr
             "iam_privileged_wildcard",
         ),
         (
+            {
+                "Statement": {
+                    "Effect": "Allow",
+                    "Action": "s3:GetObject",
+                    "NotResource": "arn:aws:s3:::excluded-bucket/*",
+                }
+            },
+            "iam_not_resource_policy_denied",
+        ),
+        (
             {"Statement": {"Effect": "Allow", "Action": "iam:PassRole", "Resource": "*"}},
             "iam_passrole_unbounded_denied",
         ),
@@ -2564,6 +2785,103 @@ def evaluate_application_policy(policy_document):
         ),
         generated,
     )
+
+
+@pytest.mark.parametrize("action", ["s3:*", "dynamodb:Put*", "sqs:*"])
+def test_application_data_policies_deny_service_action_wildcards(action):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": "arn:aws:s3:::pilot-uploads",
+            }
+        }
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_privileged_wildcard" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("action", "resource_arn"),
+    [
+        ("s3:GetObject", "*"),
+        ("s3:GetObject", "arn:aws:s3:::*"),
+        ("dynamodb:PutItem", "arn:aws:dynamodb:us-east-1:654654474502:table/*"),
+        (
+            "sqs:SendMessage",
+            "arn:aws:sqs:us-east-1:654654474502:*",
+        ),
+    ],
+)
+def test_application_data_policies_deny_unbounded_resource_patterns(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_data_resource_unbounded" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("action", "resource_arn"),
+    [
+        ("s3:GetObject", "arn:aws:s3"),
+        ("sqs:SendMessage", "arn:aws:sqs"),
+        ("dynamodb:PutItem", "arn:aws:dynamodb:us-east-1:654654474502"),
+    ],
+)
+def test_application_data_policies_deny_incomplete_resource_arns(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "iam_data_resource_unbounded" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("action", "resource_arn"),
+    [
+        ("s3:GetObject", "arn:aws:s3:::pilot-uploads"),
+        ("s3:GetObject", "arn:aws:s3:::pilot-uploads/*"),
+        ("s3:GetObject", "arn:aws:s3:::pilot-uploads/inbox/item.json"),
+        ("sqs:SendMessage", "arn:aws:sqs:us-east-1:654654474502:pilot-queue"),
+        (
+            "dynamodb:PutItem",
+            "arn:aws:dynamodb:us-east-1:654654474502:table/pilot-table",
+        ),
+        (
+            "dynamodb:Query",
+            "arn:aws:dynamodb:us-east-1:654654474502:table/pilot-table/index/*",
+        ),
+    ],
+)
+def test_application_data_policies_allow_exact_child_resource_scopes(action, resource_arn):
+    result = evaluate_application_policy(
+        {
+            "Statement": {
+                "Effect": "Allow",
+                "Action": action,
+                "Resource": resource_arn,
+            }
+        }
+    )
+
+    assert "iam_data_resource_unbounded" not in codes(result)
 
 
 def evaluate_role_trust(trust_document):
