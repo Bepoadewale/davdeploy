@@ -7,7 +7,7 @@ coverage remain separate facts.
 
 ## Current source and acceptance status — 2026-11-19
 
-Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0` (through PR #436).
+Backend `main` is `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3` (through PR #437).
 PR #413 merged the capability ledger. The last recorded hosted backend release
 is PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -22,16 +22,17 @@ It contains a separate, default-off exact-plan apply path. No Nova apply build,
 credential issuance, or Nova-generated customer workload is claimed. Apply and
 credential gates remain disabled.
 
-PR #437 is open and draft at `bc59160bbce3143ecf5e54938531f0637b60cb8f`;
-all seven checks passed in
-[run 44514674934](https://github.com/Bepoadewale/davdeploy/actions/runs/44514674934).
-Its isolated customer-account ECS Express run used local Terraform state,
-reached live health, then removed its Terraform-managed resources and
-independently checked absence. The goal owner accepts this as the general
-goal's customer-side plan/apply/health/teardown evidence under the required
-control-plane isolation. It was direct Terraform, not a Nova-generated or
-Nova-dispatched run; it does not prove cross-account isolation or update/recovery.
-No Nova customer workload is claimed as applied or certified.
+PR #437 merged at `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3` after final
+head `e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
+[run 44586955606](https://github.com/Bepoadewale/davdeploy/actions/runs/44586955606).
+Two isolated same-account ECS Express runs used local Terraform state. The
+second verified healthy v1 and v2, ECS circuit-breaker rollback of an
+unhealthy revision to healthy v2, and teardown of all 15 Terraform-managed
+resources with independent absence checks. The goal owner accepts this as the
+general goal's customer-side plan/apply/health/update/recovery/teardown
+evidence under control-plane isolation. It was direct Terraform, not a
+Nova-generated or Nova-dispatched run, and does not prove cross-account
+isolation. No Nova customer workload is claimed as applied or certified.
 
 PR #438 is open and draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`;
 all seven checks passed in
@@ -39,7 +40,7 @@ all seven checks passed in
 Its lock-free read-only plan against protected template-host state showed four
 address moves and zero resource changes. No apply or live template change ran.
 
-The Terraform run monitor currently has zero records and zero active runs.
+The Terraform run monitor has no active runs; its registry retains terminal history.
 The ECS test left no running workload or Terraform-managed resources; AWS
 retains an inactive service/history record and an empty default cluster. Preserve
 the protected untracked `--only-show-errors` file, `.venv-pr399/`, and retained
@@ -51,7 +52,7 @@ human approval -> exact-plan execution -> observed application health and
 lifecycle evidence. Model output cannot authorize execution. Remaining work
 includes the dedicated apply role and effective permissions, Nova-specific
 authorization/dispatch/credential-path evidence, complete cost and policy
-coverage, update/recovery proof, and the full scenario matrix. The
+coverage, Nova-specific update/recovery proof, and the full scenario matrix. The
 [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) retains all 26
 architecture entries and 30 implementation roots; the ECS pilot does not close
 those per-entry requirements.
@@ -89,15 +90,16 @@ execution strategy. Dated release details below remain historical records.
   default-off Nova apply worker and credential broker. The customer apply role
   and its effective permissions are not verified; no Nova apply build or
   credential issuance is claimed.
-- PR #437 is open/draft at `bc59160bbce3143ecf5e54938531f0637b60cb8f`, with
-  seven checks passing in run `44514674934`. Its same-account ECS Express run
-  is accepted for general-goal customer-side plan/apply/health/teardown
-  evidence. It did not test update/recovery and did not use Nova.
+- PR #437 merged as `7481c1f` after final head `e2c968b`; its seven checks
+  passed in run `44586955606`. The isolated customer-side ECS Express runs
+  prove v1/v2 health, failed-revision rollback to v2, and teardown. The owner
+  accepts this direct-Terraform evidence for the general-goal customer-side
+  plan/apply/health/update/recovery/teardown gate; it did not use Nova.
 - PR #438 is open/draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`, with
   seven checks passing in run `44510141524`. Its template-host change is
   source-only; the protected-state plan showed four address moves and zero
   resource changes.
-- The Terraform run monitor has zero records and zero active runs. The ECS test
+- The Terraform run monitor has no active runs and retains terminal history. The ECS test
   left no Terraform-managed workload resources; AWS retains inactive service
   history and an empty cluster record. Preserve the protected untracked files
   and retained lineage evidence. Browser/CLI/MCP lifecycle parity and the full

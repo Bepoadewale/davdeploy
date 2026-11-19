@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `ec937ed257eec5eb0a21f69519df337a90bd79c0`
-(through PR #436), 2026-11-19. PR #413 merged this 26-architecture-entry /
+Status snapshot: backend `main` at `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3`
+(through PR #437), 2026-11-19. PR #413 merged this 26-architecture-entry /
 30-root coverage ledger. The last recorded hosted release remains PR #420
 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -25,16 +25,16 @@ Draft PR #399 is open at
 `086d3afe0504adde0384275a6a3c713e2a42a75a`; all seven checks passed in
 [run 44297591687](https://github.com/Bepoadewale/davdeploy/actions/runs/44297591687).
 Apply and credential gates remain disabled, and its Nova-specific apply path
-has not been exercised. PR #437 is open at
-`bc59160bbce3143ecf5e54938531f0637b60cb8f`; all seven checks passed in
-[run 44514674934](https://github.com/Bepoadewale/davdeploy/actions/runs/44514674934).
-It records an isolated same-account ECS Express customer test with saved-plan
-apply, live health, teardown, and independent absence. The goal owner accepts it
-as the general goal's customer-side
-plan/apply/health/teardown evidence under the control-plane isolation boundary.
-It does not prove Nova generation, authorization, dispatch, cross-account
-isolation, or update/recovery. No Nova customer workload is claimed as applied
-or certified. PR #438 adds append-only template hosting in source only; its
+has not been exercised. PR #437 merged as `7481c1f` after final head
+`e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
+[run 44586955606](https://github.com/Bepoadewale/davdeploy/actions/runs/44586955606).
+Its isolated same-account ECS Express runs record saved-plan creation,
+healthy v1/v2, failed-health circuit-breaker rollback to v2, teardown, and
+independent absence. The goal owner accepts this direct-Terraform evidence as
+the general goal's customer-side plan/apply/health/update/recovery/teardown
+gate under control-plane isolation. It does not prove Nova generation,
+authorization, dispatch, cross-account isolation, or Nova-originated lifecycle.
+No Nova customer workload is claimed as applied or certified. PR #438 adds append-only template hosting in source only; its
 protected-state plan had four address moves and zero resource changes. Neither
 open PR changes hosted runtime or enables customer execution.
 
@@ -61,9 +61,10 @@ customer.
   `docs/test/` AWS tests are isolated service/root tests unless explicitly
   described otherwise. They are not Nova-hosted customer execution.
 - For the general Nova goal, the owner accepts PR #437's isolated ECS Express
-  run as customer-side plan/apply/health/teardown evidence under the required
-  control-plane isolation. Its direct-Terraform provenance does not establish
-  Nova generation/dispatch, cross-account isolation, or update/recovery.
+  runs as customer-side plan/apply/health/update/recovery/teardown evidence under
+  the required control-plane isolation. The runs used direct Terraform and do
+  not establish Nova generation/dispatch, cross-account isolation, or
+  Nova-originated lifecycle evidence.
 - **Policy evidence** describes the shared generated-plan checks in
   `generated_plan_policy.py`, not a complete policy for the named module.
 - **Plan price** means an independently sourced regional estimate for the exact
@@ -82,8 +83,8 @@ customer.
 | Proposal/schema checks | `generated_provider_validation.py` checks generated resource types and arguments against the initialized, locked AWS provider schema. PR #429 records that schema document's supported format version and canonical digest in the plan result and integrity-checked manifest. [`ticket309.md`](../tickets/ticket309.md) records a synthetic S3 schema check; [`test311.md`](../test/test311.md) records the later authenticated S3 saved-plan run with the locked provider schema. | This verifies Terraform schema shape and the identity of the schema input, not service semantics, customer security, cost, or lifecycle behavior. It does not map the capability/root registries to per-module supported schema evidence. |
 | Generated-plan policy | `generated_plan_policy.py` binds trusted account/region and proposal inventory; reviews destructive and sensitive changes; checks policy-critical unknowns for a finite list of Terraform types; and contains S3, IAM, security-group/network-ACL ingress, EC2 metadata, relational-database, and bounded EKS node IMDSv2 rules. PRs #401/#402/#404 are merged and deployed to the control plane; [`test401.md`](../test/test401.md), [`test402.md`](../test/test402.md), and [`test404.md`](../test/test404.md) record synthetic/local tests and hosted CI. | Partial shared rules only. The EKS node rule applies only when the plan binds a node group to exactly one same-plan launch template whose metadata settings are visible to policy. It does not establish pod metadata isolation, Kubernetes/RBAC or cluster endpoint security. Unknown-value checks cover only paths in `POLICY_CRITICAL_UNKNOWN_PATHS`. ACL association, route/egress reachability, and a complete deterministic policy map for all 26 modules or 30 roots are not established. No customer plan has exercised these checks. See the resource-family table below. |
 | Cost | The hosted package has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PR #424 is merged in backend source for one Aurora PostgreSQL Serverless v2 writer shape; its catalog response and local tests are not deployed evidence. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
-| Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. PR #437 [test evidence](https://github.com/Bepoadewale/davdeploy/pull/437) records an isolated ECS Express customer service reaching steady state and returning its live `/healthz` result; the owner accepts it as general-goal customer-side evidence. | The test is direct Terraform and does not prove Nova generated or dispatched the plan. Scenario declarations do not prove that a hosted worker ran probes. The current `CertificationEvidence` is five booleans; it does not record update, controlled failure, cost, source/artifact digest, or evidence link. |
-| Update/recovery/cleanup | Service-level evidence includes create, live health, saved-plan teardown, and independent absence for ECS Express in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). The goal owner accepts the customer-side plan/apply/health/teardown result for the general goal. | PR #437 did not test update/recovery. No complete Nova-hosted composed application evidence records update, injected failure, recovery, exact ownership-based destroy, and independent absence. A scenario label is not an observed result. |
+| Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. PR #437 [test evidence](https://github.com/Bepoadewale/davdeploy/pull/437) records direct ECS Express v1/v2 `/healthz` probes and rollback recovery; the owner accepts this as general-goal customer-side evidence. | The test does not prove Nova generated or dispatched the plan. Scenario declarations do not prove that a hosted worker ran probes. The current `CertificationEvidence` is five booleans; it does not record controlled failure, cost, source/artifact digest, or evidence link. |
+| Update/recovery/cleanup | Service-level evidence includes healthy v1-to-v2 update, ECS circuit-breaker rollback of an unhealthy revision to v2, saved-plan teardown, and independent absence for ECS Express in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). The owner accepts the customer-side result for the general goal. | No Nova-hosted composed application evidence records the complete update, injected failure, recovery, exact ownership-based destroy, and independent absence path. A scenario label is not an observed result. |
 | Hosted execution | The repository records a legacy App Runner pilot in [`test42.md`](../test/test42.md), and the direct customer-side ECS Express pilot in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). PR #314 added durable saved-plan storage and administrator approval; its ticket states that path's hosted worker has no caller and apply/destroy are unavailable. | The two service pilots were not Nova-generated composed execution. The owner accepts the ECS run as a substitute for the general customer-side plan/apply/lifecycle evidence gate under control-plane isolation; it does not prove Nova's authorization, dispatch, or credential path. Hosted control-plane health is not workload health. |
 
 ## Acceptance record required for every entry
@@ -215,7 +216,7 @@ Nova-hosted lifecycle evidence** unless the limitation says otherwise.
 | `aws-static-web` | `web-application` | `aws-s3-private-storage`, `aws-cloudfront-delivery` | S3 public-access and merged PRs #434–#436 transport, encryption, and ownership checks apply. PRs #432/#433 cover viewer and custom-origin TLS only. No private-origin access, cache, or deployment policy suite | [`test253.md`](../test/test253.md) served HTTPS content | No Nova-hosted source-to-site build, update/rollback, or cleanup proof |
 | `aws-serverless-api` | `web-application` | `aws-api-gateway-http`, `aws-lambda-service` | Shared IAM/network rules only; no API auth, throttling, or Lambda runtime-specific plan policy | [`test268.md`](../test/test268.md) real isolated HTTP 200 and teardown through a separate serverless renderer root | No Nova-hosted plan/apply or composed API/data/queue health proof |
 | `aws-managed-application` | `saas-backend` | No root in the 30-entry registry; separate App Runner renderer | Shared IAM/network checks only; no App Runner-specific policy map | [`test42.md`](../test/test42.md) records a separate App Runner customer workload pilot | No Nova-generated App Runner plan evidence; the pilot does not prove composed Nova execution |
-| `aws-container-service` | `kubernetes` | `aws-ecr-image` (partial; ECS/Fargate and ALB roots are absent from the 30-root registry) | Shared IAM/network checks only; no container image, task role, or service deployment policy | [`test255.md`](../test/test255.md) is EKS. [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437) adds a direct same-account ECS Express service health/teardown pilot, accepted for the general customer-side gate but not Nova execution. | No ECS/Fargate API-plus-worker behavior, update/recovery, Nova-generated plan, or catalog-root binding proof |
+| `aws-container-service` | `kubernetes` | `aws-ecr-image` (partial; ECS/Fargate and ALB roots are absent from the 30-root registry) | Shared IAM/network checks only; no container image, task role, or service deployment policy | [`test255.md`](../test/test255.md) is EKS. [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437) records isolated ECS Express create, health, update, failed-revision rollback, and teardown; accepted for the general customer-side gate but not Nova execution. | No ECS/Fargate API-plus-worker behavior, Nova-generated plan, or catalog-root binding proof |
 | `aws-virtual-machine-service` | — | `aws-ec2-autoscaling` | Merged source PR #402 checks IMDSv2 for planned `aws_instance`, `aws_launch_template`, and `aws_launch_configuration`, and requires regional metadata defaults to require tokens; no VM image, role, or host-hardening policy | [`test244.md`](../test/test244.md) records a zero-capacity Auto Scaling group reaching service-valid state | No guest application health, scaling behavior, patch/update, recovery, or hosted proof; metadata defaults can be overridden and are not account-wide enforcement |
 | `aws-kubernetes-platform` | `kubernetes` | `aws-eks-cluster`, `aws-ecr-image`, `aws-vpc-private-network` | Shared IAM/network checks only; no Kubernetes RBAC, admission, node, or cluster policy suite | [`test255.md`](../test/test255.md) deployed a workload and probed its service | No Nova-hosted cluster lifecycle, upgrade/failure recovery, or independent cleanup proof |
 | `aws-identity` | `web-application` | No Cognito or application-identity root | No customer-identity tenant/MFA/session policy in generated-plan policy | No customer workload identity probe mapped to this module | No Nova-hosted sign-up, authorization, revocation, or identity-recovery proof |
