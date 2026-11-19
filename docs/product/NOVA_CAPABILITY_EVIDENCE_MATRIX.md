@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3`
-(through PR #437), 2026-11-19. PR #413 merged this 26-architecture-entry /
+Status snapshot: backend `main` at `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`
+(through PR #399), 2026-11-19. PR #413 merged this 26-architecture-entry /
 30-root coverage ledger. The last recorded hosted release remains PR #420
 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -21,11 +21,16 @@ and versioned context/proposal identity evidence in backend source. PR #429
 records the supported Terraform provider-schema format and canonical digest of
 the full schema document in plan evidence. These changes are source-only and
 are not deployed. Unsupported material costs and settings still block approval.
-Draft PR #399 is open at
-`086d3afe0504adde0384275a6a3c713e2a42a75a`; all seven checks passed in
-[run 44297591687](https://github.com/Bepoadewale/davdeploy/actions/runs/44297591687).
-Apply and credential gates remain disabled, and its Nova-specific apply path
-has not been exercised. PR #437 merged as `7481c1f` after final head
+PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
+passed on final source head `61bdb3fb3baac1adbf49dd37e4870a9fb665424e` in
+[run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
+Its exact-plan Nova apply path, customer-role template, and template publisher
+are source-only; apply and credential gates remain disabled, and Nova-specific
+execution has not been exercised. A temporary same-account customer role test
+verified ExternalId assumption, an exact S3 session-policy lifecycle, and an
+explicit denial of unrelated EC2 access; it did not verify Nova dispatch,
+cross-account trust, or the full effective permission set, and all resources
+were removed. PR #437 merged as `7481c1f` after final head
 `e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
 [run 44586955606](https://github.com/Bepoadewale/davdeploy/actions/runs/44586955606).
 Its isolated same-account ECS Express runs record saved-plan creation,
@@ -34,9 +39,10 @@ independent absence. The goal owner accepts this direct-Terraform evidence as
 the general goal's customer-side plan/apply/health/update/recovery/teardown
 gate under control-plane isolation. It does not prove Nova generation,
 authorization, dispatch, cross-account isolation, or Nova-originated lifecycle.
-No Nova customer workload is claimed as applied or certified. PR #438 adds append-only template hosting in source only; its
-protected-state plan had four address moves and zero resource changes. Neither
-open PR changes hosted runtime or enables customer execution.
+No Nova customer workload is claimed as applied or certified. PR #438 merged as
+`cb78865`; its append-only template hosting is source-only, and its
+protected-state plan had four address moves and zero resource changes. PR #399
+and PR #438 have not changed hosted runtime or enabled customer execution.
 
 PR #422 merged as `8c84827` and adds source-only verification of the customer
 plan role's exact trust and bounded inline policy profile during connection
