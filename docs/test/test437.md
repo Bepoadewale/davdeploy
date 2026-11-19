@@ -65,15 +65,59 @@ retains stopped-task/service history and an empty default cluster record. These
 records have no running workload; the tag index may continue to show historical
 ECS records after deletion.
 
+## Additional update, recovery, and teardown run
+
+The second run used fresh local state in
+`/private/tmp/davdeploy-ecs-lifecycle-20261119-b1/root`, connection
+`ecs-lifecycle-20261119-b1`, and source commit
+`bc59160bbce3143ecf5e54938531f0637b60cb8f`. The AWS account was verified as
+`654654474502` (`adewale-terminal`) in `us-east-1`. It did not call or modify
+the hosted control plane, its state, locks, runtime, queues, or API.
+
+The foundation saved plan contained 14 creates, zero changes, and zero deletes.
+The service v1 plan contained one create; the v2 and failed-health plans each
+contained one in-place update and no replacement or unrelated resource action.
+Images were built for `linux/amd64` and deployed by digest:
+
+| Revision | Immutable image digest | Observed result |
+| --- | --- | --- |
+| v1 | `sha256:f9daaacbcbd6260cf6c72a1b145508a3b3b7cc61842931952d56629981f05274` | `/version` and `/healthz` returned healthy v1; initial service reached steady state in 5m03s |
+| v2 | `sha256:7375991c183327719e31599d827279eaf83f1425dc49fce5ee7b324a1abbed52` | In-place update completed in 8m36s; `/version` and `/healthz` returned healthy v2 |
+| failed | `sha256:4fe5398fda4d4f6fa0c5b7a8c9398d1721b54355130455a367cf2b10245486bc` | ECS deployment circuit breaker rolled back the revision; monitored Terraform apply returned the expected error after 14m11s; `/healthz` returned HTTP 200 and healthy v2 |
+
+A fresh plan against the restored v2 configuration showed no changes. The
+reviewed saved destroy plan contained exactly 15 deletes and no additions or
+updates. Its monitored apply completed with zero added, zero changed, and 15
+destroyed. Independent AWS reads confirmed that the ECR repository, customer
+VPC, both IAM roles, and CloudWatch log group were absent; local Terraform state
+was empty. ECS retains the service record as `INACTIVE` with zero desired,
+running, and pending tasks. AWS historical service records remain; there is no
+running workload or Terraform-managed test infrastructure.
+
+### Monitored runs
+
+All runs used the existing `scripts/terraform_run_monitor.py` and the same
+isolated local-state root. Supervisor PID / Terraform PID and log path:
+
+| Run ID | Result | Supervisor / Terraform PID | Log |
+| --- | --- | --- | --- |
+| `nova-customer-ecs-foundation-20261119-b1` | Succeeded: 14 created | `35797 / 35798` | `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-ecs-foundation-20261119-b1.log` |
+| `nova-customer-ecs-service-v1-20261119-b1` | Succeeded: 1 created | `38134 / 38135` | `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-ecs-service-v1-20261119-b1.log` |
+| `nova-customer-ecs-service-v2-20261119-b1` | Succeeded: 1 in-place update | `39852 / 39853` | `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-ecs-service-v2-20261119-b1.log` |
+| `nova-customer-ecs-service-failed-20261119-b1` | Expected circuit-breaker rollback; apply returned exit 1 | `43746 / 43747` | `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-ecs-service-failed-20261119-b1.log` |
+| `nova-customer-ecs-lifecycle-destroy-20261119-b1` | Succeeded: 15 destroyed | `55536 / 55537` | `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-customer-ecs-lifecycle-destroy-20261119-b1.log` |
+
 ## Final boundary
 
 This is direct same-account customer-side infrastructure evidence and may serve
 as the isolated customer deployment test while the hosted control plane remains
-untouched. It is not evidence that Nova initiated an apply, and it does not
-prove cross-account isolation. No update/recovery test was run. The PR remains
-draft. On 2026-11-19, the goal owner accepted this isolated run as the
-customer-side plan, apply, health, and teardown evidence for the general Nova
-infrastructure goal, substituting for a hosted Nova run under the required
-control-plane isolation. This does not establish Nova generation,
-authorization, dispatch, cross-account isolation, or update/recovery behavior.
-No Nova customer workload is claimed as applied or certified.
+untouched. The first run proved create, health, and cleanup. A second isolated
+run additionally proved healthy v1-to-v2 update, circuit-breaker rollback of a
+deliberately unhealthy revision, recovery on v2, and teardown. Both runs used
+direct Terraform and local state; neither proves Nova initiated an apply or
+cross-account isolation. On 2026-11-19, the goal owner accepted this isolated
+customer-side evidence for the general Nova infrastructure goal in place of a
+hosted customer apply under the required control-plane isolation. It does not
+establish Nova generation, authorization, dispatch, cross-account isolation, or
+Nova-specific lifecycle behavior. No Nova customer workload is claimed as
+applied or certified.

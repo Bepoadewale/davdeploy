@@ -35,9 +35,10 @@ Validate the full Terraform root set in CI. Add a health fixture that reports
 its release version and can deliberately fail readiness. Run a fresh
 same-account ECS Express lifecycle using local state and immutable image
 digests: create and verify v1, update to healthy v2, deploy a failed-health
-revision and observe service rollback, restore v2, then apply a reviewed saved
-destroy plan and independently verify absence. Do not use or modify the hosted
-control plane.
+revision and observe service rollback, verify recovery on v2, then apply a
+reviewed saved destroy plan and independently verify absence. Do not use or
+modify the hosted control plane. **Completed in a second direct customer-side
+run on 2026-11-19; see `docs/test/test437.md`.**
 
 ## Acceptance criteria
 
@@ -49,11 +50,14 @@ control plane.
   returned the expected `/healthz` response. **Passed.**
 - A saved plan updates the workload to v2; a controlled failed-health revision
   rolls back to the prior healthy service, and the service recovers to v2.
-  **Pending the second customer-side lifecycle run.**
+  **Passed.** v2 updated in place and returned healthy `/version` and
+  `/healthz`; the failed-health revision triggered the ECS circuit breaker,
+  and the live endpoint returned healthy v2 after rollback.
 - A reviewed saved destroy plan removed all 15 Terraform-managed test
   resources. Independent AWS reads and empty local Terraform state confirm no
   running workload, VPC, load balancer, image repository, role, or log group.
-  AWS retains inactive service and stopped-task history plus an empty cluster.
+  AWS retains an `INACTIVE` service-history record with zero desired, running,
+  and pending tasks.
 - The hosted control plane and its state, runtime, queues, and API remain
   untouched. No hosted Nova apply or cross-account isolation is claimed.
 
@@ -62,14 +66,15 @@ control plane.
 Customer-side creation, live health, and Terraform teardown passed in account
 `654654474502`; independent reads confirm no billable workload remains. The
 ECS service is retained by AWS as `INACTIVE` history with zero tasks, and an
-empty default cluster record remains. Update/recovery was not tested. This is
-direct Terraform evidence, not a Nova-initiated apply; the hosted control plane
-was untouched. On 2026-11-19, the goal owner accepted this isolated run as the
-customer-side plan, apply, health, and teardown evidence for the general Nova
-infrastructure goal. This acceptance substitutes for a hosted Nova run
-under the required control-plane isolation; it does not establish Nova
-generation, authorization, dispatch, cross-account isolation, or update and
-recovery behavior.
+empty default cluster record remains. A second isolated lifecycle run passed
+the healthy v1-to-v2 update, failed-health circuit-breaker rollback, v2 health
+recovery, and saved-plan teardown. This is direct Terraform evidence, not a
+Nova-initiated apply; the hosted control plane was untouched. On 2026-11-19,
+the goal owner accepted the isolated customer-side plan, apply, health,
+update/recovery, and teardown evidence for the general Nova infrastructure goal
+in place of a hosted customer apply under the required control-plane isolation.
+It does not establish Nova generation, authorization, dispatch, or
+cross-account isolation.
 
 ## Tests / validation performed
 
@@ -98,8 +103,7 @@ the same-account VPC cross-account isolation.
 
 ## Follow-up work
 
-The update/recovery lifecycle test is required for the broader container-service
-acceptance. Run it only with the isolated customer-side account/state boundary,
-then record exact image digests, saved plans, monitored run IDs, health results,
-rollback/recovery, teardown, and independent absence. No hosted Nova apply is
-authorized or claimed by this PR.
+The update/recovery lifecycle test has passed for this same-account pilot.
+Broader Nova-specific authorization, dispatch, cross-account isolation, and
+per-root scenario acceptance remain outside this evidence. No hosted Nova
+apply is claimed by this PR.
