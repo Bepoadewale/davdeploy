@@ -1,70 +1,60 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-17. This status summary tracks the Nova-led infrastructure
-workflow without claiming launch readiness. Code, control-plane deployment,
-customer plan, application behavior, and lifecycle evidence are distinct states.
+Updated: 2026-11-19. This handoff tracks the Nova-led infrastructure goal
+without claiming launch readiness. Source code, hosted control-plane state,
+customer-side AWS evidence, Nova execution, application behavior, and lifecycle
+coverage remain separate facts.
 
-## Current source and hosted status — 2026-11-17
+## Current source and acceptance status — 2026-11-19
 
-Backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422); the
-hosted control plane remains at PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`. PR #413
-merged the Nova coverage ledger. PRs #412 and #414 add bounded, revision-bound
-pricing for supported Lambda/API and DynamoDB configurations; PR #416 exposes
-the modeled pricing assumptions in generated-plan review output. PRs #417–#420
-make the protected Terraform plan summary inspectable while keeping values
-redacted and malformed IAM policy shapes fail-closed.
+Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0` (through PR #436).
+PR #413 merged the capability ledger. The last recorded hosted backend release
+is PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
+[run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
+after plan
+[run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
+This reconciliation made no hosted control-plane request or change.
 
-The control plane remains deployed from pre-PR #422 source (PR #420) using plan
-[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
-and saved-plan apply
-[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-Both workflow jobs succeeded, including database migrations. Read-only checks
-found all six `davdeploy-*` Lambda packages on code hash
-`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
-HTTP 200. This verifies the deployed control plane, not a customer workload.
+PR #399 is open and draft at `086d3afe0504adde0384275a6a3c713e2a42a75a`;
+all seven required checks passed in
+[run 44297591687](https://github.com/Bepoadewale/davdeploy/actions/runs/44297591687).
+It contains a separate, default-off exact-plan apply path. No Nova apply build,
+credential issuance, or Nova-generated customer workload is claimed. Apply and
+credential gates remain disabled.
 
-Draft PR #399 is open at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`; CI run
-[43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241)
-passed all seven jobs. The branch now contains the default-off apply credential
-and input routes, isolated staging of exact plan/workspace artifacts, a fixed
-apply worker, and result reconciliation. The apply worker and credential gates
-remain disabled. A dedicated customer role and its least-privilege permissions
-have not been provisioned or verified. No customer credentials were issued and
-no Nova customer plan, apply, health check, update, recovery, or destroy has
-been performed.
+PR #437 is open and draft at `a1cecca156d5baac124750f8dd3d2c6721758ac5`;
+all seven checks passed in
+[run 44510517423](https://github.com/Bepoadewale/davdeploy/actions/runs/44510517423).
+Its isolated customer-account ECS Express run used local Terraform state,
+reached live health, then removed its Terraform-managed resources and
+independently checked absence. The goal owner accepts this as the general
+goal's customer-side plan/apply/health/teardown evidence under the required
+control-plane isolation. It was direct Terraform, not a Nova-generated or
+Nova-dispatched run; it does not prove cross-account isolation or update/recovery.
+No Nova customer workload is claimed as applied or certified.
 
-PR #422 merged as `8c84827` and adds a strict check of the customer plan role's
-current trust and bounded inline policy profile at connection verification and
-before plan credentials are issued. It is not deployed. It keeps older
-identity-only `VERIFIED` records from becoming plan-ready and does not claim
-full effective AWS permissions or hosted plan-runner readiness.
+PR #438 is open and draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`;
+all seven checks passed in
+[run 44510141524](https://github.com/Bepoadewale/davdeploy/actions/runs/44510141524).
+Its lock-free read-only plan against protected template-host state showed four
+address moves and zero resource changes. No apply or live template change ran.
 
-Read-only inventory in account `654654474502`, region `us-east-1`, found no
-SageMaker endpoint, model, or endpoint configuration. Four tagged DavDeploy
-Batch job definitions remain inactive. One SageMaker lineage action and one
-context remain as retained evidence. The local Terraform run monitor is empty
-and no Terraform plan, apply, or destroy process is active. Preserve the
-untracked `--only-show-errors` file, `.venv-pr399/`, and lineage records.
-
-The frontend `main` is `b6cb14bc9563802d9b0b644739a6136336594174`. Draft PR #102
-(`d3008e7`) makes customer pages and plan status more truthful; its five required
-checks passed in run
-[43579164304](https://github.com/Bepoadewale/davdeploy-frontend/actions/runs/43579164304),
-but it is not merged or a customer execution flow. Draft PR #99 adds blog author
-names, but the current backend still returns a fixed display name and the PR's
-branch is not cleanly mergeable. The frontend also has five open dependency
-update PRs; they are unrelated to Nova acceptance.
+The Terraform run monitor currently has zero records and zero active runs.
+The ECS test left no running workload or Terraform-managed resources; AWS
+retains an inactive service/history record and an empty default cluster. Preserve
+the protected untracked `--only-show-errors` file, `.venv-pr399/`, and retained
+SageMaker lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
 human approval -> exact-plan execution -> observed application health and
-lifecycle evidence. Model output cannot authorize execution. Current gaps
-include complete cost evidence, a customer-owned least-privilege apply role,
-the hosted customer plan and approval journey, apply credential/build/result
-exercise, health/recovery/cleanup, and full scenario coverage. The
-[capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) tracks all 26
-architecture entries and 30 implementation roots with explicit acceptance
-cases and honest evidence status.
+lifecycle evidence. Model output cannot authorize execution. Remaining work
+includes the dedicated apply role and effective permissions, Nova-specific
+authorization/dispatch/credential-path evidence, complete cost and policy
+coverage, update/recovery proof, and the full scenario matrix. The
+[capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) retains all 26
+architecture entries and 30 implementation roots; the ECS pilot does not close
+those per-entry requirements.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 
@@ -91,27 +81,27 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420),
-  deployed by apply run `43982396577` after plan run `43981566184`. The six
-  backend Lambda packages share code hash
-  `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; public `/healthz` returned
-  HTTP 200. This release does not establish a Nova customer workload.
-- PR #399 remains open and draft. Its current branch contains a separate
-  default-off apply worker, credential broker, exact artifact staging, and
-  result reconciliation; CI run `43997205241` passed all seven checks. The
-  customer apply role has not been provisioned or verified, and no real apply
-  build, health observation, recovery, destroy, or independent absence check
-  has run. Do not merge or enable apply before those gates are satisfied.
-- Current AWS inventory has four tagged inactive Batch job definitions and
-  retained SageMaker lineage evidence; no endpoint, model, or endpoint
-  configuration was returned. The local Terraform monitor is empty and no
-  Terraform operation is active. Preserve the protected local untracked files
-  and lineage evidence.
-- Frontend `main` remains `b6cb14bc9563802d9b0b644739a6136336594174`. Draft
-  PR #102 passed its five checks but is not merged and adds no backend execution
-  capability. Draft PR #99 remains blocked by the backend's fixed blog author
-  name. Neither dependency work nor the five open Dependabot PRs proves browser,
-  CLI, and MCP lifecycle parity.
+- Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0`. The last
+  recorded hosted release remains PR #420, applied by run `43982396577` after
+  plan run `43981566184`; no hosted change was made for this reconciliation.
+- PR #399 is open/draft at `086d3afe0504adde0384275a6a3c713e2a42a75a`, with
+  seven checks passing in run `44297591687`. It contains a separate
+  default-off Nova apply worker and credential broker. The customer apply role
+  and its effective permissions are not verified; no Nova apply build or
+  credential issuance is claimed.
+- PR #437 is open/draft at `a1cecca156d5baac124750f8dd3d2c6721758ac5`, with
+  seven checks passing in run `44510517423`. Its same-account ECS Express run
+  is accepted for general-goal customer-side plan/apply/health/teardown
+  evidence. It did not test update/recovery and did not use Nova.
+- PR #438 is open/draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`, with
+  seven checks passing in run `44510141524`. Its template-host change is
+  source-only; the protected-state plan showed four address moves and zero
+  resource changes.
+- The Terraform run monitor has zero records and zero active runs. The ECS test
+  left no Terraform-managed workload resources; AWS retains inactive service
+  history and an empty cluster record. Preserve the protected untracked files
+  and retained lineage evidence. Browser/CLI/MCP lifecycle parity and the full
+  per-entry capability matrix remain open.
 
 ## Verified boundary — historical detail, read with current status above
 
