@@ -26,7 +26,11 @@ passed on final source head `61bdb3fb3baac1adbf49dd37e4870a9fb665424e` in
 [run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
 Its exact-plan Nova apply path, customer-role template, and template publisher
 are source-only; apply and credential gates remain disabled, and Nova-specific
-execution has not been exercised. PR #437 merged as `7481c1f` after final head
+execution has not been exercised. A temporary same-account customer role test
+verified ExternalId assumption, an exact S3 session-policy lifecycle, and an
+explicit denial of unrelated EC2 access; it did not verify Nova dispatch,
+cross-account trust, or the full effective permission set, and all resources
+were removed. PR #437 merged as `7481c1f` after final head
 `e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
 [run 44586955606](https://github.com/Bepoadewale/davdeploy/actions/runs/44586955606).
 Its isolated same-account ECS Express runs record saved-plan creation,

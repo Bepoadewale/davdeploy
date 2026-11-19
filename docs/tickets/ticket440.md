@@ -25,9 +25,15 @@ historical checklist.
   as the general goal's customer-side plan/apply/health/update/recovery/teardown
   evidence. The run used direct Terraform and does not claim Nova generation,
   authorization, dispatch, or cross-account isolation.
+- A temporary customer apply role created from the PR #399 CloudFormation
+  template was exercised in the same account with a temporary broker role,
+  valid and invalid ExternalId attempts, an exact S3 session policy, and an
+  explicit denial check. The test bucket, role stack, and broker role were
+  removed and independently checked absent; this does not test Nova dispatch.
 - The last recorded hosted control-plane release remains PR #420, applied by
-  run `43982396577` after plan run `43981566184`. No control-plane or AWS
-  mutation is part of this PR.
+  run `43982396577` after plan run `43981566184`. No hosted control-plane
+  mutation was made; the customer-side test resources were temporary and
+  cleaned up.
 - The Terraform run monitor has terminal history and no active run. Preserve
   the protected untracked `--only-show-errors` file and `.venv-pr399/`.
 
@@ -52,7 +58,9 @@ historical checklist.
    deployment status explicit.
 3. Preserve the accepted ECS customer-side evidence with direct-Terraform
    provenance and retain Nova-specific and per-entry gaps.
-4. Keep the historical renderer checklist historical and preserve the complete
+4. Record bounded customer-role verification without attributing it to Nova or
+   broadening the accepted direct ECS evidence.
+5. Keep the historical renderer checklist historical and preserve the complete
    26/30 evidence matrix.
 
 ## Acceptance criteria
@@ -67,21 +75,32 @@ historical checklist.
       broad Nova acceptance is not marked complete.
 - [ ] Documentation conventions, diff checks, matrix counts, and PR CI pass on
       the final content head.
-- [x] No AWS, Terraform state/lock, hosted runtime, or feature-gate mutation.
+- [x] No hosted-control-plane, Terraform state/lock, runtime, or feature-gate
+      mutation; temporary customer test resources were removed.
 
 ## Acceptance status
 
 The handoff and matrix now reconcile the current source and preserve the
-customer-side evidence acceptance and remaining Nova-specific scope.
-Documentation conventions, diff checks, and the 26/30 matrix count check pass.
-Final PR CI is pending. This documentation change does not touch AWS or the
-hosted control plane.
+customer-side evidence acceptance and remaining Nova-specific scope. The
+customer apply-role template also passed a bounded temporary same-account
+assume-role/session-policy test; all created resources were removed. No hosted
+control-plane resource or state was changed. Documentation checks passed; final
+PR CI is pending.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=440 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 - Matrix count validation — 26 architecture entries and 30 Terraform roots.
+- Customer-role smoke: created a temporary broker IAM role and the template's
+  dedicated apply role; verified the correct ExternalId succeeds, a wrong
+  ExternalId is rejected, a plan-scoped session can create/head/delete only
+  its fresh S3 bucket, and EC2 `DescribeInstances` is explicitly denied.
+- CloudTrail records `Client.UnauthorizedOperation` with explicit identity
+  policy denial for `ec2:DescribeInstances` at `2026-11-19T19:57:25Z`.
+- CloudFormation stack `davdeploy-nova-apply-smoke-b9e85dc2` reached
+  `DELETE_COMPLETE`; independent AWS reads confirmed both temporary roles and
+  the S3 bucket are absent.
 - Required PR CI is pending.
 - Current GitHub state verified with `gh pr list`, `gh pr view`, and the
   terminal checks for PR #399.
@@ -97,9 +116,11 @@ hosted control plane.
 ## Boundaries
 
 Do not modify the hosted control plane, its state, locks, runtime, queues, or
-feature gates. Do not claim Nova initiated or certified the isolated ECS run,
-or that the full 26/30 capability matrix is complete. Preserve the protected
-untracked `--only-show-errors` and `.venv-pr399/` in the user's main checkout.
+feature gates. The isolated role test is customer-side source/template evidence,
+not Nova credential issuance or dispatch proof. Do not claim Nova initiated or
+certified the ECS run, or that the full 26/30 capability matrix is complete.
+Preserve the protected untracked `--only-show-errors` and `.venv-pr399/` in the
+user's main checkout.
 
 ## Follow-up work
 

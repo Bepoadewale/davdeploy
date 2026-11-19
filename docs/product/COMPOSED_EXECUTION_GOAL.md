@@ -22,7 +22,11 @@ passed on final source head `61bdb3fb3baac1adbf49dd37e4870a9fb665424e` in
 It adds a separate, default-off exact-plan apply path and the customer apply-role
 template. Apply and credential gates remain disabled. No Nova apply build,
 credential issuance, or Nova-generated customer workload is claimed. The
-current source is not deployed to the hosted control plane.
+current source is not deployed to the hosted control plane. A temporary
+same-account customer test deployed and assumed the template role, verified a
+plan-scoped S3 bucket lifecycle and an explicit denial of unrelated EC2 access,
+then removed the test role, broker role, and bucket. This does not verify the
+Nova broker, cross-account trust, or the role's complete effective permissions.
 
 PR #437 merged at `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3` after final
 head `e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
@@ -90,9 +94,12 @@ execution strategy. Dated release details below remain historical records.
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
   default-off Nova apply worker, credential broker, and customer apply-role
-  template. The customer role has not been installed or verified for effective
-  permissions; no Nova apply build or credential issuance is claimed. Both
-  execution gates remain disabled.
+  template. A temporary same-account role test verified ExternalId-based
+  assumption, one plan-scoped S3 lifecycle, and an explicit unrelated EC2
+  denial; all test resources were removed. This is not complete effective
+  permission or cross-account verification. No persistent customer role,
+  Nova apply build, or Nova credential issuance is claimed. Both execution
+  gates remain disabled.
 - PR #437 merged as `7481c1f` after final head `e2c968b`; its seven checks
   passed in run `44586955606`. The isolated customer-side ECS Express runs
   prove v1/v2 health, failed-revision rollback to v2, and teardown. The owner
