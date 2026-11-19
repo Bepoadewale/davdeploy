@@ -23,7 +23,10 @@ None. Tests use synthetic Terraform plan documents.
 - `GITHUB_PR_NUMBER=441 python3 scripts/check_doc_conventions.py` — passed
 - `git diff --check` — passed
 - GitHub Actions run `44606644772` — all seven checks passed on source head
-  `3700e88`; a final check run is pending for this evidence update
+  `3700e88`
+- GitHub Actions run `44607504888` — all seven checks passed on evidence head
+  `52fcd83`
+- Required checks for the current test-record head are tracked on PR #441
 
 ## Observed result
 
@@ -31,9 +34,10 @@ The policy requires known SQS-managed server-side encryption for every planned
 `aws_sqs_queue`. The regression cases cover enabled, disabled, and unknown
 values. Existing queue-policy checks remain unchanged. KMS-backed encryption,
 queue retry/DLQ/visibility settings, and consumer behavior remain unsupported by
-this policy rule. Local validation passed; run `44606644772` passed all seven
-checks on implementation head `3700e88`. A final CI run is pending after this
-ticket/test update.
+this policy rule. Local validation passed. Runs `44606644772` and `44607504888`
+passed all seven checks on implementation head `3700e88` and evidence head
+`52fcd83` respectively. Checks for the latest test-record head are tracked in
+PR #441 before merge.
 
 ## Teardown
 

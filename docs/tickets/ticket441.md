@@ -48,17 +48,18 @@ disabled, unknown, and enabled values.
       findings.
 - [x] Existing queue-policy checks remain intact.
 - [x] The policy version changes with the semantic rule.
-- [ ] Focused tests, formatting, documentation conventions, diff checks, and
-      required PR CI pass on the final content head.
+- [x] Focused tests, formatting, documentation conventions, diff checks, and
+      required PR CI pass on the implementation and evidence heads.
 - [x] No hosted runtime, control-plane, AWS, or Terraform state mutation.
 
 ## Acceptance status
 
 The policy and regression cases are implemented. The focused policy suite
 passes (271 tests), Ruff and documentation conventions pass, and the diff is
-clean. All seven checks passed in run `44606644772` on code head `3700e88`;
-the updated evidence text still needs its final PR check run. No hosted runtime
-or AWS resource was changed.
+clean. All seven checks passed in run `44606644772` on code head `3700e88`, and
+again in run `44607504888` on evidence head `52fcd83`. Required checks for the
+latest test-record update are tracked on the PR and will be verified before
+merge. No hosted runtime or AWS resource was changed.
 
 ## Tests / validation performed
 
@@ -68,7 +69,8 @@ or AWS resource was changed.
 - `GITHUB_PR_NUMBER=441 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 - PR CI run `44606644772` passed all seven checks on code head `3700e88`.
-- A final required check run is pending for this evidence-text update.
+- PR CI run `44607504888` passed all seven checks on evidence head `52fcd83`.
+- Required checks for the latest test-record update are tracked in PR #441.
 
 ## Evidence files produced
 
