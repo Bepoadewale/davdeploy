@@ -7,7 +7,7 @@ coverage remain separate facts.
 
 ## Current source and acceptance status — 2026-11-19
 
-Backend `main` is `ff6ffae9ab88a37facbc443dfb35efe8c11b598d` (through PR #399).
+Backend `main` is `48911bfb74fafc626076d216f6ed78a21f3be4ee` (through PR #441).
 PRs #413 and #439 merged the capability ledger and evidence reconciliation.
 The last recorded hosted backend release
 is PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -47,6 +47,14 @@ Its append-only template-host change has not been applied. The lock-free
 read-only plan against protected template-host state showed four address moves
 and zero resource changes; no live template change ran.
 
+PR #441 merged as `48911bfb74fafc626076d216f6ed78a21f3be4ee`; all seven checks
+passed on final head `7a361b946637b4b985e2154993015129ee0bc285` in
+[run 44608565238](https://github.com/Bepoadewale/davdeploy/actions/runs/44608565238).
+It adds a source-only generated-plan rule requiring known SQS-managed
+server-side encryption on planned queues and bumps the policy version. It has
+not been deployed. KMS-backed queue encryption, queue retry/DLQ/visibility,
+consumer behavior, and hosted SQS lifecycle evidence remain incomplete.
+
 The Terraform run monitor has no active runs; its registry retains terminal history.
 The ECS test left no running workload or Terraform-managed resources; AWS
 retains an inactive service/history record and an empty default cluster. Preserve
@@ -57,9 +65,10 @@ The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
 human approval -> exact-plan execution -> observed application health and
 lifecycle evidence. Model output cannot authorize execution. Remaining work
-includes the dedicated apply role and effective permissions, Nova-specific
-authorization/dispatch/credential-path evidence, complete cost and policy
-coverage, Nova-specific update/recovery proof, and the full scenario matrix. The
+includes persistent customer-role provisioning and broader effective-permission
+proof, Nova-specific authorization/dispatch/credential-path evidence, complete
+cost and policy coverage, Nova-specific update/recovery proof, and the full
+scenario matrix. The
 [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) retains all 26
 architecture entries and 30 implementation roots; the ECS pilot does not close
 those per-entry requirements.
@@ -89,7 +98,7 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`. The last
+- Backend `main` is `48911bfb74fafc626076d216f6ed78a21f3be4ee`. The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
@@ -108,6 +117,9 @@ execution strategy. Dated release details below remain historical records.
 - PR #438 merged as `cb78865`; its seven checks passed in run `44593771329`.
   Its append-only template-host change remains source-only; the protected-state
   plan showed four address moves and zero resource changes.
+- PR #441 merged as `48911bf`; its seven checks passed in run `44608565238`.
+  It requires known SQS-managed encryption in generated queue plans. The policy
+  is source-only and has not been deployed to the hosted control plane.
 - The Terraform run monitor has no active runs and retains terminal history. The ECS test
   left no Terraform-managed workload resources; AWS retains inactive service
   history and an empty cluster record. Preserve the protected untracked files
