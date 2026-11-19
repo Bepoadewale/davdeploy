@@ -7,20 +7,22 @@ coverage remain separate facts.
 
 ## Current source and acceptance status — 2026-11-19
 
-Backend `main` is `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3` (through PR #437).
-PR #413 merged the capability ledger. The last recorded hosted backend release
+Backend `main` is `ff6ffae9ab88a37facbc443dfb35efe8c11b598d` (through PR #399).
+PRs #413 and #439 merged the capability ledger and evidence reconciliation.
+The last recorded hosted backend release
 is PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
 [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
 This reconciliation made no hosted control-plane request or change.
 
-PR #399 is open and draft at `086d3afe0504adde0384275a6a3c713e2a42a75a`;
-all seven required checks passed in
-[run 44297591687](https://github.com/Bepoadewale/davdeploy/actions/runs/44297591687).
-It contains a separate, default-off exact-plan apply path. No Nova apply build,
-credential issuance, or Nova-generated customer workload is claimed. Apply and
-credential gates remain disabled.
+PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
+passed on final source head `61bdb3fb3baac1adbf49dd37e4870a9fb665424e` in
+[run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
+It adds a separate, default-off exact-plan apply path and the customer apply-role
+template. Apply and credential gates remain disabled. No Nova apply build,
+credential issuance, or Nova-generated customer workload is claimed. The
+current source is not deployed to the hosted control plane.
 
 PR #437 merged at `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3` after final
 head `e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
@@ -34,11 +36,12 @@ evidence under control-plane isolation. It was direct Terraform, not a
 Nova-generated or Nova-dispatched run, and does not prove cross-account
 isolation. No Nova customer workload is claimed as applied or certified.
 
-PR #438 is open and draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`;
-all seven checks passed in
-[run 44510141524](https://github.com/Bepoadewale/davdeploy/actions/runs/44510141524).
-Its lock-free read-only plan against protected template-host state showed four
-address moves and zero resource changes. No apply or live template change ran.
+PR #438 merged as `cb78865b66815287478892fe012257cf964413db`; all seven checks
+passed in
+[run 44593771329](https://github.com/Bepoadewale/davdeploy/actions/runs/44593771329).
+Its append-only template-host change has not been applied. The lock-free
+read-only plan against protected template-host state showed four address moves
+and zero resource changes; no live template change ran.
 
 The Terraform run monitor has no active runs; its registry retains terminal history.
 The ECS test left no running workload or Terraform-managed resources; AWS
@@ -82,23 +85,22 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `ec937ed257eec5eb0a21f69519df337a90bd79c0`. The last
+- Backend `main` is `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`. The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
-  plan run `43981566184`; no hosted change was made for this reconciliation.
-- PR #399 is open/draft at `086d3afe0504adde0384275a6a3c713e2a42a75a`, with
-  seven checks passing in run `44297591687`. It contains a separate
-  default-off Nova apply worker and credential broker. The customer apply role
-  and its effective permissions are not verified; no Nova apply build or
-  credential issuance is claimed.
+  plan run `43981566184`; PR #399 has not been deployed to the control plane.
+- PR #399 merged with seven checks passing in run `44598735006`. It adds a
+  default-off Nova apply worker, credential broker, and customer apply-role
+  template. The customer role has not been installed or verified for effective
+  permissions; no Nova apply build or credential issuance is claimed. Both
+  execution gates remain disabled.
 - PR #437 merged as `7481c1f` after final head `e2c968b`; its seven checks
   passed in run `44586955606`. The isolated customer-side ECS Express runs
   prove v1/v2 health, failed-revision rollback to v2, and teardown. The owner
   accepts this direct-Terraform evidence for the general-goal customer-side
   plan/apply/health/update/recovery/teardown gate; it did not use Nova.
-- PR #438 is open/draft at `3e205e11ace285788fe7abe8e1e71b81d3db8d82`, with
-  seven checks passing in run `44510141524`. Its template-host change is
-  source-only; the protected-state plan showed four address moves and zero
-  resource changes.
+- PR #438 merged as `cb78865`; its seven checks passed in run `44593771329`.
+  Its append-only template-host change remains source-only; the protected-state
+  plan showed four address moves and zero resource changes.
 - The Terraform run monitor has no active runs and retains terminal history. The ECS test
   left no Terraform-managed workload resources; AWS retains inactive service
   history and an empty cluster record. Preserve the protected untracked files
