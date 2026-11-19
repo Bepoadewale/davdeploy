@@ -143,29 +143,42 @@ def test_public_template_host_publishes_append_only_hash_keyed_objects():
         "cloudformation/customer-discovery-role-"
         "8c5d1c82682b3bb90ff1f45d121b475e7b33b484f556feabafbf387c335aea4e.yaml"
     )
-    assert f'from = aws_s3_object.current_customer_discovery_role\n  to   = aws_s3_object.published_customer_templates["{current_live_key}"]' in configuration
-    assert (
-        'from = aws_s3_object.customer_discovery_role\n'
-        '  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-'
-        '600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]'
-    ) in configuration
-    assert (
-        'from = aws_s3_object.active_customer_discovery_role\n'
-        '  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-'
-        '7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]'
-    ) in configuration
-    assert (
-        'from = aws_s3_object.published_customer_discovery_role\n'
-        '  to   = aws_s3_object.published_customer_templates["cloudformation/customer-discovery-role-'
-        'f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]'
-    ) in configuration
-    for prior_key in (
+    moves = re.findall(
+        r"(?ms)^moved\s*\{\s*from\s*=\s*(.+?)\s*to\s*=\s*(.+?)\s*\}",
+        configuration,
+    )
+    move_sources = [source for source, _ in moves]
+    assert len(move_sources) == len(set(move_sources)), "each Terraform source address must have one move destination"
+
+    expected_moves = {
+        "aws_s3_object.current_customer_discovery_role": (
+            f'aws_s3_object.published_customer_templates["{current_live_key}"]'
+        ),
+        "aws_s3_object.customer_discovery_role": (
+            'aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-'
+            '600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml"]'
+        ),
+        "aws_s3_object.active_customer_discovery_role": (
+            'aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-'
+            '7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml"]'
+        ),
+        "aws_s3_object.published_customer_discovery_role": (
+            'aws_s3_object.retained_customer_templates["cloudformation/customer-discovery-role-'
+            'f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml"]'
+        ),
+    }
+    prior_keys = (
         "cloudformation/customer-discovery-role-600858c0ab944fd3f5aef06626ec5bc6ef9ed46352b418d87d651e05196bc11d.yaml",
         "cloudformation/customer-discovery-role-7e03683a397f0d4e2a5f68b9559d2790ff127e5513540457b47e9c4779b2b793.yaml",
         "cloudformation/customer-discovery-role-f3d9e1e5776fe147bbbc10107e41d221497f9b98c6b641eb8ac08467fd54aedb.yaml",
-    ):
+    )
+    for prior_key in prior_keys:
         assert prior_key in variables
-        assert f'aws_s3_object.published_customer_templates["{prior_key}"]' in configuration
+        retained_address = f'aws_s3_object.retained_customer_templates["{prior_key}"]'
+        published_address = f'aws_s3_object.published_customer_templates["{prior_key}"]'
+        expected_moves[retained_address] = published_address
+
+    assert dict(moves) == expected_moves
 
     assert "template_hash   = filesha256(local.template_source)" in configuration
     assert 'template_key    = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"' in configuration
