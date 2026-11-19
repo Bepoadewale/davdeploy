@@ -3,7 +3,7 @@
 - Date: 2026-11-19
 - Execution type: Source-level regression tests and local Terraform validation; no live AWS operations
 - Repository: `Bepoadewale/davdeploy`
-- Commit: source PR commit pending
+- Commit: `f36f86c`
 - Pull request: [#438](https://github.com/Bepoadewale/davdeploy/pull/438) (draft)
 - Customer repository: N/A; this changes DavDeploy platform-owned template publishing.
 - AWS account: N/A; no AWS calls made
@@ -22,6 +22,7 @@ Check that content-hash S3 template objects use stable key-derived Terraform add
 - `terraform -chdir=infrastructure/terraform/connection-template-host validate` — passed.
 - `GITHUB_PR_NUMBER=438 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- PR #438 CI run `44495901056` — all seven checks passed: cloud-contracts, docs-conventions, local-e2e, policy, python, secrets, supply-chain.
 
 ## Resources created
 
