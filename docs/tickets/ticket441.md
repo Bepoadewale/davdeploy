@@ -56,7 +56,9 @@ disabled, unknown, and enabled values.
 
 The policy and regression cases are implemented. The focused policy suite
 passes (271 tests), Ruff and documentation conventions pass, and the diff is
-clean. Final PR CI is pending. No hosted runtime or AWS resource was changed.
+clean. All seven checks passed in run `44606644772` on code head `3700e88`;
+the updated evidence text still needs its final PR check run. No hosted runtime
+or AWS resource was changed.
 
 ## Tests / validation performed
 
@@ -65,7 +67,8 @@ clean. Final PR CI is pending. No hosted runtime or AWS resource was changed.
 - Ruff on the changed policy and test files — passed.
 - `GITHUB_PR_NUMBER=441 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Required PR CI is pending.
+- PR CI run `44606644772` passed all seven checks on code head `3700e88`.
+- A final required check run is pending for this evidence-text update.
 
 ## Evidence files produced
 
