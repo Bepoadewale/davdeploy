@@ -30,6 +30,7 @@ resources were removed after the check.
 - Ruff on the changed source and regression tests — passed.
 - `GITHUB_PR_NUMBER=443 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- GitHub Actions run [45064740248](https://github.com/Bepoadewale/davdeploy/actions/runs/45064740248) — all seven checks passed on the initial implementation/evidence head `83b292afc3ed5b4ee819e103f4155f66710600e2`; this documentation follow-up receives its own check run.
 
 ## Observed result
 

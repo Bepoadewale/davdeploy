@@ -20,7 +20,9 @@ issuance even though every resource type is supported.
 - The apply-role template's maximum policy explicitly denies actions outside
   its fixed S3, SQS, DynamoDB, IAM-inspection, and STS identity ceiling.
 - Implementation commit `af147685998efbc423785a35e4bef0a3084a4fbf` is on
-  `fix/nova-apply-session-policy-size`; PR publication and hosted checks remain.
+  `fix/nova-apply-session-policy-size`. PR #443's initial implementation and
+  evidence head `83b292afc3ed5b4ee819e103f4155f66710600e2` passed all seven
+  checks in run `45064740248`; this ticket update receives its own CI run.
 
 ## Research / references used
 
@@ -66,7 +68,8 @@ issuance even though every resource type is supported.
   scope S3/SQS/DynamoDB creates and unrelated EC2 access were denied.
 - [x] Independent post-cleanup reads confirmed the temporary stack, roles,
   bucket, queue, and table were absent.
-- [ ] Required PR checks pass on the final evidence head.
+- [x] The implementation/evidence head passed all seven required PR checks;
+  the ticket follow-up is checked by PR CI before merge.
 - [x] The hosted runtime, control-plane state, Terraform state, and execution
   gates were not changed.
 
