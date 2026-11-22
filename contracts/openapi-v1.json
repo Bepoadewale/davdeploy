@@ -1262,7 +1262,7 @@
       },
       "SqsPricingUsageAssumptions": {
         "additionalProperties": false,
-        "description": "Proposal-wide monthly billed SQS request units by queue type.",
+        "description": "Proposal-wide SQS units including source, retry, and DLQ requests.",
         "properties": {
           "monthly_cross_region_transfer_gb": {
             "$ref": "#/components/schemas/MonthlyUsageRange"

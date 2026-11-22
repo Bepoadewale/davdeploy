@@ -51,60 +51,79 @@ do not present partial pricing as a complete estimate.
 
 1. Require known, valid queue visibility and retention settings for planned
    SQS queues; preserve PR #441's encryption and queue-policy behavior.
-2. For each planned SQS-to-Lambda event source mapping, require a plan-bound
-   source queue, consumer function and execution role. Validate the source
-   queue's redrive target, explicit retry count, and Lambda visibility-timeout
-   relationship, including any configured batching window.
-3. Require the linked consumer role to grant the SQS receive, delete and
-   attribute actions on the exact source queue ARN. Reject unresolved or
-   wildcard resource/action evidence. Keep unsupported attachment/policy
-   shapes fail-closed and identify their limits.
-4. Add regression fixtures for valid and unsafe queue, redrive, timeout,
+2. Require each planned queue to belong to one bounded source/DLQ pair. The
+   source uses a plan-known target ARN and `maxReceiveCount` 5–10; the DLQ
+   accepts only that source and retains messages longer than the source queue.
+   Keep unsupported shared-DLQ, unpaired-queue, and unknown-value shapes
+   fail-closed.
+3. For each planned SQS-to-Lambda event source mapping, require direct
+   configuration references to exactly one planned source queue and function,
+   and bind the function to one planned IAM role. Require known function
+   timeout and queue visibility of at least six times that timeout plus the
+   event source batch window.
+4. Require an inline role policy granting `sqs:ReceiveMessage`,
+   `sqs:DeleteMessage`, and `sqs:GetQueueAttributes` only on the exact planned
+   queue ARN. Reject wildcard/unresolved permissions and unsupported mapping
+   or managed-policy shapes.
+5. Add regression fixtures for valid and unsafe queue, redrive, timeout,
    event-source and permission combinations, including unknown values.
-5. Update the Nova SQS policy matrix and ticket/test evidence. State that
+6. Update the Nova SQS policy matrix and ticket/test evidence. State that
    message processing, idempotency, producer authorization, runtime pricing,
    and real SQS lifecycle evidence remain unproven unless separately evidenced.
 
 ## Acceptance criteria
 
-- [ ] Queue visibility/retention unknowns and out-of-range values are denied.
-- [ ] An SQS Lambda mapping is denied unless its source queue, function, and
-      execution role are bound to resources in the same plan.
-- [ ] A Lambda-consumed queue has an explicit valid redrive policy pointing to
-      one same-account, same-region planned queue; the target cannot be the
-      source or form a redrive cycle; receive count is within the documented
-      product retry bound; DLQ retention exceeds source retention.
-- [ ] For Lambda consumers, queue visibility is at least six times the planned
+- [x] Queue visibility/retention unknowns and out-of-range values are denied.
+- [x] Every planned queue belongs to one plan-bound, one-to-one source/DLQ
+      pair. Redrive targets cannot be self-references, unplanned, cross-account,
+      cross-region, shared, or cyclic.
+- [x] The source's explicit `maxReceiveCount` is an integer from 5 through 10.
+      The AWS Lambda guide recommends at least five attempts; ten is DavDeploy's
+      explicit product cap.
+- [x] The DLQ redrive-allow policy names only the exact source queue, and its
+      message retention exceeds the source queue retention.
+- [x] An SQS Lambda mapping is denied unless direct configuration references
+      bind its source queue, function and execution role to this plan.
+- [x] For Lambda consumers, queue visibility is at least six times the planned
       function timeout plus the configured batching window; unknown values
       fail closed.
-- [ ] The consumer role grants the required SQS read/acknowledgement actions
-      on the exact planned source ARN. Wildcard or unresolved permissions do
-      not satisfy the rule.
-- [ ] Existing SQS encryption and queue-policy checks remain intact, and the
+- [x] The consumer role's inline policy grants the required SQS read and
+      acknowledgement actions on the exact planned source ARN. Wildcard,
+      conditioned, or unresolved permissions do not satisfy the rule.
+- [x] Managed consumer policies and module-output-only bindings are explicitly
+      unsupported and fail closed; no full effective-permission claim is made.
+- [x] Existing SQS encryption and queue-policy checks remain intact, and the
       semantic policy version is bumped.
 - [ ] Focused tests, Ruff, documentation conventions, diff checks, and all
       required PR CI checks pass on the merge-ready head.
-- [ ] Pricing documentation and findings remain honest: queue request units
+- [x] Pricing documentation and findings remain honest: queue request units
       and consumer compute/transfer must be known and supported before costed
       approval; no complete quote is claimed by these policy checks.
-- [ ] No AWS resource, Terraform state, hosted control-plane runtime, customer
+- [x] No AWS resource, Terraform state, hosted control-plane runtime, customer
       credential, or Nova execution gate is mutated.
 
 ## Acceptance status
 
-Implementation has not started. This ticket is the draft-PR bootstrap and will
-be updated with concrete test outcomes and any narrowed supported shapes
-before the PR is marked ready for review.
+The implementation and local validations are complete on the draft PR. SQS
+Lambda mapping support is limited to direct plan references and inline
+consumer-role policies; CI/review remains outstanding and this source policy
+is not deployed.
 
 ## Tests / validation performed
 
-- None yet. This bootstrap contains documentation only; no AWS or Terraform
-  operation was run.
+- Focused generated-plan, pricing, API schema, Terraform format/validate, Ruff,
+  and diff checks are recorded in [`test445.md`](../test/test445.md).
+- No AWS resource, Terraform state, hosted control-plane runtime, customer
+  credential, or Nova execution gate has been changed.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket445.md`
 - `docs/test/test445.md` — to be added before this PR is marked ready.
+- `apps/api/src/davdeploy/generated_plan_policy.py`
+- `tests/test_generated_plan_policy.py`
+- `infrastructure/terraform/modules/sqs-queue/main.tf`
+- `apps/api/src/davdeploy/domain.py` and `contracts/openapi-v1.json`
 
 ## Boundaries
 

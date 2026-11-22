@@ -132,7 +132,7 @@ class S3PricingUsageAssumptions(BaseModel):
 
 
 class SqsPricingUsageAssumptions(BaseModel):
-    """Proposal-wide monthly billed SQS request units by queue type."""
+    """Proposal-wide SQS units including source, retry, and DLQ requests."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 

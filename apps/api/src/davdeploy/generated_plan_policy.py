@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-19.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-22.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -87,7 +87,14 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_iam_role": (("assume_role_policy",),),
     "aws_iam_role_policy": (("policy",),),
     "aws_sqs_queue_policy": (("policy",),),
-    "aws_sqs_queue": (("sqs_managed_sse_enabled",),),
+    "aws_sqs_queue": (
+        ("sqs_managed_sse_enabled",),
+        ("visibility_timeout_seconds",),
+        ("message_retention_seconds",),
+        ("redrive_policy",),
+        ("redrive_allow_policy",),
+    ),
+    "aws_lambda_function": (("timeout",),),
     "aws_lambda_permission": (
         ("action",),
         ("function_name",),
@@ -243,6 +250,9 @@ def _evaluate(
     _check_cloudfront_origin_tls(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
+    _check_sqs_delivery_contract(
+        document, resources, findings, expected_account_id, expected_region
+    )
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
     _check_iam(resources, findings, expected_account_id)
@@ -2205,6 +2215,505 @@ def _check_sqs_queue_encryption(
                 address,
                 "The SQS queue must enable SQS-managed server-side encryption.",
             )
+
+
+def _sqs_partition_for_region(region: str) -> str:
+    if region.startswith("cn-"):
+        return "aws-cn"
+    if region.startswith("us-gov-"):
+        return "aws-us-gov"
+    if region.startswith("us-isob-"):
+        return "aws-iso-b"
+    if region.startswith("eu-isoe-"):
+        return "aws-iso-e"
+    if region.startswith("us-isof-"):
+        return "aws-iso-f"
+    if region.startswith(("us-iso-", "eu-iso-")):
+        return "aws-iso"
+    return "aws"
+
+
+def _sqs_queue_arn(name: Any, account_id: str, region: str) -> str | None:
+    if not isinstance(name, str) or not re.fullmatch(
+        r"(?=.{1,80}\Z)[A-Za-z0-9_-]+(?:\.fifo)?", name
+    ):
+        return None
+    return (
+        f"arn:{_sqs_partition_for_region(region)}:sqs:{region}:"
+        f"{account_id}:{name}"
+    )
+
+
+def _check_sqs_delivery_contract(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    """Require bounded queue retry pairs and bind Lambda consumers to them."""
+    queues = [item for item in resources if item.get("type") == "aws_sqs_queue"]
+    if not queues:
+        return
+
+    queue_by_arn: dict[str, dict[str, Any]] = {}
+    queue_details: dict[str, tuple[dict[str, Any], str, int | None]] = {}
+    for item in queues:
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "sqs_queue_delivery_unknown",
+                address,
+                "The plan does not show the SQS queue delivery settings.",
+            )
+            continue
+
+        name = values.get("name")
+        derived_arn = _sqs_queue_arn(name, expected_account_id, expected_region)
+        arn = values.get("arn")
+        if derived_arn is None or arn not in {None, derived_arn}:
+            _deny(
+                findings,
+                "sqs_queue_identity_invalid",
+                address,
+                "The plan does not bind the SQS queue name to the trusted account and region.",
+            )
+            continue
+        if derived_arn in queue_by_arn:
+            _deny(
+                findings,
+                "sqs_queue_identity_duplicate",
+                address,
+                "The plan contains ambiguous SQS queue identities.",
+            )
+            continue
+        queue_by_arn[derived_arn] = item
+
+        visibility = _integer(values.get("visibility_timeout_seconds"))
+        if visibility is None or not 0 <= visibility <= 43_200:
+            _deny(
+                findings,
+                "sqs_visibility_timeout_invalid",
+                address,
+                "The queue visibility timeout must be known and between 0 and 43,200 seconds.",
+            )
+        retention = _integer(values.get("message_retention_seconds"))
+        if retention is None or not 60 <= retention <= 1_209_600:
+            _deny(
+                findings,
+                "sqs_message_retention_invalid",
+                address,
+                "The queue message retention must be known and between 60 seconds and 14 days.",
+            )
+        queue_details[derived_arn] = (item, address, retention)
+
+    redrive_pairs: dict[str, str] = {}
+    redrive_targets: dict[str, str] = {}
+    redrive_edges: dict[str, str] = {}
+    for arn, (item, address, source_retention) in queue_details.items():
+        values = item["values"]
+        redrive_raw = values.get("redrive_policy")
+        allow_raw = values.get("redrive_allow_policy")
+
+        if redrive_raw not in (None, ""):
+            redrive = _json_document(redrive_raw, findings, address)
+            if redrive is None:
+                continue
+            target_arn = redrive.get("deadLetterTargetArn")
+            receive_count = _integer(redrive.get("maxReceiveCount"))
+            if (
+                set(redrive) != {"deadLetterTargetArn", "maxReceiveCount"}
+                or not isinstance(target_arn, str)
+                or receive_count is None
+                or not 5 <= receive_count <= 10
+                or target_arn == arn
+            ):
+                _deny(
+                    findings,
+                    "sqs_redrive_policy_invalid",
+                    address,
+                    "The queue redrive policy must use one different planned DLQ and 5 to 10 receives.",
+                )
+                continue
+            if target_arn not in queue_by_arn:
+                _deny(
+                    findings,
+                    "sqs_redrive_target_unplanned",
+                    address,
+                    "The queue redrive target must be a queue in the same Terraform plan and account.",
+                )
+                continue
+            redrive_edges[arn] = target_arn
+            if target_arn in redrive_targets:
+                _deny(
+                    findings,
+                    "sqs_redrive_target_ambiguous",
+                    address,
+                    "A planned dead-letter queue must have one bounded source queue.",
+                )
+                continue
+            target_retention = queue_details[target_arn][2]
+            if (
+                source_retention is None
+                or target_retention is None
+                or target_retention <= source_retention
+            ):
+                _deny(
+                    findings,
+                    "sqs_dlq_retention_not_longer",
+                    queue_details[target_arn][1],
+                    "Dead-letter queue retention must exceed its source queue retention.",
+                )
+                continue
+            redrive_pairs[arn] = target_arn
+            redrive_targets[target_arn] = arn
+        elif allow_raw not in (None, ""):
+            allow = _json_document(allow_raw, findings, address)
+            if allow is None:
+                continue
+            source_arns = allow.get("sourceQueueArns")
+            if (
+                set(allow) != {"redrivePermission", "sourceQueueArns"}
+                or allow.get("redrivePermission") != "byQueue"
+                or not isinstance(source_arns, list)
+                or len(source_arns) != 1
+                or not isinstance(source_arns[0], str)
+            ):
+                _deny(
+                    findings,
+                    "sqs_redrive_allow_policy_invalid",
+                    address,
+                    "A dead-letter queue must allow exactly its planned source queue.",
+                )
+
+    for start_arn in redrive_edges:
+        visited: set[str] = set()
+        current_arn = start_arn
+        while current_arn in redrive_edges:
+            if current_arn in visited:
+                _deny(
+                    findings,
+                    "sqs_redrive_cycle_denied",
+                    queue_details[start_arn][1],
+                    "The planned SQS redrive policies contain a cycle.",
+                )
+                break
+            visited.add(current_arn)
+            current_arn = redrive_edges[current_arn]
+
+    for source_arn, target_arn in redrive_pairs.items():
+        source_address = queue_details[source_arn][1]
+        target_item, target_address, _ = queue_details[target_arn]
+        target_values = target_item["values"]
+        allow = _json_document(
+            target_values.get("redrive_allow_policy"), findings, target_address
+        )
+        if allow is None:
+            continue
+        if (
+            set(allow) != {"redrivePermission", "sourceQueueArns"}
+            or allow.get("redrivePermission") != "byQueue"
+            or allow.get("sourceQueueArns") != [source_arn]
+        ):
+            _deny(
+                findings,
+                "sqs_redrive_allow_source_mismatch",
+                target_address,
+                "The dead-letter queue must allow only its exact planned source queue.",
+            )
+        if target_arn in redrive_pairs:
+            _deny(
+                findings,
+                "sqs_redrive_cycle_denied",
+                source_address,
+                "A planned dead-letter queue cannot itself redrive messages to another queue.",
+            )
+
+    for arn, (item, address, _) in queue_details.items():
+        values = item["values"]
+        if arn not in redrive_pairs and arn not in redrive_targets:
+            _deny(
+                findings,
+                "sqs_redrive_contract_missing",
+                address,
+                "Every planned SQS queue must be a bounded source queue or its paired dead-letter queue.",
+            )
+        if arn in redrive_pairs and values.get("redrive_allow_policy") not in (None, ""):
+            _deny(
+                findings,
+                "sqs_queue_source_and_dlq_denied",
+                address,
+                "A planned queue cannot be both a retry source and a dead-letter target.",
+            )
+        if arn in redrive_targets and values.get("redrive_policy") not in (None, ""):
+            _deny(
+                findings,
+                "sqs_queue_source_and_dlq_denied",
+                address,
+                "A planned queue cannot be both a retry source and a dead-letter target.",
+            )
+
+    _check_sqs_lambda_consumers(
+        document,
+        resources,
+        queue_by_arn,
+        findings,
+        expected_account_id,
+        expected_region,
+    )
+
+
+def _check_sqs_lambda_consumers(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    queue_by_arn: dict[str, dict[str, Any]],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    configured = _configured_resource_references(document)
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for item in resources:
+        kind = item.get("type")
+        address = item.get("address")
+        if isinstance(kind, str) and isinstance(address, str):
+            by_type.setdefault(kind, []).append(item)
+
+    mappings = by_type.get("aws_lambda_event_source_mapping", [])
+    for mapping in mappings:
+        address = mapping.get("address")
+        values = mapping.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "sqs_lambda_mapping_unknown",
+                address,
+                "The SQS Lambda event source mapping is missing required plan values.",
+            )
+            continue
+        references = configured.get(address, ())
+        queue_candidates = [
+            item
+            for item in by_type.get("aws_sqs_queue", [])
+            if any(
+                _reference_targets_resource(reference, item["address"], "aws_sqs_queue")
+                for reference in references
+            )
+        ]
+        function_candidates = [
+            item
+            for item in by_type.get("aws_lambda_function", [])
+            if any(
+                _reference_targets_resource(reference, item["address"], "aws_lambda_function")
+                for reference in references
+            )
+        ]
+        if len(queue_candidates) != 1 or len(function_candidates) != 1:
+            _deny(
+                findings,
+                "sqs_lambda_mapping_unbound",
+                address,
+                "The SQS Lambda mapping must reference exactly one planned queue and one planned function.",
+            )
+            continue
+
+        queue = queue_candidates[0]
+        function = function_candidates[0]
+        queue_values = queue.get("values")
+        function_values = function.get("values")
+        queue_address = queue.get("address")
+        function_address = function.get("address")
+        if (
+            not isinstance(queue_values, dict)
+            or not isinstance(function_values, dict)
+            or not isinstance(queue_address, str)
+            or not isinstance(function_address, str)
+        ):
+            _deny(
+                findings,
+                "sqs_lambda_mapping_unbound",
+                address,
+                "The SQS Lambda mapping target resources are incomplete.",
+            )
+            continue
+
+        queue_arn = _sqs_queue_arn(
+            queue_values.get("name"), expected_account_id, expected_region
+        )
+        if queue_arn is None or queue_arn not in queue_by_arn:
+            _deny(
+                findings,
+                "sqs_lambda_queue_unplanned",
+                address,
+                "The SQS Lambda mapping source must be an exact queue in this plan.",
+            )
+            continue
+        mapping_queue_arn = values.get("event_source_arn")
+        if isinstance(mapping_queue_arn, str) and mapping_queue_arn != queue_arn:
+            _deny(
+                findings,
+                "sqs_lambda_queue_reference_mismatch",
+                address,
+                "The SQS Lambda mapping does not target its referenced queue.",
+            )
+        mapping_function_name = values.get("function_name")
+        planned_function_name = function_values.get("function_name")
+        if (
+            isinstance(mapping_function_name, str)
+            and isinstance(planned_function_name, str)
+            and mapping_function_name != planned_function_name
+        ):
+            _deny(
+                findings,
+                "sqs_lambda_function_reference_mismatch",
+                address,
+                "The SQS Lambda mapping does not target its referenced function.",
+            )
+        if values.get("enabled", True) is not True:
+            _deny(
+                findings,
+                "sqs_lambda_mapping_disabled",
+                address,
+                "An SQS consumer mapping must be enabled in the proposed deployment.",
+            )
+
+        timeout = _integer(function_values.get("timeout"))
+        visibility = _integer(queue_values.get("visibility_timeout_seconds"))
+        window = _integer(values.get("maximum_batching_window_in_seconds", 0))
+        if (
+            timeout is None
+            or not 1 <= timeout <= 900
+            or visibility is None
+            or window is None
+            or not 0 <= window <= 300
+            or visibility < 6 * timeout + window
+        ):
+            _deny(
+                findings,
+                "sqs_lambda_visibility_timeout_insufficient",
+                address,
+                "Queue visibility must be at least six times the known Lambda timeout plus its batch window.",
+            )
+
+        role_references = configured.get(function_address, ())
+        role_candidates = [
+            item
+            for item in by_type.get("aws_iam_role", [])
+            if any(
+                _reference_targets_resource(reference, item["address"], "aws_iam_role")
+                for reference in role_references
+            )
+        ]
+        if len(role_candidates) != 1:
+            _deny(
+                findings,
+                "sqs_lambda_role_unbound",
+                function_address,
+                "The Lambda function must reference exactly one planned execution role.",
+            )
+            continue
+        role = role_candidates[0]
+        role_address = role.get("address")
+        role_values = role.get("values")
+        if not isinstance(role_address, str) or not isinstance(role_values, dict):
+            _deny(
+                findings,
+                "sqs_lambda_role_unbound",
+                function_address,
+                "The Lambda execution role is missing required plan values.",
+            )
+            continue
+
+        if not _sqs_lambda_role_grants_queue(
+            resources,
+            configured,
+            role_address,
+            role_values.get("name"),
+            queue_arn,
+            findings,
+            address,
+        ):
+            _deny(
+                findings,
+                "sqs_lambda_consumer_permission_missing",
+                address,
+                "The Lambda execution role must grant receive, delete, and queue-attribute access on this exact SQS queue.",
+            )
+
+
+def _sqs_lambda_role_grants_queue(
+    resources: tuple[dict[str, Any], ...],
+    configured_references: dict[str, tuple[str, ...]],
+    role_address: str,
+    role_name: Any,
+    queue_arn: str,
+    findings: list[PlanPolicyFinding],
+    mapping_address: str,
+) -> bool:
+    required_actions = {
+        "sqs:receivemessage",
+        "sqs:deletemessage",
+        "sqs:getqueueattributes",
+    }
+    allowed_actions = required_actions | {"sqs:changemessagevisibility"}
+    granted: set[str] = set()
+    for item in resources:
+        if item.get("type") != "aws_iam_role_policy":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            continue
+        references = configured_references.get(address, ())
+        references_role = any(
+            _reference_targets_resource(reference, role_address, "aws_iam_role")
+            for reference in references
+        )
+        if not references_role and values.get("role") != role_name:
+            continue
+        policy = _json_document(values.get("policy"), findings, address)
+        if policy is None:
+            continue
+        for statement in _statements(policy, require_resource=True):
+            actions = {action.lower() for action in _string_list(statement.get("Action"))}
+            sqs_actions = {action for action in actions if action.startswith("sqs:")}
+            if not sqs_actions:
+                continue
+            resources_scoped = _string_list(statement.get("Resource"))
+            if (
+                statement.get("Effect") == "Deny"
+                and any(
+                    fnmatchcase(required, pattern)
+                    for pattern in actions
+                    for required in required_actions
+                )
+                and (queue_arn in resources_scoped or "*" in resources_scoped)
+            ):
+                _deny(
+                    findings,
+                    "sqs_lambda_consumer_explicit_deny",
+                    mapping_address,
+                    "The Lambda execution role explicitly denies a required SQS consumer action.",
+                )
+                continue
+            if statement.get("Effect") != "Allow":
+                continue
+            if (
+                not sqs_actions <= allowed_actions
+                or resources_scoped != (queue_arn,)
+                or "Condition" in statement
+            ):
+                _deny(
+                    findings,
+                    "sqs_lambda_consumer_scope_invalid",
+                    address,
+                    "SQS consumer permissions must name only required actions and the exact queue ARN without conditions.",
+                )
+                continue
+            granted.update(sqs_actions)
+    return required_actions <= granted
 
 
 def _check_lambda_permissions(

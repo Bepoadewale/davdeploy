@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-22. Backend `main` is
-`e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443); hosted runtime remains
+`7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -38,6 +38,13 @@ teardown gate under control-plane isolation; it was not Nova-dispatched. No
 Nova customer workload has been applied or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance crosswalk.
+
+Draft PR #445 adds source-only SQS queue visibility/retention, explicit
+one-to-one redrive/DLQ bounds, and direct same-plan Lambda consumer timeout and
+inline-role-permission checks. Focused policy and pricing tests pass locally;
+the source has not passed PR CI, merged, or been deployed. It does not prove
+SQS message delivery, idempotency, producer permissions, complete effective
+IAM permissions, or Nova dispatch.
 
 PR #422 merged as `8c84827` and adds a strict source-level check of customer
 plan-role trust and the bounded inline policy profile, repeated before plan

@@ -7,7 +7,7 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-22
 
-Backend `main` is `e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443). The last
+Backend `main` is `7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -43,9 +43,10 @@ unverified. See [test443](../test/test443.md).
 
 PR #438's append-only template-host change remains source-only; the protected
 state plan showed four address moves and zero resource changes. PR #441's
-source-only SQS encryption rule remains undeployed. KMS-backed queue
-encryption, retry/DLQ/visibility policy, consumer behavior, and hosted SQS
-lifecycle evidence remain incomplete.
+source-only SQS encryption rule remains undeployed. Draft PR #445 adds
+source-only SQS retry/DLQ/visibility and direct Lambda-consumer policy checks;
+KMS-backed encryption, unsupported consumer-policy shapes, message processing,
+idempotency, and hosted SQS lifecycle evidence remain incomplete.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
