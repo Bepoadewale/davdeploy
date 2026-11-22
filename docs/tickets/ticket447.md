@@ -60,9 +60,9 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 - [x] Plan values confirm visibility is at least six times function timeout
       plus batching window, and the role grants only the required exact-queue
       SQS actions.
-- [ ] Monitored teardown succeeds; exact test resources are independently
+- [x] Monitored teardown succeeds; exact test resources are independently
       confirmed absent. No production queue or control-plane resource changes.
-- [ ] Documentation conventions, focused checks, and all seven PR CI checks
+- [x] Documentation conventions, focused checks, and all seven PR CI checks
       pass.
 - [ ] Evidence is described as same-account direct service behavior, not Nova
       dispatch, cross-account isolation, or customer workload certification.
@@ -77,7 +77,8 @@ Enabled. The synthetic message reached the paired DLQ after six receives.
 CloudWatch reports five Lambda invocations and five errors for the test window.
 The exact message ID is `6e6fe3bf-beae-41fc-9134-aadd6edd74b1`. A reviewed
 saved destroy plan contains only the six named test resources; monitored
-teardown and independent absence checks are in progress.
+teardown succeeded and independent AWS reads confirmed the named resources and
+the Lambda-created log group absent. No active Terraform run remains.
 
 ## Tests / validation performed
 
@@ -108,8 +109,15 @@ teardown and independent absence checks are in progress.
   paired DLQ contained the same message ID with `ApproximateReceiveCount=6`.
 - Saved destroy plan reviewed in account `654654474502`: exactly six test
   resources are destroyed and zero are added or changed. Monitored teardown
-  `nova-sqs-lambda-447-destroy-nov22a1` is running; final absence verification
-  is pending.
+  `nova-sqs-lambda-447-destroy-nov22a1` (supervisor PID 79889, Terraform PID
+  79890, root `/private/tmp/davdeploy-nova-sqs-lambda-447-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-lambda-447-destroy-nov22a1.log`)
+  succeeded: zero added, zero changed, six destroyed.
+- Independent reads in account `654654474502` found the exact SQS prefix,
+  Lambda function, event source mapping, IAM role, and Lambda-created log
+  group absent. The monitor has 21 terminal records and zero active runs.
+- Documentation convention checks passed. Seven required PR checks passed in
+  run `45078014959`.
 
 ## Evidence files produced
 

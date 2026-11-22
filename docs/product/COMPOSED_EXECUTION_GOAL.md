@@ -7,7 +7,7 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-22
 
-Backend `main` is `c874b0de523f26c46561272a05b290ecf782aecc` (PR #445). The last
+Backend `main` is `857e5efdf56713ecdd37ed24060fde15767930be` (PR #446). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -44,20 +44,25 @@ unverified. See [test443](../test/test443.md).
 PR #438's append-only template-host change remains source-only; the protected
 state plan showed four address moves and zero resource changes. PR #441's
 source-only SQS encryption rule remains undeployed. PR #445 merged source-only
-retry/DLQ/visibility and direct Lambda-consumer policy checks. Draft PR #446
+retry/DLQ/visibility and direct Lambda-consumer policy checks. Merged PR #446
 fixes source-after-DLQ creation ordering and records isolated SQS delivery,
-retry, automatic DLQ transition, and teardown. This does not prove Nova
-dispatch, Lambda processing, idempotency, or hosted SQS execution. KMS-backed
-encryption, unsupported consumer-policy shapes, and complete SQS cost coverage
-remain incomplete.
+retry, automatic DLQ transition, and teardown. Draft PR #447 records an actual
+same-account Lambda event-source mapping failure/retry/DLQ lifecycle: five
+invocations and errors, then the same message in the paired DLQ at receive
+count six. Its six-resource test stack and generated Lambda log group were
+destroyed and independently confirmed absent. This SQS test does not establish
+Nova dispatch, idempotency, composed application health, or hosted SQS
+execution. KMS-backed encryption, unsupported consumer-policy shapes, and
+complete SQS cost coverage remain incomplete.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
 configuration. Four tagged Batch job definitions remain inactive. The test
 SageMaker lineage action/context remain as audit evidence. The PR #443
-temporary roles and workload resources are absent. The PR #446 test queue
-prefix is absent; the existing production-tagged queue remains. The Terraform
-run monitor has 19 terminal records and no active runs. Preserve the protected untracked
+temporary roles and workload resources are absent. PR #446 and #447 test queue
+prefixes are absent; the existing production-tagged queue remains. The PR #447
+Lambda, event mapping, test role, and generated log group are absent. The
+Terraform run monitor has 21 terminal records and no active runs. Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and

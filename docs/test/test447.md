@@ -8,7 +8,9 @@ Repository: `Bepoadewale/davdeploy`
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: `a0db5cccd51e1b0bc751ac85b15b35943b6fbdd7` (evidence update pending).
+Commit: `b1949ea2d46e86a4d8549bceaf0ec5dfaed16de4`.
+
+Tested commit: `a0db5cccd51e1b0bc751ac85b15b35943b6fbdd7`.
 
 AWS account: `654654474502`.
 
@@ -62,8 +64,18 @@ message ID with `ApproximateReceiveCount=6`, exceeding the configured
 
 ## Teardown
 
-The reviewed six-resource destroy plan is running through the Terraform PID
-monitor. Independent AWS absence checks are pending.
+The reviewed six-resource destroy plan ran through the Terraform PID monitor.
+Run `nova-sqs-lambda-447-destroy-nov22a1` started at
+`2026-11-22T22:28:53Z`, with supervisor PID 79889 and Terraform PID 79890.
+It completed at `2026-11-22T22:29:23Z` with zero added, zero changed, and six
+destroyed. Its root was
+`/private/tmp/davdeploy-nova-sqs-lambda-447-nov22a1`; log:
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-lambda-447-destroy-nov22a1.log`.
+Independent reads in account `654654474502` confirmed the exact two-queue
+prefix, Lambda function, event source mapping, and IAM role are absent. The
+Lambda-created log group `/aws/lambda/davdeploy-nova-sqs-lambda-447-nov22a1`
+is also absent. The Terraform monitor has 21 terminal records and no active
+runs.
 
 ## Final boundary
 
