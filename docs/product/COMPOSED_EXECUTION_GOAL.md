@@ -7,7 +7,7 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-22
 
-Backend `main` is `7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444). The last
+Backend `main` is `c874b0de523f26c46561272a05b290ecf782aecc` (PR #445). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -43,17 +43,21 @@ unverified. See [test443](../test/test443.md).
 
 PR #438's append-only template-host change remains source-only; the protected
 state plan showed four address moves and zero resource changes. PR #441's
-source-only SQS encryption rule remains undeployed. Draft PR #445 adds
-source-only SQS retry/DLQ/visibility and direct Lambda-consumer policy checks;
-KMS-backed encryption, unsupported consumer-policy shapes, message processing,
-idempotency, and hosted SQS lifecycle evidence remain incomplete.
+source-only SQS encryption rule remains undeployed. PR #445 merged source-only
+retry/DLQ/visibility and direct Lambda-consumer policy checks. Draft PR #446
+fixes source-after-DLQ creation ordering and records isolated SQS delivery,
+retry, automatic DLQ transition, and teardown. This does not prove Nova
+dispatch, Lambda processing, idempotency, or hosted SQS execution. KMS-backed
+encryption, unsupported consumer-policy shapes, and complete SQS cost coverage
+remain incomplete.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
 configuration. Four tagged Batch job definitions remain inactive. The test
 SageMaker lineage action/context remain as audit evidence. The PR #443
-temporary roles and workload resources are absent. The Terraform run monitor
-has 16 terminal records and no active runs. Preserve the protected untracked
+temporary roles and workload resources are absent. The PR #446 test queue
+prefix is absent; the existing production-tagged queue remains. The Terraform
+run monitor has 19 terminal records and no active runs. Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and

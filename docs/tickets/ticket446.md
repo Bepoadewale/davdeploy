@@ -1,0 +1,160 @@
+# ticket446 — isolated SQS retry and dead-letter lifecycle evidence
+
+PR: https://github.com/Bepoadewale/davdeploy/pull/446
+Branch: `test/sqs-redrive-lifecycle-446`
+
+## Problem / goal
+
+Record a real, disposable same-account SQS lifecycle run that exercises message
+delivery, repeated receives, automatic dead-letter queue transition, and
+independent cleanup. This complements the source-only plan policy in PR #445
+and the earlier EventBridge-to-SQS delivery test in `test257.md`.
+
+## Current repo state
+
+- Backend `main` is `c874b0de523f26c46561272a05b290ecf782aecc` (PR #445).
+- PR #445 adds source-only plan checks for paired SQS retry/DLQ settings and
+  direct same-plan Lambda consumers; it does not establish AWS delivery or
+  retry behavior.
+- Its SQS module derives both queue ARNs, so Terraform did not infer that the
+  source queue must wait for the DLQ. The first disposable apply exposed this
+  creation-order race; this PR adds an explicit dependency.
+- Existing `davdeploy-worker` and `davdeploy-worker-dlq` queues are tagged
+  `Environment=production` and excluded from this test.
+- The hosted control plane, its Terraform state/locks, and Nova execution gates
+  are outside this customer-side test.
+
+## Research / references used
+
+- [`test257.md`](../test/test257.md) — EventBridge-to-SQS delivery, without a
+  consumer or observed DLQ transition.
+- [`test445.md`](../test/test445.md) — local generated-plan SQS policy checks.
+- AWS [SQS dead-letter queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)
+  — redrive behavior, same-account/region constraints, and DLQ retention.
+- AWS [SQS queue attributes](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SetQueueAttributes.html)
+  — redrive and redrive-allow policies; messages move after their receive count
+  exceeds `maxReceiveCount`.
+
+## Work planned for the PR
+
+1. Open this draft PR before any AWS mutation.
+2. Make the source queue explicitly depend on the DLQ in the SQS Terraform
+   module so the redrive target exists before SQS creates the source.
+3. Create a dedicated SQS standard source queue and DLQ with managed
+   encryption, one-to-one redrive at five receives, a `byQueue` allow policy,
+   bounded retention/visibility, and test-only tags.
+4. Send one synthetic message. Receive it repeatedly with immediate visibility
+   expiration until SQS moves it to the DLQ. Record only message IDs and
+   approximate receive counts, not message contents or credentials.
+5. Receive the message from the DLQ. Run a separate monitored Terraform
+   destroy for only this test root and independently verify both exact test
+   queue URLs are absent.
+6. Add `docs/test/test446.md` with commands, monitor IDs, observations,
+   teardown, and limitations. Do not claim source deployment.
+
+## Acceptance criteria
+
+- [x] Draft PR and ticket exist before the first AWS mutation.
+- [x] Caller identity is the expected account; resources use the unique
+      `davdeploy-nova-sqs-446-nov22a1` prefix and test-only tags.
+- [x] The source queue delivers the synthetic message and its receive count
+      advances; SQS moves it to the paired DLQ after the count exceeds the
+      configured `maxReceiveCount` of 5.
+- [x] Terraform graph and monitored apply confirm the source queue depends on
+      successful DLQ creation.
+- [x] The DLQ message is readable and identified by its message ID only.
+- [x] Monitored Terraform destroy succeeds for the test root; independently
+      verify the named test queues/resources are absent afterward.
+- [x] Production queues and the hosted control plane remain unchanged.
+- [x] Evidence conventions, focused checks, and all seven PR CI checks pass.
+- [x] Documentation says this is same-account service evidence, not Nova
+      dispatch, cross-account isolation, application health, or general
+      workload certification.
+
+## Acceptance status
+
+Draft PR #446 is open. AWS identity was verified as account `654654474502`.
+Read-only inventory found two production-tagged queues; neither was read or
+changed. Initial run `nova-sqs-446-create-nov22a1` failed with exit 1 after
+creating only the test DLQ; SQS rejected source creation because Terraform had
+no creation dependency. The source-only retry
+`nova-sqs-446-source-nov22a1` started at `2026-11-22T21:43:11Z` after adding
+the dependency and succeeded. The test message was received five times from
+the source; the sixth source receive returned no message, and the same message
+ID was received from the DLQ. Monitored saved-plan teardown succeeded, both
+test queue URLs are absent, Terraform state is empty, and the existing
+production queue retains its production tags. No control-plane access or
+mutation occurred.
+
+## Tests / validation performed
+
+- `AWS_PROFILE=ai-platform-pilot-key aws sts get-caller-identity` — expected
+  account `654654474502`.
+- `aws sqs list-queue-tags` — the existing production queue pair is tagged
+  `Environment=production`; no messages were read.
+- Terraform monitor before mutation: 16 terminal records, zero active.
+- Checked the unique source queue did not exist before planning.
+- Local Terraform root initialized AWS provider 5.100.0 and passed
+  `terraform validate`.
+- Reviewed saved plan: exactly two queue creates, zero changes, zero destroys.
+- First monitored apply `nova-sqs-446-create-nov22a1` (supervisor PID 63460,
+  Terraform PID 63461, root `/private/tmp/davdeploy-nova-sqs-446-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-create-nov22a1.log`)
+  failed with exit 1. It created only the tagged test DLQ; the source queue was
+  confirmed absent. No production queue was affected.
+- Added `depends_on = [aws_sqs_queue.dlq]` to the source queue in
+  `modules/sqs-queue`. Module validation passed, and Terraform graph output
+  contains `module.queue.aws_sqs_queue.this -> module.queue.aws_sqs_queue.dlq`.
+- Retry plan contains only one source queue create, zero changes, and zero
+  destroys. Monitored run `nova-sqs-446-source-nov22a1` (supervisor PID 65529,
+  Terraform PID 65530, root `/private/tmp/davdeploy-nova-sqs-446-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-source-nov22a1.log`)
+  succeeded with one resource created.
+- Source and DLQ attributes matched the intended managed encryption,
+  30-second visibility, 345,600/1,209,600-second retention, receive threshold
+  5, and exact `byQueue` source ARN.
+- Synthetic message ID `442f76aa-5ddb-4341-ab8c-2793c205897e` was received from
+  source with approximate receive counts 1 through 5. The next source receive
+  returned no message. The same message ID was read from the DLQ with receive
+  count 6. The body was not printed.
+- Reviewed `/tmp/davdeploy-nova-sqs-446-nov22a1/destroy.tfplan`: it deletes
+  only `aws_sqs_queue.source` and `aws_sqs_queue.dlq`, with zero creates or
+  updates.
+- Monitored saved-plan teardown `nova-sqs-446-destroy-nov22a1` (supervisor PID
+  68532, Terraform PID 68533, root `/private/tmp/davdeploy-nova-sqs-446-nov22a1`,
+  log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-destroy-nov22a1.log`)
+  succeeded: zero added, zero changed, two destroyed.
+- Independent `sqs list-queues` for the test prefix returned no queue URLs;
+  local Terraform state is empty. The existing production-tagged
+  `davdeploy-worker` queue still exists and retains `Environment=production`.
+- Final Terraform monitor: 19 records, zero active runs.
+- Documentation convention and diff checks passed; the matrix retains 26
+  architecture entries and 30 roots.
+- Run `45074340234` passed all seven PR checks on the module-fix commit.
+- Run `45075255587` passed all seven checks on the lifecycle evidence and Nova
+  status-documentation head `c3f4d76425a0a4abe94c1cf285fc0c024f35a694`.
+
+## Evidence files produced
+
+- `docs/tickets/ticket446.md`
+- `docs/test/test446.md`
+
+## Boundaries
+
+Use only the test prefix `davdeploy-nova-sqs-446-nov22a1` in account
+`654654474502`, region `us-east-1`. Keep Terraform state local and isolated
+from production and the hosted control plane. Start each Terraform mutation
+through the PID monitor and record its run ID, root, PID, and log path. Never
+overlap mutations on the root. Destroy only this test stack after observing
+delivery and redrive. Do not touch the production-tagged queues, control-plane
+state/locks/runtime, Nova execution gates, or customer credentials. Keep
+message contents, credentials, and secrets out of output and evidence.
+
+Do not claim Nova dispatch, cross-account isolation, application health, or
+customer workload certification from direct SQS operations.
+
+## Follow-up work
+
+Use the observed run to verify PR #445's plan shape against actual SQS redrive
+behavior. Separately address producer authorization, Lambda processing,
+idempotency, hosted dispatch, pricing, and broader service coverage.

@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-22, backend `main` is
-`7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444). The hosted control plane
+`c874b0de523f26c46561272a05b290ecf782aecc` (PR #445). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -41,17 +41,21 @@ verified absent. This proves only the tested direct role actions; Nova's
 credential path, cross-account trust, full effective permissions, and hosted
 apply remain unverified.
 
-Draft PR #445 adds source-only SQS delivery policy for one-to-one retry/DLQ
-pairs and same-plan Lambda consumers. Local policy tests cover visibility,
-retention, redrive, timeout relationships, and exact inline queue permissions.
-The hosted control plane was not changed; no SQS message lifecycle or Nova
-customer workload is claimed.
+PR #445 merged with all seven checks passing in
+[run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
+It adds source-only generated-plan checks for one-to-one SQS retry/DLQ pairs
+and direct same-plan Lambda consumers; it has not been deployed to the hosted
+control plane. Draft PR #446 adds the SQS module creation-order dependency and
+records an isolated SQS message-to-DLQ lifecycle. The test queues were
+destroyed and independently confirmed absent. This is direct service evidence,
+not Nova dispatch or customer application certification.
 
 The latest read-only inventory in account `654654474502`, region `us-east-1`,
 found no tested SageMaker endpoint, model, or endpoint configuration. Four
 tagged DavDeploy Batch job definitions remain inactive. One SageMaker lineage
-action/context remains as retained audit evidence. The Terraform run monitor
-has 16 terminal records and no active run. Preserve `--only-show-errors`,
+action/context remains as retained audit evidence. The SQS test prefix is
+absent; the existing production-tagged queue remains. The Terraform run monitor
+has 19 terminal records and no active run. Preserve `--only-show-errors`,
 `.venv-pr399/`, and lineage evidence. The frontend status remains based on
 the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 

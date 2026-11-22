@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444), 2026-11-22. PR #413
+`c874b0de523f26c46561272a05b290ecf782aecc` (PR #445), 2026-11-22. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -27,15 +27,17 @@ role-policy evidence, not Nova credential issuance, dispatch, cross-account
 trust, or a complete permission attestation. See
 [`test443.md`](../test/test443.md).
 
-Draft PR #445 adds source-only queue delivery policy: plan-bound one-to-one
-SQS source/DLQ pairs, bounded retry counts, exact DLQ allow lists, queue
-retention/visibility checks, and same-plan Lambda consumer timeout and inline
-role-permission checks. Local regressions cover these contracts. It is not
-deployed and does not prove message delivery, idempotency, producer access,
-complete effective role permissions, cost completeness, or SQS lifecycle.
-Request pricing assumptions now explicitly include source, retry, and DLQ
-requests; Lambda usage and material transfer costs must still be separately
-bounded. See [`ticket445.md`](../tickets/ticket445.md).
+PR #445 merged as `c874b0d`; all seven checks passed in
+[run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
+Its source-only policy covers one-to-one SQS source/DLQ pairs, bounded retries,
+exact DLQ allow lists, retention/visibility, and direct same-plan Lambda
+consumer permissions. It is not deployed. Draft PR #446 fixes a Terraform
+creation-order race and records direct SQS delivery, five source receives,
+automatic DLQ transition, and isolated teardown in [`test446.md`](../test/test446.md).
+That run does not prove Nova dispatch, Lambda processing, producer access,
+idempotency, complete effective permissions, or cost completeness. Request
+pricing assumptions include source, retry, and DLQ requests; Lambda usage and
+material transfer costs must still be separately bounded.
 
 PR #438 template hosting and PR #441's SQS encryption rule remain source-only.
 KMS-backed queue encryption, unsupported consumer-policy shapes, complete
@@ -172,7 +174,7 @@ above applies to every row.
 | `aws-elasticache-redis` | Additional cache case | Require private encrypted/authenticated access and failover; set/get/reconnect; price node-hours, backup, storage and transfer. |
 | `aws-opensearch` | `ai-rag` search case | Check private access, encryption, scoped index permissions and capacity; query/update/delete plus tenant denial; price OCU/node, storage, ingest/query. |
 | `aws-efs-shared-storage` | Additional shared-file case | Check encryption, mount security, access point identity and retention; authorized clients read/write, other denied; price storage, throughput, backup, transfer. |
-| `aws-sqs-queue` | `saas-backend` / `async-data` worker | PR #441 requires known SQS-managed encryption. Draft PR #445 requires a plan-bound one-to-one source/DLQ contract, 5–10 receives, exact source allow list, bounded visibility/retention, and a directly referenced Lambda consumer with exact inline read permissions. |
+| `aws-sqs-queue` | `saas-backend` / `async-data` worker | PR #441 requires known SQS-managed encryption. Merged PR #445 adds plan-bound source/DLQ, retry, visibility/retention, and direct Lambda consumer checks. Draft PR #446 fixes Terraform queue creation ordering and records isolated delivery/retry/DLQ evidence. |
 | `aws-eventbridge-bus` | `async-data` routing | Restrict bus/rules/target/account; prove only intended target receives event; price events, archive/replay, invocation and transfer. |
 | `aws-step-functions` | `async-data` workflow | Restrict state role, tasks, retries and logged inputs; execute success and injected retry/failure; price transitions, duration, logs, integrations. |
 | `aws-sns-notifications` | Additional notification delivery | Restrict topic/subscription and require confirmation; deliver to real approved endpoint; price publish, protocol, delivery and transfer. |
@@ -199,7 +201,7 @@ design does not mean that a rate is currently available.
 |---|---|---|
 | Scope and plan | Trusted account and region guard; declared-resource inventory; malformed/non-applyable plans; destructive changes and sensitive changes require review. | Resource ownership for every AWS type, quota availability, or workload suitability. |
 | S3 | Requires all four public-access-block flags for planned buckets; denies public ACLs and public bucket policies; merged PRs #434–#436 require same-plan TLS-deny policies, explicit default encryption, and `BucketOwnerEnforced` ownership controls. | This does not validate every bucket use pattern, KMS key authorization, object-level upload enforcement, existing object encryption, or retention. Unknown-value checks cover listed S3 policy-critical fields only. |
-| SQS | PR #441 requires known SQS-managed encryption. Draft PR #445 adds 0–43,200 second visibility bounds, 60 second–14 day retention, explicit one-to-one redrive pairs with integer `maxReceiveCount` 5–10, an exact `byQueue` DLQ allow policy, and six-times-Lambda-timeout-plus-batch-window checks. A same-plan Lambda consumer needs inline `ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes` access on the exact source ARN. | Source-only until PR #445 merges; no hosted rollout. Managed-policy contents, module-output bindings, KMS encryption, non-Lambda consumers, producer authorization, processing/idempotency, full effective permissions, and complete retry/DLQ cost usage remain unproven. |
+| SQS | PR #441 requires known SQS-managed encryption. Merged PR #445 adds 0–43,200 second visibility bounds, 60 second–14 day retention, one-to-one redrive pairs with `maxReceiveCount` 5–10, exact `byQueue` allow policy, and six-times-Lambda-timeout-plus-batch-window checks. A same-plan Lambda consumer needs inline `ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes` on the exact source ARN. Draft PR #446 fixes source-after-DLQ Terraform ordering and records real message delivery and automatic DLQ transition. | Policy remains source-only, not hosted. Direct SQS evidence does not prove Nova dispatch or Lambda processing. Managed-policy contents, module-output bindings, KMS encryption, non-Lambda consumers, producer authorization, idempotency, full effective permissions, and complete retry/DLQ cost usage remain unproven. |
 | IAM | Denies broad wildcard privileges, wildcard trust, unknown policy attachments, and application `AdministratorAccess`. | Complete least-privilege analysis across service-specific policies, resource-based policies, permission boundaries, and all generated trust relationships. |
 | Network | Reviews public security-group and network-ACL web/general ingress; denies all-protocol and listed sensitive-port exposure; unknown ACL ingress sources fail closed. Globally routable source ranges are recognized. | ACL association and rule-precedence reachability, complete VPC topology, egress, endpoint policy, DNS, TLS, VPN, multi-region, or service-to-service reachability review. |
 | Databases and unknowns | Denies public RDS/Redshift, requires encryption for the listed relational types, and checks unknown critical fields for the bounded resource/path list. | Backup restore evidence, workload data integrity, every database product, every retention setting, or unknown values on unlisted types. |
@@ -268,7 +270,7 @@ are isolated AWS service/root evidence, not hosted customer execution.
 | `aws-elasticache-redis` | `modules/elasticache-redis` | No cache module in catalogue / no scenario | No Redis-specific encryption, auth, network, or failover rule | [`test244.md`](../test/test244.md): replication group available; no client operation |
 | `aws-opensearch` | `modules/opensearch` | `aws-search`, `aws-ai-retrieval` / `ai-rag` | Shared IAM/network checks only; no OpenSearch domain/collection access policy | [`test244.md`](../test/test244.md) domain ready; [`test262.md`](../test/test262.md) uses OpenSearch Serverless for KB retrieval |
 | `aws-efs-shared-storage` | `modules/efs-shared-storage` | No explicit EFS catalogue module; possible `aws-file-storage` overlap / no exact scenario mapping | Shared network/IAM checks only; no EFS mount/access-point policy | [`test244.md`](../test/test244.md): EFS available; no file read/write |
-| `aws-sqs-queue` | `modules/sqs-queue` | `aws-jobs-events`, `aws-payments-webhooks` / `saas-backend`, `async-data` | PR #441 requires known `sqs_managed_sse_enabled=true`; existing SQS queue-policy checks reject public/unverified principals and unbounded resource scope. Draft PR #445 adds exact plan-bound source/DLQ settings, retries, retention/visibility, and direct Lambda consumer role checks. KMS-backed encryption, managed-policy contents, producers and non-Lambda consumers remain open. | [`test257.md`](../test/test257.md): real EventBridge delivery to SQS; PR #445 fixtures are local policy tests only. |
+| `aws-sqs-queue` | `modules/sqs-queue` | `aws-jobs-events`, `aws-payments-webhooks` / `saas-backend`, `async-data` | PR #441 requires known `sqs_managed_sse_enabled=true`; existing SQS queue-policy checks reject public/unverified principals and unbounded resource scope. Merged PR #445 adds retry/DLQ, retention/visibility, and direct Lambda consumer checks. Draft PR #446 fixes Terraform resource ordering and adds isolated DLQ lifecycle evidence. KMS-backed encryption, managed-policy contents, producers and non-Lambda consumers remain open. | [`test257.md`](../test/test257.md): EventBridge delivery; [`test446.md`](../test/test446.md): direct delivery, retries, DLQ transition, and teardown. Neither proves Nova dispatch. |
 | `aws-eventbridge-bus` | `modules/eventbridge-bus` | `aws-jobs-events` / `saas-backend`, `async-data` | Shared IAM checks only; no event bus/rule target authorization policy | [`test257.md`](../test/test257.md): real event delivery |
 | `aws-step-functions` | `modules/step-functions` | `aws-jobs-events` / `saas-backend`, `async-data` | Shared IAM checks only; no state-machine role/state-data policy | [`test256.md`](../test/test256.md): execution completed |
 | `aws-sns-notifications` | `modules/sns-notifications` | `aws-jobs-events` / `saas-backend`, `async-data` | Shared IAM checks only; no topic/subscribe confirmation or delivery policy | [`test257.md`](../test/test257.md) created a topic; its observed behavior was EventBridge-to-SQS, not SNS delivery |
