@@ -69,7 +69,7 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 
 ## Acceptance status
 
-Draft PR #447 is open. The preceding PR #446 SQS resources were independently
+PR #447 merged as `78d11f8`. The preceding PR #446 SQS resources were independently
 confirmed absent. Caller identity and absence of the unique test prefix were
 rechecked before apply. Monitored run `nova-sqs-lambda-447-create-nov22a1`
 succeeded with six resources added. The Lambda is Active and its SQS mapping is
