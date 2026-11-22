@@ -36,7 +36,7 @@ and the earlier EventBridge-to-SQS delivery test in `test257.md`.
 
 - AWS account `654654474502`, region `us-east-1`; verify identity immediately
   before any mutation.
-- Use a unique test prefix `davdeploy-nova-sqs-446-<run-id>` for both queues
+- Use the unique test prefix `davdeploy-nova-sqs-446-nov22a1` for both queues
   and all test resources. Keep Terraform state local and separate from the
   hosted control plane and production state.
 - Inventory found existing `davdeploy-worker` and `davdeploy-worker-dlq`
@@ -92,7 +92,11 @@ active runs. No AWS mutation has been performed. Test evidence is pending.
 - Read-only queue inventory identified the production-tagged queues; no queue
   message was read and no queue setting was changed.
 - Terraform monitor: 16 terminal records, zero active.
-- No test resources have been created.
+- Test prefix absence was checked before planning. The local Terraform root
+  initialized AWS provider 5.100.0 and validated.
+- Reviewed saved plan `/tmp/davdeploy-nova-sqs-446-nov22a1/create.tfplan`:
+  exactly two SQS queue creates, zero changes, zero destroys. No test resource
+  has been created yet.
 
 ## Evidence files produced
 
