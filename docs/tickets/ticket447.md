@@ -71,18 +71,30 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 
 Draft PR #447 is open. No AWS mutation has occurred. The preceding PR #446 SQS
 resources were independently confirmed absent, and the Terraform monitor had
-no active runs at bootstrap. Test evidence is pending.
+no active runs at bootstrap. The local plan contains six uniquely named
+resource creates with no changes or destroys. Test evidence is pending.
 
 ## Tests / validation performed
 
 - Current main and PR #446 merge state verified through GitHub.
+- AWS identity and absence of the unique SQS queue/Lambda names were verified
+  before planning.
 - Terraform monitor: 19 terminal records, zero active.
-- No Lambda or queue resource has been created for this PR.
+- Local Terraform root initialized AWS provider 5.100.0 and passed
+  `terraform validate`.
+- Reviewed saved plan: six creates (two SQS queues, one IAM role, one inline
+  policy, one Lambda, one event source mapping), zero changes, zero destroys.
+- Terraform graph confirms the source queue waits for the DLQ and the event
+  source mapping waits for both the function and inline role policy.
+- The planned role policy names only the three SQS receive/delete/attributes
+  actions on the exact known source ARN; the 30-second queue visibility is
+  greater than six times the 3-second function timeout plus zero batching.
+- No AWS resource has been created for this PR.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket447.md`
-- `docs/test/test447.md` — to be added before review-ready status.
+- `docs/test/test447.md`
 
 ## Boundaries
 
