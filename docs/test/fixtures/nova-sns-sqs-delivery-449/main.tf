@@ -13,12 +13,16 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+data "aws_region" "current" {}
 
 locals {
   test_id    = "nov23a1"
   prefix     = "davdeploy-nova-sns-sqs-449-${local.test_id}"
   topic_name = local.prefix
   queue_name = local.prefix
+  topic_arn  = "arn:${data.aws_partition.current.partition}:sns:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:${local.topic_name}"
+  queue_arn  = "arn:${data.aws_partition.current.partition}:sqs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:${local.queue_name}"
   test_tags = {
     Product     = "davdeploy"
     Environment = "test"
@@ -49,9 +53,9 @@ resource "aws_sqs_queue_policy" "sns_publish" {
       Effect    = "Allow"
       Principal = { Service = "sns.amazonaws.com" }
       Action    = "sqs:SendMessage"
-      Resource  = aws_sqs_queue.delivery.arn
+      Resource  = local.queue_arn
       Condition = {
-        ArnEquals = { "aws:SourceArn" = aws_sns_topic.delivery.arn }
+        ArnEquals = { "aws:SourceArn" = local.topic_arn }
         StringEquals = {
           "aws:SourceAccount" = data.aws_caller_identity.current.account_id
         }
@@ -61,11 +65,15 @@ resource "aws_sqs_queue_policy" "sns_publish" {
 }
 
 resource "aws_sns_topic_subscription" "delivery" {
-  topic_arn            = aws_sns_topic.delivery.arn
+  topic_arn            = local.topic_arn
   protocol             = "sqs"
-  endpoint             = aws_sqs_queue.delivery.arn
+  endpoint             = local.queue_arn
   raw_message_delivery = true
-  depends_on           = [aws_sqs_queue_policy.sns_publish]
+  depends_on = [
+    aws_sns_topic.delivery,
+    aws_sqs_queue.delivery,
+    aws_sqs_queue_policy.sns_publish,
+  ]
 }
 
 output "topic_arn" {

@@ -21,8 +21,19 @@ will be created only after the draft PR and exact create plan are reviewed.
 
 ## Commands executed
 
-Pending controlled execution after the draft PR is open and the create plan has
-been reviewed.
+- Draft PR #449 and matching ticket/test evidence were opened before any AWS
+  mutation.
+- Caller verified as account `654654474502`, region `us-east-1`. Exact topic
+  and queue names were absent; the run monitor had 24 terminal entries and no
+  active operation.
+- Terraform init selected AWS provider `5.100.0`; format, validation, Python
+  syntax/Ruff, and documentation conventions passed locally.
+- Saved plan `create-reviewed.tfplan` contains exactly four creates, zero
+  changes, and zero destroys. Its full queue policy is known before apply and
+  names the exact topic ARN, queue ARN, account, and SNS service principal.
+- Initial PR CI run `45085442555` passed all seven checks on the first fixture
+  revision. A final run is pending for the known-ARN policy refinement.
+- No AWS resource has been created yet.
 
 ## Acceptance criteria
 

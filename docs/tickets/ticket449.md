@@ -39,7 +39,9 @@ modify the hosted control plane, or certify all `aws-jobs-events` behavior.
 2. Open this draft PR with its ticket and test record before AWS mutation.
 3. Create one tagged topic, one SQS queue with SQS-managed encryption, one
    queue policy permitting `sqs:SendMessage` only from the exact topic ARN and
-   trusted account, and one raw-message SQS subscription.
+   trusted account, and one raw-message SQS subscription. Derive the ARNs from
+   the verified caller, region, and fixed test names so the full policy is
+   reviewable in the saved plan before apply.
 4. Verify a synthetic message reaches the queue and matches the expected
    payload without printing its body. Delete the received message.
 5. Review saved create and destroy plans; run all mutations through the PID
@@ -49,11 +51,12 @@ modify the hosted control plane, or certify all `aws-jobs-events` behavior.
 
 ## Acceptance criteria
 
-- [ ] Draft PR and matching ticket/test evidence exist before any AWS write.
-- [ ] Caller identity, region, exact names, and absence of conflicts are
+- [x] Draft PR and matching ticket/test evidence exist before any AWS write.
+- [x] Caller identity, region, exact names, and absence of conflicts are
       verified before create.
-- [ ] The saved plan contains only the four intended test resources and no
-      changes or destroys.
+- [x] The saved plan contains only the four intended test resources and no
+      changes or destroys; the complete queue policy names the exact planned
+      queue ARN, topic ARN, account, and SNS service principal.
 - [ ] Queue authorization allows only the exact SNS service principal, topic
       ARN, and account.
 - [ ] A synthetic publish is received exactly once with matching content; the
@@ -75,14 +78,21 @@ credentials. Preserve protected untracked files and retained lineage evidence.
 
 ## Acceptance status
 
-The draft PR, fixture validation, AWS test, and teardown evidence are being
-completed. No AWS resources have been created yet.
+Draft PR #449 was opened before any AWS mutation. The verified caller is
+account `654654474502` in `us-east-1`; the exact topic and queue names were
+absent and the run monitor had 24 terminal records with no active operation.
+The reviewed saved create plan contains exactly four creates, zero changes,
+and zero destroys. Its complete queue policy is known in plan and restricts
+`sqs:SendMessage` to the exact test queue ARN, exact topic ARN, account, and
+SNS service principal. No AWS resources have been created yet.
 
 ## Tests / validation performed
 
-Terraform format and validation, Python syntax/Ruff, documentation conventions,
-and GitHub Actions checks are required before merge. AWS execution must occur
-only after the draft PR is open and exact saved plans are reviewed.
+Terraform format and validation, Python syntax/Ruff, and documentation
+conventions passed locally. Initial PR CI run `45085442555` passed all seven
+checks on the first fixture revision; a final run is required for the reviewed
+known-ARN policy refinement. AWS execution must occur only after that final
+run passes and the exact saved plan is reviewed.
 
 ## Evidence files produced
 
