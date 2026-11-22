@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`78d11f82a373797f5d0c739956b93b3b618796dc` (PR #447), 2026-11-23. PR #413
+`dcdcd07e09a912fe52763de4968cd9140d831979` (PR #448), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -43,10 +43,12 @@ Request pricing assumptions include source, retry, and DLQ requests; Lambda
 usage and material transfer costs must still be separately bounded.
 
 PR #438 template hosting and PR #441's SQS encryption rule remain source-only.
-PR #448 records direct SQS/Lambda/DynamoDB idempotency and redrive recovery;
-its seven-resource stack and local state are confirmed absent. KMS-backed
-queue encryption, unsupported consumer-policy shapes, complete regional cost
-coverage, and Nova-hosted lifecycle proof remain open. Current AWS reads found no tested
+Merged PR #448 records direct SQS/Lambda/DynamoDB idempotency and redrive
+recovery; its seven-resource stack and local state are confirmed absent. Draft
+PR #449 adds an exact-topic SNS-to-SQS delivery fixture; AWS execution is
+pending. KMS-backed queue encryption, unsupported consumer-policy shapes,
+complete regional cost coverage, and Nova-hosted lifecycle proof remain open.
+Current AWS reads found no tested
 DavDeploy SageMaker endpoint, model, or endpoint configuration; four tagged
 Batch definitions are inactive and the SageMaker lineage action/context remain
 as retained audit evidence. The PR #443, #447, and #448 temporary resources
@@ -207,7 +209,7 @@ design does not mean that a rate is currently available.
 |---|---|---|
 | Scope and plan | Trusted account and region guard; declared-resource inventory; malformed/non-applyable plans; destructive changes and sensitive changes require review. | Resource ownership for every AWS type, quota availability, or workload suitability. |
 | S3 | Requires all four public-access-block flags for planned buckets; denies public ACLs and public bucket policies; merged PRs #434–#436 require same-plan TLS-deny policies, explicit default encryption, and `BucketOwnerEnforced` ownership controls. | This does not validate every bucket use pattern, KMS key authorization, object-level upload enforcement, existing object encryption, or retention. Unknown-value checks cover listed S3 policy-critical fields only. |
-| SQS | PR #441 requires known SQS-managed encryption. Merged PR #445 adds 0–43,200 second visibility bounds, 60 second–14 day retention, one-to-one redrive pairs with `maxReceiveCount` 5–10, exact `byQueue` allow policy, and six-times-Lambda-timeout-plus-batch-window checks. A same-plan Lambda consumer needs inline `ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes` on the exact source ARN. Merged PR #446 fixes source-after-DLQ ordering. PR #447 records Lambda retries/DLQ delivery; PR #448 records direct duplicate suppression, code update, managed redrive, and recovered processing. Its cleanup is still in progress. | Policy remains source-only, not hosted. Direct SQS/Lambda tests do not prove Nova dispatch. Managed-policy contents, module-output bindings, KMS encryption, non-Lambda consumers, producer authorization, full effective permissions, and complete retry/DLQ cost usage remain unproven. |
+| SQS | PR #441 requires known SQS-managed encryption. Merged PR #445 adds 0–43,200 second visibility bounds, 60 second–14 day retention, one-to-one redrive pairs with `maxReceiveCount` 5–10, exact `byQueue` allow policy, and six-times-Lambda-timeout-plus-batch-window checks. A same-plan Lambda consumer needs inline `ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes` on the exact source ARN. Merged PR #446 fixes source-after-DLQ ordering. PR #447 records Lambda retries/DLQ delivery; merged PR #448 records direct duplicate suppression, code update, managed redrive, recovered processing, and verified teardown. | Policy remains source-only, not hosted. Direct SQS/Lambda tests do not prove Nova dispatch. Managed-policy contents, module-output bindings, KMS encryption, non-Lambda consumers, producer authorization, full effective permissions, and complete retry/DLQ cost usage remain unproven. |
 | IAM | Denies broad wildcard privileges, wildcard trust, unknown policy attachments, and application `AdministratorAccess`. | Complete least-privilege analysis across service-specific policies, resource-based policies, permission boundaries, and all generated trust relationships. |
 | Network | Reviews public security-group and network-ACL web/general ingress; denies all-protocol and listed sensitive-port exposure; unknown ACL ingress sources fail closed. Globally routable source ranges are recognized. | ACL association and rule-precedence reachability, complete VPC topology, egress, endpoint policy, DNS, TLS, VPN, multi-region, or service-to-service reachability review. |
 | Databases and unknowns | Denies public RDS/Redshift, requires encryption for the listed relational types, and checks unknown critical fields for the bounded resource/path list. | Backup restore evidence, workload data integrity, every database product, every retention setting, or unknown values on unlisted types. |

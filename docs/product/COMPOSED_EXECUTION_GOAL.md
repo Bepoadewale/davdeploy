@@ -1,13 +1,13 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-22. This handoff tracks the Nova-led infrastructure goal
+Updated: 2026-11-23. This handoff tracks the Nova-led infrastructure goal
 without claiming launch readiness. Source, hosted control-plane state,
 customer-side AWS evidence, Nova execution, application behavior, and per-entry
 lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-22
+## Current source and acceptance status — 2026-11-23
 
-Backend `main` is `78d11f82a373797f5d0c739956b93b3b618796dc` (PR #447). The last
+Backend `main` is `dcdcd07e09a912fe52763de4968cd9140d831979` (PR #448). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -52,13 +52,19 @@ invocations and errors, then the same message in the paired DLQ at receive
 count six. Its six-resource test stack and generated Lambda log group were
 destroyed and independently confirmed absent. This SQS test does not establish
 Nova dispatch, idempotency, composed application health, or hosted SQS
-execution. Draft PR #448 records same-account SQS/Lambda/DynamoDB success,
+execution. Merged PR #448 records same-account SQS/Lambda/DynamoDB success,
 duplicate suppression, failure-to-DLQ, a Lambda-only code update, SQS-managed
 redrive, and idempotent recovery. Its exact seven-resource destroy completed;
 the queue/table/Lambda/mapping/role/log group are independently confirmed
-absent, the local state is empty, and the run monitor has no active work.
+absent, the local state is empty, and the run monitor has no active work. Its
+seven required CI checks passed in [run 45084339682](https://github.com/Bepoadewale/davdeploy/actions/runs/45084339682).
 KMS-backed encryption, unsupported consumer-policy shapes, and complete SQS
 cost coverage remain incomplete.
+
+Draft PR #449 adds a bounded SNS-to-SQS test fixture with exact source-topic
+queue authorization. Fixture validation passed; its AWS lifecycle test has
+not started. It adds direct service evidence only and does not change policy
+or hosted control-plane behavior.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint

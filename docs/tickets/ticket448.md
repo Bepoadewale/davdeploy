@@ -80,7 +80,8 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 
 ## Acceptance status
 
-PR #448 is a draft. The caller is verified in account `654654474502`; the
+PR #448 merged as `dcdcd07e09a912fe52763de4968cd9140d831979`; final CI run
+`45084339682` passed all seven checks. The caller was verified in account `654654474502`; the
 exact test prefix was absent before apply. The reviewed saved plan contained
 exactly seven creates and zero changes/destroys. Monitored apply
 `nova-sqs-idem-448-create-nov23a1` succeeded with seven added, zero changed,
