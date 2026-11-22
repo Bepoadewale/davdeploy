@@ -61,14 +61,14 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 ## Acceptance criteria
 
 - [x] Draft PR and matching ticket/test evidence exist before any AWS write.
-- [ ] Caller identity is account `654654474502`; test resources are uniquely
+- [x] Caller identity is account `654654474502`; test resources are uniquely
       prefixed/tagged and no production/control-plane resources change.
 - [x] The successful v1 consumer writes one item for two messages with the
       same idempotency key; the duplicate is acknowledged without overwriting.
 - [x] A controlled failure exceeds `maxReceiveCount=5` and is delivered to the
       exact paired DLQ.
 - [x] The saved v1-to-v2 Terraform plan changes only the test Lambda code.
-- [ ] SQS-managed DLQ redrive returns the failed event to the source; v2 writes
+- [x] SQS-managed DLQ redrive returns the failed event to the source; v2 writes
       one ledger item for it and acknowledges a duplicate without overwrite.
 - [ ] Monitored destroy succeeds, local state is empty, exact AWS resources are
       independently confirmed absent, and the run monitor has no active work.
@@ -86,10 +86,13 @@ exactly seven creates and zero changes/destroys. Monitored apply
 `nova-sqs-idem-448-create-nov23a1` succeeded with seven added, zero changed,
 and zero destroyed. The SQS mapping is Enabled and the Lambda is Active.
 Two success messages with the same key were acknowledged; DynamoDB contains
-exactly one `v1` ledger item. The controlled-failure message is still in its
-paired DLQ with receive count six. The saved update plan changes only the
-Lambda. Its monitored apply is running; redrive, recovery, and cleanup remain
-pending.
+exactly one `v1` ledger item. The controlled-failure message reached the paired
+DLQ at receive count six. Monitored v1-to-v2 update succeeded with one change.
+SQS redrive task `463e6401-e6a4-438d-b375-be3d6d9e56c0` completed, moving one
+message. V2 wrote one `redrive-recovery-001` item and acknowledged a duplicate
+without overwriting it. The table contains two records total. The reviewed
+seven-delete plan is being applied through the monitor; independent absence
+checks remain pending.
 
 ## Tests / validation performed
 
@@ -106,8 +109,17 @@ resources and no replacements. Monitored update
 supervisor PID 93804, root
 `/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-update-nov23a1.log`.
-Record the update outcome, SQS redrive task status, recovery ledger
-observation, and destroy/absence evidence as it arrives.
+Terraform PID 93805; it finished successfully at `2026-11-22T23:15:57Z` with
+zero added, one changed, and zero destroyed. SQS redrive task
+`463e6401-e6a4-438d-b375-be3d6d9e56c0` completed and moved one message. The
+v2 recovery key remains one `v2` record after a later duplicate. The table
+contains two records; source and DLQ have no visible messages. Reviewed
+`destroy-reviewed.tfplan` contains exactly seven deletes, zero adds, and zero
+updates. Monitored destroy `nova-sqs-idem-448-destroy-nov23a1` started at
+`2026-11-22T23:25:24Z` with supervisor PID 96678, root
+`/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-destroy-nov23a1.log`.
+Its final result and independent absence checks remain outstanding.
 
 ## Evidence files produced
 

@@ -29,9 +29,9 @@ unique `davdeploy-nova-sqs-idem-448-nov23a1` prefix.
 - Python syntax parsing passed for both Lambda versions.
 - Draft PR #448 and its matching ticket/test evidence were present before any
   AWS write.
-- AWS caller is verified as account `654654474502`; the exact queue, table,
-  Lambda, and role names are absent, and the monitor has 21 terminal runs with
-  no active operation.
+- Before apply, AWS caller was verified as account `654654474502`; the exact
+  queue, table, Lambda, and role names were absent. The monitor then had 21
+  terminal runs and no active operation.
 - Saved plan `create-final.tfplan` contains seven creates, zero changes,
   and zero destroys. The plan-bound inline role policy is fully known and
   grants only the exact source queue actions and `PutItem` on the exact test
@@ -51,34 +51,48 @@ unique `davdeploy-nova-sqs-idem-448-nov23a1` prefix.
 - Reviewed saved v2 update plan `update-reviewed.tfplan`: exactly one in-place
   update to the Lambda function; the other six resources are no-op, with no
   creates or destroys. Monitored update run `nova-sqs-idem-448-update-nov23a1`
-  started at `2026-11-22T23:15:42Z` with supervisor PID 93804, root
-  `/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
+  started at `2026-11-22T23:15:42Z`, supervisor PID 93804, Terraform PID
+  93805, root `/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
   `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-update-nov23a1.log`.
-  Its final result is pending.
+  It succeeded at `2026-11-22T23:15:57Z` with zero added, one changed, and
+  zero destroyed. The Lambda is Active with handler `consumer_v2.handler` and
+  the event source mapping remains Enabled.
+- SQS redrive task `463e6401-e6a4-438d-b375-be3d6d9e56c0` completed with one
+  message moved. V2 created exactly one `redrive-recovery-001` ledger item
+  with `consumer_version=v2`. After sending duplicate message
+  `cf3edfef-9578-4a2d-bdd0-fbd11ce5cf9b`, the item remained `v2` and table
+  count remained two. Source and DLQ both had zero visible messages; source
+  had zero in-flight messages.
 - Sent success message IDs
   `310fd3c9-c5ec-4454-a2f8-d839ea77edaa` and
   `9bcee1e2-beae-4446-82be-1c3524d18eb2`, both using the same synthetic key.
   DynamoDB contains exactly one item with `consumer_version=v1`; the source
   queue has no visible message.
 - Sent controlled-failure message ID `d8ac52f7-5a75-4246-b10f-9d6c0fb9794f`.
-  It remains in the source retry cycle; DLQ transition and subsequent update,
-  redrive, and destroy evidence are pending.
+  It reached the DLQ at receive count six.
+- The reviewed saved destroy plan `destroy-reviewed.tfplan` contains exactly
+  seven deletes, zero creates, and zero updates. Monitored destroy run
+  `nova-sqs-idem-448-destroy-nov23a1` started at `2026-11-22T23:25:24Z`,
+  supervisor PID 96678, root
+  `/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-destroy-nov23a1.log`.
+  Its result and independent absence checks are pending.
 
 ## Observed result
 
-The successful v1 path acknowledged two messages with the same key and
-created one DynamoDB record. The controlled failure remains in the source
-queue retry cycle; DLQ delivery, Lambda update, managed redrive, and recovery
-The source queue/DLQ and Lambda mapping are active. V1 processed both duplicate
-success messages while the idempotency table retained exactly one `v1` item.
-The controlled failure reached the paired DLQ after six receives. The v2
-update plan changes only the Lambda; redrive/recovery and cleanup remain
-pending.
+The v1 consumer acknowledged both success messages with the same idempotency
+key while DynamoDB retained exactly one `v1` record. The failing message
+reached the exact paired DLQ at receive count six. The reviewed v1-to-v2 plan
+changed only the Lambda function. AWS managed redrive completed one move back
+to the source queue; v2 created one `redrive-recovery-001` record with version
+`v2`. A subsequent duplicate was acknowledged without overwriting the item;
+the table remained at two records. Source and DLQ had zero visible messages,
+and the source had zero in-flight messages.
 
 ## Teardown
 
-Pending. The named seven-resource stack remains under test until lifecycle
-evidence is complete; cleanup will use a reviewed saved plan and PID monitor.
+The reviewed exact seven-resource destroy plan is running through the PID
+monitor. Independent AWS absence checks remain pending.
 
 ## Final boundary
 
