@@ -69,10 +69,11 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 
 ## Acceptance status
 
-Draft PR #447 is open. No AWS mutation has occurred. The preceding PR #446 SQS
-resources were independently confirmed absent, and the Terraform monitor had
-no active runs at bootstrap. The local plan contains six uniquely named
-resource creates with no changes or destroys. Test evidence is pending.
+Draft PR #447 is open. The preceding PR #446 SQS resources were independently
+confirmed absent. Caller identity and absence of the unique test prefix were
+rechecked before apply. Monitored run `nova-sqs-lambda-447-create-nov22a1`
+started at `2026-11-22T22:17:07Z`; its terminal result is pending. No test
+message has been sent.
 
 ## Tests / validation performed
 
@@ -89,7 +90,10 @@ resource creates with no changes or destroys. Test evidence is pending.
 - The planned role policy names only the three SQS receive/delete/attributes
   actions on the exact known source ARN; the 30-second queue visibility is
   greater than six times the 3-second function timeout plus zero batching.
-- No AWS resource has been created for this PR.
+- Monitored apply `nova-sqs-lambda-447-create-nov22a1` is in progress with
+  supervisor PID 76303, root `/private/tmp/davdeploy-nova-sqs-lambda-447-nov22a1`,
+  log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-lambda-447-create-nov22a1.log`.
+- No message test has started.
 
 ## Evidence files produced
 

@@ -16,8 +16,9 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-None yet. The draft PR was opened before any AWS mutation. Test resources will
-use only the unique `davdeploy-nova-sqs-lambda-447-nov22a1` prefix.
+The monitored apply `nova-sqs-lambda-447-create-nov22a1` is running for the
+six-resource test stack under the unique
+`davdeploy-nova-sqs-lambda-447-nov22a1` prefix. Terminal results are pending.
 
 ## Commands executed
 
@@ -31,16 +32,19 @@ use only the unique `davdeploy-nova-sqs-lambda-447-nov22a1` prefix.
   enabled event source mapping.
 - Terraform graph confirms the source/DLQ and mapping/function/role-policy
   dependencies.
-- Apply, event source, failure, redrive, and teardown commands/results are
-  pending.
+- Monitored saved-plan apply started at `2026-11-22T22:17:07Z` (supervisor PID
+  76303), root `/private/tmp/davdeploy-nova-sqs-lambda-447-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-lambda-447-create-nov22a1.log`.
+- Event source, failure, redrive, and teardown results are pending.
 
 ## Observed result
 
-Pending. No Lambda, event source mapping, or queue was created for PR #447.
+Pending completion of monitored apply. No test message has been sent.
 
 ## Teardown
 
-None. No AWS resource was created.
+Pending. Only the planned test stack will be destroyed after the lifecycle
+probe.
 
 ## Final boundary
 
