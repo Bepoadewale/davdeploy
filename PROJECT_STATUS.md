@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-22, backend `main` is
-`e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443). The hosted control plane
+`7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -40,6 +40,12 @@ The stack, roles, bucket, queue, and table were removed and independently
 verified absent. This proves only the tested direct role actions; Nova's
 credential path, cross-account trust, full effective permissions, and hosted
 apply remain unverified.
+
+Draft PR #445 adds source-only SQS delivery policy for one-to-one retry/DLQ
+pairs and same-plan Lambda consumers. Local policy tests cover visibility,
+retention, redrive, timeout relationships, and exact inline queue permissions.
+The hosted control plane was not changed; no SQS message lifecycle or Nova
+customer workload is claimed.
 
 The latest read-only inventory in account `654654474502`, region `us-east-1`,
 found no tested SageMaker endpoint, model, or endpoint configuration. Four

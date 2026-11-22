@@ -435,9 +435,16 @@ def add_sqs_queue_policy(document, policy, **change_metadata):
 def sqs_queue_case(sqs_managed_sse_enabled, *, after_unknown=None):
     document = plan()
     address = "aws_sqs_queue.queue"
+    queue_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+    dlq_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work-dlq"
     values = {
         "name": "async-work",
         "sqs_managed_sse_enabled": sqs_managed_sse_enabled,
+        "visibility_timeout_seconds": 360,
+        "message_retention_seconds": 345600,
+        "redrive_policy": json.dumps(
+            {"deadLetterTargetArn": dlq_arn, "maxReceiveCount": 5}
+        ),
     }
     document["planned_values"]["root_module"]["resources"].append(
         resource(address, "aws_sqs_queue", values)
@@ -445,18 +452,44 @@ def sqs_queue_case(sqs_managed_sse_enabled, *, after_unknown=None):
     document["resource_changes"].append(
         change(address, "aws_sqs_queue", after_unknown=after_unknown or {})
     )
+    dlq_address = "aws_sqs_queue.dead_letter"
+    dlq_values = {
+        "name": "async-work-dlq",
+        "sqs_managed_sse_enabled": True,
+        "visibility_timeout_seconds": 30,
+        "message_retention_seconds": 1209600,
+        "redrive_allow_policy": json.dumps(
+            {"redrivePermission": "byQueue", "sourceQueueArns": [queue_arn]}
+        ),
+    }
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(dlq_address, "aws_sqs_queue", dlq_values)
+    )
+    document["resource_changes"].append(change(dlq_address, "aws_sqs_queue"))
     resources = [item.model_dump(mode="json") for item in proposal().resources]
-    resources.append(
-        {
-            "resource_id": "queue",
-            "resource_type": "aws_sqs_queue",
-            "name": "queue",
-            "arguments": {
-                "name": "async-work",
-                "sqs_managed_sse_enabled": sqs_managed_sse_enabled,
+    resources.extend(
+        [
+            {
+                "resource_id": "queue",
+                "resource_type": "aws_sqs_queue",
+                "name": "queue",
+                "arguments": {
+                    "name": "async-work",
+                    "sqs_managed_sse_enabled": sqs_managed_sse_enabled,
+                },
+                "rationale": "Use an encrypted queue with bounded retries.",
             },
-            "rationale": "Use SQS-managed encryption for queued application data.",
-        }
+            {
+                "resource_id": "dead-letter",
+                "resource_type": "aws_sqs_queue",
+                "name": "dead_letter",
+                "arguments": {
+                    "name": "async-work-dlq",
+                    "sqs_managed_sse_enabled": True,
+                },
+                "rationale": "Keep failed queue messages in a scoped dead-letter queue.",
+            },
+        ]
     )
     return document, proposal(resources)
 
@@ -490,6 +523,357 @@ def test_sqs_queue_with_sqs_managed_encryption_remains_reviewable():
 
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert "sqs_queue_encryption_required" not in codes(result)
+
+
+def sqs_lambda_consumer_case(
+    *, permissions=None, visibility=360, timeout=60, batch_window=0,
+    unknown_timeout=False,
+):
+    document, proposal_value = sqs_queue_case(True)
+    root_resources = document["planned_values"]["root_module"]["resources"]
+    queue_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+    source_queue = next(item for item in root_resources if item["address"] == "aws_sqs_queue.queue")
+    source_queue["values"]["visibility_timeout_seconds"] = visibility
+    role_arn = f"arn:aws:iam::{ACCOUNT}:role/queue-consumer"
+    role_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "lambda.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                }
+            ],
+        }
+    )
+    consumer_policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": permissions
+                    or [
+                        "sqs:ReceiveMessage",
+                        "sqs:DeleteMessage",
+                        "sqs:GetQueueAttributes",
+                    ],
+                    "Resource": queue_arn,
+                }
+            ],
+        }
+    )
+    role_address = "aws_iam_role.queue_consumer"
+    policy_address = "aws_iam_role_policy.queue_consumer"
+    function_address = "aws_lambda_function.queue_consumer"
+    mapping_address = "aws_lambda_event_source_mapping.queue_consumer"
+    values_by_resource = [
+        resource(
+            role_address,
+            "aws_iam_role",
+            {"name": "queue-consumer", "arn": role_arn, "assume_role_policy": role_trust},
+        ),
+        resource(
+            policy_address,
+            "aws_iam_role_policy",
+            {"name": "queue-consumer-sqs", "role": "queue-consumer", "policy": consumer_policy},
+        ),
+        resource(
+            function_address,
+            "aws_lambda_function",
+            {
+                "function_name": "queue-consumer",
+                "role": role_arn,
+                "timeout": timeout,
+            },
+        ),
+        resource(
+            mapping_address,
+            "aws_lambda_event_source_mapping",
+            {
+                "event_source_arn": queue_arn,
+                "function_name": "queue-consumer",
+                "enabled": True,
+                "batch_size": 1,
+                "maximum_batching_window_in_seconds": batch_window,
+            },
+        ),
+    ]
+    for item in values_by_resource:
+        root_resources.append(item)
+        metadata = (
+            {"after_unknown": {"timeout": True}}
+            if unknown_timeout and item["type"] == "aws_lambda_function"
+            else {}
+        )
+        document["resource_changes"].append(
+            change(item["address"], item["type"], **metadata)
+        )
+
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": function_address,
+                "expressions": {"role": {"references": [f"{role_address}.arn"]}},
+            },
+            {
+                "address": policy_address,
+                "expressions": {"role": {"references": [f"{role_address}.name"]}},
+            },
+            {
+                "address": mapping_address,
+                "expressions": {
+                    "event_source_arn": {"references": ["aws_sqs_queue.queue.arn"]},
+                    "function_name": {"references": [f"{function_address}.arn"]},
+                },
+            },
+        ]
+    }
+    proposal_resources = [item.model_dump(mode="json") for item in proposal_value.resources]
+    proposal_resources.extend(
+        [
+            {
+                "resource_id": "queue-consumer-role",
+                "resource_type": "aws_iam_role",
+                "name": "queue_consumer",
+                "arguments": {"name": "queue-consumer"},
+                "rationale": "Run the queue consumer with a dedicated execution role.",
+            },
+            {
+                "resource_id": "queue-consumer-policy",
+                "resource_type": "aws_iam_role_policy",
+                "name": "queue_consumer",
+                "arguments": {"role": "queue-consumer"},
+                "rationale": "Limit the consumer to its planned SQS queue.",
+            },
+            {
+                "resource_id": "queue-consumer-function",
+                "resource_type": "aws_lambda_function",
+                "name": "queue_consumer",
+                "arguments": {"function_name": "queue-consumer", "timeout": timeout},
+                "rationale": "Process messages from the planned SQS queue.",
+            },
+            {
+                "resource_id": "queue-consumer-mapping",
+                "resource_type": "aws_lambda_event_source_mapping",
+                "name": "queue_consumer",
+                "arguments": {"batch_size": 1},
+                "rationale": "Connect the queue to its same-plan consumer.",
+            },
+        ]
+    )
+    dlq_resource = next(item for item in proposal_resources if item["resource_id"] == "dead-letter")
+    dlq_resource["arguments"]["name"] = "async-work-dlq"
+    source_resource = next(item for item in proposal_resources if item["resource_id"] == "queue")
+    source_resource["arguments"]["name"] = "async-work"
+    source_resource["arguments"]["visibility_timeout_seconds"] = visibility
+    return document, proposal(proposal_resources)
+
+
+def test_sqs_lambda_consumer_requires_bounded_queue_retry_and_exact_role_scope():
+    document, proposal_value = sqs_lambda_consumer_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(item.code.startswith("sqs_lambda_") for item in result.findings)
+
+
+def test_sqs_lambda_consumer_visibility_accounts_for_batch_window():
+    document, proposal_value = sqs_lambda_consumer_case(
+        visibility=360, timeout=60, batch_window=1
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_lambda_visibility_timeout_insufficient" in codes(result)
+
+
+def test_sqs_lambda_consumer_unknown_function_timeout_fails_closed():
+    document, proposal_value = sqs_lambda_consumer_case(unknown_timeout=True)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+@pytest.mark.parametrize("visibility,timeout", [(359, 60), (0, 1), (43201, 60)])
+def test_sqs_lambda_consumer_denies_insufficient_or_invalid_visibility(visibility, timeout):
+    document, proposal_value = sqs_lambda_consumer_case(
+        visibility=visibility, timeout=timeout
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_visibility_timeout_invalid" in codes(result) or (
+        "sqs_lambda_visibility_timeout_insufficient" in codes(result)
+    )
+
+
+def test_sqs_lambda_consumer_denies_missing_required_permission():
+    document, proposal_value = sqs_lambda_consumer_case(
+        permissions=["sqs:ReceiveMessage", "sqs:GetQueueAttributes"]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_lambda_consumer_permission_missing" in codes(result)
+
+
+def test_sqs_lambda_consumer_denies_wildcard_permission_resource():
+    document, proposal_value = sqs_lambda_consumer_case()
+    policy = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_iam_role_policy"
+    )
+    policy_document = json.loads(policy["values"]["policy"])
+    policy_document["Statement"][0]["Resource"] = "*"
+    policy["values"]["policy"] = json.dumps(policy_document)
+    change_item = next(
+        item
+        for item in document["resource_changes"]
+        if item["type"] == "aws_iam_role_policy"
+    )
+    change_item["change"]["after"]["policy"] = policy["values"]["policy"]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_lambda_consumer_scope_invalid" in codes(result)
+
+
+def test_sqs_lambda_consumer_denies_unbound_mapping_references():
+    document, proposal_value = sqs_lambda_consumer_case()
+    mapping = document["configuration"]["root_module"]["resources"][-1]
+    mapping["expressions"]["event_source_arn"]["references"] = []
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_lambda_mapping_unbound" in codes(result)
+
+
+def test_sqs_redrive_policy_requires_bounded_retries_and_planned_dlq():
+    document, proposal_value = sqs_queue_case(True)
+    queue = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_sqs_queue.queue"
+    )
+    queue["values"]["redrive_policy"] = json.dumps(
+        {
+            "deadLetterTargetArn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:outside-dlq",
+            "maxReceiveCount": 3,
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_redrive_policy_invalid" in codes(result)
+
+
+def test_sqs_dlq_must_allow_only_its_exact_source_and_have_longer_retention():
+    document, proposal_value = sqs_queue_case(True)
+    dlq = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_sqs_queue.dead_letter"
+    )
+    dlq["values"]["redrive_allow_policy"] = json.dumps(
+        {
+            "redrivePermission": "byQueue",
+            "sourceQueueArns": [f"arn:aws:sqs:{REGION}:{ACCOUNT}:another-source"],
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_redrive_allow_source_mismatch" in codes(result)
+
+
+def test_sqs_dlq_retention_must_exceed_source_retention():
+    document, proposal_value = sqs_queue_case(True)
+    dlq = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_sqs_queue.dead_letter"
+    )
+    dlq["values"]["message_retention_seconds"] = 345600
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_dlq_retention_not_longer" in codes(result)
+
+
+def test_sqs_redrive_unknown_value_fails_closed():
+    document, proposal_value = sqs_queue_case(
+        True, after_unknown={"redrive_policy": True}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_sqs_queue_must_belong_to_a_bounded_redrive_pair():
+    document, proposal_value = sqs_queue_case(True)
+    queue = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_sqs_queue.queue"
+    )
+    queue["values"]["redrive_policy"] = None
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_redrive_contract_missing" in codes(result)
+
+
+def test_sqs_redrive_cycle_is_denied():
+    document, proposal_value = sqs_queue_case(True)
+    dlq = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_sqs_queue.dead_letter"
+    )
+    dlq["values"]["redrive_policy"] = json.dumps(
+        {
+            "deadLetterTargetArn": f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work",
+            "maxReceiveCount": 5,
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sqs_redrive_cycle_denied" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "unknown",
+    [
+        {"visibility_timeout_seconds": True},
+        {"message_retention_seconds": True},
+    ],
+)
+def test_sqs_queue_unknown_delivery_values_fail_closed(unknown):
+    document, proposal_value = sqs_queue_case(True, after_unknown=unknown)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 def cloudfront_case(
