@@ -8,7 +8,7 @@ Repository: `Bepoadewale/davdeploy`
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: `32eaf0b` (PR #446 module ordering fix; evidence update follows)
+Commit: `32eaf0b` (SQS module ordering fix; later evidence updates follow)
 
 AWS account: `654654474502`.
 
@@ -19,7 +19,8 @@ AWS region: `us-east-1`.
 The test source queue and tagged DLQ were created with local Terraform state.
 The first apply created only the DLQ and failed on source creation; the
 source-only retry succeeded after adding an explicit source-to-DLQ dependency
-to the module. Existing production-tagged queues are excluded.
+to the module. Both queues were destroyed and independently confirmed absent.
+Existing production-tagged queues are excluded.
 
 ## Commands executed
 
@@ -54,22 +55,30 @@ to the module. Existing production-tagged queues are excluded.
   was deleted or redriven manually.
 - Reviewed saved destroy plan: exactly the source and DLQ queues are deleted;
   zero resources are created or updated.
-- Reviewed destroy plan: only source and DLQ deletes.
-- Saved-plan teardown is running as `nova-sqs-446-destroy-nov22a1`, started at
-  `2026-11-22T21:50:42Z` (supervisor PID 68532), root
+- Saved-plan teardown `nova-sqs-446-destroy-nov22a1` started at
+  `2026-11-22T21:50:42Z` (supervisor PID 68532, Terraform PID 68533), root
   `/private/tmp/davdeploy-nova-sqs-446-nov22a1`, log
   `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-destroy-nov22a1.log`.
-- Post-destroy absence checks remain pending.
+  It succeeded with zero added, zero changed, two destroyed.
+- Independent inventory returned no URLs under the test prefix, local
+  Terraform state is empty, and existing `davdeploy-worker` remains tagged
+  `Environment=production`.
+- Final Terraform monitor: 19 terminal records, zero active runs.
+- GitHub Actions run [45074340234](https://github.com/Bepoadewale/davdeploy/actions/runs/45074340234)
+  passed all seven checks on PR #446 head `bd18e2052845ee2a207d60a3a021888b13596c65`.
+  That head contains the SQS module fix; later evidence and goal-status
+  documentation updates are receiving a fresh CI run.
 
 ## Observed result
 
-The source-to-DLQ receive and automatic redrive passed. Teardown and
-independent absence checks are still pending.
+The source-to-DLQ receive and automatic redrive passed. Monitored teardown
+destroyed only the test queues, and independent checks confirmed both are
+absent.
 
 ## Teardown
 
-Pending. Only the named test stack will be destroyed, followed by independent
-absence checks for both test queues.
+The monitored saved-plan teardown destroyed only the test source and DLQ.
+Independent inventory confirmed both queue URLs are absent.
 
 ## Final boundary
 

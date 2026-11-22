@@ -55,19 +55,19 @@ and the earlier EventBridge-to-SQS delivery test in `test257.md`.
 ## Acceptance criteria
 
 - [x] Draft PR and ticket exist before the first AWS mutation.
-- [ ] Caller identity is the expected account; resources use the unique
+- [x] Caller identity is the expected account; resources use the unique
       `davdeploy-nova-sqs-446-nov22a1` prefix and test-only tags.
-- [ ] The source queue delivers the synthetic message and its receive count
+- [x] The source queue delivers the synthetic message and its receive count
       advances; SQS moves it to the paired DLQ after the count exceeds the
       configured `maxReceiveCount` of 5.
-- [ ] Terraform graph and monitored apply confirm the source queue depends on
+- [x] Terraform graph and monitored apply confirm the source queue depends on
       successful DLQ creation.
-- [ ] The DLQ message is readable and identified by its message ID only.
-- [ ] Monitored Terraform destroy succeeds for the test root; independently
+- [x] The DLQ message is readable and identified by its message ID only.
+- [x] Monitored Terraform destroy succeeds for the test root; independently
       verify the named test queues/resources are absent afterward.
-- [ ] Production queues and the hosted control plane remain unchanged.
+- [x] Production queues and the hosted control plane remain unchanged.
 - [ ] Evidence conventions, focused checks, and all seven PR CI checks pass.
-- [ ] Documentation says this is same-account service evidence, not Nova
+- [x] Documentation says this is same-account service evidence, not Nova
       dispatch, cross-account isolation, application health, or general
       workload certification.
 
@@ -81,8 +81,10 @@ no creation dependency. The source-only retry
 `nova-sqs-446-source-nov22a1` started at `2026-11-22T21:43:11Z` after adding
 the dependency and succeeded. The test message was received five times from
 the source; the sixth source receive returned no message, and the same message
-ID was received from the DLQ. A saved-plan teardown is prepared; destruction
-and independent absence verification are pending.
+ID was received from the DLQ. Monitored saved-plan teardown succeeded, both
+test queue URLs are absent, Terraform state is empty, and the existing
+production queue retains its production tags. No control-plane access or
+mutation occurred.
 
 ## Tests / validation performed
 
@@ -117,13 +119,24 @@ and independent absence verification are pending.
   count 6. The body was not printed.
 - Reviewed `/tmp/davdeploy-nova-sqs-446-nov22a1/destroy.tfplan`: it deletes
   only `aws_sqs_queue.source` and `aws_sqs_queue.dlq`, with zero creates or
-  updates. Monitored teardown and independent absence checks remain pending.
-- Documentation convention and diff checks passed on the bootstrap ticket.
+  updates.
+- Monitored saved-plan teardown `nova-sqs-446-destroy-nov22a1` (supervisor PID
+  68532, Terraform PID 68533, root `/private/tmp/davdeploy-nova-sqs-446-nov22a1`,
+  log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-destroy-nov22a1.log`)
+  succeeded: zero added, zero changed, two destroyed.
+- Independent `sqs list-queues` for the test prefix returned no queue URLs;
+  local Terraform state is empty. The existing production-tagged
+  `davdeploy-worker` queue still exists and retains `Environment=production`.
+- Final Terraform monitor: 19 records, zero active runs.
+- Documentation convention and diff checks passed; the matrix retains 26
+  architecture entries and 30 roots.
+- Run `45074340234` passed all seven PR checks on the module-fix commit. A fresh
+  CI run is pending on the final evidence and status-documentation head.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket446.md`
-- `docs/test/test446.md` — to be completed before review-ready status.
+- `docs/test/test446.md`
 
 ## Boundaries
 
