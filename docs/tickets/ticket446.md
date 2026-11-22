@@ -66,7 +66,7 @@ and the earlier EventBridge-to-SQS delivery test in `test257.md`.
 - [x] Monitored Terraform destroy succeeds for the test root; independently
       verify the named test queues/resources are absent afterward.
 - [x] Production queues and the hosted control plane remain unchanged.
-- [ ] Evidence conventions, focused checks, and all seven PR CI checks pass.
+- [x] Evidence conventions, focused checks, and all seven PR CI checks pass.
 - [x] Documentation says this is same-account service evidence, not Nova
       dispatch, cross-account isolation, application health, or general
       workload certification.
@@ -130,8 +130,9 @@ mutation occurred.
 - Final Terraform monitor: 19 records, zero active runs.
 - Documentation convention and diff checks passed; the matrix retains 26
   architecture entries and 30 roots.
-- Run `45074340234` passed all seven PR checks on the module-fix commit. A fresh
-  CI run is pending on the final evidence and status-documentation head.
+- Run `45074340234` passed all seven PR checks on the module-fix commit.
+- Run `45075255587` passed all seven checks on the lifecycle evidence and Nova
+  status-documentation head `c3f4d76425a0a4abe94c1cf285fc0c024f35a694`.
 
 ## Evidence files produced
 
