@@ -26,6 +26,7 @@ without a backend and ran `terraform validate` only.
 - `git diff --check` — passed.
 - `make api-contract` — could not complete because its local API request to `127.0.0.1:8080` had no server listening. The snapshot check passed; CI remains required for the full contract workflow.
 - GitHub Actions run [45071180867](https://github.com/Bepoadewale/davdeploy/actions/runs/45071180867) on PR #445 head `712ba586453196edda27c402383c9c4452fc42d4` — all seven checks passed. This records the code head before the final evidence-only documentation update.
+- GitHub Actions run [45071611528](https://github.com/Bepoadewale/davdeploy/actions/runs/45071611528) on PR #445 head `b7a6a01a083340c13ec809dc8c08a94cbf283191` — all seven checks passed, including cloud contracts and local end-to-end checks.
 
 ## Observed result
 

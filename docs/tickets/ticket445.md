@@ -104,11 +104,10 @@ do not present partial pricing as a complete estimate.
 
 ## Acceptance status
 
-The implementation is complete on the draft PR. Commit
-`712ba586453196edda27c402383c9c4452fc42d4` passed all seven checks in run
-`45071180867`. SQS Lambda mapping support is limited to direct plan references
-and inline consumer-role policies; the source policy is not deployed. Final
-evidence updates are pending a fresh CI run.
+The implementation and evidence are complete on the draft PR. Commit
+`b7a6a01a083340c13ec809dc8c08a94cbf283191` passed all seven checks in run
+`45071611528`. SQS Lambda mapping support is limited to direct plan references
+and inline consumer-role policies; the source policy is not deployed.
 
 ## Tests / validation performed
 
