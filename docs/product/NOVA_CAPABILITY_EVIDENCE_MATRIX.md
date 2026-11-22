@@ -1,61 +1,40 @@
 # Nova capability and execution evidence matrix
 
-Status snapshot: backend `main` at `48911bfb74fafc626076d216f6ed78a21f3be4ee`
-(through PR #441), 2026-11-19. PR #413 merged this 26-architecture-entry /
-30-root coverage ledger. The last recorded hosted release remains PR #420
-commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
+Status snapshot: backend `main` at
+`e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443), 2026-11-22. PR #413
+merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
+hosted release remains PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
-This documentation refresh did not access or change the hosted control plane.
+The hosted control plane was not accessed or changed for this reconciliation.
 
-Merged PRs #412 and #414 provide bounded, revision-bound Lambda/API and
-DynamoDB pricing, and #416 exposes modeled assumptions in generated-plan
-review output. PRs #417–#420 add value-redacted protected plan summaries,
-including safe IAM policy scope, bounded policy placeholders, failure
-locators, and hyphenated IAM policy names. These features are in the current
-hosted package. They do not make all resource costs known or establish a Nova
-customer workload journey. PR #424 adds bounded Aurora PostgreSQL Serverless
-v2 pricing for one writer shape; it is merged in backend source but remains
-outside the hosted PR #420 package. PRs #425–#427 add bounded Nova schema repair
-and versioned context/proposal identity evidence in backend source. PR #429
-records the supported Terraform provider-schema format and canonical digest of
-the full schema document in plan evidence. These changes are source-only and
-are not deployed. Unsupported material costs and settings still block approval.
-PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
-passed on final source head `61bdb3fb3baac1adbf49dd37e4870a9fb665424e` in
-[run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
-Its exact-plan Nova apply path, customer-role template, and template publisher
-are source-only; apply and credential gates remain disabled, and Nova-specific
-execution has not been exercised. A temporary same-account customer role test
-verified ExternalId assumption, an exact S3 session-policy lifecycle, and an
-explicit denial of unrelated EC2 access; it did not verify Nova dispatch,
-cross-account trust, or the full effective permission set, and all resources
-were removed. PR #437 merged as `7481c1f` after final head
-`e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
-[run 44586955606](https://github.com/Bepoadewale/davdeploy/actions/runs/44586955606).
-Its isolated same-account ECS Express runs record saved-plan creation,
-healthy v1/v2, failed-health circuit-breaker rollback to v2, teardown, and
-independent absence. The goal owner accepts this direct-Terraform evidence as
-the general goal's customer-side plan/apply/health/update/recovery/teardown
-gate under control-plane isolation. It does not prove Nova generation,
-authorization, dispatch, cross-account isolation, or Nova-originated lifecycle.
-No Nova customer workload is claimed as applied or certified. PR #438 merged as
-`cb78865`; its append-only template hosting is source-only, and its
-protected-state plan had four address moves and zero resource changes. PR #399
-and PR #438 have not changed hosted runtime or enabled customer execution.
+PR #399 adds the exact-plan Nova apply path and customer role template in
+source; its apply and credential gates remain disabled. PR #437's isolated
+same-account ECS Express run is accepted by the owner as the general
+customer-side plan/apply/health/update/recovery/teardown gate. It used direct
+Terraform, not Nova dispatch, and does not prove cross-account isolation.
 
-PR #441 merged as `48911bf`; all seven checks passed in
-[run 44608565238](https://github.com/Bepoadewale/davdeploy/actions/runs/44608565238).
-It adds a source-only generated-plan requirement for known SQS-managed
-server-side encryption. The rule does not cover KMS-backed encryption,
-visibility/retry/DLQ contracts, queue consumers, or hosted lifecycle behavior;
-it has not been deployed to the control plane.
+PR #443 merged as `e63d3ec`; seven checks passed in
+[run 45065309558](https://github.com/Bepoadewale/davdeploy/actions/runs/45065309558).
+Its temporary role test used the checked-in customer-role template and a
+temporary same-account broker. Exact-plan session scopes allowed S3, SQS, and
+DynamoDB create/read, SQS update, and a separate three-service destroy. The
+test denied out-of-scope S3/SQS/DynamoDB creates and unrelated EC2 access.
+Create/update/destroy policy sizes were 1,549/470/1,489 bytes. The stack, roles,
+bucket, queue, and table were independently verified absent. This is direct
+role-policy evidence, not Nova credential issuance, dispatch, cross-account
+trust, or a complete permission attestation. See
+[`test443.md`](../test/test443.md).
 
-PR #422 merged as `8c84827` and adds source-only verification of the customer
-plan role's exact trust and bounded inline policy profile during connection
-verification and again before plan credentials are issued. It is not deployed.
-This does not attest every effective AWS permission layer, and existing
-identity-only role records require fresh verification.
+PR #438 template hosting and PR #441's SQS encryption rule remain source-only.
+SQS retry/DLQ/visibility and consumer policy, complete regional cost coverage,
+and Nova-hosted lifecycle proof remain open. Current AWS reads found no tested
+DavDeploy SageMaker endpoint, model, or endpoint configuration; four tagged
+Batch definitions are inactive and the SageMaker lineage action/context remain
+as retained audit evidence. The PR #443 temporary resources are absent. The
+Terraform run monitor has no active runs. Preserve the protected untracked
+`--only-show-errors`, `.venv-pr399/`, and retained lineage evidence.
 
 This document joins the checked-in architecture catalogue, Terraform
 implementation registry, scenario catalogue and existing evidence. A catalogue
@@ -94,6 +73,7 @@ customer.
 |---|---|---|
 | Nova intent provenance | Backend source PRs #425–#427 bound schema-repair attempts to 0–2, record the final validated proposal version/digest, and record a versioned digest of the original intent context across repairs. The context digest is attached to intent metadata and workload provenance without adding raw customer text. PR #429 separately binds the supported Terraform provider-schema format and canonical full-document digest to generated-plan evidence. | These changes are in backend `main` but not the deployed hosted runtime. Digests identify inputs; they do not prove model correctness, repeatability, prompt-injection resistance, or safe execution. Provider documentation retrieval provenance and pinned live Nova evaluation remain incomplete. |
 | Proposal/schema checks | `generated_provider_validation.py` checks generated resource types and arguments against the initialized, locked AWS provider schema. PR #429 records that schema document's supported format version and canonical digest in the plan result and integrity-checked manifest. [`ticket309.md`](../tickets/ticket309.md) records a synthetic S3 schema check; [`test311.md`](../test/test311.md) records the later authenticated S3 saved-plan run with the locked provider schema. | This verifies Terraform schema shape and the identity of the schema input, not service semantics, customer security, cost, or lifecycle behavior. It does not map the capability/root registries to per-module supported schema evidence. |
+| Customer apply-role scope | PR #443 [test evidence](../test/test443.md) records same-account ExternalId assumption using a temporary broker and the checked-in apply-role template. Exact-plan scopes were exercised for S3, SQS, and DynamoDB create/read, SQS update, and separate destroy; out-of-scope creates and unrelated EC2 access were denied. | Direct SDK calls did not use Nova’s credential broker or dispatcher. This covers only the tested services/actions in one account; cross-account trust, all effective policy layers, and Nova-originated execution remain unverified. |
 | Generated-plan policy | `generated_plan_policy.py` binds trusted account/region and proposal inventory; reviews destructive and sensitive changes; checks policy-critical unknowns for a finite list of Terraform types; and contains S3, SQS managed-encryption and queue-policy, IAM, security-group/network-ACL ingress, EC2 metadata, relational-database, and bounded EKS node IMDSv2 rules. PRs #401/#402/#404 are merged and deployed to the control plane; [`test401.md`](../test/test401.md), [`test402.md`](../test/test402.md), and [`test404.md`](../test/test404.md) record synthetic/local tests and hosted CI. | Partial shared rules only. SQS encryption requires the planned queue to show SQS-managed server-side encryption; KMS-backed encryption, visibility/retry/DLQ contracts, and consumer behavior remain outside this rule. The EKS node rule applies only when the plan binds a node group to exactly one same-plan launch template whose metadata settings are visible to policy. It does not establish pod metadata isolation, Kubernetes/RBAC or cluster endpoint security. Unknown-value checks cover only paths in `POLICY_CRITICAL_UNKNOWN_PATHS`. ACL association, route/egress reachability, and a complete deterministic policy map for all 26 modules or 30 roots are not established. No customer plan has exercised these checks. See the resource-family table below. |
 | Cost | The hosted package has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PR #424 is merged in backend source for one Aurora PostgreSQL Serverless v2 writer shape; its catalog response and local tests are not deployed evidence. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
 | Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. PR #437 [test evidence](https://github.com/Bepoadewale/davdeploy/pull/437) records direct ECS Express v1/v2 `/healthz` probes and rollback recovery; the owner accepts this as general-goal customer-side evidence. | The test does not prove Nova generated or dispatched the plan. Scenario declarations do not prove that a hosted worker ran probes. The current `CertificationEvidence` is five booleans; it does not record controlled failure, cost, source/artifact digest, or evidence link. |

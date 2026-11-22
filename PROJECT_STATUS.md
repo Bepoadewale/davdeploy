@@ -2,21 +2,52 @@
 
 ## Current state
 
-**As of 2026-11-17, backend `main` is `8c84827ddbd32f5c937f83a393c177a825afbfb3` (PR #422). The hosted control plane remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184) and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). Both jobs succeeded, including database migrations. Read-only checks found all six backend Lambdas on code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` returned HTTP 200 in account `654654474502`, region `us-east-1`. This is control-plane deployment evidence only.**
+**As of 2026-11-22, backend `main` is
+`e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443). The hosted control plane
+remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
+using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
+Both jobs succeeded, including database migrations. Read-only checks found all
+six backend Lambdas on code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`
+and `/healthz` returned HTTP 200 in account `654654474502`, region
+`us-east-1`. This is control-plane deployment evidence only. This status
+refresh did not access or change the hosted control plane.**
 
-Source and the hosted control plane now include durable plan requests, isolated Terraform state, plan review, actual-plan policy, typed health/recovery requirements, exact workspace artifacts, and bounded regional pricing for selected EBS, S3, SQS, RDS MySQL, DynamoDB, Lambda/API, logs, and modeled egress. Cost coverage is still partial and unpriced material resources block approval. Merged PRs #417–#420 make protected Terraform plan summaries reviewable without exposing raw values. PR #413's 26-capability/30-root evidence ledger is merged.
+Source includes durable plan requests, isolated Terraform state, plan review,
+actual-plan policy, typed health/recovery requirements, exact workspace
+artifacts, and bounded regional pricing for selected resource families. Cost
+coverage remains partial; unknown or unpriced material resources block
+approval. PR #413's 26-capability/30-root evidence ledger is merged.
 
-Draft PR #399 is open at `72648dcf2b1237bfcbdd1643d02f1b3fd7d0c824`; its current source includes default-off apply credential/input routes, exact artifact staging, a fixed apply worker, and result reconciliation. CI run [43997205241](https://github.com/Bepoadewale/davdeploy/actions/runs/43997205241) passed seven checks. The apply and credential gates remain disabled. A dedicated customer apply role and its effective least-privilege permissions have not been verified. No Nova customer credentials were issued and no Nova customer plan, apply, health check, update, recovery, or destroy has occurred.
+PR #399 merged with all seven checks passing in
+[run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
+It adds default-off apply credential/input routes, exact-artifact staging, a
+fixed apply worker, and result reconciliation. The apply and credential gates
+remain disabled. No Nova-issued customer credential or Nova-dispatched
+workload is claimed.
 
-PR #422 merged as `8c84827` and adds source-only checks for current plan-role
-trust and the bounded inline policy profile during setup verification and
-before each plan credential issuance. It is not deployed. Existing
-identity-only role records require fresh verification; the profile check does
-not attest every effective AWS permission layer.
+PR #437's isolated same-account ECS Express lifecycle is accepted by the goal
+owner for the general customer-side plan/apply/health/update/recovery/teardown
+gate under control-plane isolation. It was applied with direct Terraform, not
+Nova, and does not prove cross-account isolation.
 
-Read-only inventory found no SageMaker endpoint, model, or endpoint configuration; four tagged DavDeploy Batch job definitions remain inactive, and one SageMaker lineage action/context remain as retained audit evidence. The Terraform run monitor is empty and no Terraform operation is active. Preserve `--only-show-errors`, `.venv-pr399/`, and lineage evidence. Frontend `main` is `b6cb14bc9563802d9b0b644739a6136336594174`; draft PR #102 makes customer surfaces more truthful but is not merged or an execution path. PR #99 remains dependent on a backend blog-author persistence contract. Five frontend Dependabot PRs remain open.
-The GitHub repository was renamed from `ai-platform-product-strategy` to `davdeploy` and is public at the owner's direction. DavDeploy remains a commercial product.
+PR #443 merged with all seven checks passing in
+[run 45065309558](https://github.com/Bepoadewale/davdeploy/actions/runs/45065309558).
+A temporary same-account broker and customer role were used to test exact-plan
+S3/SQS/DynamoDB create/read, SQS update, and separate destroy permissions.
+Out-of-scope S3/SQS/DynamoDB creates and unrelated EC2 access were denied.
+The stack, roles, bucket, queue, and table were removed and independently
+verified absent. This proves only the tested direct role actions; Nova's
+credential path, cross-account trust, full effective permissions, and hosted
+apply remain unverified.
 
+The latest read-only inventory in account `654654474502`, region `us-east-1`,
+found no tested SageMaker endpoint, model, or endpoint configuration. Four
+tagged DavDeploy Batch job definitions remain inactive. One SageMaker lineage
+action/context remains as retained audit evidence. The Terraform run monitor
+has 16 terminal records and no active run. Preserve `--only-show-errors`,
+`.venv-pr399/`, and lineage evidence. The frontend status remains based on
+the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
 ## What is implemented
 

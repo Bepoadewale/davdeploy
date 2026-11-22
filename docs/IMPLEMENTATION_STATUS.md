@@ -1,7 +1,7 @@
 # Implementation Status
 
-Status snapshot: 2026-11-18. Backend `main` is
-`aef34c0cd6f5fc8a4e87a671246697061f9e9210` (PR #430); hosted runtime remains
+Status snapshot: 2026-11-22. Backend `main` is
+`e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -21,15 +21,21 @@ of deployed PR #420. PR #430 refreshed the 26-capability/30-root evidence map.
 Pricing coverage remains partial; unknown or unpriced material resources block
 approval.
 
-Draft PR #399 is open at
-`81eabbbccb5f47bbb5e0f6929872d675c8a6ee10`, based on main `aef34c0`. It contains
-the separate apply credential/input routes, isolated exact-artifact staging,
-fixed apply worker, result reconciliation, and simulator preflight. Current-head
-CI run [44204640591](https://github.com/Bepoadewale/davdeploy/actions/runs/44204640591)
-passed all seven checks. Apply and credential gates remain disabled. The
-designated customer apply role, its effective least-privilege permissions, and
-the hosted customer apply/health/recovery/cleanup cycle remain unverified. No
-Nova customer plan or workload has been applied, operated, or certified. See
+PR #399 merged with all seven checks passing in
+[run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
+It adds separate apply credential/input routes, isolated exact-artifact
+staging, a fixed apply worker, and result reconciliation. Apply and credential
+gates remain disabled; no Nova apply build, credential issuance, or
+Nova-dispatched customer workload is claimed. PR #443 merged with seven checks
+passing in [run 45065309558](https://github.com/Bepoadewale/davdeploy/actions/runs/45065309558).
+Its temporary same-account role test verified exact-plan S3/SQS/DynamoDB
+create/read, SQS update, separate destroy, and denials for out-of-scope
+resources and unrelated EC2. Resources were removed and absence was checked.
+This does not verify Nova's credential broker, cross-account trust, all
+effective permissions, or hosted apply. PR #437's direct ECS Express lifecycle
+is accepted as the general customer-side plan/apply/health/update/recovery/
+teardown gate under control-plane isolation; it was not Nova-dispatched. No
+Nova customer workload has been applied or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance crosswalk.
 
@@ -38,12 +44,12 @@ plan-role trust and the bounded inline policy profile, repeated before plan
 credentials are issued. The change is not deployed. This is not full effective
 AWS permission attestation, and no customer plan has run.
 
-Last read-only inventory on 2026-11-17 in account `654654474502`, region
+Last read-only inventory on 2026-11-22 in account `654654474502`, region
 `us-east-1`, found no tested SageMaker endpoint, model, or endpoint
 configuration; four tagged DavDeploy Batch job definitions were inactive; one
 SageMaker lineage action/context and associated evidence remain preserved. The
 Terraform monitor was empty and no Terraform operation was active at that
-check. Preserve the protected untracked `--only-show-errors` file,
+check. The monitor currently has 16 terminal records and no active run. Preserve the protected untracked `--only-show-errors` file,
 `.venv-pr399/`, and lineage evidence.
 
 ## Executed locally
@@ -54,7 +60,7 @@ check. Preserve the protected untracked `--only-show-errors` file,
 | --- | --- |
 | Intent to typed specification | Provider interface, deterministic fixture, optional Nova 2 Lite/Bedrock adapter, local schema validation, bounded semantic repair (PR #320), provenance, usage metadata and material follow-up questions. A capped two-case live synthetic Nova evaluation passed in the pilot account; customer activation remains gated on the broader benchmark, pricing catalog and tenant rollout controls. |
 | Nova intent scope boundary | PR #377 adds typed infrastructure/out-of-scope classification. Unrelated requests receive a fixed HTTP 422 explanation before a workload intent is stored; deploying financial-domain software remains in scope. The code is deployed with backend `40439ab6b493a40c522102fa88de1c48043b4177` via protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048). Two bounded synthetic model checks passed for stock advice and a stockbroking-app deployment, but this is not broad classification-quality evidence and no authenticated customer API journey was exercised. |
-| Nova proposal policy and execution boundary | Backend `main` `9951caa` (PR #420) is deployed by protected plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184) and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577). It includes the strict generated graph, provider-schema validation, bounded proposal repair, actual-plan security/ownership/retention policy, isolated plan-only runner, tenant-state and plan-review contracts, and partial regional pricing for selected EBS, S3, SQS, RDS MySQL, Lambda, HTTP API, CloudWatch Standard logs, and egress. PRs #417–#420 add safe protected plan summaries. Draft PR #399 has green CI and adds source for credential/input routes, exact-artifact staging, a fixed apply worker, and result reconciliation; its gates remain disabled. No customer apply role or hosted customer plan/apply/health/recovery/cleanup cycle is verified. No Nova customer workload has been applied or certified. See [`test413.md`](test/test413.md), [`test401.md`](test/test401.md), [`test402.md`](test/test402.md), and [`test404.md`](test/test404.md). |
+| Nova proposal policy and execution boundary | The hosted package is backend PR #420 (9951caa), applied by plan 43981566184 and apply 43982396577. PR #399 merged with default-off exact-plan apply and credential gates. PR #443 adds source-only compact exact-plan role scopes; its isolated same-account test covered S3/SQS/DynamoDB create/read, SQS update, separate destroy, and out-of-scope/EC2 denials. PR #437's direct ECS lifecycle is accepted for the general customer-side plan/apply/health/update/recovery/teardown gate. | No Nova credential issuance or dispatch, cross-account trust, complete effective permissions, or Nova-generated customer workload is verified. Pricing and per-entry policy/lifecycle coverage remain partial; no Nova customer workload is claimed as applied or certified. See docs/test/test437.md, docs/test/test443.md, docs/test/test401.md, docs/test/test402.md, and docs/test/test404.md. |
 | Architecture and cost proposal | Constrained AWS V1 candidate planner: hard-constraint rejection, fixture inventory reuse, component cost ranges, complexity scores, rejected alternatives and upgrade triggers |
 | Governance | Live OPA policy, immutable SHA-256 plan hash, independent approval and audit |
 | Durable state | PostgreSQL in Compose; SQLite only in fast unit tests |
