@@ -8,7 +8,7 @@ Repository: `Bepoadewale/davdeploy`
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: `1cc5f67` (draft PR bootstrap; no AWS mutations).
+Commit: test fixture revision pending before apply.
 
 AWS account: `654654474502`.
 
@@ -27,8 +27,16 @@ only the unique `davdeploy-nova-sqs-idem-448-nov23a1` resource prefix.
 - `terraform fmt -check`, provider initialization, and `terraform validate`
   passed against an isolated copy of the fixture under `/tmp`.
 - Python syntax parsing passed for both Lambda versions.
-- Preflight of AWS identity, resource-name absence, and monitor state is
-  pending before any plan or apply.
+- Draft PR #448 and its matching ticket/test evidence were present before any
+  AWS write.
+- AWS caller is verified as account `654654474502`; the exact queue, table,
+  Lambda, and role names are absent, and the monitor has 21 terminal runs with
+  no active operation.
+- Saved plan `create-final.tfplan` contains seven creates, zero changes,
+  and zero destroys. The plan-bound inline role policy is fully known and
+  grants only the exact source queue actions and `PutItem` on the exact test
+  table. Source visibility is 30 seconds for the three-second Lambda; the
+  retry threshold is five.
 - Plan, apply, update, retry, redrive, and destroy evidence is pending.
 
 ## Observed result

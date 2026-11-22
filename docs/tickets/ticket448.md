@@ -80,15 +80,23 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 
 ## Acceptance status
 
-Bootstrap only. No AWS mutation has occurred. Confirm the test prefix is empty,
-verify the caller account, and check the Terraform monitor before planning.
+PR #448 is a draft. The caller is verified in account `654654474502`; the
+exact test prefix and seven planned resource names are absent. The Terraform
+monitor has 21 terminal records and no active runs. Saved plan
+`/tmp/davdeploy-nova-sqs-idem-448-nov23a1/create-final.tfplan` contains
+exactly seven creates and zero changes/destroys. No AWS mutation has occurred.
 
 ## Tests / validation performed
 
 `terraform fmt -check`, provider initialization, `terraform validate`, and
-Python syntax checks passed locally. Record saved plans, monitored apply/update/
-destroy runs, SQS redrive task status, exact idempotency ledger observations,
-and independent absence checks here as evidence arrives.
+Python syntax checks passed locally. Before any AWS write, a reviewed saved
+plan contains seven test resources and no changes or destroys. Its exact inline
+policy grants the source queue's three receive/delete/attributes actions and
+`dynamodb:PutItem` on only the computed test table ARN. The source queue uses
+30-second visibility for the three-second Lambda and max receive count five.
+Record monitored apply/update/destroy runs, SQS redrive task status, exact
+idempotency ledger observations, and independent absence checks as evidence
+arrives.
 
 ## Evidence files produced
 

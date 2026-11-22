@@ -39,6 +39,7 @@ locals {
   table_name    = "${local.prefix}-idempotency"
   source_arn    = "arn:${data.aws_partition.current.partition}:sqs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:${local.queue_name}"
   dlq_arn       = "arn:${data.aws_partition.current.partition}:sqs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:${local.dlq_name}"
+  table_arn     = "arn:${data.aws_partition.current.partition}:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${local.table_name}"
   test_tags = {
     Product     = "davdeploy"
     Environment = "test"
@@ -127,7 +128,7 @@ resource "aws_iam_role_policy" "consumer" {
       {
         Effect   = "Allow"
         Action   = ["dynamodb:PutItem"]
-        Resource = aws_dynamodb_table.idempotency.arn
+        Resource = local.table_arn
       },
     ]
   })
