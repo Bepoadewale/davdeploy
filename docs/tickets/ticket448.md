@@ -24,7 +24,7 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 - Direct ECS Express lifecycle evidence from PR #437 remains accepted as the
   general customer-side plan/apply/health/update/recovery/teardown gate.
 - AWS account `654654474502`, region `us-east-1`; this test will use only
-  `davdeploy-nova-sqs-idem-448-nov22a1` resource names.
+  `davdeploy-nova-sqs-idem-448-nov23a1` resource names.
 - The test has no hosted control-plane, Terraform state/lock, production
   resource, or Nova execution dependency.
 
@@ -101,7 +101,7 @@ and independent absence checks here as evidence arrives.
 
 ## Boundaries
 
-Use only `davdeploy-nova-sqs-idem-448-nov22a1` in account `654654474502`,
+Use only `davdeploy-nova-sqs-idem-448-nov23a1` in account `654654474502`,
 region `us-east-1`. Keep Terraform state and generated zip in a separate `/tmp`
 directory. Use the PID-based Terraform run monitor for all applies/destroys;
 never overlap mutations on the root. Preserve synthetic messages and test

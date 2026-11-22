@@ -31,7 +31,7 @@ data "aws_partition" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  test_id       = "nov22a1"
+  test_id       = "nov23a1"
   prefix        = "davdeploy-nova-sqs-idem-448-${local.test_id}"
   queue_name    = local.prefix
   dlq_name      = "${local.prefix}-dlq"

@@ -1,6 +1,6 @@
 # test448 — isolated SQS idempotency and redrive recovery
 
-Date: 2026-11-22
+Date: 2026-11-23
 
 Execution type: Controlled disposable AWS workload validation.
 
@@ -17,7 +17,7 @@ AWS region: `us-east-1`.
 ## Resources created
 
 None yet. Draft PR #448 was opened before any AWS mutation. The fixture uses
-only the unique `davdeploy-nova-sqs-idem-448-nov22a1` resource prefix.
+only the unique `davdeploy-nova-sqs-idem-448-nov23a1` resource prefix.
 
 ## Commands executed
 
