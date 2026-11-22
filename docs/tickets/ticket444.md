@@ -61,16 +61,14 @@ control plane or shrinking the 26-architecture-entry / 30-root scope.
 - [x] AWS inventory and monitor match read-only current-state checks.
 - [x] The 26/30 crosswalk and remaining Nova-specific execution gaps remain.
 - [x] Documentation conventions, matrix row counts, and diff checks pass.
-- [x] All seven required checks passed on documentation head `6ae6621` in run
-      `45066910994`; the final ticket/evidence follow-up is also checked by PR
-      CI before merge.
+- [x] All seven required checks passed on final documentation head `e5d76bd`
+      in run `45067420859`.
 - [x] No control-plane, Terraform-state, or execution-gate mutation occurs.
 
 ## Acceptance status
 
 The documentation refresh and local checks are complete. All seven required
-checks passed on head `6ae6621` in run `45066910994`; the ticket/evidence
-follow-up will receive its own required check run before merge.
+checks passed on final head `e5d76bd` in run `45067420859`.
 
 ## Tests / validation performed
 
