@@ -64,7 +64,7 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
       confirmed absent. No production queue or control-plane resource changes.
 - [x] Documentation conventions, focused checks, and all seven PR CI checks
       pass.
-- [ ] Evidence is described as same-account direct service behavior, not Nova
+- [x] Evidence is described as same-account direct service behavior, not Nova
       dispatch, cross-account isolation, or customer workload certification.
 
 ## Acceptance status
@@ -116,8 +116,8 @@ the Lambda-created log group absent. No active Terraform run remains.
 - Independent reads in account `654654474502` found the exact SQS prefix,
   Lambda function, event source mapping, IAM role, and Lambda-created log
   group absent. The monitor has 21 terminal records and zero active runs.
-- Documentation convention checks passed. Seven required PR checks passed in
-  run `45078014959`.
+- Documentation convention checks passed. Required PR CI checks were
+  verified on the final branch revision before review readiness.
 
 ## Evidence files produced
 

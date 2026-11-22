@@ -46,7 +46,7 @@ state plan showed four address moves and zero resource changes. PR #441's
 source-only SQS encryption rule remains undeployed. PR #445 merged source-only
 retry/DLQ/visibility and direct Lambda-consumer policy checks. Merged PR #446
 fixes source-after-DLQ creation ordering and records isolated SQS delivery,
-retry, automatic DLQ transition, and teardown. Draft PR #447 records an actual
+retry, automatic DLQ transition, and teardown. PR #447 records an actual
 same-account Lambda event-source mapping failure/retry/DLQ lifecycle: five
 invocations and errors, then the same message in the paired DLQ at receive
 count six. Its six-resource test stack and generated Lambda log group were

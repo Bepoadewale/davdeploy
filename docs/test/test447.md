@@ -8,9 +8,7 @@ Repository: `Bepoadewale/davdeploy`
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: `b1949ea2d46e86a4d8549bceaf0ec5dfaed16de4`.
-
-Tested commit: `a0db5cccd51e1b0bc751ac85b15b35943b6fbdd7`.
+Commit: `a0db5cccd51e1b0bc751ac85b15b35943b6fbdd7` (test application revision).
 
 AWS account: `654654474502`.
 
