@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from davdeploy.nova_apply_access import (
+    MAX_SESSION_POLICY_BYTES,
     NovaApplyAccessPolicyError,
     build_nova_apply_access_policy,
 )
@@ -43,8 +46,64 @@ def test_apply_scope_binds_supported_create_to_exact_bucket_and_operations():
         "s3:PutBucketTagging",
     } <= set(allows[0]["Action"])
     assert result.sha256
+    assert not any(
+        statement.get("Effect") == "Deny"
+        and "NotAction" in statement
+        and statement.get("NotAction") != "sts:GetCallerIdentity"
+        for statement in result.document["Statement"]
+    )
     assert any(
-        statement.get("NotResource") == ["arn:aws:s3:::pilot-data"]
+        statement.get("Effect") == "Deny"
+        and statement.get("NotAction") == "sts:GetCallerIdentity"
+        and statement.get("NotResource") == ["arn:aws:s3:::pilot-data"]
+        for statement in result.document["Statement"]
+    )
+    assert any(
+        statement.get("Effect") == "Deny"
+        and statement.get("Action") == "s3:*"
+        and statement.get("Condition") == {
+            "StringNotEquals": {"aws:ResourceAccount": ACCOUNT}
+        }
+        for statement in result.document["Statement"]
+    )
+
+
+def test_apply_scope_fits_a_mixed_s3_sqs_dynamodb_plan_under_sts_limit():
+    result = policy(
+        change(
+            "aws_s3_bucket",
+            ["create"],
+            after={"bucket": "davdeploy-apply-scope-test-bucket"},
+        ),
+        change(
+            "aws_sqs_queue",
+            ["create"],
+            after={"name": "davdeploy-apply-scope-test-queue"},
+        ),
+        change(
+            "aws_dynamodb_table",
+            ["create"],
+            after={"name": "davdeploy-apply-scope-test-table"},
+        ),
+    )
+
+    encoded = json.dumps(result.document, sort_keys=True, separators=(",", ":")).encode()
+    assert len(encoded) <= MAX_SESSION_POLICY_BYTES
+    resource_allows = {
+        statement["Resource"]: set(statement["Action"])
+        for statement in result.document["Statement"]
+        if statement["Effect"] == "Allow" and statement.get("Resource") != "*"
+    }
+    assert set(resource_allows) == {
+        "arn:aws:s3:::davdeploy-apply-scope-test-bucket",
+        f"arn:aws:sqs:{REGION}:{ACCOUNT}:davdeploy-apply-scope-test-queue",
+        f"arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/davdeploy-apply-scope-test-table",
+    }
+    assert all("*" not in resource for resource in resource_allows)
+    assert any(
+        statement.get("Effect") == "Deny"
+        and statement.get("NotAction") == "sts:GetCallerIdentity"
+        and set(statement.get("NotResource", [])) == set(resource_allows)
         for statement in result.document["Statement"]
     )
 
