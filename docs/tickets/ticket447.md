@@ -72,8 +72,9 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 Draft PR #447 is open. The preceding PR #446 SQS resources were independently
 confirmed absent. Caller identity and absence of the unique test prefix were
 rechecked before apply. Monitored run `nova-sqs-lambda-447-create-nov22a1`
-started at `2026-11-22T22:17:07Z`; its terminal result is pending. No test
-message has been sent.
+succeeded with six resources added. The Lambda is Active and its SQS mapping is
+Enabled. Synthetic message ID `6e6fe3bf-beae-41fc-9134-aadd6edd74b1` was sent;
+failure, retry, and DLQ observations are pending.
 
 ## Tests / validation performed
 
@@ -90,10 +91,16 @@ message has been sent.
 - The planned role policy names only the three SQS receive/delete/attributes
   actions on the exact known source ARN; the 30-second queue visibility is
   greater than six times the 3-second function timeout plus zero batching.
-- Monitored apply `nova-sqs-lambda-447-create-nov22a1` is in progress with
-  supervisor PID 76303, root `/private/tmp/davdeploy-nova-sqs-lambda-447-nov22a1`,
-  log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-lambda-447-create-nov22a1.log`.
-- No message test has started.
+- Monitored apply `nova-sqs-lambda-447-create-nov22a1` (supervisor PID 76303,
+  Terraform PID 76304, root `/private/tmp/davdeploy-nova-sqs-lambda-447-nov22a1`,
+  log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-lambda-447-create-nov22a1.log`)
+  succeeded: six added, zero changed, zero destroyed.
+- AWS reads show the function Active with a successful update, the mapping
+  Enabled, timeout 3 seconds, queue visibility 30 seconds, and inline role
+  permissions limited to ReceiveMessage/DeleteMessage/GetQueueAttributes on
+  the exact test source ARN.
+- Sent synthetic message ID `6e6fe3bf-beae-41fc-9134-aadd6edd74b1`. Its
+  Lambda error, retry progression, and DLQ delivery are still being observed.
 
 ## Evidence files produced
 
