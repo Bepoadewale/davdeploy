@@ -79,7 +79,10 @@ changed. Initial run `nova-sqs-446-create-nov22a1` failed with exit 1 after
 creating only the test DLQ; SQS rejected source creation because Terraform had
 no creation dependency. The source-only retry
 `nova-sqs-446-source-nov22a1` started at `2026-11-22T21:43:11Z` after adding
-the dependency; its terminal result is pending. No message test has started.
+the dependency and succeeded. The test message was received five times from
+the source; the sixth source receive returned no message, and the same message
+ID was received from the DLQ. A saved-plan teardown is prepared; destruction
+and independent absence verification are pending.
 
 ## Tests / validation performed
 
@@ -101,7 +104,20 @@ the dependency; its terminal result is pending. No message test has started.
   `modules/sqs-queue`. Module validation passed, and Terraform graph output
   contains `module.queue.aws_sqs_queue.this -> module.queue.aws_sqs_queue.dlq`.
 - Retry plan contains only one source queue create, zero changes, and zero
-  destroys. Its monitored apply is in progress; the message test has not run.
+  destroys. Monitored run `nova-sqs-446-source-nov22a1` (supervisor PID 65529,
+  Terraform PID 65530, root `/private/tmp/davdeploy-nova-sqs-446-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-source-nov22a1.log`)
+  succeeded with one resource created.
+- Source and DLQ attributes matched the intended managed encryption,
+  30-second visibility, 345,600/1,209,600-second retention, receive threshold
+  5, and exact `byQueue` source ARN.
+- Synthetic message ID `442f76aa-5ddb-4341-ab8c-2793c205897e` was received from
+  source with approximate receive counts 1 through 5. The next source receive
+  returned no message. The same message ID was read from the DLQ with receive
+  count 6. The body was not printed.
+- Reviewed `/tmp/davdeploy-nova-sqs-446-nov22a1/destroy.tfplan`: it deletes
+  only `aws_sqs_queue.source` and `aws_sqs_queue.dlq`, with zero creates or
+  updates. Monitored teardown and independent absence checks remain pending.
 - Documentation convention and diff checks passed on the bootstrap ticket.
 
 ## Evidence files produced
