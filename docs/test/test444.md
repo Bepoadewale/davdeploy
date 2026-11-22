@@ -25,6 +25,7 @@ confirmed absent; no Terraform operation was started.
 - `GITHUB_PR_NUMBER=444 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 - Crosswalk row count — 26 architecture entries and 30 roots.
+- GitHub Actions run [45066910994](https://github.com/Bepoadewale/davdeploy/actions/runs/45066910994) — all seven checks passed on documentation head `6ae662178b5b65d4748647ebc462d0bdc2b244e3`; this ticket/evidence follow-up receives its own check run.
 
 ## Observed result
 
