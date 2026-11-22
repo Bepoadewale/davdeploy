@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`857e5efdf56713ecdd37ed24060fde15767930be` (PR #446), 2026-11-22. PR #413
+`78d11f82a373797f5d0c739956b93b3b618796dc` (PR #447), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by

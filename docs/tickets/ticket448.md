@@ -63,11 +63,11 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 - [x] Draft PR and matching ticket/test evidence exist before any AWS write.
 - [ ] Caller identity is account `654654474502`; test resources are uniquely
       prefixed/tagged and no production/control-plane resources change.
-- [ ] The successful v1 consumer writes one item for two messages with the
+- [x] The successful v1 consumer writes one item for two messages with the
       same idempotency key; the duplicate is acknowledged without overwriting.
-- [ ] A controlled failure exceeds `maxReceiveCount=5` and is delivered to the
+- [x] A controlled failure exceeds `maxReceiveCount=5` and is delivered to the
       exact paired DLQ.
-- [ ] The saved v1-to-v2 Terraform plan changes only the test Lambda code.
+- [x] The saved v1-to-v2 Terraform plan changes only the test Lambda code.
 - [ ] SQS-managed DLQ redrive returns the failed event to the source; v2 writes
       one ledger item for it and acknowledges a duplicate without overwrite.
 - [ ] Monitored destroy succeeds, local state is empty, exact AWS resources are
@@ -81,10 +81,15 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 ## Acceptance status
 
 PR #448 is a draft. The caller is verified in account `654654474502`; the
-exact test prefix and seven planned resource names are absent. The Terraform
-monitor has 21 terminal records and no active runs. Saved plan
-`/tmp/davdeploy-nova-sqs-idem-448-nov23a1/create-final.tfplan` contains
-exactly seven creates and zero changes/destroys. No AWS mutation has occurred.
+exact test prefix was absent before apply. The reviewed saved plan contained
+exactly seven creates and zero changes/destroys. Monitored apply
+`nova-sqs-idem-448-create-nov23a1` succeeded with seven added, zero changed,
+and zero destroyed. The SQS mapping is Enabled and the Lambda is Active.
+Two success messages with the same key were acknowledged; DynamoDB contains
+exactly one `v1` ledger item. The controlled-failure message is still in its
+paired DLQ with receive count six. The saved update plan changes only the
+Lambda. Its monitored apply is running; redrive, recovery, and cleanup remain
+pending.
 
 ## Tests / validation performed
 
@@ -94,9 +99,15 @@ plan contains seven test resources and no changes or destroys. Its exact inline
 policy grants the source queue's three receive/delete/attributes actions and
 `dynamodb:PutItem` on only the computed test table ARN. The source queue uses
 30-second visibility for the three-second Lambda and max receive count five.
-Record monitored apply/update/destroy runs, SQS redrive task status, exact
-idempotency ledger observations, and independent absence checks as evidence
-arrives.
+The v1 create added seven test resources with no updates or deletes. The v2
+saved update plan contains one in-place Lambda change, with six no-op
+resources and no replacements. Monitored update
+`nova-sqs-idem-448-update-nov23a1` started at `2026-11-22T23:15:42Z` with
+supervisor PID 93804, root
+`/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-update-nov23a1.log`.
+Record the update outcome, SQS redrive task status, recovery ledger
+observation, and destroy/absence evidence as it arrives.
 
 ## Evidence files produced
 
