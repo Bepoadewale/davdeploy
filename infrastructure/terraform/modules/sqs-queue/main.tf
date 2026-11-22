@@ -38,6 +38,7 @@ resource "aws_sqs_queue" "dlq" {
 }
 
 resource "aws_sqs_queue" "this" {
+  depends_on                 = [aws_sqs_queue.dlq]
   name                       = var.name
   visibility_timeout_seconds = var.visibility_timeout_seconds
   sqs_managed_sse_enabled    = true
