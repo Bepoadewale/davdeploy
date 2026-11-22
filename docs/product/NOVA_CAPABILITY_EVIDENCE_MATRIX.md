@@ -43,16 +43,16 @@ Request pricing assumptions include source, retry, and DLQ requests; Lambda
 usage and material transfer costs must still be separately bounded.
 
 PR #438 template hosting and PR #441's SQS encryption rule remain source-only.
-KMS-backed queue encryption, unsupported consumer-policy shapes, complete
-regional cost coverage, processing/idempotency evidence, and Nova-hosted
-lifecycle proof remain open. Current AWS reads found no tested
+PR #448 records direct SQS/Lambda/DynamoDB idempotency and redrive recovery;
+its seven-resource stack and local state are confirmed absent. KMS-backed
+queue encryption, unsupported consumer-policy shapes, complete regional cost
+coverage, and Nova-hosted lifecycle proof remain open. Current AWS reads found no tested
 DavDeploy SageMaker endpoint, model, or endpoint configuration; four tagged
 Batch definitions are inactive and the SageMaker lineage action/context remain
-as retained audit evidence. The PR #443 and #447 temporary resources are
-absent. PR #448 records the SQS/Lambda/DynamoDB success, idempotency, update,
-redrive, and recovery test; its exact test stack is in monitored teardown.
-The Terraform run monitor has 24 records, including that active destroy.
-Preserve the protected untracked
+as retained audit evidence. The PR #443, #447, and #448 temporary resources
+are absent; PR #448's local Terraform state is empty. The Terraform run
+monitor has 24 terminal records and no active operations. Preserve the
+protected untracked
 `--only-show-errors`, `.venv-pr399/`, and retained lineage evidence.
 
 This document joins the checked-in architecture catalogue, Terraform
@@ -180,7 +180,7 @@ above applies to every row.
 | `aws-elasticache-redis` | Additional cache case | Require private encrypted/authenticated access and failover; set/get/reconnect; price node-hours, backup, storage and transfer. |
 | `aws-opensearch` | `ai-rag` search case | Check private access, encryption, scoped index permissions and capacity; query/update/delete plus tenant denial; price OCU/node, storage, ingest/query. |
 | `aws-efs-shared-storage` | Additional shared-file case | Check encryption, mount security, access point identity and retention; authorized clients read/write, other denied; price storage, throughput, backup, transfer. |
-| `aws-sqs-queue` | `saas-backend` / `async-data` worker | PR #441 requires known SQS-managed encryption. Merged PRs #445/#446 add plan safety and fix queue ordering. PR #447 records a direct Lambda failure/retry/DLQ cycle. PR #448 records duplicate-safe successful processing, Lambda update, managed DLQ redrive, and recovery; cleanup verification is pending. |
+| `aws-sqs-queue` | `saas-backend` / `async-data` worker | PR #441 requires known SQS-managed encryption. Merged PRs #445/#446 add plan safety and fix queue ordering. PR #447 records a direct Lambda failure/retry/DLQ cycle. PR #448 records duplicate-safe successful processing, Lambda update, managed DLQ redrive, recovery, and independently verified cleanup. |
 | `aws-eventbridge-bus` | `async-data` routing | Restrict bus/rules/target/account; prove only intended target receives event; price events, archive/replay, invocation and transfer. |
 | `aws-step-functions` | `async-data` workflow | Restrict state role, tasks, retries and logged inputs; execute success and injected retry/failure; price transitions, duration, logs, integrations. |
 | `aws-sns-notifications` | Additional notification delivery | Restrict topic/subscription and require confirmation; deliver to real approved endpoint; price publish, protocol, delivery and transfer. |
@@ -276,7 +276,7 @@ are isolated AWS service/root evidence, not hosted customer execution.
 | `aws-elasticache-redis` | `modules/elasticache-redis` | No cache module in catalogue / no scenario | No Redis-specific encryption, auth, network, or failover rule | [`test244.md`](../test/test244.md): replication group available; no client operation |
 | `aws-opensearch` | `modules/opensearch` | `aws-search`, `aws-ai-retrieval` / `ai-rag` | Shared IAM/network checks only; no OpenSearch domain/collection access policy | [`test244.md`](../test/test244.md) domain ready; [`test262.md`](../test/test262.md) uses OpenSearch Serverless for KB retrieval |
 | `aws-efs-shared-storage` | `modules/efs-shared-storage` | No explicit EFS catalogue module; possible `aws-file-storage` overlap / no exact scenario mapping | Shared network/IAM checks only; no EFS mount/access-point policy | [`test244.md`](../test/test244.md): EFS available; no file read/write |
-| `aws-sqs-queue` | `modules/sqs-queue` | `aws-jobs-events`, `aws-payments-webhooks` / `saas-backend`, `async-data` | PR #441 requires known `sqs_managed_sse_enabled=true`; existing SQS queue-policy checks reject public/unverified principals and unbounded resource scope. Merged PRs #445/#446 add plan safety and correct dependency ordering. PR #447 adds a Lambda retry/DLQ cycle. PR #448 adds idempotent processing, code update, managed redrive, recovery, and monitored cleanup. KMS-backed encryption, managed-policy contents, producers and non-Lambda consumers remain open. | [`test257.md`](../test/test257.md): EventBridge delivery; [`test446.md`](../test/test446.md): direct delivery, retries, DLQ transition, and teardown; [`test447.md`](../test/test447.md): Lambda retries and paired DLQ delivery; [`test448.md`](../test/test448.md): duplicate suppression, update, redrive, and recovery. None proves Nova dispatch. |
+| `aws-sqs-queue` | `modules/sqs-queue` | `aws-jobs-events`, `aws-payments-webhooks` / `saas-backend`, `async-data` | PR #441 requires known `sqs_managed_sse_enabled=true`; existing SQS queue-policy checks reject public/unverified principals and unbounded resource scope. Merged PRs #445/#446 add plan safety and correct dependency ordering. PR #447 adds a Lambda retry/DLQ cycle. PR #448 adds idempotent processing, code update, managed redrive, recovery, and independently verified cleanup. KMS-backed encryption, managed-policy contents, producers and non-Lambda consumers remain open. | [`test257.md`](../test/test257.md): EventBridge delivery; [`test446.md`](../test/test446.md): direct delivery, retries, DLQ transition, and teardown; [`test447.md`](../test/test447.md): Lambda retries and paired DLQ delivery; [`test448.md`](../test/test448.md): duplicate suppression, update, redrive, recovery, and teardown. None proves Nova dispatch. |
 | `aws-eventbridge-bus` | `modules/eventbridge-bus` | `aws-jobs-events` / `saas-backend`, `async-data` | Shared IAM checks only; no event bus/rule target authorization policy | [`test257.md`](../test/test257.md): real event delivery |
 | `aws-step-functions` | `modules/step-functions` | `aws-jobs-events` / `saas-backend`, `async-data` | Shared IAM checks only; no state-machine role/state-data policy | [`test256.md`](../test/test256.md): execution completed |
 | `aws-sns-notifications` | `modules/sns-notifications` | `aws-jobs-events` / `saas-backend`, `async-data` | Shared IAM checks only; no topic/subscribe confirmation or delivery policy | [`test257.md`](../test/test257.md) created a topic; its observed behavior was EventBridge-to-SQS, not SNS delivery |

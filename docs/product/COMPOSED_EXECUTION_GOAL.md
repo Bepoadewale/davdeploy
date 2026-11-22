@@ -54,9 +54,11 @@ destroyed and independently confirmed absent. This SQS test does not establish
 Nova dispatch, idempotency, composed application health, or hosted SQS
 execution. Draft PR #448 records same-account SQS/Lambda/DynamoDB success,
 duplicate suppression, failure-to-DLQ, a Lambda-only code update, SQS-managed
-redrive, and idempotent recovery. Its exact seven-resource destroy is running;
-independent absence checks remain pending. KMS-backed encryption, unsupported
-consumer-policy shapes, and complete SQS cost coverage remain incomplete.
+redrive, and idempotent recovery. Its exact seven-resource destroy completed;
+the queue/table/Lambda/mapping/role/log group are independently confirmed
+absent, the local state is empty, and the run monitor has no active work.
+KMS-backed encryption, unsupported consumer-policy shapes, and complete SQS
+cost coverage remain incomplete.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
@@ -65,8 +67,8 @@ SageMaker lineage action/context remain as audit evidence. The PR #443
 temporary roles and workload resources are absent. PR #446 and #447 test queue
 prefixes are absent; the existing production-tagged queue remains. The PR #447
 Lambda, event mapping, test role, and generated log group are absent. PR #448
-resources are in a monitored destroy; independent absence checks are pending.
-The Terraform run monitor has 24 records, including that one active destroy.
+queues, table, Lambda, mapping, role, and generated log group are also absent.
+The Terraform run monitor has 24 terminal records and no active operations.
 Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 

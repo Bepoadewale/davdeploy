@@ -76,7 +76,13 @@ unique `davdeploy-nova-sqs-idem-448-nov23a1` prefix.
   supervisor PID 96678, root
   `/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
   `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-destroy-nov23a1.log`.
-  Its result and independent absence checks are pending.
+  Terraform PID 96679; it completed at `2026-11-22T23:25:40Z` with zero
+  added, zero changed, and seven destroyed. The local state is empty. After
+  waiting more than five minutes, independent AWS reads confirmed the exact
+  source/DLQ queues, table, Lambda function, event source mapping, IAM role,
+  and generated Lambda log group absent. The run monitor has 24 terminal
+  records and zero active operations. PR CI run `45083356874` passed all seven
+  checks on head `3d1f6de2a1d671e1ed70106c8d880fd22d5bde29`.
 
 ## Observed result
 
@@ -91,8 +97,9 @@ and the source had zero in-flight messages.
 
 ## Teardown
 
-The reviewed exact seven-resource destroy plan is running through the PID
-monitor. Independent AWS absence checks remain pending.
+The reviewed exact seven-resource destroy plan succeeded through the PID
+monitor. Independent AWS reads after the settling period confirmed every
+resource absent, local state is empty, and the run monitor has no active work.
 
 ## Final boundary
 

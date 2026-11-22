@@ -70,11 +70,11 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 - [x] The saved v1-to-v2 Terraform plan changes only the test Lambda code.
 - [x] SQS-managed DLQ redrive returns the failed event to the source; v2 writes
       one ledger item for it and acknowledges a duplicate without overwrite.
-- [ ] Monitored destroy succeeds, local state is empty, exact AWS resources are
+- [x] Monitored destroy succeeds, local state is empty, exact AWS resources are
       independently confirmed absent, and the run monitor has no active work.
-- [ ] Focused fixture validation, documentation conventions, and all seven
+- [x] Focused fixture validation, documentation conventions, and all seven
       required PR checks pass.
-- [ ] Evidence is described as direct same-account service behavior. It does
+- [x] Evidence is described as direct same-account service behavior. It does
       not claim Nova dispatch, cross-account isolation, hosted execution, or
       broad customer certification.
 
@@ -91,8 +91,12 @@ DLQ at receive count six. Monitored v1-to-v2 update succeeded with one change.
 SQS redrive task `463e6401-e6a4-438d-b375-be3d6d9e56c0` completed, moving one
 message. V2 wrote one `redrive-recovery-001` item and acknowledged a duplicate
 without overwriting it. The table contains two records total. The reviewed
-seven-delete plan is being applied through the monitor; independent absence
-checks remain pending.
+seven-delete plan ran through the Terraform monitor and succeeded with zero
+adds, zero changes, and seven destroys. After the required five-minute wait,
+independent AWS reads confirmed the exact source/DLQ queues, DynamoDB table,
+Lambda function, event source mapping, IAM role, and generated Lambda log
+group absent. The local Terraform state is empty; the run monitor has 24
+terminal records and no active work.
 
 ## Tests / validation performed
 
@@ -119,7 +123,13 @@ updates. Monitored destroy `nova-sqs-idem-448-destroy-nov23a1` started at
 `2026-11-22T23:25:24Z` with supervisor PID 96678, root
 `/private/tmp/davdeploy-nova-sqs-idem-448-nov23a1`, and log
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-idem-448-destroy-nov23a1.log`.
-Its final result and independent absence checks remain outstanding.
+It completed at `2026-11-22T23:25:40Z` with zero added, zero changed, and seven
+destroyed. After waiting more than five minutes, exact AWS queue/table/Lambda/
+mapping/role/log-group lookups returned no resources; the local state is
+empty. The monitor has 24 terminal records and zero active operations.
+`GITHUB_PR_NUMBER=448 python3 scripts/check_doc_conventions.py` and all seven
+required PR checks passed; final CI run `45083356874` is on head
+`3d1f6de2a1d671e1ed70106c8d880fd22d5bde29`.
 
 ## Evidence files produced
 
