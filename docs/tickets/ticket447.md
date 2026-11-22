@@ -1,6 +1,6 @@
 # ticket447 — isolated Lambda SQS consumer retry lifecycle evidence
 
-PR: to be assigned
+PR: https://github.com/Bepoadewale/davdeploy/pull/447
 Branch: `test/nova-sqs-lambda-lifecycle-447`
 
 ## Problem / goal
@@ -51,7 +51,7 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 
 ## Acceptance criteria
 
-- [ ] Draft PR and ticket exist before the first AWS mutation.
+- [x] Draft PR and ticket exist before the first AWS mutation.
 - [ ] Caller identity is account `654654474502`; all resource names and tags
       identify only this test.
 - [ ] Event source mapping reaches Enabled and invokes the planned Lambda.
@@ -69,9 +69,9 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 
 ## Acceptance status
 
-Bootstrap only. No AWS mutation has occurred. The preceding PR #446 SQS
-resources were independently confirmed absent, the Terraform monitor has no
-active runs, and draft PR/test evidence are pending.
+Draft PR #447 is open. No AWS mutation has occurred. The preceding PR #446 SQS
+resources were independently confirmed absent, and the Terraform monitor had
+no active runs at bootstrap. Test evidence is pending.
 
 ## Tests / validation performed
 
