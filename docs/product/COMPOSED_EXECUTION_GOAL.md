@@ -1,77 +1,72 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-19. This handoff tracks the Nova-led infrastructure goal
-without claiming launch readiness. Source code, hosted control-plane state,
-customer-side AWS evidence, Nova execution, application behavior, and lifecycle
-coverage remain separate facts.
+Updated: 2026-11-22. This handoff tracks the Nova-led infrastructure goal
+without claiming launch readiness. Source, hosted control-plane state,
+customer-side AWS evidence, Nova execution, application behavior, and per-entry
+lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-19
+## Current source and acceptance status — 2026-11-22
 
-Backend `main` is `48911bfb74fafc626076d216f6ed78a21f3be4ee` (through PR #441).
-PRs #413 and #439 merged the capability ledger and evidence reconciliation.
-The last recorded hosted backend release
-is PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
+Backend `main` is `e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5` (PR #443). The last
+hosted backend release remains PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
 [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
-This reconciliation made no hosted control-plane request or change.
+This reconciliation did not access or change the hosted control plane.
 
 PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
-passed on final source head `61bdb3fb3baac1adbf49dd37e4870a9fb665424e` in
-[run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
-It adds a separate, default-off exact-plan apply path and the customer apply-role
-template. Apply and credential gates remain disabled. No Nova apply build,
-credential issuance, or Nova-generated customer workload is claimed. The
-current source is not deployed to the hosted control plane. A temporary
-same-account customer test deployed and assumed the template role, verified a
-plan-scoped S3 bucket lifecycle and an explicit denial of unrelated EC2 access,
-then removed the test role, broker role, and bucket. This does not verify the
-Nova broker, cross-account trust, or the role's complete effective permissions.
+passed in [run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
+Its exact-plan apply path, credential route, and customer apply-role template
+remain source-only and default-off. No Nova apply build, Nova-issued customer
+credentials, or Nova-dispatched workload is claimed.
 
-PR #437 merged at `7481c1fb771bf28ca0afe27a0968eecb6bdd3de3` after final
-head `e2c968b4bb30e3db8c4e79cbca05ce8572052988`; all seven checks passed in
-[run 44586955606](https://github.com/Bepoadewale/davdeploy/actions/runs/44586955606).
-Two isolated same-account ECS Express runs used local Terraform state. The
-second verified healthy v1 and v2, ECS circuit-breaker rollback of an
-unhealthy revision to healthy v2, and teardown of all 15 Terraform-managed
-resources with independent absence checks. The goal owner accepts this as the
-general goal's customer-side plan/apply/health/update/recovery/teardown
-evidence under control-plane isolation. It was direct Terraform, not a
-Nova-generated or Nova-dispatched run, and does not prove cross-account
-isolation. No Nova customer workload is claimed as applied or certified.
+PR #437's isolated same-account ECS Express runs used direct Terraform and
+local state. They verified v1/v2 health, unhealthy-revision rollback, and
+teardown with independent absence checks. The goal owner accepts these runs as
+the general goal's customer-side plan/apply/health/update/recovery/teardown
+gate under control-plane isolation. This evidence is not Nova-generated or
+Nova-dispatched and does not establish cross-account isolation.
 
-PR #438 merged as `cb78865b66815287478892fe012257cf964413db`; all seven checks
-passed in
-[run 44593771329](https://github.com/Bepoadewale/davdeploy/actions/runs/44593771329).
-Its append-only template-host change has not been applied. The lock-free
-read-only plan against protected template-host state showed four address moves
-and zero resource changes; no live template change ran.
+PR #443 merged as `e63d3ec`; all seven checks passed on final head
+`2d15f39d494931c251fd86d1a227693086ea2135` in
+[run 45065309558](https://github.com/Bepoadewale/davdeploy/actions/runs/45065309558).
+It removes a redundant maximum-action list from the exact-plan STS session
+policy while retaining exact-resource denial. A temporary same-account role
+and broker used the checked-in role template and exact-plan session policies to
+test S3, SQS, and DynamoDB create/read, an SQS update, and a separate
+three-service destroy. Out-of-scope S3/SQS/DynamoDB creates and unrelated EC2
+access were denied. The test roles, stack, bucket, queue, and table were
+independently verified absent. This validates those actions only; Nova did not
+issue credentials or dispatch the test, and cross-account trust remains
+unverified. See [test443](../test/test443.md).
 
-PR #441 merged as `48911bfb74fafc626076d216f6ed78a21f3be4ee`; all seven checks
-passed on final head `7a361b946637b4b985e2154993015129ee0bc285` in
-[run 44608565238](https://github.com/Bepoadewale/davdeploy/actions/runs/44608565238).
-It adds a source-only generated-plan rule requiring known SQS-managed
-server-side encryption on planned queues and bumps the policy version. It has
-not been deployed. KMS-backed queue encryption, queue retry/DLQ/visibility,
-consumer behavior, and hosted SQS lifecycle evidence remain incomplete.
+PR #438's append-only template-host change remains source-only; the protected
+state plan showed four address moves and zero resource changes. PR #441's
+source-only SQS encryption rule remains undeployed. KMS-backed queue
+encryption, retry/DLQ/visibility policy, consumer behavior, and hosted SQS
+lifecycle evidence remain incomplete.
 
-The Terraform run monitor has no active runs; its registry retains terminal history.
-The ECS test left no running workload or Terraform-managed resources; AWS
-retains an inactive service/history record and an empty default cluster. Preserve
-the protected untracked `--only-show-errors` file, `.venv-pr399/`, and retained
-SageMaker lineage evidence.
+Current read-only AWS checks in account `654654474502`, region `us-east-1`,
+returned no tested DavDeploy SageMaker endpoint, model, or endpoint
+configuration. Four tagged Batch job definitions remain inactive. The test
+SageMaker lineage action/context remain as audit evidence. The PR #443
+temporary roles and workload resources are absent. The Terraform run monitor
+has 16 terminal records and no active runs. Preserve the protected untracked
+`--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
 human approval -> exact-plan execution -> observed application health and
 lifecycle evidence. Model output cannot authorize execution. Remaining work
-includes persistent customer-role provisioning and broader effective-permission
-proof, Nova-specific authorization/dispatch/credential-path evidence, complete
-cost and policy coverage, Nova-specific update/recovery proof, and the full
-scenario matrix. The
+includes Nova-specific authorization/dispatch/credential-path evidence,
+persistent customer-role provisioning, cross-account and broader effective-
+permission proof, complete cost and policy coverage, Nova-specific application
+recovery, and the full scenario matrix. The
 [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) retains all 26
-architecture entries and 30 implementation roots; the ECS pilot does not close
-those per-entry requirements.
+architecture entries and 30 implementation roots. The accepted ECS evidence
+meets the general customer-side gate; it does not close per-entry or
+Nova-originated execution requirements.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 

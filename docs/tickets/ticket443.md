@@ -14,15 +14,14 @@ issuance even though every resource type is supported.
 
 ## Current repo state
 
-- Backend `main` at the implementation base is `b60ca15` (PR #442).
+- Backend `main` is `e63d3ec` (PR #443).
 - PR #399 is merged; the customer apply worker and credential path remain
   disabled and have not been exercised by Nova.
 - The apply-role template's maximum policy explicitly denies actions outside
   its fixed S3, SQS, DynamoDB, IAM-inspection, and STS identity ceiling.
-- Implementation commit `af147685998efbc423785a35e4bef0a3084a4fbf` is on
-  `fix/nova-apply-session-policy-size`. PR #443's initial implementation and
-  evidence head `83b292afc3ed5b4ee819e103f4155f66710600e2` passed all seven
-  checks in run `45064740248`; this ticket update receives its own CI run.
+- PR #443 merged as `e63d3ec`. Its final PR head
+  `2d15f39d494931c251fd86d1a227693086ea2135` passed all seven checks in run
+  `45065309558`.
 
 ## Research / references used
 
@@ -68,16 +67,15 @@ issuance even though every resource type is supported.
   scope S3/SQS/DynamoDB creates and unrelated EC2 access were denied.
 - [x] Independent post-cleanup reads confirmed the temporary stack, roles,
   bucket, queue, and table were absent.
-- [x] The implementation/evidence head passed all seven required PR checks;
-  the ticket follow-up is checked by PR CI before merge.
+- [x] All seven required PR checks passed on the final evidence head in run
+  `45065309558`.
 - [x] The hosted runtime, control-plane state, Terraform state, and execution
   gates were not changed.
 
 ## Acceptance status
 
 Implementation and the isolated same-account action matrix are complete.
-Documentation conventions, final PR CI, and independent review remain before
-merge.
+PR #443 merged after all seven required checks passed.
 
 ## Tests / validation performed
 

@@ -7,6 +7,7 @@
 - Customer repository: N/A; synthetic Terraform plan documents
 - Commit: `af147685998efbc423785a35e4bef0a3084a4fbf` (implementation commit)
 - Pull request: [#443](https://github.com/Bepoadewale/davdeploy/pull/443)
+- Merge commit: `e63d3ecbcc715d5a509e3f6b99382154a4bdc0d5`
 - AWS account: `654654474502`
 - AWS region: `us-east-1`
 
@@ -30,7 +31,7 @@ resources were removed after the check.
 - Ruff on the changed source and regression tests — passed.
 - `GITHUB_PR_NUMBER=443 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- GitHub Actions run [45064740248](https://github.com/Bepoadewale/davdeploy/actions/runs/45064740248) — all seven checks passed on the initial implementation/evidence head `83b292afc3ed5b4ee819e103f4155f66710600e2`; this documentation follow-up receives its own check run.
+- GitHub Actions run [45065309558](https://github.com/Bepoadewale/davdeploy/actions/runs/45065309558) — all seven checks passed on final PR head `2d15f39d494931c251fd86d1a227693086ea2135`.
 
 ## Observed result
 

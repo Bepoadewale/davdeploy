@@ -53,20 +53,21 @@ control plane or shrinking the 26-architecture-entry / 30-root scope.
 
 ## Acceptance criteria
 
-- [ ] Main, PR #443 and CI run `45065309558` are accurately recorded.
-- [ ] PR #437 is counted for the general customer-side lifecycle gate with
+- [x] Main, PR #443 and CI run `45065309558` are accurately recorded.
+- [x] PR #437 is counted for the general customer-side lifecycle gate with
       direct-Terraform provenance.
-- [ ] PR #443's role evidence includes exact-plan permissions and cleanup,
+- [x] PR #443's role evidence includes exact-plan permissions and cleanup,
       without claiming Nova credential issuance or cross-account trust.
-- [ ] AWS inventory and monitor match read-only current-state checks.
-- [ ] The 26/30 crosswalk and remaining Nova-specific execution gaps remain.
-- [ ] Documentation conventions and diff checks pass; all required PR CI
-      checks pass before merge.
+- [x] AWS inventory and monitor match read-only current-state checks.
+- [x] The 26/30 crosswalk and remaining Nova-specific execution gaps remain.
+- [x] Documentation conventions, matrix row counts, and diff checks pass.
+- [ ] All required PR CI checks pass before merge.
 - [ ] No control-plane, Terraform-state, or execution-gate mutation occurs.
 
 ## Acceptance status
 
-Draft PR opened. Documentation refresh and validation are in progress.
+The documentation refresh is implemented. Local documentation conventions,
+diff checks, and matrix counts pass; required PR CI remains the merge gate.
 
 ## Tests / validation performed
 
