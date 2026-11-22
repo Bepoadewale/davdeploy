@@ -1,0 +1,116 @@
+# ticket448 — isolated SQS success, idempotency, and redrive recovery
+
+PR: to be assigned
+Branch: `test/nova-sqs-lambda-idempotency-448`
+
+## Problem / goal
+
+PR #447 proved a failing Lambda consumer retries an SQS message into its paired
+DLQ, then cleaned up the test stack. The next SQS lifecycle gap is whether a
+successful consumer can apply a duplicate-safe side effect, and whether a
+failed message can be redriven and processed after a code update.
+
+Build a reproducible, disposable same-account test fixture for an SQS source
+and DLQ, a Lambda consumer, and a DynamoDB idempotency ledger. Record direct
+AWS evidence for duplicate suppression, v1-to-v2 code update, DLQ redrive, and
+recovery. This does not use Nova dispatch or touch the hosted control plane.
+
+## Current repo state
+
+- Backend `main` is `78d11f82a373797f5d0c739956b93b3b618796dc` (PR #447).
+- PR #445's SQS policy is merged in source, not deployed to the control plane.
+- PR #446 fixed source-after-DLQ ordering. PR #447 recorded real Lambda
+  failure/retry/DLQ delivery and confirmed teardown.
+- Direct ECS Express lifecycle evidence from PR #437 remains accepted as the
+  general customer-side plan/apply/health/update/recovery/teardown gate.
+- AWS account `654654474502`, region `us-east-1`; this test will use only
+  `davdeploy-nova-sqs-idem-448-nov22a1` resource names.
+- The test has no hosted control-plane, Terraform state/lock, production
+  resource, or Nova execution dependency.
+
+## Research / references used
+
+- [`test447.md`](../test/test447.md) — direct Lambda retry-to-DLQ evidence and
+  cleanup.
+- AWS [SQS to Lambda configuration](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-configure-lambda-function-trigger.html) — visibility timeout and DLQ behavior.
+- AWS [StartMessageMoveTask](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_StartMessageMoveTask.html) — managed DLQ-to-source redrive.
+- AWS [DynamoDB PutItem](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_PutItem.html) — conditional writes with `attribute_not_exists`.
+- AWS [Lambda SQS integration](https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html) — at-least-once delivery and idempotent consumer requirements.
+
+## Work planned for the PR
+
+1. Add a reviewable Terraform/Python fixture under `docs/test/fixtures/`;
+   provider versions are pinned and test state stays outside the repository.
+2. Open a draft PR with ticket and test evidence before any AWS mutation.
+3. Create one tagged SQS source/DLQ pair, a DynamoDB idempotency table, and a
+   Lambda role limited to source receive/delete/attributes plus `PutItem` on
+   that exact table. Use a three-second function timeout and 30-second source
+   visibility timeout.
+4. With v1, send two messages carrying the same synthetic idempotency key and
+   verify there is one ledger item. Send a controlled-failure event, verify
+   retry to the paired DLQ, and review an update plan changing only Lambda code.
+5. Apply v2 through the Terraform run monitor, redrive the failed message to
+   the source queue with SQS `StartMessageMoveTask`, and verify the ledger has
+   the recovered key once with v2. Send the same key again and verify no
+   overwrite or duplicate record.
+6. Review and run a saved destroy plan through the PID monitor. Independently
+   verify all exact test resources are absent, including any generated logs.
+7. Record operation IDs, run IDs, metric/data observations, cleanup, and the
+   limitations in `docs/test/test448.md`.
+
+## Acceptance criteria
+
+- [ ] Draft PR and matching ticket/test evidence exist before any AWS write.
+- [ ] Caller identity is account `654654474502`; test resources are uniquely
+      prefixed/tagged and no production/control-plane resources change.
+- [ ] The successful v1 consumer writes one item for two messages with the
+      same idempotency key; the duplicate is acknowledged without overwriting.
+- [ ] A controlled failure exceeds `maxReceiveCount=5` and is delivered to the
+      exact paired DLQ.
+- [ ] The saved v1-to-v2 Terraform plan changes only the test Lambda code.
+- [ ] SQS-managed DLQ redrive returns the failed event to the source; v2 writes
+      one ledger item for it and acknowledges a duplicate without overwrite.
+- [ ] Monitored destroy succeeds, local state is empty, exact AWS resources are
+      independently confirmed absent, and the run monitor has no active work.
+- [ ] Focused fixture validation, documentation conventions, and all seven
+      required PR checks pass.
+- [ ] Evidence is described as direct same-account service behavior. It does
+      not claim Nova dispatch, cross-account isolation, hosted execution, or
+      broad customer certification.
+
+## Acceptance status
+
+Bootstrap only. No AWS mutation has occurred. Confirm the test prefix is empty,
+verify the caller account, and check the Terraform monitor before planning.
+
+## Tests / validation performed
+
+`terraform fmt -check`, provider initialization, `terraform validate`, and
+Python syntax checks passed locally. Record saved plans, monitored apply/update/
+destroy runs, SQS redrive task status, exact idempotency ledger observations,
+and independent absence checks here as evidence arrives.
+
+## Evidence files produced
+
+- `docs/tickets/ticket448.md`
+- `docs/test/test448.md`
+- `docs/test/fixtures/nova-sqs-lambda-idempotency-448/main.tf`
+- `docs/test/fixtures/nova-sqs-lambda-idempotency-448/.terraform.lock.hcl`
+- `docs/test/fixtures/nova-sqs-lambda-idempotency-448/consumer_v1.py`
+- `docs/test/fixtures/nova-sqs-lambda-idempotency-448/consumer_v2.py`
+
+## Boundaries
+
+Use only `davdeploy-nova-sqs-idem-448-nov22a1` in account `654654474502`,
+region `us-east-1`. Keep Terraform state and generated zip in a separate `/tmp`
+directory. Use the PID-based Terraform run monitor for all applies/destroys;
+never overlap mutations on the root. Preserve synthetic messages and test
+data only; keep credentials and message bodies out of logs. Do not touch
+production queues, control-plane runtime/state/locks, Nova gates, or customer
+credentials. Clean up only the exact test stack and generated test artifacts.
+
+## Follow-up work
+
+This test adds direct SQS/Lambda idempotency and redrive recovery evidence. It
+does not close Nova-originated execution, cross-account trust, KMS-backed SQS,
+all 26 architecture entries, all 30 Terraform roots, or complete cost coverage.
