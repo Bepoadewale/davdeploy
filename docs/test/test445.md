@@ -4,7 +4,7 @@
 - Execution type: Local generated-plan policy regression and Terraform module validation
 - Repository: `Bepoadewale/davdeploy`
 - Customer repository: N/A; synthetic plan fixtures only
-- Commit: local PR #445 working tree based on `7f9148a12cb5ec91ed7c5e19c49a1ce8c7980c98` (PR #444)
+- Commit: `712ba586453196edda27c402383c9c4452fc42d4` (PR #445 implementation; final evidence-only update follows)
 - Pull request: [#445](https://github.com/Bepoadewale/davdeploy/pull/445)
 - AWS account: Not used
 - AWS region: Not used
@@ -25,6 +25,7 @@ without a backend and ran `terraform validate` only.
 - `terraform fmt -check infrastructure/terraform/modules/sqs-queue/main.tf` — passed.
 - `git diff --check` — passed.
 - `make api-contract` — could not complete because its local API request to `127.0.0.1:8080` had no server listening. The snapshot check passed; CI remains required for the full contract workflow.
+- GitHub Actions run [45071180867](https://github.com/Bepoadewale/davdeploy/actions/runs/45071180867) on PR #445 head `712ba586453196edda27c402383c9c4452fc42d4` — all seven checks passed. This records the code head before the final evidence-only documentation update.
 
 ## Observed result
 

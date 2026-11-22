@@ -94,7 +94,7 @@ do not present partial pricing as a complete estimate.
       unsupported and fail closed; no full effective-permission claim is made.
 - [x] Existing SQS encryption and queue-policy checks remain intact, and the
       semantic policy version is bumped.
-- [ ] Focused tests, Ruff, documentation conventions, diff checks, and all
+- [x] Focused tests, Ruff, documentation conventions, diff checks, and all
       required PR CI checks pass on the merge-ready head.
 - [x] Pricing documentation and findings remain honest: queue request units
       and consumer compute/transfer must be known and supported before costed
@@ -104,10 +104,11 @@ do not present partial pricing as a complete estimate.
 
 ## Acceptance status
 
-The implementation and local validations are complete on the draft PR. SQS
-Lambda mapping support is limited to direct plan references and inline
-consumer-role policies; CI/review remains outstanding and this source policy
-is not deployed.
+The implementation is complete on the draft PR. Commit
+`712ba586453196edda27c402383c9c4452fc42d4` passed all seven checks in run
+`45071180867`. SQS Lambda mapping support is limited to direct plan references
+and inline consumer-role policies; the source policy is not deployed. Final
+evidence updates are pending a fresh CI run.
 
 ## Tests / validation performed
 
