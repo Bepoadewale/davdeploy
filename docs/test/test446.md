@@ -32,14 +32,19 @@ to the module. Existing production-tagged queues are excluded.
   destroys.
 - First monitored apply `nova-sqs-446-create-nov22a1` failed with exit 1 after
   creating only the DLQ. SQS rejected source creation because the DLQ target
-  did not exist when the source was submitted.
+  did not exist when the source was submitted. It started at
+  `2026-11-22T21:37:11Z` (supervisor PID 63460, Terraform PID 63461), root
+  `/private/tmp/davdeploy-nova-sqs-446-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-create-nov22a1.log`.
 - Added `depends_on = [aws_sqs_queue.dlq]` to the SQS module's source queue.
   `terraform validate` passed; `terraform graph` confirmed the source-to-DLQ
   dependency. The retry plan includes only the source queue create.
 - Retry plan `create-source.tfplan` — one source queue create, zero changes,
   zero destroys.
 - Monitored retry `nova-sqs-446-source-nov22a1` succeeded: one resource added,
-  zero changed, zero destroyed. Log:
+  zero changed, zero destroyed. It started at `2026-11-22T21:43:11Z`
+  (supervisor PID 65529, Terraform PID 65530), root
+  `/private/tmp/davdeploy-nova-sqs-446-nov22a1`. Log:
   `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-source-nov22a1.log`.
 - `aws sqs send-message` returned message ID
   `442f76aa-5ddb-4341-ab8c-2793c205897e`; message body was not logged.
@@ -49,7 +54,12 @@ to the module. Existing production-tagged queues are excluded.
   was deleted or redriven manually.
 - Reviewed saved destroy plan: exactly the source and DLQ queues are deleted;
   zero resources are created or updated.
-- Destroy and post-destroy absence checks remain pending.
+- Reviewed destroy plan: only source and DLQ deletes.
+- Saved-plan teardown is running as `nova-sqs-446-destroy-nov22a1`, started at
+  `2026-11-22T21:50:42Z` (supervisor PID 68532), root
+  `/private/tmp/davdeploy-nova-sqs-446-nov22a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sqs-446-destroy-nov22a1.log`.
+- Post-destroy absence checks remain pending.
 
 ## Observed result
 
