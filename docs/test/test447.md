@@ -8,7 +8,7 @@ Repository: `Bepoadewale/davdeploy`
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: PR #447 bootstrap evidence; test results pending.
+Commit: `a0db5cccd51e1b0bc751ac85b15b35943b6fbdd7` (evidence update pending).
 
 AWS account: `654654474502`.
 
@@ -43,16 +43,27 @@ event source mapping.
   seconds; exact inline role actions and source ARN were verified.
 - `aws sqs send-message` returned test message ID
   `6e6fe3bf-beae-41fc-9134-aadd6edd74b1`; the body was not printed.
-- Lambda error, retry, DLQ delivery, and teardown results are pending.
+- Lambda metrics during the test window reported five invocations and five
+  errors. The source queue had no visible or in-flight messages after
+  processing; the DLQ held the same synthetic message ID
+  `6e6fe3bf-beae-41fc-9134-aadd6edd74b1` with
+  `ApproximateReceiveCount=6`.
+- A saved destroy plan contains exactly six deletes (the two named queues,
+  test role and inline policy, Lambda function, and event source mapping),
+  zero creates, and zero updates. The monitored destroy-plan apply is running.
 
 ## Observed result
 
-Pending Lambda failure, retry, and DLQ observation.
+The event source mapping was Enabled. CloudWatch reported five invocations and
+five errors for the test Lambda. The source queue had zero visible and
+in-flight messages after processing. The paired DLQ received the exact same
+message ID with `ApproximateReceiveCount=6`, exceeding the configured
+`maxReceiveCount=5`.
 
 ## Teardown
 
-Pending. Only the named test stack will be destroyed after the lifecycle
-probe.
+The reviewed six-resource destroy plan is running through the Terraform PID
+monitor. Independent AWS absence checks are pending.
 
 ## Final boundary
 

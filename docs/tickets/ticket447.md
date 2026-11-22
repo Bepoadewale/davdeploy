@@ -52,12 +52,12 @@ for PR #445's same-plan consumer timeout and execution-role policy contract.
 ## Acceptance criteria
 
 - [x] Draft PR and ticket exist before the first AWS mutation.
-- [ ] Caller identity is account `654654474502`; all resource names and tags
+- [x] Caller identity is account `654654474502`; all resource names and tags
       identify only this test.
-- [ ] Event source mapping reaches Enabled and invokes the planned Lambda.
-- [ ] Lambda error behavior is observed and a single synthetic message reaches
+- [x] Event source mapping reaches Enabled and invokes the planned Lambda.
+- [x] Lambda error behavior is observed and a single synthetic message reaches
       the exact paired DLQ after exceeding `maxReceiveCount=5`.
-- [ ] Plan values confirm visibility is at least six times function timeout
+- [x] Plan values confirm visibility is at least six times function timeout
       plus batching window, and the role grants only the required exact-queue
       SQS actions.
 - [ ] Monitored teardown succeeds; exact test resources are independently
@@ -73,8 +73,11 @@ Draft PR #447 is open. The preceding PR #446 SQS resources were independently
 confirmed absent. Caller identity and absence of the unique test prefix were
 rechecked before apply. Monitored run `nova-sqs-lambda-447-create-nov22a1`
 succeeded with six resources added. The Lambda is Active and its SQS mapping is
-Enabled. Synthetic message ID `6e6fe3bf-beae-41fc-9134-aadd6edd74b1` was sent;
-failure, retry, and DLQ observations are pending.
+Enabled. The synthetic message reached the paired DLQ after six receives.
+CloudWatch reports five Lambda invocations and five errors for the test window.
+The exact message ID is `6e6fe3bf-beae-41fc-9134-aadd6edd74b1`. A reviewed
+saved destroy plan contains only the six named test resources; monitored
+teardown and independent absence checks are in progress.
 
 ## Tests / validation performed
 
@@ -100,7 +103,13 @@ failure, retry, and DLQ observations are pending.
   permissions limited to ReceiveMessage/DeleteMessage/GetQueueAttributes on
   the exact test source ARN.
 - Sent synthetic message ID `6e6fe3bf-beae-41fc-9134-aadd6edd74b1`. Its
-  Lambda error, retry progression, and DLQ delivery are still being observed.
+  Lambda failures resulted in five CloudWatch invocations and five errors.
+  The source queue had no visible or in-flight messages after processing; the
+  paired DLQ contained the same message ID with `ApproximateReceiveCount=6`.
+- Saved destroy plan reviewed in account `654654474502`: exactly six test
+  resources are destroyed and zero are added or changed. Monitored teardown
+  `nova-sqs-lambda-447-destroy-nov22a1` is running; final absence verification
+  is pending.
 
 ## Evidence files produced
 
