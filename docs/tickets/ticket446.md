@@ -1,16 +1,38 @@
 # ticket446 — isolated SQS retry and dead-letter lifecycle evidence
 
-PR: to be assigned
+PR: https://github.com/Bepoadewale/davdeploy/pull/446
 Branch: `test/sqs-redrive-lifecycle-446`
 
-## Goal
+## Problem / goal
 
 Record a real, disposable same-account SQS lifecycle run that exercises message
 delivery, repeated receives, automatic dead-letter queue transition, and
 independent cleanup. This complements the source-only plan policy in PR #445
 and the earlier EventBridge-to-SQS delivery test in `test257.md`.
 
-## Safety boundary
+## Current repo state
+
+- Backend `main` is `c874b0de523f26c46561272a05b290ecf782aecc` (PR #445).
+- PR #445 adds source-only plan checks for paired SQS retry/DLQ settings and
+  direct same-plan Lambda consumers; it does not establish AWS delivery or
+  retry behavior.
+- Existing `davdeploy-worker` queues are production-tagged and excluded from
+  this test.
+- The control plane, Terraform state/locks, and Nova execution gates are not
+  part of this customer-side test.
+
+## Research / references used
+
+- [`test257.md`](../test/test257.md) — isolated EventBridge-to-SQS message
+  delivery, without a consumer or observed DLQ transition.
+- [`test445.md`](../test/test445.md) — local generated-plan SQS policy
+  regressions.
+- AWS [SQS dead-letter queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)
+  — redrive behavior, same-account/region constraints, and DLQ retention.
+- AWS [SQS queue attributes](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SetQueueAttributes.html)
+  — redrive and redrive-allow policies.
+
+## Work planned for the PR
 
 - AWS account `654654474502`, region `us-east-1`; verify identity immediately
   before any mutation.
@@ -28,7 +50,7 @@ and the earlier EventBridge-to-SQS delivery test in `test257.md`.
   redrive. Confirm the exact test queue URLs are absent afterward.
 - Keep secrets and credential material out of output and evidence.
 
-## Planned procedure
+### Planned procedure
 
 1. Open this draft PR before creating AWS resources.
 2. Create a dedicated SQS standard source queue and DLQ with managed encryption,
@@ -44,7 +66,7 @@ and the earlier EventBridge-to-SQS delivery test in `test257.md`.
 
 ## Acceptance criteria
 
-- [ ] Draft PR and ticket exist before the first AWS mutation.
+- [x] Draft PR and ticket exist before the first AWS mutation.
 - [ ] Caller identity is the expected account and test resources have the
       unique run prefix and test-only tags.
 - [ ] Source queue delivers the synthetic message; its receive count advances;
@@ -58,9 +80,35 @@ and the earlier EventBridge-to-SQS delivery test in `test257.md`.
       dispatch, cross-account isolation, application health, or general
       workload certification.
 
-## Current status
+## Acceptance status
 
-Bootstrap only. AWS identity was verified; queue inventory showed two
+Draft PR #446 is open. AWS identity was verified; queue inventory showed two
 production-tagged queues, which are excluded. The Terraform monitor has no
-active runs. No AWS mutation has been performed. Draft PR and test evidence
-are pending.
+active runs. No AWS mutation has been performed. Test evidence is pending.
+
+## Tests / validation performed
+
+- Bootstrap: AWS caller identity verified for account `654654474502`.
+- Read-only queue inventory identified the production-tagged queues; no queue
+  message was read and no queue setting was changed.
+- Terraform monitor: 16 terminal records, zero active.
+- No test resources have been created.
+
+## Evidence files produced
+
+- `docs/tickets/ticket446.md`
+- `docs/test/test446.md` — to be produced after the run, before review-ready.
+
+## Boundaries
+
+Do not touch the production-tagged queues, the hosted control plane, its state
+or locks, Nova execution gates, or customer credentials. Do not claim Nova
+dispatch, cross-account isolation, application health, or customer workload
+certification from direct SQS operations. Keep output free of credentials and
+message contents.
+
+## Follow-up work
+
+Use the observed run to decide whether PR #445's plan shape matches real SQS
+redrive behavior. Separately plan producer authorization, Lambda processing,
+idempotency, hosted dispatch, pricing, and broader service coverage.
