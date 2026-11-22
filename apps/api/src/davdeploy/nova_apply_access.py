@@ -386,11 +386,9 @@ def build_nova_apply_access_policy(
         raise NovaApplyAccessPolicyError("saved plan has no supported resource changes to apply")
 
     statements: list[dict[str, Any]] = []
-    all_actions: set[str] = {"sts:GetCallerIdentity"}
     all_resources: set[str] = set()
     for arn in sorted(scoped):
         actions = scoped[arn]
-        all_actions.update(actions)
         all_resources.add(arn)
         statements.append(
             {"Effect": "Allow", "Action": sorted(actions), "Resource": arn}
@@ -398,9 +396,10 @@ def build_nova_apply_access_policy(
     statements.append(
         {"Effect": "Allow", "Action": "sts:GetCallerIdentity", "Resource": "*"}
     )
-    statements.append(
-        {"Effect": "Deny", "NotAction": sorted(all_actions), "Resource": "*"}
-    )
+    # The customer's fixed role policy supplies an explicit maximum-action
+    # deny. Keep the exact-resource deny here as defense against a resource
+    # policy granting directly to this assumed-role session, but avoid
+    # repeating the larger maximum-action list in this STS-limited document.
     statements.append(
         {
             "Effect": "Deny",
