@@ -1,6 +1,6 @@
 # ticket448 — isolated SQS success, idempotency, and redrive recovery
 
-PR: to be assigned
+PR: https://github.com/Bepoadewale/davdeploy/pull/448
 Branch: `test/nova-sqs-lambda-idempotency-448`
 
 ## Problem / goal
@@ -60,7 +60,7 @@ recovery. This does not use Nova dispatch or touch the hosted control plane.
 
 ## Acceptance criteria
 
-- [ ] Draft PR and matching ticket/test evidence exist before any AWS write.
+- [x] Draft PR and matching ticket/test evidence exist before any AWS write.
 - [ ] Caller identity is account `654654474502`; test resources are uniquely
       prefixed/tagged and no production/control-plane resources change.
 - [ ] The successful v1 consumer writes one item for two messages with the
