@@ -20,6 +20,8 @@ resource "aws_dynamodb_table" "this" {
     enabled = true
   }
 
+  deletion_protection_enabled = true
+
   server_side_encryption {
     enabled = true
   }
