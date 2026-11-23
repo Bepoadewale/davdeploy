@@ -40,11 +40,11 @@ Add explicit safety requirements to the bounded DynamoDB module and generated-pl
 - [x] The evidence matrix describes this source-only policy and leaves application behavior, restore, and complete cost evidence open.
 - [x] No AWS or hosted control-plane resources are changed.
 - [x] Focused/full policy tests, formatting, documentation conventions, Terraform validation, and `git diff --check` pass.
-- [ ] Final-head CI and review/merge state are tracked; merge only after required checks pass.
+- [x] Final-head CI run [45283817114](https://github.com/Bepoadewale/davdeploy/actions/runs/45283817114) passed all seven required checks. No review feedback is pending; PR remains draft pending final merge-state handling.
 
 ## Acceptance status
 
-Implementation is complete. All local validation is complete; final-head CI and review/merge remain pending. The change is source-only and does not establish workload or hosted Nova evidence.
+Implementation is complete. All local validation and final-head CI are complete. PR #473 has no review feedback and is mergeable; final merge handling remains. The change is source-only and does not establish workload or hosted Nova evidence.
 
 ## Tests / validation performed
 
@@ -55,6 +55,7 @@ Implementation is complete. All local validation is complete; final-head CI and 
 - `terraform -chdir=infrastructure/terraform/modules/dynamodb-table init -backend=false -input=false` — passed. The generated provider lock file is preserved locally and not committed.
 - `terraform -chdir=infrastructure/terraform/modules/dynamodb-table validate` — passed.
 - `git diff --check` — passed.
+- Final-head CI run 45283817114 — all seven checks passed.
 
 ## Evidence files produced
 
