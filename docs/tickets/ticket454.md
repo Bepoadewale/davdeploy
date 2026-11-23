@@ -60,12 +60,25 @@ recovers, along with a separate ordinary success path and exact teardown.
 
 ## Acceptance status
 
-The fixture and evidence records are being prepared. AWS execution has not
-started.
+The fixture and PR are open. Initial PR head `eddbcd6ac3d47846c7e44a0a5ea3bcd9f71f3686`
+passed all seven checks in run
+[45222597413](https://github.com/Bepoadewale/davdeploy/actions/runs/45222597413).
+The state-machine definition validated with zero diagnostics. The monitored
+AWS create retry is in progress; delivery, recovery, and cleanup acceptance
+remain pending.
 
 ## Tests / validation performed
 
-- Pending the Terraform fixture validation, probe checks, and PR CI.
+- `terraform init`, `terraform validate`, and the exact five-create saved plan
+  passed; AWS's Step Functions definition validator returned `OK` with zero
+  diagnostics.
+- Ruff, Python syntax, Terraform format, documentation conventions, and
+  `git diff --check` passed.
+- All seven required checks passed on initial PR head `eddbcd6` in run
+  `45222597413`; a final-head run is required after the evidence update.
+- The first monitored create failed before AWS calls because `AWS_PROFILE` was
+  absent from the subprocess environment. Exact-name reads found no partial
+  resources; the corrected monitored create is underway.
 
 ## Evidence files produced
 

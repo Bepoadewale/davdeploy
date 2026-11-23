@@ -2,11 +2,15 @@
 
 Date: 2026-11-23
 
-Execution type: Planned controlled disposable AWS workload validation.
+Execution type: Controlled disposable AWS workload validation in progress.
 
 Customer repository: None; direct same-account AWS service test.
 
 Commit: `bc44e0c` (fixture and initial evidence record).
+
+PR: [#454](https://github.com/Bepoadewale/davdeploy/pull/454), draft. Initial
+head `eddbcd6ac3d47846c7e44a0a5ea3bcd9f71f3686` passed all seven checks in run
+[45222597413](https://github.com/Bepoadewale/davdeploy/actions/runs/45222597413).
 
 AWS account: `654654474502`.
 
@@ -23,12 +27,21 @@ packaged Lambda artifact stay outside the repository.
 
 ## Commands executed
 
-No AWS command or mutation has been run. Planned sequence: open the draft PR
-with its ticket and test record; verify account/region, exact-name absence,
-and idle Terraform monitor; review the exact five-resource create plan; run
-the failure/recovery and normal success probes; review and run the exact
-five-resource destroy plan through the PID monitor; independently verify
-resource absence and empty state.
+- Draft PR #454 and its ticket/test evidence were opened before AWS writes.
+- Caller identity was verified as account `654654474502` in `us-east-1`; exact
+  Step Functions, Lambda, and role names were absent. The monitor had 31
+  records and no active operations.
+- Terraform init and validation passed with the pinned AWS `5.100.0` and
+  Archive `2.7.1` providers. The saved create plan contains exactly five
+  creates, zero updates, and zero deletes. AWS's state-machine-definition
+  validator returned `OK` with zero diagnostics.
+- Initial monitored create `nova-stepfn-recovery-454-create-nov23a2` failed
+  before making AWS calls because the Terraform subprocess did not inherit the
+  AWS profile. Exact-name reads confirmed no resources were created. A fresh
+  five-create plan was saved and the monitored retry
+  `nova-stepfn-recovery-454-create-retry-nov23a2` started at
+  `2026-11-23T17:07:41Z` under the verified profile. Its result and subsequent
+  probes/teardown are pending.
 
 ## Acceptance criteria
 
@@ -46,8 +59,9 @@ resource absence and empty state.
 
 ## Observed result
 
-Pending the controlled disposable run. No AWS resource has been created for
-this test.
+The controlled run is in progress. The first create attempt stopped before
+AWS access due to a missing profile environment variable; exact-name checks
+confirmed that no resources were created by that attempt.
 
 ## Teardown
 
