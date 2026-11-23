@@ -40,11 +40,11 @@ Add explicit safety requirements to the bounded DynamoDB module and generated-pl
 - [x] The evidence matrix describes this source-only policy and leaves application behavior, restore, and complete cost evidence open.
 - [x] No AWS or hosted control-plane resources are changed.
 - [x] Focused/full policy tests, formatting, documentation conventions, Terraform validation, and `git diff --check` pass.
-- [x] Final-head CI run [45283817114](https://github.com/Bepoadewale/davdeploy/actions/runs/45283817114) passed all seven required checks. No review feedback is pending; PR remains draft pending final merge-state handling.
+- [x] PR checks and review state are tracked on [PR #473](https://github.com/Bepoadewale/davdeploy/pull/473); merge only when all seven required checks pass on the current head and no review feedback is pending.
 
 ## Acceptance status
 
-Implementation is complete. All local validation and final-head CI are complete. PR #473 has no review feedback and is mergeable; final merge handling remains. The change is source-only and does not establish workload or hosted Nova evidence.
+Implementation is complete. All local validation is complete. PR #473 has no review feedback; its current-head CI status is tracked live on GitHub. The change is source-only and does not establish workload or hosted Nova evidence.
 
 ## Tests / validation performed
 
@@ -55,7 +55,7 @@ Implementation is complete. All local validation and final-head CI are complete.
 - `terraform -chdir=infrastructure/terraform/modules/dynamodb-table init -backend=false -input=false` — passed. The generated provider lock file is preserved locally and not committed.
 - `terraform -chdir=infrastructure/terraform/modules/dynamodb-table validate` — passed.
 - `git diff --check` — passed.
-- Final-head CI run 45283817114 — all seven checks passed.
+- CI run [45283817114](https://github.com/Bepoadewale/davdeploy/actions/runs/45283817114) passed all seven checks for implementation commit `6e4ae51`. A follow-up ticket-only commit was pushed afterward; the PR check page carries the required current-head status.
 
 ## Evidence files produced
 
