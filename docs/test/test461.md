@@ -6,7 +6,7 @@ Execution type: Controlled disposable AWS Terraform module validation.
 
 Customer repository: None; direct same-account customer-side test.
 
-PR: [#461](https://github.com/Bepoadewale/davdeploy/pull/461), draft.
+PR: [#461](https://github.com/Bepoadewale/davdeploy/pull/461).
 
 Commit: `156dcb9` (test evidence will be finalized on the PR head).
 

@@ -1,6 +1,6 @@
 # ticket461
 
-PR: [#461 — feat: enforce safe ECR repository settings](https://github.com/Bepoadewale/davdeploy/pull/461) (draft)
+PR: [#461 — feat: enforce safe ECR repository settings](https://github.com/Bepoadewale/davdeploy/pull/461)
 
 Branch: `feat/ecr-repository-plan-safety-461`
 
@@ -66,8 +66,9 @@ declared safeguards.
 
 ## Acceptance status
 
-Implementation, focused regression tests, and the empty-repository AWS module
-lifecycle run pass. PR CI and review are pending.
+Implementation, focused regression tests, documentation checks, and the
+empty-repository AWS module lifecycle run pass. The current CI and review state
+is tracked on [PR #461](https://github.com/Bepoadewale/davdeploy/pull/461).
 
 ## Tests / validation performed
 
