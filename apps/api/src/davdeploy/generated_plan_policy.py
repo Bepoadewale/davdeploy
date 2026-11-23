@@ -86,6 +86,12 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_iam_policy": (("policy",),),
     "aws_iam_role": (("assume_role_policy",),),
     "aws_iam_role_policy": (("policy",),),
+    "aws_ecr_repository": (
+        ("image_tag_mutability",),
+        ("image_scanning_configuration", "scan_on_push"),
+        ("encryption_configuration", "encryption_type"),
+        ("force_delete",),
+    ),
     "aws_sqs_queue_policy": (("policy",),),
     "aws_sqs_queue": (
         ("sqs_managed_sse_enabled",),
@@ -249,6 +255,7 @@ def _evaluate(
     _check_s3(document, resources, expected_region, findings, expected_account_id)
     _check_cloudfront_viewer_tls(resources, findings)
     _check_cloudfront_origin_tls(resources, findings)
+    _check_ecr_repositories(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -2889,6 +2896,68 @@ def _check_sqs_queue_encryption(
                 "sqs_queue_encryption_required",
                 address,
                 "The SQS queue must enable SQS-managed server-side encryption.",
+            )
+
+
+def _check_ecr_repositories(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_ecr_repository":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "ecr_repository_configuration_unknown",
+                address,
+                "The plan does not show the ECR repository safety settings.",
+            )
+            continue
+
+        if values.get("image_tag_mutability") != "IMMUTABLE":
+            _deny(
+                findings,
+                "ecr_image_tags_must_be_immutable",
+                address,
+                "ECR image tags must be immutable so a published tag cannot be overwritten.",
+            )
+
+        scanning = values.get("image_scanning_configuration")
+        if (
+            not isinstance(scanning, list)
+            or len(scanning) != 1
+            or not isinstance(scanning[0], dict)
+            or scanning[0].get("scan_on_push") is not True
+        ):
+            _deny(
+                findings,
+                "ecr_scan_on_push_required",
+                address,
+                "The ECR repository must declare scan-on-push enabled.",
+            )
+
+        encryption = values.get("encryption_configuration")
+        if (
+            not isinstance(encryption, list)
+            or len(encryption) != 1
+            or not isinstance(encryption[0], dict)
+            or encryption[0].get("encryption_type") != "AES256"
+        ):
+            _deny(
+                findings,
+                "ecr_encryption_required",
+                address,
+                "Only ECR AES256 repository encryption is currently supported by this policy.",
+            )
+
+        if values.get("force_delete") is not False:
+            _deny(
+                findings,
+                "ecr_force_delete_denied",
+                address,
+                "ECR repositories cannot use force_delete because it removes stored images with the repository.",
             )
 
 
