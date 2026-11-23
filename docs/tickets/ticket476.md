@@ -34,17 +34,17 @@ Reconcile the active Nova status, backlog, and evidence matrix with merged PR #4
 - [x] No Kinesis consumer behavior, complete pricing, customer lifecycle, or Nova dispatch is claimed from plan checks.
 - [x] No AWS or hosted control-plane resources are changed.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head CI and review state are tracked; merge only after required checks pass.
+- [x] CI run [45289372911](https://github.com/Bepoadewale/davdeploy/actions/runs/45289372911) passed all seven checks; current-head checks and review remain tracked on PR #476, and merge requires all checks to pass.
 
 ## Acceptance status
 
-Documentation reconciliation and local validation are complete; final-head CI is pending.
+Documentation reconciliation and local validation are complete. CI run 45289372911 passed all seven checks; a ticket-only validation update is the only subsequent change.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=476 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head CI — pending.
+- CI run [45289372911](https://github.com/Bepoadewale/davdeploy/actions/runs/45289372911) — all seven checks passed before this ticket-only validation update; current-head checks are tracked on the PR.
 
 ## Evidence files produced
 
