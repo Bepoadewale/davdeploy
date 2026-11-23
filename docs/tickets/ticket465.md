@@ -73,7 +73,8 @@ establish parameter runtime or lifecycle support.
 - `terraform fmt -check` and `terraform validate` — passed.
 - `GITHUB_PR_NUMBER=465 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head CI — pending.
+- CI run 45270676350 passed all seven checks on the implementation commit;
+  final-head CI after this evidence update is pending.
 
 ## Evidence files produced
 
