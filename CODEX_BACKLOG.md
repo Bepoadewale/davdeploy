@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `aa72c68fa51add00691459fec4907a937ec63c61` (PR #473). The
+Backend `main` is `b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -66,6 +66,12 @@ the bounded module; intentional future teardown needs a separate reviewed plan
 to disable it. No AWS table was created. Application reads/writes, restore,
 complete regional pricing, and broader DynamoDB configurations remain open.
 See `docs/tickets/ticket473.md`.
+
+PR #475 adds source-only Kinesis plan checks for a known stream name, one
+provisioned shard, 24-hour retention, KMS encryption, and the AWS-managed
+Kinesis key. No stream was created. The prior one-record service test still
+does not prove consumer processing, replay, full pricing, or Nova dispatch.
+See `docs/tickets/ticket475.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

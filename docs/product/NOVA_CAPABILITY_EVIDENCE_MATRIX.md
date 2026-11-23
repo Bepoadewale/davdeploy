@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`aa72c68fa51add00691459fec4907a937ec63c61` (PR #473), 2026-11-24. PR #413
+`b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475), 2026-11-24. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -14,6 +14,10 @@ PR #473 merged with seven checks passing in CI run
 It adds source-only DynamoDB safety checks and enables deletion protection in
 the bounded module. No AWS table was created, and this adds no application,
 restore, complete-cost, or Nova-dispatch evidence.
+
+PR #475 merged with seven checks passing in CI run
+[45288480162](https://github.com/Bepoadewale/davdeploy/actions/runs/45288480162).
+It adds bounded source-only Kinesis policy checks; no AWS stream was created.
 
 PR #399 adds the exact-plan Nova apply path and customer role template in
 source; its apply and credential gates remain disabled. PR #437's isolated
