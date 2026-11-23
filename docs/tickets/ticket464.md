@@ -58,17 +58,20 @@ recorded.
 - [x] The monitor count is reconciled to 41 terminal records and zero active
   operations.
 - [x] Protected and unrelated untracked files remain untouched.
-- [ ] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head CI passes and the PR is reviewed/merged through GitHub.
+- [x] Documentation conventions and `git diff --check` pass.
+- [x] The PR head passes all seven checks in CI run
+  [45268239876](https://github.com/Bepoadewale/davdeploy/actions/runs/45268239876).
 
 ## Acceptance status
 
-The active documentation snapshots are reconciled locally. CI and PR review
-state are tracked on PR #464.
+The active documentation snapshots and validation record are reconciled on
+PR #464. GitHub review and merge state are recorded on the PR.
 
 ## Tests / validation performed
 
-Pending.
+- `GITHUB_PR_NUMBER=464 python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI run 45268239876 — all seven checks passed.
 
 ## Evidence files produced
 
