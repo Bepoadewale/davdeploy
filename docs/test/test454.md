@@ -6,7 +6,7 @@ Execution type: Planned controlled disposable AWS workload validation.
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: Pending initial test commit.
+Commit: `bc44e0c` (fixture and initial evidence record).
 
 AWS account: `654654474502`.
 
