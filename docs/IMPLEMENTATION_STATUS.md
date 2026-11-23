@@ -1,7 +1,7 @@
 # Implementation Status
 
-Status snapshot: 2026-11-22. Backend `main` is
-`c874b0de523f26c46561272a05b290ecf782aecc` (PR #445); hosted runtime remains
+Status snapshot: 2026-11-24. Backend `main` is
+`aa72c68fa51add00691459fec4907a937ec63c61` (PR #473); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -38,6 +38,14 @@ teardown gate under control-plane isolation; it was not Nova-dispatched. No
 Nova customer workload has been applied or certified. See
 [`NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance crosswalk.
+
+PR #473 merged with all seven checks passing in CI run
+[45284594649](https://github.com/Bepoadewale/davdeploy/actions/runs/45284594649).
+It adds source-only DynamoDB plan checks for known table/partition-key
+identity, on-demand billing, encryption, deletion protection, and point-in-time
+recovery. No AWS table was created and the hosted control plane was not changed.
+Application operations, restore verification, complete pricing, and Nova
+dispatch remain unproven.
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,
