@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`67913448c57e39eb3438242ef4ccc3bd567995ec` (PR #454). The last
+`d894357518dcd929fdabaa9292e1b649d0eb2ca0` (PR #455). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -99,6 +99,14 @@ PR #454 merged as `6791344`; all seven checks passed on final head
 Its direct Step Functions test records a controlled Lambda failure, Catch
 recovery, a separate normal success path, and verified cleanup. This does not
 establish Step Functions role-policy safety, Nova dispatch, or hosted execution.
+
+Draft PR #456 adds source-only generated-plan checks for one Step Functions
+shape: Standard workflows with direct same-plan Lambda task ARNs, a dedicated
+role trusted by the exact state-machine ARN/account, and inline invoke grants
+restricted to those functions. It rejects other integrations, logging,
+Map/Parallel states, wildcard permissions, and attached managed policies until
+their policies are separately covered. This follows AWS's execution-role and
+Lambda permission guidance; it does not enable or deploy Step Functions.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
