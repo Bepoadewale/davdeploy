@@ -686,6 +686,39 @@ def acm_certificate_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def route53_zone_case(*, values=None, after_unknown=None):
+    address = "aws_route53_zone.this"
+    zone_values = {
+        "name": "test.example.test",
+        "vpc": [],
+        "force_destroy": False,
+        "tags": {"Product": "davdeploy"},
+    }
+    zone_values.update(values or {})
+    document = plan(
+        resources=[
+            resource(address, "aws_route53_zone", zone_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(address, "aws_route53_zone", after_unknown=after_unknown or {}),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "zone",
+                "resource_type": "aws_route53_zone",
+                "name": "this",
+                "arguments": zone_values,
+                "rationale": "Create a named public DNS zone without deleting records implicitly.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -1141,6 +1174,45 @@ def test_acm_certificate_denies_unknown_request_settings(values, after_unknown):
     document, proposal_value = acm_certificate_case(
         values=values,
         after_unknown=after_unknown,
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_route53_zone_with_reviewed_settings_is_reviewable():
+    document, proposal_value = route53_zone_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("route53_zone_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_code"),
+    [
+        ({"name": "  "}, "route53_zone_name_unknown"),
+        ({"vpc": [{"vpc_id": "vpc-private"}]}, "route53_private_zone_unsupported"),
+        ({"force_destroy": True}, "route53_zone_force_destroy_denied"),
+    ],
+)
+def test_route53_zone_rejects_unknown_or_destructive_settings(values, expected_code):
+    document, proposal_value = route53_zone_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize("attribute", ["name", "vpc", "force_destroy"])
+def test_route53_zone_denies_unknown_identity_or_deletion_setting(attribute):
+    document, proposal_value = route53_zone_case(
+        values={attribute: None},
+        after_unknown={attribute: True},
     )
 
     result = evaluate(document, proposal_value)
