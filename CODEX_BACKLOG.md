@@ -25,16 +25,18 @@ dispatch.
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
 recorded hosted plan. No Nova-dispatched customer workload is certified. The
-owner accepts the isolated direct-Terraform ECS lifecycle as the general goal's
-customer-side lifecycle evidence; this does not verify Nova authorization or
-dispatch.
+owner accepts properly isolated direct same-account customer lifecycle tests
+for the general lifecycle gate and exact tested resource shapes; this does not
+verify Nova authorization or dispatch, or establish support for other shapes.
 See [`docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance map.
 
 PR #422's exact customer plan-role trust and bounded policy checks, PR #429's
 provider-schema provenance, and PR #424's pricing are source-only. They do not
-establish every effective AWS permission layer or replace hosted
-plan/apply/health/recovery/cleanup evidence.
+establish every effective AWS permission layer or Nova-dispatched execution.
+Isolated customer-side lifecycle evidence is tracked separately by resource
+shape and is accepted for the general lifecycle gate when its plan, observed
+behaviors, teardown, and independent absence checks are recorded.
 
 ## Three-PR delivery plan
 
