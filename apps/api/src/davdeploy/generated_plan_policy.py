@@ -157,6 +157,8 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("options", "export"),
     ),
     "aws_route53_zone": (("name",), ("vpc",), ("force_destroy",)),
+    "aws_appconfig_application": (("name",),),
+    "aws_appconfig_environment": (("name",),),
     "aws_opensearch_domain": (
         ("engine_version",),
         ("cluster_config", "instance_type"),
@@ -288,6 +290,7 @@ def _evaluate(
     _check_opensearch_domains(resources, findings)
     _check_acm_certificates(resources, findings)
     _check_route53_zones(resources, findings)
+    _check_appconfig_bindings(document, resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -3324,6 +3327,74 @@ def _check_route53_zones(
                 "route53_zone_force_destroy_denied",
                 address,
                 "Hosted zones cannot delete their records implicitly during destruction.",
+            )
+
+
+def _check_appconfig_bindings(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    applications = [
+        item for item in resources if item.get("type") == "aws_appconfig_application"
+    ]
+    configured_references = _configured_resource_references(document)
+
+    for application in applications:
+        values = application.get("values")
+        name = values.get("name") if isinstance(values, dict) else None
+        if not isinstance(name, str) or not name.strip():
+            _deny(
+                findings,
+                "appconfig_application_name_unknown",
+                application.get("address"),
+                "The AppConfig application name must be known and non-empty.",
+            )
+
+    for environment in (
+        item for item in resources if item.get("type") == "aws_appconfig_environment"
+    ):
+        address = environment.get("address")
+        values = environment.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "appconfig_environment_configuration_unknown",
+                address,
+                "The AppConfig environment is missing its name or application binding.",
+            )
+            continue
+
+        name = values.get("name")
+        if not isinstance(name, str) or not name.strip():
+            _deny(
+                findings,
+                "appconfig_environment_name_unknown",
+                address,
+                "The AppConfig environment name must be known and non-empty.",
+            )
+
+        references = configured_references.get(address, ())
+        environment_application_id = values.get("application_id")
+        matches = []
+        for application in applications:
+            application_address = application.get("address")
+            application_values = application.get("values")
+            application_id = (
+                application_values.get("id") if isinstance(application_values, dict) else None
+            )
+            if _references_resource(references, application_address) or (
+                isinstance(application_id, str)
+                and environment_application_id == application_id
+            ):
+                matches.append(application)
+
+        if len(matches) != 1:
+            _deny(
+                findings,
+                "appconfig_environment_application_binding_invalid",
+                address,
+                "Each AppConfig environment must bind to exactly one same-plan application.",
             )
 
 
