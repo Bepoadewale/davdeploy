@@ -57,25 +57,27 @@ declared safeguards.
 - [x] No rule claims registry-level image scanning is active from the
   deprecated repository-level field alone.
 - [x] The capability matrix records the new source-only policy and leaves
-  image provenance, effective scanning, scoped use, pricing, and live lifecycle
-  evidence open.
+  image provenance, effective scanning, scoped use, full application lifecycle,
+  and pricing gaps open while linking the exact empty-repository lifecycle test.
 - [x] Focused regression tests, documentation conventions, and `git diff
   --check` pass.
-- [ ] The exact disposable ECR test repository is destroyed and independently
+- [x] The exact disposable ECR test repository is destroyed and independently
   confirmed absent; no hosted control-plane state is changed.
 
 ## Acceptance status
 
-Implementation and focused regression tests pass locally. The disposable AWS
-module lifecycle run, PR CI, and review are pending.
+Implementation, focused regression tests, and the empty-repository AWS module
+lifecycle run pass. PR CI and review are pending.
 
 ## Tests / validation performed
 
 - ECR-focused generated-plan policy tests — 15 passed.
 - Full `tests/test_generated_plan_policy.py` — 348 passed.
 - Ruff on the changed Python files — passed.
-- Documentation conventions and `git diff --check` — pending.
-- Terraform plan/apply/destroy and independent AWS inventory evidence — pending.
+- Documentation conventions and `git diff --check` — passed.
+- Terraform created the one-repository plan and monitored apply/destroy both
+  succeeded. AWS inventory independently confirms the test repository absent;
+  `/tmp` local state has no resources.
 
 ## Evidence files produced
 
@@ -90,8 +92,8 @@ module lifecycle run, PR CI, and review are pending.
 
 - Do not modify the hosted control plane, registry-wide scanning settings, or
   any existing ECR repository.
-- The only planned cloud mutation is the exact fresh tagged test repository in
-  `docs/test/fixtures/nova-ecr-repository-461/main.tf`; destroy it after
+- The only cloud mutation was the exact fresh tagged test repository in
+  `docs/test/fixtures/nova-ecr-repository-461/main.tf`; it was destroyed after
   verification.
 - Do not treat repository-level scan configuration as proof of effective
   registry-level scanning.
