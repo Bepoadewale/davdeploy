@@ -149,6 +149,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("deletion_window_in_days",),
         ("multi_region",),
     ),
+    "aws_ssm_parameter": (("type",), ("tier",), ("key_id",)),
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
         ("deletion_protection_enabled",),
@@ -263,6 +264,7 @@ def _evaluate(
     _check_cloudfront_origin_tls(resources, findings)
     _check_ecr_repositories(resources, findings)
     _check_kms_keys(resources, findings)
+    _check_ssm_parameters(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -3021,6 +3023,48 @@ def _check_kms_keys(
             actual = values.get(attribute)
             if actual != expected or isinstance(actual, bool) != isinstance(expected, bool):
                 _deny(findings, code, address, message)
+
+
+def _check_ssm_parameters(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_ssm_parameter":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "ssm_parameter_configuration_unknown",
+                address,
+                "The plan does not show the parameter encryption and tier settings.",
+            )
+            continue
+
+        if values.get("type") != "SecureString":
+            _deny(
+                findings,
+                "ssm_parameter_secure_string_required",
+                address,
+                "Parameters from this module must use SecureString encryption.",
+            )
+        if values.get("tier") != "Standard":
+            _deny(
+                findings,
+                "ssm_parameter_standard_tier_required",
+                address,
+                "Only Standard-tier parameters are currently supported by this policy.",
+            )
+
+        key_id = values.get("key_id")
+        if key_id is not None and (not isinstance(key_id, str) or not key_id.strip()):
+            _deny(
+                findings,
+                "ssm_parameter_kms_key_invalid",
+                address,
+                "A custom KMS key reference must be a known non-empty string.",
+            )
 
 
 def _sqs_partition_for_region(region: str) -> str:

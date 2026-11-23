@@ -564,6 +564,41 @@ def kms_key_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def ssm_parameter_case(*, values=None, after_unknown=None):
+    address = "aws_ssm_parameter.this"
+    parameter_values = {
+        "name": "/davdeploy/test/setting",
+        "type": "SecureString",
+        "tier": "Standard",
+        "key_id": None,
+        "value": "synthetic-test-value",
+        "tags": {"Product": "davdeploy"},
+    }
+    parameter_values.update(values or {})
+    document = plan(
+        resources=[
+            resource(address, "aws_ssm_parameter", parameter_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(address, "aws_ssm_parameter", after_unknown=after_unknown or {}),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "parameter",
+                "resource_type": "aws_ssm_parameter",
+                "name": "this",
+                "arguments": parameter_values,
+                "rationale": "Store an encrypted Standard-tier configuration value.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -867,6 +902,46 @@ def test_kms_key_denies_unknown_safety_settings(attribute, expected_code, unknow
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "policy_critical_value_unknown" in codes(result)
     assert expected_code in codes(result)
+
+
+def test_ssm_parameter_with_secure_standard_configuration_is_reviewable():
+    document, proposal_value = ssm_parameter_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("ssm_parameter_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_code"),
+    [
+        ({"type": "String"}, "ssm_parameter_secure_string_required"),
+        ({"tier": "Advanced"}, "ssm_parameter_standard_tier_required"),
+        ({"tier": "Intelligent-Tiering"}, "ssm_parameter_standard_tier_required"),
+        ({"key_id": "  "}, "ssm_parameter_kms_key_invalid"),
+    ],
+)
+def test_ssm_parameter_rejects_unsupported_encryption_or_tier(values, expected_code):
+    document, proposal_value = ssm_parameter_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize("attribute", ["type", "tier", "key_id"])
+def test_ssm_parameter_denies_unknown_encryption_or_tier_settings(attribute):
+    document, proposal_value = ssm_parameter_case(
+        values={attribute: None},
+        after_unknown={attribute: True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 def test_sqs_queue_requires_sqs_managed_encryption():

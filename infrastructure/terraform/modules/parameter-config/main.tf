@@ -12,6 +12,7 @@ variable "tags" { type = map(string) }
 resource "aws_ssm_parameter" "this" {
   name   = var.name
   type   = "SecureString"
+  tier   = "Standard"
   value  = var.value
   key_id = var.key_id
   tags   = var.tags
