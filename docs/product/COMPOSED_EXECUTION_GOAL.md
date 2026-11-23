@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`d10a9f66b43ac8c696e227f39b40a452b8bd79f9` (PR #461). The last
+`f33ff461f85cb457fb4a6ed03b358a5a0615a180` (PR #463). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -146,9 +146,18 @@ independently confirmed absent. No image was pushed, so image provenance,
 effective registry scanning, pull/run behavior, and image pricing remain open.
 See [test461](../test/test461.md). The control plane was untouched.
 
-The tested ECR repository and local Terraform state are absent. Current
-read-only inventory finds only the pre-existing `my-app` ECR repository. The
-Terraform monitor has 41 terminal records and no active operations.
+PR #463 merged at `f33ff46`; all seven checks passed on the final head in
+[run 45266750554](https://github.com/Bepoadewale/davdeploy/actions/runs/45266750554).
+It adds source-only generated-plan checks for symmetric `ENCRYPT_DECRYPT`
+keys, automatic rotation, single-Region scope, and a 30-day deletion window,
+and makes those settings explicit in the KMS module. No customer-managed key
+was created because AWS bills these keys and imposes a 7–30 day deletion wait.
+Key-policy safety, consumer binding, and root-specific customer lifecycle
+evidence remain open. The hosted control plane was not changed; see
+[`ticket463`](../tickets/ticket463.md).
+
+The tested ECR repository and local Terraform state are absent. The Terraform
+monitor has 41 terminal records and no active operations.
 Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
 lineage evidence.
 

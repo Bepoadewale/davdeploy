@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`d10a9f66b43ac8c696e227f39b40a452b8bd79f9` (PR #461), 2026-11-23. PR #413
+`f33ff461f85cb457fb4a6ed03b358a5a0615a180` (PR #463), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -64,6 +64,10 @@ rule-scoped DLQ, permission repair, successful recovery delivery, and cleanup;
 see [`test452.md`](../test/test452.md). Its eight-resource test stack and
 local state are absent, and the run monitor has no active operations. This
 does not establish Nova dispatch or hosted execution.
+PR #463 adds source-only KMS key-type, usage, rotation, Region-scope, and
+deletion-window checks. It does not test AWS KMS or establish key-policy,
+consumer-binding, cost, or lifecycle coverage; see
+[`ticket463.md`](../tickets/ticket463.md).
 Merged PR #454's direct Step Functions test records a Lambda task failure,
 Catch recovery, a separate normal success path, and cleanup; see
 [`test454.md`](../test/test454.md). The five-resource test stack and local
@@ -75,7 +79,7 @@ previously recorded tagged Batch definitions remain inactive, and PR #458's
 test job definition is also inactive after exact teardown. The SageMaker
 lineage action/context remain as retained audit evidence. The PR #443, #447, and #448 temporary resources
 are absent; PR #448's local Terraform state is empty. The Terraform run
-monitor has 38 terminal records and no active operations. Preserve the
+monitor has 41 terminal records and no active operations. Preserve the
 protected untracked
 `--only-show-errors`, `.venv-pr399/`, and retained lineage evidence.
 
