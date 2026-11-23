@@ -84,15 +84,20 @@ absent and the run monitor had 24 terminal records with no active operation.
 The reviewed saved create plan contains exactly four creates, zero changes,
 and zero destroys. Its complete queue policy is known in plan and restricts
 `sqs:SendMessage` to the exact test queue ARN, exact topic ARN, account, and
-SNS service principal. No AWS resources have been created yet.
+SNS service principal. The first monitored create attempt
+`nova-sns-sqs-449-create-nov23a1` failed at STS credential validation because
+its request signature was stale; it made no resource changes. Exact AWS reads
+confirmed the topic and queue remained absent. A fresh plan was saved and
+monitored create `nova-sns-sqs-449-create2-nov23a1` is running.
 
 ## Tests / validation performed
 
 Terraform format and validation, Python syntax/Ruff, and documentation
 conventions passed locally. Initial PR CI run `45085442555` passed all seven
-checks on the first fixture revision; a final run is required for the reviewed
-known-ARN policy refinement. AWS execution must occur only after that final
-run passes and the exact saved plan is reviewed.
+checks on the first fixture revision; PR run `45085892273` passed all seven
+checks on the reviewed known-ARN policy refinement. The first create attempt
+failed before resource changes because of a stale STS signature. A fresh saved
+plan is being applied through the monitor; its result is pending.
 
 ## Evidence files produced
 

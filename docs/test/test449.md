@@ -6,7 +6,7 @@ Execution type: Controlled disposable AWS workload validation.
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: Pending fixture commit.
+Commit: `7495c2ad064fab07cb1298b58f66827850abb138` (known-ARN policy plan).
 
 AWS account: `654654474502`.
 
@@ -28,12 +28,26 @@ will be created only after the draft PR and exact create plan are reviewed.
   active operation.
 - Terraform init selected AWS provider `5.100.0`; format, validation, Python
   syntax/Ruff, and documentation conventions passed locally.
-- Saved plan `create-reviewed.tfplan` contains exactly four creates, zero
+- Saved plan `create-reviewed2.tfplan` contains exactly four creates, zero
   changes, and zero destroys. Its full queue policy is known before apply and
   names the exact topic ARN, queue ARN, account, and SNS service principal.
 - Initial PR CI run `45085442555` passed all seven checks on the first fixture
-  revision. A final run is pending for the known-ARN policy refinement.
-- No AWS resource has been created yet.
+  revision. Final fixture run `45085892273` also passed all seven checks on
+  commit `7495c2ad064fab07cb1298b58f66827850abb138`.
+- The first monitored create `nova-sns-sqs-449-create-nov23a1` started at
+  `2026-11-23T02:54:13Z` (supervisor PID 7937, Terraform PID 7938, root
+  `/private/tmp/davdeploy-nova-sns-sqs-449-nov23a1`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sns-sqs-449-create-nov23a1.log`). It failed at
+  `2026-11-23T03:09:48Z` while validating an STS request whose signature was
+  stale by 15 minutes. It made no resource changes; fresh exact-name AWS reads
+  confirmed the topic and queue remained absent.
+- After confirming caller identity again, a fresh four-create plan was saved
+  as `/tmp/davdeploy-nova-sns-sqs-449-nov23a1/create-reviewed2.tfplan`. The
+  exact topic/queue policy remains fully known. Monitored create
+  `nova-sns-sqs-449-create2-nov23a1` started at `2026-11-23T14:35:40Z`,
+  supervisor PID 13106, root
+  `/private/tmp/davdeploy-nova-sns-sqs-449-nov23a1`, and log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sns-sqs-449-create2-nov23a1.log`. Its result is pending.
 
 ## Acceptance criteria
 
