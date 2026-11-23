@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`d894357518dcd929fdabaa9292e1b649d0eb2ca0` (PR #455). The last
+`d2a9b5430d30e483e69bfb14438ad4960493b51f` (PR #456). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -100,8 +100,10 @@ Its direct Step Functions test records a controlled Lambda failure, Catch
 recovery, a separate normal success path, and verified cleanup. This does not
 establish Step Functions role-policy safety, Nova dispatch, or hosted execution.
 
-Draft PR #456 adds source-only generated-plan checks for one Step Functions
-shape: Standard workflows with direct same-plan Lambda task ARNs, a dedicated
+PR #456 merged as `d2a9b54`; all seven checks passed on final head
+`0bc9935297f00d0a5f9f525e05bd6909e4d8d602` in run
+[45235335526](https://github.com/Bepoadewale/davdeploy/actions/runs/45235335526).
+It adds source-only generated-plan checks for one Step Functions shape: Standard workflows with direct same-plan Lambda task ARNs, a dedicated
 role trusted by the exact state-machine ARN/account, and inline invoke grants
 restricted to those functions. It rejects other integrations, logging,
 Map/Parallel states, wildcard permissions, and attached managed policies until
