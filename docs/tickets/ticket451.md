@@ -53,32 +53,35 @@ Nova execution evidence.
 
 ## Acceptance criteria
 
-- [ ] A valid exact planned EventBridge bus/rule/target and attached SQS queue
+- [x] A valid exact planned EventBridge bus/rule/target and attached SQS queue
       policy remains eligible for human review.
-- [ ] The grant has the exact EventBridge principal, action, queue ARN, and rule
+- [x] The grant has the exact EventBridge principal, action, queue ARN, and rule
       source ARN; an optional source-account condition must match the trusted
       account.
-- [ ] Unplanned buses/rules/queues, unknown destinations, target roles,
+- [x] Unplanned buses/rules/queues, unknown destinations, target roles,
       mismatched queue URLs, duplicate pairs, broad grants, and orphan grants
       are denied.
-- [ ] Exact SNS and EventBridge grants can coexist in one queue policy.
-- [ ] Findings do not echo policy values or source identifiers.
-- [ ] The generated-plan policy test file, Ruff, documentation conventions,
+- [x] Exact SNS and EventBridge grants can coexist in one queue policy.
+- [x] Findings do not echo policy values or source identifiers.
+- [x] The generated-plan policy test file, Ruff, documentation conventions,
       and all seven required PR checks pass before merge.
-- [ ] No AWS workload, hosted control-plane, Terraform state, or lock resource
+- [x] No AWS workload, hosted control-plane, Terraform state, or lock resource
       is changed. Documentation makes no Nova dispatch or customer-apply claim.
 
 ## Acceptance status
 
-The EventBridge binding and regression tests are implemented on the source
-branch. The full generated-plan policy test file currently passes 320 tests;
-Ruff and documentation conventions pass. PR checks remain.
+The EventBridge binding and regression tests are complete. The full
+generated-plan policy test file passes 320 tests; Ruff and documentation
+conventions pass. All seven required PR checks passed on the tested revision.
+No AWS or hosted control-plane state changed.
 
 ## Tests / validation performed
 
 - `.venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py` —
   320 passed.
 - `.venv-pr399/bin/python -m ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
+- `.venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
+- PR CI run `45206796692` passed all seven checks on commit `028949c`.
 - No AWS mutation or hosted control-plane operation was performed.
 
 ## Evidence files produced
