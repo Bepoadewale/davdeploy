@@ -93,6 +93,12 @@ customer-side service evidence, not Nova dispatch or hosted execution.
 EventBridge target IAM roles and unknown or cross-account target shapes remain
 unsupported by the current plan policy.
 
+Draft PR #454 records direct Step Functions behavior with a controlled Lambda
+failure, Catch recovery, a separate normal success path, and verified cleanup.
+The test stack is absent and the implementation/evidence head passed all seven
+CI checks. This does not establish Step Functions role-policy safety, Nova
+dispatch, or hosted execution.
+
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
 configuration. Four tagged Batch job definitions remain inactive. The test
@@ -102,8 +108,9 @@ prefixes are absent; the existing production-tagged queue remains. The PR #447
 Lambda, event mapping, test role, and generated log group are absent. PR #448
 queues, table, Lambda, mapping, role, and generated log group are also absent.
 PR #449's four-resource test stack and local state are absent. PR #452's
-eight-resource stack and local state are absent. The run monitor has 31
-terminal records and no active operations. Preserve the protected untracked
+eight-resource stack and PR #454's five-resource stack and local state are
+absent. The run monitor has 34 terminal records and no active operations.
+Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and
