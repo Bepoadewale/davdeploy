@@ -1,11 +1,12 @@
 # ticket456 — bound Step Functions roles to planned Lambda tasks
 
 PR: https://github.com/Bepoadewale/davdeploy/pull/456
-Branch: `feat/step-functions-role-scope-456`
+Branch: `feat/step-functions-role-scope-456` (deleted after merge)
 
 ## Current repo state
 
-- Backend `main` is `d894357518dcd929fdabaa9292e1b649d0eb2ca0` (PR #455).
+- Backend `main` is `d2a9b5430d30e483e69bfb14438ad4960493b51f` (PR #456).
+- PR #456 merged at `2026-11-23T18:13:54Z`; its source branch was deleted.
 - Merged PR #454 records direct Lambda failure/Catch recovery and teardown.
   Nova dispatch and hosted lifecycle remain unproven by that service test.
 - Step Functions role permissions were previously subject only to generic IAM
@@ -64,7 +65,7 @@ permissions.
 - [x] Managed-policy attachments and unsupported integrations/configurations
       fail closed.
 - [x] Findings expose no policy values, workflow definition text, or secrets.
-- [ ] Focused tests, Ruff, documentation conventions, and all seven required
+- [x] Focused tests, Ruff, documentation conventions, and all seven required
       PR checks pass.
 - [x] No AWS workload, hosted control-plane resource, Terraform state/lock, or
       Nova execution gate is changed.
@@ -72,7 +73,7 @@ permissions.
 ## Acceptance status
 
 The source policy and regression cases are implemented. Focused validation
-passes; required PR CI is pending.
+passes; all seven required PR checks pass on the final head.
 
 ## Tests / validation performed
 
@@ -80,6 +81,8 @@ passes; required PR CI is pending.
 - `.venv-pr399/bin/python -m ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Final PR head `0bc9935297f00d0a5f9f525e05bd6909e4d8d602` passed all seven checks
+  in run [45235335526](https://github.com/Bepoadewale/davdeploy/actions/runs/45235335526).
 
 ## Evidence files produced
 
