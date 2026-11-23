@@ -7,7 +7,8 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-23
 
-Backend `main` is `dcdcd07e09a912fe52763de4968cd9140d831979` (PR #448). The last
+The source baseline for this reconciliation is backend `main` at
+`c5f7a2cf265665451c2ee88e85e34e4bbb048e6c` (PR #449). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -61,13 +62,19 @@ seven required CI checks passed in [run 45084339682](https://github.com/Bepoadew
 KMS-backed encryption, unsupported consumer-policy shapes, and complete SQS
 cost coverage remain incomplete.
 
-Draft PR #449 adds a bounded SNS-to-SQS test fixture with exact source-topic
-queue authorization. The isolated test published and received one synthetic
-message, verified the exact payload without printing its body, and emptied the
-queue. The four-resource destroy succeeded and the exact AWS topic, queue, and
-subscription are independently confirmed absent; local state is empty. It
-adds direct service evidence only and does not change policy or hosted
-control-plane behavior.
+PR #449 merged as `c5f7a2c`; all seven checks passed in run `45198632115`.
+Its bounded SNS-to-SQS fixture used exact source-topic queue authorization. The
+isolated test published and received one synthetic message, verified the exact
+payload without printing its body, and emptied the queue. The four-resource
+destroy succeeded and the exact AWS topic, queue, and subscription are
+independently confirmed absent; local state is empty. It adds direct service
+evidence only and does not change hosted control-plane behavior.
+
+PR #450 adds a source-only generated-plan policy binding for planned SNS-to-SQS
+subscriptions: one exact topic, queue, attached queue-policy URL, and SNS
+`SendMessage` grant with exact source ARN and account conditions. Regression
+tests deny mismatched or broad grants. The policy change is not deployed and
+does not alter AWS or hosted control-plane state or enable Nova execution.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint

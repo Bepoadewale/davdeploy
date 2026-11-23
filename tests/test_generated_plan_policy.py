@@ -494,6 +494,70 @@ def sqs_queue_case(sqs_managed_sse_enabled, *, after_unknown=None):
     return document, proposal(resources)
 
 
+def sns_sqs_case():
+    document, base_proposal = sqs_queue_case(True)
+    topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
+    queue_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+    queue_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "AllowExactSnsTopic",
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": queue_arn,
+                "Condition": {
+                    "ArnEquals": {"aws:SourceArn": topic_arn},
+                    "StringEquals": {"aws:SourceAccount": ACCOUNT},
+                },
+            }
+        ],
+    }
+    planned = [
+        (
+            "aws_sns_topic.notifications",
+            "aws_sns_topic",
+            {"name": "notifications", "arn": topic_arn},
+        ),
+        (
+            "aws_sqs_queue_policy.sns_publish",
+            "aws_sqs_queue_policy",
+            {
+                "queue_url": f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/async-work",
+                "policy": json.dumps(queue_policy),
+            },
+        ),
+        (
+            "aws_sns_topic_subscription.to_queue",
+            "aws_sns_topic_subscription",
+            {
+                "protocol": "sqs",
+                "topic_arn": topic_arn,
+                "endpoint": queue_arn,
+                "raw_message_delivery": True,
+            },
+        ),
+    ]
+    proposal_resources = [item.model_dump(mode="json") for item in base_proposal.resources]
+    for address, kind, values in planned:
+        document["planned_values"]["root_module"]["resources"].append(
+            resource(address, kind, values)
+        )
+        document["resource_changes"].append(change(address, kind))
+        name = address.split(".", maxsplit=1)[1]
+        proposal_resources.append(
+            {
+                "resource_id": name.replace("_", "-"),
+                "resource_type": kind,
+                "name": name,
+                "arguments": values,
+                "rationale": "Bind synthetic SNS notifications to the exact test queue.",
+            }
+        )
+    return document, proposal(proposal_resources)
+
+
 def test_sqs_queue_requires_sqs_managed_encryption():
     document, proposal_value = sqs_queue_case(False)
 
@@ -523,6 +587,167 @@ def test_sqs_queue_with_sqs_managed_encryption_remains_reviewable():
 
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert "sqs_queue_encryption_required" not in codes(result)
+
+
+def test_sns_sqs_subscription_with_exact_queue_policy_is_reviewable():
+    document, proposal_value = sns_sqs_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "sns_sqs_policy_binding_invalid" not in codes(result)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "wrong_principal",
+        "broad_action",
+        "wildcard_queue",
+        "wrong_source",
+        "wrong_account",
+        "extra_send_grant",
+        "queue_url_mismatch",
+    ],
+)
+def test_sns_sqs_subscription_denies_unscoped_queue_send_policy(mutation):
+    document, proposal_value = sns_sqs_case()
+    policy_item = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sqs_queue_policy"
+    )
+    policy = json.loads(policy_item["values"]["policy"])
+    statement = policy["Statement"][0]
+    if mutation == "wrong_principal":
+        statement["Principal"] = {"Service": "events.amazonaws.com"}
+    elif mutation == "broad_action":
+        statement["Action"] = "sqs:*"
+    elif mutation == "wildcard_queue":
+        statement["Resource"] = "arn:aws:sqs:us-east-1:654654474502:*"
+    elif mutation == "wrong_source":
+        statement["Condition"]["ArnEquals"]["aws:SourceArn"] = (
+            "arn:aws:sns:us-east-1:654654474502:another-topic"
+        )
+    elif mutation == "wrong_account":
+        statement["Condition"]["StringEquals"]["aws:SourceAccount"] = "111111111111"
+    elif mutation == "queue_url_mismatch":
+        policy_item["values"]["queue_url"] = (
+            f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/another-queue"
+        )
+    else:
+        policy["Statement"].append(
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "sns.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": "arn:aws:sqs:us-east-1:654654474502:async-work",
+            }
+        )
+    policy_item["values"]["policy"] = json.dumps(policy)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sns_sqs_policy_binding_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "field,value,expected_code",
+    [
+        ("protocol", "email", "sns_subscription_protocol_unsupported"),
+        ("topic_arn", "arn:aws:sns:us-east-1:654654474502:other", "sns_subscription_topic_unplanned"),
+        ("endpoint", "arn:aws:sqs:us-east-1:654654474502:other", "sns_subscription_queue_unplanned"),
+    ],
+)
+def test_sns_sqs_subscription_requires_exact_planned_topic_and_queue(field, value, expected_code):
+    document, proposal_value = sns_sqs_case()
+    subscription = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sns_topic_subscription"
+    )
+    subscription["values"][field] = value
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_sns_sqs_subscription_rejects_duplicate_topic_queue_pair():
+    document, proposal_value = sns_sqs_case()
+    subscription = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sns_topic_subscription"
+    )
+    address = "aws_sns_topic_subscription.duplicate"
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, "aws_sns_topic_subscription", subscription["values"])
+    )
+    document["resource_changes"].append(change(address, "aws_sns_topic_subscription"))
+    resources = [item.model_dump(mode="json") for item in proposal_value.resources]
+    resources.append(
+        {
+            "resource_id": "duplicate",
+            "resource_type": "aws_sns_topic_subscription",
+            "name": "duplicate",
+            "arguments": {
+                key: value
+                for key, value in subscription["values"].items()
+                if key != "tags"
+            },
+            "rationale": "Duplicate notification route regression.",
+        }
+    )
+
+    result = evaluate(document, proposal(resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sns_subscription_duplicate" in codes(result)
+
+
+def test_sns_sqs_send_policy_requires_a_same_plan_subscription():
+    document, proposal_value = sns_sqs_case()
+    address = "aws_sns_topic_subscription.to_queue"
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] != address
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["address"] != address
+    ]
+    proposal_resources = [
+        item.model_dump(mode="json")
+        for item in proposal_value.resources
+        if item.name != "to_queue"
+    ]
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sns_sqs_policy_binding_invalid" in codes(result)
+
+
+def test_sns_sqs_policy_finding_does_not_echo_policy_values():
+    marker = "private-sns-source-arn-marker"
+    document, proposal_value = sns_sqs_case()
+    policy_item = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sqs_queue_policy"
+    )
+    policy = json.loads(policy_item["values"]["policy"])
+    policy["Statement"][0]["Condition"]["ArnEquals"]["aws:SourceArn"] = marker
+    policy_item["values"]["policy"] = json.dumps(policy)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "sns_sqs_policy_binding_invalid" in codes(result)
+    assert marker not in repr(result)
 
 
 def sqs_lambda_consumer_case(

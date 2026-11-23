@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-22.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-23.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -250,6 +250,9 @@ def _evaluate(
     _check_cloudfront_origin_tls(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
+    _check_sns_sqs_subscription_bindings(
+        resources, findings, expected_account_id, expected_region
+    )
     _check_sqs_delivery_contract(
         document, resources, findings, expected_account_id, expected_region
     )
@@ -2190,6 +2193,249 @@ def _check_sqs_queue_policies(
                     "sqs_resource_arn_unbounded",
                     address,
                     "The queue policy resource must use a complete, bounded SQS ARN.",
+                )
+
+
+def _sns_topic_arn(name: Any, account_id: str, region: str) -> str | None:
+    if not isinstance(name, str) or not re.fullmatch(
+        r"(?=.{1,256}\Z)[A-Za-z0-9_-]+(?:\.fifo)?", name
+    ):
+        return None
+    return (
+        f"arn:{_sqs_partition_for_region(region)}:sns:{region}:"
+        f"{account_id}:{name}"
+    )
+
+
+def _sqs_queue_url(name: Any, account_id: str, region: str) -> str | None:
+    if _sqs_queue_arn(name, account_id, region) is None:
+        return None
+    partition = _sqs_partition_for_region(region)
+    if partition not in {"aws", "aws-us-gov", "aws-cn"}:
+        return None
+    domain = "amazonaws.com.cn" if partition == "aws-cn" else "amazonaws.com"
+    return f"https://sqs.{region}.{domain}/{account_id}/{name}"
+
+
+def _sqs_action_may_send(action: Any) -> bool:
+    actions = _string_list(action)
+    return any(
+        fnmatchcase("sqs:sendmessage", item.lower())
+        for item in actions
+    )
+
+
+def _valid_sns_sqs_send_statement(
+    statement: dict[str, Any],
+    *,
+    queue_arn: str,
+    topic_arn: str,
+    account_id: str,
+) -> bool:
+    return (
+        statement.get("Effect") == "Allow"
+        and statement.get("Principal") == {"Service": "sns.amazonaws.com"}
+        and statement.get("Action") == "sqs:SendMessage"
+        and statement.get("Resource") == queue_arn
+        and statement.get("Condition")
+        == {
+            "ArnEquals": {"aws:SourceArn": topic_arn},
+            "StringEquals": {"aws:SourceAccount": account_id},
+        }
+    )
+
+
+def _check_sns_sqs_subscription_bindings(
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    """Bind planned SNS-to-SQS subscriptions to one exact, conditional send grant."""
+    topics: set[str] = set()
+    for item in resources:
+        if item.get("type") != "aws_sns_topic":
+            continue
+        values = item.get("values")
+        name = values.get("name") if isinstance(values, dict) else None
+        address = item.get("address")
+        derived_arn = _sns_topic_arn(name, expected_account_id, expected_region)
+        arn = values.get("arn") if isinstance(values, dict) else None
+        if derived_arn is not None and arn in (None, derived_arn):
+            topics.add(derived_arn)
+        elif derived_arn is not None:
+            _deny(
+                findings,
+                "sns_topic_identity_invalid",
+                address,
+                "The planned SNS topic does not match the trusted account, region, and topic name.",
+            )
+
+    queues: set[str] = set()
+    queue_urls: dict[str, str] = {}
+    for item in resources:
+        if item.get("type") != "aws_sqs_queue":
+            continue
+        values = item.get("values")
+        name = values.get("name") if isinstance(values, dict) else None
+        address = item.get("address")
+        derived_arn = _sqs_queue_arn(name, expected_account_id, expected_region)
+        arn = values.get("arn") if isinstance(values, dict) else None
+        if derived_arn is not None and arn in (None, derived_arn):
+            queues.add(derived_arn)
+            derived_url = _sqs_queue_url(name, expected_account_id, expected_region)
+            if derived_url is not None:
+                queue_urls[derived_url] = derived_arn
+
+    subscriptions = [
+        item for item in resources if item.get("type") == "aws_sns_topic_subscription"
+    ]
+    subscription_pairs: set[tuple[str, str]] = set()
+    for subscription in subscriptions:
+        address = subscription.get("address")
+        values = subscription.get("values")
+        if not isinstance(values, dict) or values.get("protocol") != "sqs":
+            _deny(
+                findings,
+                "sns_subscription_protocol_unsupported",
+                address,
+                "Only a known SNS-to-SQS subscription protocol is supported by this plan policy.",
+            )
+            continue
+
+        topic_arn = values.get("topic_arn")
+        queue_arn = values.get("endpoint")
+        if not isinstance(topic_arn, str) or topic_arn not in topics:
+            _deny(
+                findings,
+                "sns_subscription_topic_unplanned",
+                address,
+                "The SNS subscription must name one exact topic in the trusted plan account and region.",
+            )
+            continue
+        if not isinstance(queue_arn, str) or queue_arn not in queues:
+            _deny(
+                findings,
+                "sns_subscription_queue_unplanned",
+                address,
+                "The SNS subscription must target one exact SQS queue in the trusted plan account and region.",
+            )
+            continue
+
+        pair = (topic_arn, queue_arn)
+        if pair in subscription_pairs:
+            _deny(
+                findings,
+                "sns_subscription_duplicate",
+                address,
+                "A topic and queue may have only one planned subscription pair.",
+            )
+            continue
+        subscription_pairs.add(pair)
+
+        matching_policies: list[dict[str, Any]] = []
+        for policy_item in resources:
+            if policy_item.get("type") != "aws_sqs_queue_policy":
+                continue
+            policy_values = policy_item.get("values")
+            if not isinstance(policy_values, dict):
+                continue
+            policy_queue = queue_urls.get(policy_values.get("queue_url"))
+            if policy_queue != queue_arn:
+                continue
+            policy = _json_document(
+                policy_values.get("policy"), findings, policy_item.get("address")
+            )
+            if policy is None:
+                continue
+            for statement in _statements(policy, require_resource=True, require_principal=True):
+                if str(statement.get("Effect", "")).lower() != "allow":
+                    continue
+                resources_in_statement = _string_list(statement.get("Resource"))
+                targets_queue = any(
+                    fnmatchcase(queue_arn, resource_arn)
+                    for resource_arn in resources_in_statement
+                )
+                if not targets_queue or not _sqs_action_may_send(statement.get("Action")):
+                    continue
+                matching_policies.append(
+                    {
+                        "statement": statement,
+                        "queue_arn": queue_arn,
+                        "address": policy_item.get("address"),
+                    }
+                )
+
+        valid = [
+            item
+            for item in matching_policies
+            if _valid_sns_sqs_send_statement(
+                item["statement"],
+                queue_arn=queue_arn,
+                topic_arn=topic_arn,
+                account_id=expected_account_id,
+            )
+        ]
+        if len(matching_policies) != 1 or len(valid) != 1:
+            _deny(
+                findings,
+                "sns_sqs_policy_binding_invalid",
+                address,
+                "The subscribed queue needs one exact SNS SendMessage grant with matching source ARN and account conditions.",
+            )
+
+    for policy_item in resources:
+        if policy_item.get("type") != "aws_sqs_queue_policy":
+            continue
+        values = policy_item.get("values")
+        if not isinstance(values, dict):
+            continue
+        policy_queue = queue_urls.get(values.get("queue_url"))
+        policy = _json_document(values.get("policy"), findings, policy_item.get("address"))
+        if policy is None:
+            continue
+        for statement in _statements(policy, require_resource=True, require_principal=True):
+            principal = statement.get("Principal")
+            sns_principal = (
+                isinstance(principal, dict)
+                and "sns.amazonaws.com" in _string_list(principal.get("Service"))
+            )
+            if (
+                not sns_principal
+                or str(statement.get("Effect", "")).lower() != "allow"
+                or not _sqs_action_may_send(statement.get("Action"))
+            ):
+                continue
+            resources_in_statement = _string_list(statement.get("Resource"))
+            condition = statement.get("Condition")
+            arn_equals = condition.get("ArnEquals") if isinstance(condition, dict) else None
+            topic_arn = (
+                arn_equals.get("aws:SourceArn")
+                if isinstance(arn_equals, dict)
+                else None
+            )
+            queue_arns = [
+                resource_arn
+                for resource_arn in resources_in_statement
+                if resource_arn in queues and resource_arn == policy_queue
+            ]
+            if (
+                len(queue_arns) != 1
+                or not isinstance(topic_arn, str)
+                or topic_arn not in topics
+                or (topic_arn, queue_arns[0]) not in subscription_pairs
+                or not _valid_sns_sqs_send_statement(
+                    statement,
+                    queue_arn=queue_arns[0] if len(queue_arns) == 1 else "",
+                    topic_arn=topic_arn if isinstance(topic_arn, str) else "",
+                    account_id=expected_account_id,
+                )
+            ):
+                _deny(
+                    findings,
+                    "sns_sqs_policy_binding_invalid",
+                    policy_item.get("address"),
+                    "SNS may send to SQS only through one exact planned topic, queue, and subscription with source conditions.",
                 )
 
 
