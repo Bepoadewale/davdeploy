@@ -173,6 +173,9 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("domain_endpoint_options", "tls_security_policy"),
     ),
     "aws_dynamodb_table": (
+        ("name",),
+        ("hash_key",),
+        ("billing_mode",),
         ("server_side_encryption", "enabled"),
         ("deletion_protection_enabled",),
         ("point_in_time_recovery", "enabled"),
@@ -310,7 +313,8 @@ def _evaluate(
     _check_iam(resources, findings, expected_account_id)
     _check_network(resources, findings)
     _check_databases(resources, findings)
-    _check_dynamodb_recovery(resources, proposal, findings)
+    _check_dynamodb_table_safety(resources, findings)
+    _check_dynamodb_recovery(resources, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
@@ -2027,10 +2031,9 @@ def _trusted_account_guard_matches(configuration: Any, expected_account_id: str)
 
 def _check_dynamodb_recovery(
     resources: tuple[dict[str, Any], ...],
-    proposal: GeneratedDeploymentProposal,
     findings: list[PlanPolicyFinding],
 ) -> None:
-    """Require known PITR when requested and review tables without recovery."""
+    """Require known, enabled PITR for generated DynamoDB tables."""
     for item in resources:
         if item.get("type") != "aws_dynamodb_table":
             continue
@@ -2070,27 +2073,12 @@ def _check_dynamodb_recovery(
             recovery_period = None
 
         if enabled is not True:
-            if proposal.recovery.backup_required:
-                _deny(
-                    findings,
-                    "dynamodb_pitr_required",
-                    address,
-                    "The proposal requires backups, but this DynamoDB table does not have confirmed point-in-time recovery enabled.",
-                )
-            elif enabled is False or pitr is None:
-                _review(
-                    findings,
-                    "dynamodb_pitr_disabled",
-                    address,
-                    "Point-in-time recovery is disabled for this DynamoDB table. Confirm that this data-recovery choice is intended.",
-                )
-            else:
-                _deny(
-                    findings,
-                    "dynamodb_pitr_settings_invalid",
-                    address,
-                    "DavDeploy could not verify DynamoDB point-in-time recovery settings.",
-                )
+            _deny(
+                findings,
+                "dynamodb_pitr_required",
+                address,
+                "Generated DynamoDB tables must have point-in-time recovery enabled.",
+            )
             continue
 
         if (
@@ -2103,6 +2091,63 @@ def _check_dynamodb_recovery(
                 "dynamodb_pitr_recovery_period_invalid",
                 address,
                 "The plan does not confirm a valid DynamoDB point-in-time recovery period.",
+            )
+
+
+def _check_dynamodb_table_safety(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    """Require the bounded encrypted, protected, on-demand table shape."""
+    for item in resources:
+        if item.get("type") != "aws_dynamodb_table":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "dynamodb_table_settings_invalid",
+                address,
+                "DavDeploy could not verify the required DynamoDB table settings.",
+            )
+            continue
+
+        for key in ("name", "hash_key"):
+            value = values.get(key)
+            if not isinstance(value, str) or not value.strip():
+                _deny(
+                    findings,
+                    "dynamodb_table_identity_invalid",
+                    address,
+                    "The DynamoDB table name and partition key must be known and non-empty.",
+                )
+                break
+
+        if values.get("billing_mode") != "PAY_PER_REQUEST":
+            _deny(
+                findings,
+                "dynamodb_billing_mode_unsupported",
+                address,
+                "Generated DynamoDB tables must use the module's bounded on-demand billing mode.",
+            )
+
+        encryption = values.get("server_side_encryption")
+        if isinstance(encryption, list) and len(encryption) == 1:
+            encryption = encryption[0]
+        if not isinstance(encryption, dict) or encryption.get("enabled") is not True:
+            _deny(
+                findings,
+                "dynamodb_encryption_required",
+                address,
+                "Generated DynamoDB tables must have server-side encryption enabled.",
+            )
+
+        if values.get("deletion_protection_enabled") is not True:
+            _deny(
+                findings,
+                "dynamodb_deletion_protection_required",
+                address,
+                "Generated DynamoDB tables must have deletion protection enabled.",
             )
 def _references_resource(references: tuple[str, ...], resource_address: Any) -> bool:
     if not isinstance(resource_address, str):

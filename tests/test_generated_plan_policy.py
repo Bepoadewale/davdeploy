@@ -384,6 +384,8 @@ def add_network_resource(document, kind, name, arguments, *, after_unknown=None)
 def dynamodb_case(point_in_time_recovery=_OMIT, *, backup_required=False, after_unknown=None):
     table_values = {
         "name": "app-records",
+        "hash_key": "id",
+        "billing_mode": "PAY_PER_REQUEST",
         "server_side_encryption": {"enabled": True},
         "deletion_protection_enabled": True,
     }
@@ -5375,18 +5377,18 @@ def test_dynamodb_pitr_enabled_with_valid_recovery_period_passes_recovery_policy
     result = evaluate(document, proposal_value)
 
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
-    assert not {"dynamodb_pitr_required", "dynamodb_pitr_disabled", "dynamodb_pitr_recovery_period_invalid"} & codes(result)
+    assert not {"dynamodb_pitr_required", "dynamodb_pitr_recovery_period_invalid"} & codes(result)
 
 
-def test_dynamodb_pitr_disabled_is_reviewed_when_backups_are_not_required():
+def test_dynamodb_pitr_disabled_is_denied_even_when_backups_are_not_requested():
     document, proposal_value = dynamodb_case(
         [{"enabled": False, "recovery_period_in_days": 35}]
     )
 
     result = evaluate(document, proposal_value)
 
-    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
-    assert "dynamodb_pitr_disabled" in codes(result)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "dynamodb_pitr_required" in codes(result)
 
 
 @pytest.mark.parametrize(
@@ -5438,8 +5440,43 @@ def test_dynamodb_pitr_policy_findings_do_not_include_plan_values():
 
     result = evaluate(document, proposal_value)
 
-    assert "dynamodb_pitr_disabled" in codes(result)
+    assert "dynamodb_pitr_required" in codes(result)
     assert "private-data-marker" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_code"),
+    [
+        ("name", "", "dynamodb_table_identity_invalid"),
+        ("hash_key", None, "dynamodb_table_identity_invalid"),
+        ("billing_mode", "PROVISIONED", "dynamodb_billing_mode_unsupported"),
+        ("deletion_protection_enabled", False, "dynamodb_deletion_protection_required"),
+        ("server_side_encryption", {"enabled": False}, "dynamodb_encryption_required"),
+    ],
+)
+def test_dynamodb_unsafe_table_settings_are_denied(field, value, expected_code):
+    document, proposal_value = dynamodb_case(
+        [{"enabled": True, "recovery_period_in_days": 35}]
+    )
+    table = document["planned_values"]["root_module"]["resources"][-1]["values"]
+    table[field] = value
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_dynamodb_plan_requires_known_identity_and_on_demand_settings():
+    document, proposal_value = dynamodb_case(
+        [{"enabled": True, "recovery_period_in_days": 35}],
+        after_unknown={"name": True, "billing_mode": True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 def step_functions_lambda_case():
