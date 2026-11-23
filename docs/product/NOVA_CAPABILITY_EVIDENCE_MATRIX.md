@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`d0614ac10059a1b34fc1b3f98cdd4cde032b7ece` (PR #468), 2026-11-23. PR #413
+`7b88fcf74352d448614d374d502a3aff3409525a` (PR #471), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -79,6 +79,12 @@ workload, lifecycle, and price remain unproven; see
 PR #468 adds source-only ACM request checks for DNS validation, RSA_2048, and
 disabled export; domain ownership, DNS publication, issuance, renewal, and
 production TLS remain unproven. See [`ticket468.md`](../tickets/ticket468.md).
+PR #470 adds source-only Route 53 zone-name, VPC-association, and record-safe
+deletion checks; ownership, delegation, record/failover behavior, lifecycle,
+and cost remain open. See [`ticket470.md`](../tickets/ticket470.md).
+PR #471 verifies an AppConfig environment binds to one same-plan application.
+It adds no feature profile or deployment; flag lifecycle and price remain
+unproven. See [`ticket471.md`](../tickets/ticket471.md).
 Merged PR #454's direct Step Functions test records a Lambda task failure,
 Catch recovery, a separate normal success path, and cleanup; see
 [`test454.md`](../test/test454.md). The five-resource test stack and local
