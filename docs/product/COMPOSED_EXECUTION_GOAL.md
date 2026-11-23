@@ -110,6 +110,11 @@ Map/Parallel states, wildcard permissions, and attached managed policies until
 their policies are separately covered. This follows AWS's execution-role and
 Lambda permission guidance; it does not enable or deploy Step Functions.
 
+Draft PR #458 prepares a disposable AWS Batch Fargate retry test. The plan is
+to record an injected first-attempt exit, automatic retry, successful second
+attempt, and exact teardown. The AWS run has not started; the hosted control
+plane remains outside its scope.
+
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
 configuration. Four tagged Batch job definitions remain inactive. The test
