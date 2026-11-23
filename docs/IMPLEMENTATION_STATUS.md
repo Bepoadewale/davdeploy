@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`aa72c68fa51add00691459fec4907a937ec63c61` (PR #473); hosted runtime remains
+`b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -46,6 +46,12 @@ identity, on-demand billing, encryption, deletion protection, and point-in-time
 recovery. No AWS table was created and the hosted control plane was not changed.
 Application operations, restore verification, complete pricing, and Nova
 dispatch remain unproven.
+
+PR #475 merged with all seven checks passing in CI run
+[45288480162](https://github.com/Bepoadewale/davdeploy/actions/runs/45288480162).
+It bounds Kinesis plans to one provisioned shard, 24-hour retention, and KMS
+encryption with the AWS-managed Kinesis key. No stream was created. Consumer
+behavior, replay, full price, and Nova execution remain open.
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,

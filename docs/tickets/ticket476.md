@@ -30,19 +30,21 @@ Reconcile the active Nova status, backlog, and evidence matrix with merged PR #4
 
 ## Acceptance criteria
 
-- [ ] Active status documents identify PR #475 and accurately describe its policy scope.
-- [ ] No Kinesis consumer behavior, complete pricing, customer lifecycle, or Nova dispatch is claimed from plan checks.
-- [ ] No AWS or hosted control-plane resources are changed.
-- [ ] Documentation conventions and `git diff --check` pass.
+- [x] Active status documents identify PR #475 and accurately describe its policy scope.
+- [x] No Kinesis consumer behavior, complete pricing, customer lifecycle, or Nova dispatch is claimed from plan checks.
+- [x] No AWS or hosted control-plane resources are changed.
+- [x] Documentation conventions and `git diff --check` pass.
 - [ ] Final-head CI and review state are tracked; merge only after required checks pass.
 
 ## Acceptance status
 
-Documentation reconciliation is in progress.
+Documentation reconciliation and local validation are complete; final-head CI is pending.
 
 ## Tests / validation performed
 
-- Pending.
+- `GITHUB_PR_NUMBER=476 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI — pending.
 
 ## Evidence files produced
 

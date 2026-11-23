@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`aa72c68fa51add00691459fec4907a937ec63c61` (PR #473). The hosted control plane
+`b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -47,6 +47,13 @@ It adds source-only DynamoDB plan checks for known table identity, on-demand
 billing, encryption, deletion protection, and point-in-time recovery. No AWS
 table or hosted control-plane resource was changed. It does not prove table
 operations, restore, full cost, or Nova dispatch.
+
+PR #475 merged with seven checks passing in CI run
+[45288480162](https://github.com/Bepoadewale/davdeploy/actions/runs/45288480162).
+Its source-only Kinesis policy checks one provisioned shard, 24-hour retention,
+and encryption with the AWS-managed Kinesis key. No stream or hosted
+control-plane resource was changed. This does not prove consumer behavior,
+complete pricing, lifecycle, or Nova dispatch.
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
