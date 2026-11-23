@@ -51,19 +51,21 @@ recovers, along with a separate ordinary success path and exact teardown.
 - [x] A separate normal execution completes without using the recovery path.
 - [x] The probe omits all execution input/output, exception text, and
       identifiers.
-- [ ] The exact five-resource stack is removed through monitored Terraform
+- [x] The exact five-resource stack is removed through monitored Terraform
       destroy; AWS and local state are independently confirmed empty.
-- [ ] Focused validation, docs conventions, and all seven required PR checks
+- [x] Focused validation, docs conventions, and all seven required PR checks
       pass.
-- [ ] No control-plane or production resource is changed and no Nova dispatch
+- [x] No control-plane or production resource is changed and no Nova dispatch
       or hosted execution is claimed.
 
 ## Acceptance status
 
-The five-resource fixture created successfully and the two probe paths passed
+The five-resource fixture created successfully and both probe paths passed
 after the probe was corrected to match Lambda-specific history event names.
-Four executions ended `SUCCEEDED`. Monitored teardown is in progress;
-independent absence and final-head CI remain pending.
+All four executions ended `SUCCEEDED`. Monitored teardown succeeded; exact
+AWS reads and local state confirm cleanup. All seven checks passed on head
+`c301c6f8330851c95d5d915b4f418c4d9bcee463` in run `45226919117`; a final-head
+CI run will cover the AWS teardown evidence updates.
 
 ## Tests / validation performed
 
@@ -80,7 +82,13 @@ independent absence and final-head CI remain pending.
 - The first probe pass validated the service behavior but used generic task
   history event names. The probe now checks `LambdaFunctionFailed` and
   `LambdaFunctionSucceeded`; its corrected run passed all redacted assertions.
-- The reviewed exact five-delete plan is running through the Terraform monitor.
+- Reviewed destroy plan: exactly five deletes, zero additions/updates.
+- Monitored destroy `nova-stepfn-recovery-454-destroy-nov23a2` succeeded with
+  five destroys. AWS confirmed the state machine, Lambda function, and both
+  roles absent; Terraform state is empty and there are no active monitor runs.
+- Final PR head `c301c6f8330851c95d5d915b4f418c4d9bcee463` passed all seven
+  checks in run `45226919117`; final-head CI will rerun after recording the
+  teardown and matrix evidence.
 
 ## Evidence files produced
 
