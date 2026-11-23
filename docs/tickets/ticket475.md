@@ -39,11 +39,11 @@ The Kinesis Terraform module uses one provisioned shard, 24-hour retention, and 
 - [x] The evidence matrix does not claim consumer behavior, full pricing, lifecycle, or Nova dispatch from the policy checks.
 - [x] No AWS or hosted control-plane resources are changed.
 - [x] Focused policy tests, Ruff, Terraform formatting/validation, documentation conventions, and `git diff --check` pass.
-- [ ] Final-head CI and review state are tracked; merge only after required checks pass.
+- [x] CI run [45287789821](https://github.com/Bepoadewale/davdeploy/actions/runs/45287789821) passed all seven checks for the implementation head; current-head checks and review remain tracked on PR #475, and merge requires all checks to pass.
 
 ## Acceptance status
 
-Implementation and all local validation are complete; final-head CI is pending.
+Implementation and all local validation are complete. CI run 45287789821 passed all seven checks; a ticket-only validation update is the only subsequent change.
 
 ## Tests / validation performed
 
@@ -54,7 +54,7 @@ Implementation and all local validation are complete; final-head CI is pending.
 - `terraform -chdir=infrastructure/terraform/modules/kinesis-stream validate` — passed.
 - `GITHUB_PR_NUMBER=475 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head CI — pending.
+- CI run [45287789821](https://github.com/Bepoadewale/davdeploy/actions/runs/45287789821) — all seven checks passed before this ticket-only validation update; current-head checks are tracked on the PR.
 
 ## Evidence files produced
 
