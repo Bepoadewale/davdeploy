@@ -1,7 +1,7 @@
 # ticket452 — validate EventBridge target retry and DLQ recovery
 
 PR: https://github.com/Bepoadewale/davdeploy/pull/452
-Branch: `feat/eventbridge-dlq-recovery-452`
+Branch: `feat/eventbridge-dlq-recovery-452` (merged; source branch deleted)
 
 ## Problem / goal
 
@@ -13,9 +13,9 @@ permission repair, successful delivery, and teardown.
 
 ## Current repo state
 
-- Backend `main` is `24000865fbf6e3d2c8325661a6e1494dd896de9b` (PR #451).
-- PR #451 binds a planned EventBridge bus/rule, SQS target, queue-policy URL,
-  and exact rule source ARN. It does not yet enforce retry or DLQ configuration.
+- Backend `main` is `6a193161aead202c4fda25b31cf70c512315961f` (PR #452).
+- Merged PRs #451 and #452 bind a planned EventBridge bus/rule, SQS target,
+  exact queue-policy grants, bounded retries, and a separate standard DLQ.
 - [`test257.md`](../test/test257.md) records one direct EventBridge-to-SQS
   delivery and teardown, without a failure-to-DLQ or recovery cycle.
 - The hosted control plane and its Terraform state/locks are out of scope.
@@ -72,9 +72,10 @@ permission repair, successful delivery, and teardown.
 ## Acceptance status
 
 All source, regression, direct-service, and cleanup criteria are met for this
-test shape. PR #452 remains a draft; its final head `2162265` passed all seven
+test shape. PR #452 merged as `6a193161aead202c4fda25b31cf70c512315961f`;
+its final head `9bfc02d70a89931a4037cb4c12a306bc7154d91f` passed all seven
 required checks in run
-[45215572683](https://github.com/Bepoadewale/davdeploy/actions/runs/45215572683).
+[45217552598](https://github.com/Bepoadewale/davdeploy/actions/runs/45217552598).
 This is direct same-account EventBridge-to-SQS evidence only, not Nova
 dispatch, hosted execution, or broad customer certification.
 

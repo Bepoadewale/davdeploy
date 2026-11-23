@@ -83,15 +83,15 @@ same-plan bus/rule, queue, attached queue-policy URL, and `events.amazonaws.com`
 unplanned or unknown target identities fail closed. This does not change AWS
 or hosted control-plane state.
 
-PR #452 adds explicit EventBridge retry bounds and requires a separate planned
-standard SQS dead-letter queue (DLQ) with an exact rule-scoped grant. It also
-records a controlled direct-service test: the deliberately restrictive target
-grant routed an event to the EventBridge DLQ, repairing the exact rule grant
-restored delivery, and the eight-resource test stack was destroyed and
-independently confirmed absent. Its seven CI checks passed on head `2162265`.
-This remains customer-side service evidence, not Nova dispatch or hosted
-execution. EventBridge target IAM roles and unknown or cross-account target
-shapes remain unsupported by the current plan policy.
+PR #452 merged as `6a19316`; all seven checks passed in run `45217552598`. It
+adds explicit EventBridge retry bounds and requires a separate planned
+standard SQS dead-letter queue (DLQ) with an exact rule-scoped grant. The
+controlled direct-service test routed a failure to the EventBridge DLQ,
+restored delivery after repairing the exact rule grant, and destroyed the
+eight-resource stack with independent absence checks. This remains
+customer-side service evidence, not Nova dispatch or hosted execution.
+EventBridge target IAM roles and unknown or cross-account target shapes remain
+unsupported by the current plan policy.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
@@ -101,8 +101,9 @@ temporary roles and workload resources are absent. PR #446 and #447 test queue
 prefixes are absent; the existing production-tagged queue remains. The PR #447
 Lambda, event mapping, test role, and generated log group are absent. PR #448
 queues, table, Lambda, mapping, role, and generated log group are also absent.
-PR #449's four-resource test stack and local state are absent. The run monitor
-has 27 terminal records and no active operations. Preserve the protected untracked
+PR #449's four-resource test stack and local state are absent. PR #452's
+eight-resource stack and local state are absent. The run monitor has 31
+terminal records and no active operations. Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and

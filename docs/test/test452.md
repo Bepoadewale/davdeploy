@@ -8,6 +8,11 @@ Customer repository: None; direct same-account AWS service test.
 
 Commit: `2162265b9935da5f350eff19292860a66ef1b2c1` (fixture and probe applied).
 
+PR: [#452](https://github.com/Bepoadewale/davdeploy/pull/452), merged as
+`6a193161aead202c4fda25b31cf70c512315961f`. Final CI run
+[45217552598](https://github.com/Bepoadewale/davdeploy/actions/runs/45217552598)
+passed all seven checks on head `9bfc02d70a89931a4037cb4c12a306bc7154d91f`.
+
 AWS account: `654654474502`.
 
 AWS region: `us-east-1`.
