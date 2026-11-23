@@ -599,6 +599,59 @@ def ssm_parameter_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def opensearch_domain_case(*, values=None, after_unknown=None):
+    address = "aws_opensearch_domain.this"
+    domain_values = {
+        "domain_name": "davdeploy-search-test",
+        "engine_version": "OpenSearch_2.11",
+        "cluster_config": [
+            {
+                "instance_type": "t3.small.search",
+                "instance_count": 1,
+                "zone_awareness_enabled": False,
+            }
+        ],
+        "ebs_options": [
+            {"ebs_enabled": True, "volume_type": "gp3", "volume_size": 10}
+        ],
+        "vpc_options": [
+            {"subnet_ids": ["subnet-private"], "security_group_ids": ["sg-search"]}
+        ],
+        "encrypt_at_rest": [{"enabled": True}],
+        "node_to_node_encryption": [{"enabled": True}],
+        "domain_endpoint_options": [
+            {
+                "enforce_https": True,
+                "tls_security_policy": "Policy-Min-TLS-1-2-2019-07",
+            }
+        ],
+        "tags": {"Product": "davdeploy"},
+    }
+    domain_values.update(values or {})
+    document = plan(
+        resources=[
+            resource(address, "aws_opensearch_domain", domain_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(address, "aws_opensearch_domain", after_unknown=after_unknown or {}),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "search",
+                "resource_type": "aws_opensearch_domain",
+                "name": "this",
+                "arguments": domain_values,
+                "rationale": "Use a bounded private encrypted search domain.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -936,6 +989,76 @@ def test_ssm_parameter_denies_unknown_encryption_or_tier_settings(attribute):
     document, proposal_value = ssm_parameter_case(
         values={attribute: None},
         after_unknown={attribute: True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_opensearch_domain_with_supported_private_shape_is_reviewable():
+    document, proposal_value = opensearch_domain_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("opensearch_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_code"),
+    [
+        ({"engine_version": "OpenSearch_1.0"}, "opensearch_engine_version_unsupported"),
+        (
+            {"cluster_config": [{"instance_type": "m6g.large.search", "instance_count": 1, "zone_awareness_enabled": False}]},
+            "opensearch_instance_type_unsupported",
+        ),
+        (
+            {"cluster_config": [{"instance_type": "t3.small.search", "instance_count": 2, "zone_awareness_enabled": False}]},
+            "opensearch_instance_count_unsupported",
+        ),
+        (
+            {"ebs_options": [{"ebs_enabled": True, "volume_type": "gp2", "volume_size": 10}]},
+            "opensearch_volume_type_unsupported",
+        ),
+        ({"encrypt_at_rest": [{"enabled": False}]}, "opensearch_at_rest_encryption_required"),
+        ({"node_to_node_encryption": [{"enabled": False}]}, "opensearch_node_encryption_required"),
+        (
+            {"domain_endpoint_options": [{"enforce_https": False, "tls_security_policy": "Policy-Min-TLS-1-0-2019-07"}]},
+            "opensearch_https_required",
+        ),
+    ],
+)
+def test_opensearch_domain_rejects_unsupported_or_unsafe_settings(values, expected_code):
+    document, proposal_value = opensearch_domain_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("values", "after_unknown"),
+    [
+        ({"engine_version": None}, {"engine_version": True}),
+        (
+            {"cluster_config": [{"instance_type": None}]},
+            {"cluster_config": [{"instance_type": True}]},
+        ),
+        ({"ebs_options": [{"volume_size": None}]}, {"ebs_options": [{"volume_size": True}]}),
+        ({"encrypt_at_rest": [{"enabled": None}]}, {"encrypt_at_rest": [{"enabled": True}]}),
+        (
+            {"domain_endpoint_options": [{"tls_security_policy": None}]},
+            {"domain_endpoint_options": [{"tls_security_policy": True}]},
+        ),
+    ],
+)
+def test_opensearch_domain_denies_unknown_safety_settings(values, after_unknown):
+    document, proposal_value = opensearch_domain_case(
+        values=values,
+        after_unknown=after_unknown,
     )
 
     result = evaluate(document, proposal_value)
