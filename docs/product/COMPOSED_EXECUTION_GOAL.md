@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`b2956ac1c56e2e3b7b385a5e0202e81f00f1b87c` (PR #458). The last
+`d10a9f66b43ac8c696e227f39b40a452b8bd79f9` (PR #461). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -135,10 +135,22 @@ PR #449's four-resource test stack and local state are absent. PR #452's
 eight-resource stack and PR #454's five-resource stack and local state are
 absent. PR #458's test compute environment, queue, IAM roles, security group,
 and log group are absent; one inactive AWS Batch job definition is retained by
-AWS. Its local state lists zero resources. The run monitor has 38 terminal
-records and no active operations.
-Preserve the protected untracked
-`--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
+AWS. Its local state lists zero resources.
+
+PR #461 merged as `d10a9f6`; all seven checks passed in run
+[45262237567](https://github.com/Bepoadewale/davdeploy/actions/runs/45262237567).
+It adds ECR repository safety checks and records a direct same-account test of
+the exact `modules/ecr` root. One empty repository was created with immutable
+tags, declared scan-on-push, and AES256 encryption, then destroyed and
+independently confirmed absent. No image was pushed, so image provenance,
+effective registry scanning, pull/run behavior, and image pricing remain open.
+See [test461](../test/test461.md). The control plane was untouched.
+
+The tested ECR repository and local Terraform state are absent. Current
+read-only inventory finds only the pre-existing `my-app` ECR repository. The
+Terraform monitor has 41 terminal records and no active operations.
+Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
+lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
