@@ -24,10 +24,13 @@ credentials, or Nova-dispatched workload is claimed.
 
 PR #437's isolated same-account ECS Express runs used direct Terraform and
 local state. They verified v1/v2 health, unhealthy-revision rollback, and
-teardown with independent absence checks. The goal owner accepts these runs as
-the general goal's customer-side plan/apply/health/update/recovery/teardown
-gate under control-plane isolation. This evidence is not Nova-generated or
-Nova-dispatched and does not establish cross-account isolation.
+teardown with independent absence checks. The goal owner accepts a properly
+isolated same-account customer test as general lifecycle evidence for the
+exact tested resource shape, including when Terraform is run directly rather
+than through Nova. The PR #437 evidence meets the general customer-side
+plan/apply/health/update/recovery/teardown gate under control-plane isolation.
+This is distinct from Nova-dispatch evidence and does not establish
+cross-account isolation or support for untested resource shapes.
 
 PR #443 merged as `e63d3ec`; all seven checks passed on final head
 `2d15f39d494931c251fd86d1a227693086ea2135` in
@@ -140,15 +143,17 @@ Preserve the protected untracked
 The product path remains Nova proposal -> deterministic schema/policy and
 preflight -> isolated saved plan -> plan-level policy and cost -> authorized
 human approval -> exact-plan execution -> observed application health and
-lifecycle evidence. Model output cannot authorize execution. Remaining work
-includes Nova-specific authorization/dispatch/credential-path evidence,
-persistent customer-role provisioning, cross-account and broader effective-
-permission proof, complete cost and policy coverage, Nova-specific application
-recovery, and the full scenario matrix. The
+lifecycle evidence. Model output cannot authorize execution. Direct isolated
+customer tests may satisfy the general lifecycle gate only for their recorded
+resource shapes and observed behaviors. Remaining product work includes
+Nova-specific authorization/dispatch/credential-path evidence, persistent
+customer-role provisioning, cross-account and broader effective-permission
+proof, complete cost and policy coverage, Nova-driven application recovery,
+and the full scenario matrix. The
 [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) retains all 26
 architecture entries and 30 implementation roots. The accepted ECS evidence
-meets the general customer-side gate; it does not close per-entry or
-Nova-originated execution requirements.
+meets the general customer-side lifecycle gate for that ECS shape; it does not
+close other per-entry requirements or prove Nova-originated execution.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 

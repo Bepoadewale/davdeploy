@@ -12,8 +12,12 @@ The hosted control plane was not accessed or changed for this reconciliation.
 PR #399 adds the exact-plan Nova apply path and customer role template in
 source; its apply and credential gates remain disabled. PR #437's isolated
 same-account ECS Express run is accepted by the owner as the general
-customer-side plan/apply/health/update/recovery/teardown gate. It used direct
-Terraform, not Nova dispatch, and does not prove cross-account isolation.
+customer-side plan/apply/health/update/recovery/teardown gate for the exact ECS
+shape tested. A properly isolated same-account AWS lifecycle test can satisfy
+the general customer-side lifecycle gate even when it uses direct Terraform;
+it need not be dispatched by Nova. This does not prove Nova authorization,
+dispatch, or credential issuance, cross-account isolation, or support for any
+untested resource shape.
 
 PR #443 merged as `e63d3ec`; seven checks passed in
 [run 45065309558](https://github.com/Bepoadewale/davdeploy/actions/runs/45065309558).
@@ -51,8 +55,10 @@ generated-plan binding checks for an exact planned SNS topic, SQS queue,
 attached queue-policy URL, and conditional `SendMessage` grant; it is not
 deployed. Merged PRs #451 and #452 add source-only EventBridge-to-SQS plan
 binding, bounded retry, and exact DLQ checks.
-KMS-backed queue encryption, unsupported consumer-policy shapes,
-complete regional cost coverage, and Nova-hosted lifecycle proof remain open.
+KMS-backed queue encryption, unsupported consumer-policy shapes, and complete
+regional cost coverage remain open. Nova authorization/dispatch evidence is a
+separate product-integration gap; it is not a prerequisite for accepting
+properly isolated direct customer-side lifecycle evidence for a tested shape.
 PR #452's direct EventBridge-to-SQS test observed failure routing to a
 rule-scoped DLQ, permission repair, successful recovery delivery, and cleanup;
 see [`test452.md`](../test/test452.md). Its eight-resource test stack and
@@ -114,8 +120,8 @@ customer.
 | Generated-plan policy | `generated_plan_policy.py` binds trusted account/region and proposal inventory; reviews destructive and sensitive changes; checks policy-critical unknowns for a finite list of Terraform types; and contains S3, SQS encryption/queue-policy/retry/DLQ/Lambda-consumer, IAM, network ingress, EC2 metadata, relational-database, and bounded EKS node IMDSv2 rules. Merged PR #445 remains source-only, not deployed. PRs #401/#402/#404 are merged and deployed to the control plane; [`test401.md`](../test/test401.md), [`test402.md`](../test/test402.md), and [`test404.md`](../test/test404.md) record their evidence. | Partial shared rules only. PR #445 requires one-to-one plan-bound source/DLQ pairs with 5–10 receives, exact DLQ source allow lists, and sufficient retention; its Lambda mapping rule supports direct same-plan references and inline role policies only. It does not prove delivery, idempotency, producer authorization, managed-policy contents, complete effective permissions, KMS encryption, or all SQS consumers. The EKS node rule applies only when the plan binds a node group to exactly one same-plan launch template whose metadata settings are visible to policy. It does not establish pod metadata isolation, Kubernetes/RBAC or cluster endpoint security. Unknown-value checks cover only paths in `POLICY_CRITICAL_UNKNOWN_PATHS`. ACL association, route/egress reachability, and a complete deterministic policy map for all 26 modules or 30 roots are not established. No customer plan has exercised these checks. See the resource-family table below. |
 | Cost | The hosted package has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PR #424 is merged in backend source for one Aurora PostgreSQL Serverless v2 writer shape; its catalog response and local tests are not deployed evidence. | This is partial plan cost evidence, not a complete quote or a hard billing cap. The supported resource/settings matrix is narrower than the catalogue; every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Existing fixture ranges and Cost Explorer history are not generated-plan price evidence. |
 | Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. PR #437 [test evidence](https://github.com/Bepoadewale/davdeploy/pull/437) records direct ECS Express v1/v2 `/healthz` probes and rollback recovery; the owner accepts this as general-goal customer-side evidence. | The test does not prove Nova generated or dispatched the plan. Scenario declarations do not prove that a hosted worker ran probes. The current `CertificationEvidence` is five booleans; it does not record controlled failure, cost, source/artifact digest, or evidence link. |
-| Update/recovery/cleanup | Service-level evidence includes healthy v1-to-v2 update, ECS circuit-breaker rollback of an unhealthy revision to v2, saved-plan teardown, and independent absence for ECS Express in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). The owner accepts the customer-side result for the general goal. | No Nova-hosted composed application evidence records the complete update, injected failure, recovery, exact ownership-based destroy, and independent absence path. A scenario label is not an observed result. |
-| Hosted execution | The repository records a legacy App Runner pilot in [`test42.md`](../test/test42.md), and the direct customer-side ECS Express pilot in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). PR #314 added durable saved-plan storage and administrator approval; its ticket states that path's hosted worker has no caller and apply/destroy are unavailable. | The two service pilots were not Nova-generated composed execution. The owner accepts the ECS run as a substitute for the general customer-side plan/apply/lifecycle evidence gate under control-plane isolation; it does not prove Nova's authorization, dispatch, or credential path. Hosted control-plane health is not workload health. |
+| Update/recovery/cleanup | Service-level evidence includes healthy v1-to-v2 update, ECS circuit-breaker rollback of an unhealthy revision to v2, saved-plan teardown, and independent absence for ECS Express in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). The owner accepts this isolated customer-side result for the general lifecycle gate for that tested shape. | Evidence does not generalize beyond the resource shapes and behaviors actually exercised. Nova dispatch is a separate product-integration property. |
+| Hosted execution | The repository records a legacy App Runner pilot in [`test42.md`](../test/test42.md), and the direct customer-side ECS Express pilot in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). PR #314 added durable saved-plan storage and administrator approval; its ticket states that path's hosted worker has no caller and apply/destroy are unavailable. | The two service pilots were not Nova-generated execution. Properly isolated direct customer-side tests count for the general plan/apply/lifecycle evidence gate for their tested shape; they do not prove Nova authorization, dispatch, or credential path. Hosted control-plane health is not workload health. |
 
 ## Acceptance record required for every entry
 
@@ -236,8 +242,10 @@ design does not mean that a rate is currently available.
 catalogue-to-root dispatch binding. The policy column refers to the shared
 checks above and names the closest implemented resource-family checks. The
 source evaluator has local regional price evidence for a bounded subset of
-resources; this matrix has **no hosted customer plan-price evidence** and **no
-Nova-hosted lifecycle evidence** unless the limitation says otherwise.
+resources; this matrix has **no hosted customer plan-price evidence**. Direct
+isolated AWS lifecycle evidence is recorded per tested shape below; Nova
+dispatch remains a separate integration property and is not implied by that
+evidence.
 
 | Architecture module | Existing scenario | Candidate implementation roots | Shared policy evidence / gap | Service-level evidence (not hosted Nova proof) | Remaining health/lifecycle evidence |
 |---|---|---|---|---|---|
@@ -274,8 +282,9 @@ The `catalogue candidate` column is descriptive only; the implementation
 registry does not declare these relationships. The `policy` column lists only
 current generated-plan checks that apply by resource type. Source-level
 regional price evidence exists for a bounded subset; no root has **hosted
-customer plan-price evidence** or **Nova-hosted lifecycle proof**. Linked tests
-are isolated AWS service/root evidence, not hosted customer execution.
+customer plan-price evidence**. Linked direct tests count toward the general
+customer-side lifecycle gate only for their exact tested shapes and recorded
+behaviors; they do not establish Nova dispatch or hosted execution.
 
 | Implementation ID | Terraform root | Catalogue candidate / existing scenario | Current applicable plan-policy checks | Existing service-level evidence |
 |---|---|---|---|---|
@@ -332,11 +341,13 @@ are isolated AWS service/root evidence, not hosted customer execution.
    spend do not price the generated plan. Every row needs product/region,
    runtime/traffic/storage/transfer assumptions, a captured catalog source and
    timestamp, and an explicit unknown-cost outcome.
-6. **Service evidence is not composed hosted evidence:** no scenario currently
-   proves, through the Nova hosted runner, create/invoke/observe/update/failure
-   recovery/destroy/independent absence. `test244.md` records useful resource
-   lifecycle checks, while tests #252–#268 prove selected direct AWS behavior;
-   neither set is the package's hosted customer acceptance.
+6. **Evidence is shape-specific:** properly isolated direct AWS tests count
+   toward the general customer-side lifecycle gate for the exact resource
+   shapes and behaviors they exercise. They do not prove Nova authorization,
+   dispatch, or credential issuance, nor support for other roots or composed
+   scenarios. Record create/invoke/observe/update/failure recovery/teardown and
+   independent absence where applicable; do not infer an outcome from a
+   scenario name.
 7. **Certification record is too small for the goal gate:** record a durable
    test ID, exact main/deployed commit and artifact digests, target account and
    region, cost estimate/actual delayed bill note, resource ownership manifest,
@@ -348,8 +359,10 @@ are isolated AWS service/root evidence, not hosted customer execution.
 
 Update individual rows only when the linked evidence exists. Use separate
 labels for catalogued, contract-tested, provider-schema-validated,
-plan-policy-tested, isolated-AWS-tested, hosted-plan-tested,
-hosted-lifecycle-tested, and cleanup-verified. Do not promote a root to hosted
-customer support based on this documentation, CI, Terraform validation, or an
-isolated service certification. The existing renderer and hosted execution
-gates remain the authority for runtime eligibility.
+plan-policy-tested, isolated-AWS-tested, isolated-lifecycle-tested,
+hosted-plan-tested, hosted-lifecycle-tested, and cleanup-verified.
+`isolated-lifecycle-tested` counts toward the general customer-side lifecycle
+gate only for the exact tested shape and observed behaviors. Keep Nova
+dispatch evidence separate. Do not promote a root to hosted customer support
+based on documentation, CI, Terraform validation, or an isolated test. Runtime
+eligibility still requires the applicable renderer and hosted execution gates.
