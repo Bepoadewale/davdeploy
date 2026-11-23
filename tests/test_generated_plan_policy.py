@@ -652,6 +652,40 @@ def opensearch_domain_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def acm_certificate_case(*, values=None, after_unknown=None):
+    address = "aws_acm_certificate.this"
+    certificate_values = {
+        "domain_name": "example.test",
+        "validation_method": "DNS",
+        "key_algorithm": "RSA_2048",
+        "options": [{"export": "DISABLED"}],
+        "tags": {"Product": "davdeploy"},
+    }
+    certificate_values.update(values or {})
+    document = plan(
+        resources=[
+            resource(address, "aws_acm_certificate", certificate_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(address, "aws_acm_certificate", after_unknown=after_unknown or {}),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "certificate",
+                "resource_type": "aws_acm_certificate",
+                "name": "this",
+                "arguments": certificate_values,
+                "rationale": "Request a non-exportable certificate with DNS validation.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -1057,6 +1091,54 @@ def test_opensearch_domain_rejects_unsupported_or_unsafe_settings(values, expect
 )
 def test_opensearch_domain_denies_unknown_safety_settings(values, after_unknown):
     document, proposal_value = opensearch_domain_case(
+        values=values,
+        after_unknown=after_unknown,
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_acm_certificate_with_reviewed_request_settings_is_reviewable():
+    document, proposal_value = acm_certificate_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("acm_certificate_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_code"),
+    [
+        ({"domain_name": ""}, "acm_certificate_domain_unknown"),
+        ({"validation_method": "EMAIL"}, "acm_certificate_dns_validation_required"),
+        ({"key_algorithm": "EC_secp384r1"}, "acm_certificate_key_algorithm_unsupported"),
+        ({"options": [{"export": "ENABLED"}]}, "acm_certificate_export_denied"),
+    ],
+)
+def test_acm_certificate_rejects_unsupported_request_settings(values, expected_code):
+    document, proposal_value = acm_certificate_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("values", "after_unknown"),
+    [
+        ({"domain_name": None}, {"domain_name": True}),
+        ({"validation_method": None}, {"validation_method": True}),
+        ({"key_algorithm": None}, {"key_algorithm": True}),
+        ({"options": [{"export": None}]}, {"options": [{"export": True}]}),
+    ],
+)
+def test_acm_certificate_denies_unknown_request_settings(values, after_unknown):
+    document, proposal_value = acm_certificate_case(
         values=values,
         after_unknown=after_unknown,
     )

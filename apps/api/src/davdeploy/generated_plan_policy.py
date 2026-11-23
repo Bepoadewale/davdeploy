@@ -150,6 +150,12 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("multi_region",),
     ),
     "aws_ssm_parameter": (("type",), ("tier",), ("key_id",)),
+    "aws_acm_certificate": (
+        ("domain_name",),
+        ("validation_method",),
+        ("key_algorithm",),
+        ("options", "export"),
+    ),
     "aws_opensearch_domain": (
         ("engine_version",),
         ("cluster_config", "instance_type"),
@@ -279,6 +285,7 @@ def _evaluate(
     _check_kms_keys(resources, findings)
     _check_ssm_parameters(resources, findings)
     _check_opensearch_domains(resources, findings)
+    _check_acm_certificates(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -3225,6 +3232,56 @@ def _single_plan_block(values: dict[str, Any], name: str) -> dict[str, Any] | No
     if not isinstance(blocks, list) or len(blocks) != 1 or not isinstance(blocks[0], dict):
         return None
     return blocks[0]
+
+
+def _check_acm_certificates(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_acm_certificate":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "acm_certificate_configuration_unknown",
+                address,
+                "The plan does not show the certificate request safety settings.",
+            )
+            continue
+
+        domain_name = values.get("domain_name")
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            _deny(
+                findings,
+                "acm_certificate_domain_unknown",
+                address,
+                "The ACM certificate domain must be a known non-empty name.",
+            )
+        if values.get("validation_method") != "DNS":
+            _deny(
+                findings,
+                "acm_certificate_dns_validation_required",
+                address,
+                "The reviewed ACM module requires DNS domain validation.",
+            )
+        if values.get("key_algorithm") != "RSA_2048":
+            _deny(
+                findings,
+                "acm_certificate_key_algorithm_unsupported",
+                address,
+                "Only the module's RSA_2048 certificate shape is currently supported.",
+            )
+
+        options = _single_plan_block(values, "options")
+        if options is None or options.get("export") != "DISABLED":
+            _deny(
+                findings,
+                "acm_certificate_export_denied",
+                address,
+                "Exportable ACM certificates are outside the supported cost and key-handling policy.",
+            )
 
 
 def _sqs_partition_for_region(region: str) -> str:
