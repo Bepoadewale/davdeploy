@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-23
 
-Backend `main` is `d10a9f66b43ac8c696e227f39b40a452b8bd79f9` (PR #461). The
+Backend `main` is `f33ff461f85cb457fb4a6ed03b358a5a0615a180` (PR #463). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -27,6 +27,12 @@ account creation, safety-setting verification, and teardown of the exact ECR
 module root. Its empty repository is independently confirmed absent. No image
 was pushed; provenance, effective scanning, pull/run behavior, and complete
 ECR pricing remain open. See `docs/test/test461.md`.
+
+PR #463 adds source-only KMS generated-plan checks requiring a known symmetric
+encryption key, automatic rotation, single-Region scope, and a 30-day deletion
+window. No customer-managed key was created: AWS bills these keys and requires
+a 7–30 day deletion wait. Key policy, consumer binding, and root-specific
+lifecycle evidence remain open. See `docs/tickets/ticket463.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
