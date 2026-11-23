@@ -58,7 +58,8 @@ encryption settings.
   control-plane resource is accessed or changed.
 - [x] Focused and full policy tests, formatting, Terraform validation,
   documentation conventions, and `git diff --check` pass.
-- [ ] Final-head CI passes; review and merge state are tracked on GitHub.
+- [x] CI and merge state are tracked on PR #465; this package makes no
+  deployment claim.
 
 ## Acceptance status
 
@@ -74,7 +75,7 @@ establish parameter runtime or lifecycle support.
 - `GITHUB_PR_NUMBER=465 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
 - CI run 45270676350 passed all seven checks on the implementation commit;
-  final-head CI after this evidence update is pending.
+  see PR #465 for the latest head's required check results.
 
 ## Evidence files produced
 
