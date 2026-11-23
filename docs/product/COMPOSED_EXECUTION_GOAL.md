@@ -62,9 +62,12 @@ KMS-backed encryption, unsupported consumer-policy shapes, and complete SQS
 cost coverage remain incomplete.
 
 Draft PR #449 adds a bounded SNS-to-SQS test fixture with exact source-topic
-queue authorization. Fixture validation passed; its AWS lifecycle test has
-not started. It adds direct service evidence only and does not change policy
-or hosted control-plane behavior.
+queue authorization. The isolated test published and received one synthetic
+message, verified the exact payload without printing its body, and emptied the
+queue. The four-resource destroy succeeded and the exact AWS topic, queue, and
+subscription are independently confirmed absent; local state is empty. It
+adds direct service evidence only and does not change policy or hosted
+control-plane behavior.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
@@ -74,8 +77,8 @@ temporary roles and workload resources are absent. PR #446 and #447 test queue
 prefixes are absent; the existing production-tagged queue remains. The PR #447
 Lambda, event mapping, test role, and generated log group are absent. PR #448
 queues, table, Lambda, mapping, role, and generated log group are also absent.
-The Terraform run monitor has 24 terminal records and no active operations.
-Preserve the protected untracked
+PR #449's four-resource test stack and local state are absent. The run monitor
+has 27 terminal records and no active operations. Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
 The product path remains Nova proposal -> deterministic schema/policy and

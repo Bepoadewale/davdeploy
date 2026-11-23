@@ -45,8 +45,8 @@ usage and material transfer costs must still be separately bounded.
 PR #438 template hosting and PR #441's SQS encryption rule remain source-only.
 Merged PR #448 records direct SQS/Lambda/DynamoDB idempotency and redrive
 recovery; its seven-resource stack and local state are confirmed absent. Draft
-PR #449 adds an exact-topic SNS-to-SQS delivery fixture; AWS execution is
-pending. KMS-backed queue encryption, unsupported consumer-policy shapes,
+PR #449 records one exact-topic SNS-to-SQS delivery; its four-resource stack
+and local state are confirmed absent. KMS-backed queue encryption, unsupported consumer-policy shapes,
 complete regional cost coverage, and Nova-hosted lifecycle proof remain open.
 Current AWS reads found no tested
 DavDeploy SageMaker endpoint, model, or endpoint configuration; four tagged

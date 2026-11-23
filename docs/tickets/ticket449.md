@@ -57,14 +57,14 @@ modify the hosted control plane, or certify all `aws-jobs-events` behavior.
 - [x] The saved plan contains only the four intended test resources and no
       changes or destroys; the complete queue policy names the exact planned
       queue ARN, topic ARN, account, and SNS service principal.
-- [ ] Queue authorization allows only the exact SNS service principal, topic
+- [x] Queue authorization allows only the exact SNS service principal, topic
       ARN, and account.
-- [ ] A synthetic publish is received exactly once with matching content; the
+- [x] A synthetic publish is received exactly once with matching content; the
       probe output omits the message body.
-- [ ] Monitored destroy succeeds; AWS confirms all exact resources absent and
+- [x] Monitored destroy succeeds; AWS confirms all exact resources absent and
       the run monitor has no active work.
-- [ ] Focused validation, docs convention checks, and all seven PR checks pass.
-- [ ] Evidence is described as direct same-account SNS/SQS behavior and does
+- [x] Focused validation, docs convention checks, and all seven PR checks pass.
+- [x] Evidence is described as direct same-account SNS/SQS behavior and does
       not claim Nova dispatch, hosted execution, or complete scenario support.
 
 ## Boundaries
@@ -88,16 +88,28 @@ SNS service principal. The first monitored create attempt
 `nova-sns-sqs-449-create-nov23a1` failed at STS credential validation because
 its request signature was stale; it made no resource changes. Exact AWS reads
 confirmed the topic and queue remained absent. A fresh plan was saved and
-monitored create `nova-sns-sqs-449-create2-nov23a1` is running.
+monitored create `nova-sns-sqs-449-create2-nov23a1` succeeded with four
+resources added and zero changes/destroys. The SNS subscription is confirmed.
+The body-redacting probe published one synthetic message, received it once
+with matching content, and deleted it. AWS reports zero visible and in-flight
+queue messages. Monitored destroy succeeded with zero additions, zero changes,
+and four deletes. After the settling period, exact AWS reads found no matching
+topic, queue, or subscription. Local Terraform state is empty; all 27 monitor
+records are terminal and no operation is active.
 
 ## Tests / validation performed
 
 Terraform format and validation, Python syntax/Ruff, and documentation
 conventions passed locally. Initial PR CI run `45085442555` passed all seven
 checks on the first fixture revision; PR run `45085892273` passed all seven
-checks on the reviewed known-ARN policy refinement. The first create attempt
-failed before resource changes because of a stale STS signature. A fresh saved
-plan is being applied through the monitor; its result is pending.
+checks on the known-ARN policy revision; PR run `45196122633` passed all seven
+checks on this evidence revision. The first create attempt failed
+before resource changes because of a stale STS signature. The retry applied
+four reviewed creates successfully. One synthetic message was published and
+received exactly once with matching content; the probe printed only a
+redacted result summary. The four-resource destroy succeeded; delayed AWS reads
+confirmed the exact resources absent, local state empty, and 27 terminal
+monitor records with none active.
 
 ## Evidence files produced
 

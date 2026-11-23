@@ -14,10 +14,10 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-The test plans one SNS topic, one SQS queue, one SQS queue policy, and one SNS
-subscription under the unique `davdeploy-nova-sns-sqs-449-nov23a1` prefix.
-Terraform state and generated files stay outside the repository. The stack
-will be created only after the draft PR and exact create plan are reviewed.
+The test created one SNS topic, one SQS queue, one SQS queue policy, and one
+SNS subscription under the unique `davdeploy-nova-sns-sqs-449-nov23a1` prefix.
+The reviewed teardown removed all four. Terraform state and generated files
+stay outside the repository.
 
 ## Commands executed
 
@@ -47,28 +47,45 @@ will be created only after the draft PR and exact create plan are reviewed.
   `nova-sns-sqs-449-create2-nov23a1` started at `2026-11-23T14:35:40Z`,
   supervisor PID 13106, root
   `/private/tmp/davdeploy-nova-sns-sqs-449-nov23a1`, and log
-  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sns-sqs-449-create2-nov23a1.log`. Its result is pending.
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sns-sqs-449-create2-nov23a1.log`. Terraform PID 13107; it completed at
+  `2026-11-23T14:36:38Z` with four added, zero changed, and zero destroyed.
+- AWS confirmed one SNS-to-SQS subscription with a non-pending ARN and one
+  confirmed topic subscription. The probe published one synthetic message,
+  received it once, matched the expected JSON, and deleted it. Probe output
+  contained only a success flag and receive count; the message body was not
+  printed. Queue metrics showed zero visible and in-flight messages.
+- Reviewed `destroy-reviewed.tfplan` contains zero creates, zero changes, and
+  four deletes. Monitored destroy `nova-sns-sqs-449-destroy-nov23a1` started
+  at `2026-11-23T14:41:44Z`, supervisor PID 14873, Terraform PID 14874, root
+  `/private/tmp/davdeploy-nova-sns-sqs-449-nov23a1`, and log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-sns-sqs-449-destroy-nov23a1.log`. It completed at `2026-11-23T14:42:21Z` with zero adds, zero changes, and four destroys. After more than five minutes, AWS listed no exact topic, queue, or subscription. The Terraform state is empty; the run monitor has 27 terminal records and zero active operations.
 
 ## Acceptance criteria
 
-- [ ] Draft PR and ticket/test evidence precede AWS writes.
-- [ ] A saved four-resource create plan has no unrelated changes or destroys.
-- [ ] The exact topic/account queue policy permits the SNS service to deliver.
-- [ ] One synthetic message arrives with the expected contents; no message body
+- [x] Draft PR and ticket/test evidence precede AWS writes.
+- [x] A saved four-resource create plan has no unrelated changes or destroys.
+- [x] The exact topic/account queue policy permits the SNS service to deliver.
+- [x] One synthetic message arrives with the expected contents; no message body
       is printed in terminal or CI output.
-- [ ] The received message is deleted and the queue is empty.
-- [ ] Monitored teardown and independent absence checks pass.
-- [ ] Required local and PR checks pass.
-- [ ] No Nova dispatch, hosted execution, or broad customer certification is
+- [x] The received message is deleted and the queue is empty.
+- [x] Monitored teardown and independent absence checks pass.
+- [x] Required local and PR checks pass.
+- [x] No Nova dispatch, hosted execution, or broad customer certification is
       claimed.
 
 ## Observed result
 
-Pending controlled execution.
+One synthetic publish was received exactly once by the subscribed SQS queue.
+The body matched the expected JSON, the probe omitted the body from output and
+deleted the message. SNS reports one confirmed subscription; the queue reports
+zero visible and in-flight messages. This is direct same-account behavior only.
 
 ## Teardown
 
-Pending monitored destroy and independent AWS absence checks.
+The reviewed exact four-resource destroy succeeded through the PID monitor.
+Independent AWS reads after the settling period found the topic, queue, and
+subscription absent. Local state is empty and the run monitor has no active
+operation.
 
 ## Final boundary
 
