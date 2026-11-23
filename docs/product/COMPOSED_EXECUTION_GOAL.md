@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`3f8e9785fdd32cffc4721cd8c1f5a14b07d3a1fd` (PR #466). The last
+`d0614ac10059a1b34fc1b3f98cdd4cde032b7ece` (PR #468). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -167,6 +167,12 @@ PR #466 adds source-only OpenSearch checks for the module's one-node
 policy. It does not establish effective network access, query behavior,
 lifecycle, or pricing. No AWS domain was created; see
 [`ticket466`](../tickets/ticket466.md).
+
+PR #468 adds source-only ACM request checks for a known domain, DNS
+validation, RSA_2048, and disabled certificate export. It does not prove
+domain ownership, DNS record publication, issuance, renewal, or production
+TLS behavior. No ACM or DNS resource was changed; see
+[`ticket468`](../tickets/ticket468.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
 monitor has 41 terminal records and no active operations.

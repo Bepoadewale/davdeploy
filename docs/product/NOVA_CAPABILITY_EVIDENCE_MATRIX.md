@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`3f8e9785fdd32cffc4721cd8c1f5a14b07d3a1fd` (PR #466), 2026-11-23. PR #413
+`d0614ac10059a1b34fc1b3f98cdd4cde032b7ece` (PR #468), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -76,6 +76,9 @@ PR #466 adds source-only OpenSearch module-shape, VPC-mode, encryption, HTTPS,
 and TLS checks. Subnet/security-group binding, effective access, search
 workload, lifecycle, and price remain unproven; see
 [`ticket466.md`](../tickets/ticket466.md).
+PR #468 adds source-only ACM request checks for DNS validation, RSA_2048, and
+disabled export; domain ownership, DNS publication, issuance, renewal, and
+production TLS remain unproven. See [`ticket468.md`](../tickets/ticket468.md).
 Merged PR #454's direct Step Functions test records a Lambda task failure,
 Catch recovery, a separate normal success path, and cleanup; see
 [`test454.md`](../test/test454.md). The five-resource test stack and local
