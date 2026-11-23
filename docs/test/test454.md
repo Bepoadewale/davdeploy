@@ -8,9 +8,12 @@ Customer repository: None; direct same-account AWS service test.
 
 Commit: `bc44e0c` (fixture and initial evidence record).
 
-PR: [#454](https://github.com/Bepoadewale/davdeploy/pull/454), draft. Initial
-head `eddbcd6ac3d47846c7e44a0a5ea3bcd9f71f3686` passed all seven checks in run
-[45222597413](https://github.com/Bepoadewale/davdeploy/actions/runs/45222597413).
+PR: [#454](https://github.com/Bepoadewale/davdeploy/pull/454), merged as
+`67913448c57e39eb3438242ef4ccc3bd567995ec`. Final head
+`a1a07882e767ae5f05e9a338f63ca7eed3d92138` passed all seven checks in run
+[45229243421](https://github.com/Bepoadewale/davdeploy/actions/runs/45229243421).
+Initial head `eddbcd6ac3d47846c7e44a0a5ea3bcd9f71f3686` passed all seven
+checks in run [45222597413](https://github.com/Bepoadewale/davdeploy/actions/runs/45222597413).
 Probe fix head `04edcc4cc81e56c2e37c6b9bca83dc6fb9cbcf7a` passed all seven
 checks in run `45225522977`. Evidence head
 `c301c6f8330851c95d5d915b4f418c4d9bcee463` passed all seven checks in run
@@ -32,7 +35,7 @@ repository.
 
 ## Commands executed
 
-- Draft PR #454 and its ticket/test evidence were opened before AWS writes.
+- PR #454 and its ticket/test evidence were opened before AWS writes; the PR was merged after all acceptance checks passed.
 - Caller identity was verified as account `654654474502` in `us-east-1`; exact
   Step Functions, Lambda, and role names were absent. The monitor had 31
   records and no active operations.
