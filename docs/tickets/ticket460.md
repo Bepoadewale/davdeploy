@@ -62,13 +62,15 @@ Nova dispatch and per-resource support as separate claims.
 
 ## Acceptance status
 
-Documentation is drafted; local acceptance criteria are met. PR CI and review
-are pending.
+Documentation is drafted; local acceptance criteria are met. All seven checks
+passed in [CI run 45253901006](https://github.com/Bepoadewale/davdeploy/actions/runs/45253901006).
+The PR remains a draft pending final-head checks and merge.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=460 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- PR CI run 45253901006 — all seven checks passed.
 - No product runtime or AWS workload test is planned for this documentation-only PR.
 
 ## Evidence files produced
