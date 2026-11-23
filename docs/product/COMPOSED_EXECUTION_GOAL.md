@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`d0614ac10059a1b34fc1b3f98cdd4cde032b7ece` (PR #468). The last
+`7b88fcf74352d448614d374d502a3aff3409525a` (PR #471). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -173,6 +173,16 @@ validation, RSA_2048, and disabled certificate export. It does not prove
 domain ownership, DNS record publication, issuance, renewal, or production
 TLS behavior. No ACM or DNS resource was changed; see
 [`ticket468`](../tickets/ticket468.md).
+
+PR #470 adds source-only Route 53 checks for known zone names, absence of VPC
+associations, and `force_destroy=false`. It does not prove ownership,
+delegation, record behavior, failover, or cost. No hosted zone was created;
+see [`ticket470`](../tickets/ticket470.md).
+
+PR #471 verifies a same-plan reference from each AppConfig environment to one
+application. It does not create or deploy configuration profiles or flags,
+and no AppConfig workload or lifecycle was tested; see
+[`ticket471`](../tickets/ticket471.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
 monitor has 41 terminal records and no active operations.

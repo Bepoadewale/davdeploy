@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-23
 
-Backend `main` is `d0614ac10059a1b34fc1b3f98cdd4cde032b7ece` (PR #468). The
+Backend `main` is `7b88fcf74352d448614d374d502a3aff3409525a` (PR #471). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -48,6 +48,16 @@ PR #468 adds source-only ACM checks requiring a known domain, DNS validation,
 RSA_2048, and export disabled. It does not prove domain ownership, DNS
 publication, certificate issuance, or renewal. No certificate or DNS record
 was created. See `docs/tickets/ticket468.md`.
+
+PR #470 adds source-only Route 53 zone checks for a known name, no VPC
+associations, and `force_destroy=false`. It does not verify ownership,
+delegation, records, failover, or DNS costs. No hosted zone was created. See
+`docs/tickets/ticket470.md`.
+
+PR #471 binds each planned AppConfig environment to exactly one same-plan
+application. The module still creates no configuration profile or feature-flag
+deployment, and no AWS AppConfig resource was changed. See
+`docs/tickets/ticket471.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
