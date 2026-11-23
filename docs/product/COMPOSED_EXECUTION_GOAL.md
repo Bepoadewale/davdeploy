@@ -110,6 +110,13 @@ Map/Parallel states, wildcard permissions, and attached managed policies until
 their policies are separately covered. This follows AWS's execution-role and
 Lambda permission guidance; it does not enable or deploy Step Functions.
 
+Draft PR #458 records a disposable AWS Batch Fargate retry test. The first
+attempt exited `1`, the automatic retry exited `0`, and the job succeeded. The
+exact stack was destroyed through the run monitor and independently checked
+absent; an AWS-managed inactive job definition remains subject to documented
+180-day retention. This is direct service evidence, not Nova dispatch or a
+hosted customer apply. The hosted control plane remained outside its scope.
+
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
 configuration. Four tagged Batch job definitions remain inactive. The test
@@ -120,7 +127,9 @@ Lambda, event mapping, test role, and generated log group are absent. PR #448
 queues, table, Lambda, mapping, role, and generated log group are also absent.
 PR #449's four-resource test stack and local state are absent. PR #452's
 eight-resource stack and PR #454's five-resource stack and local state are
-absent. The run monitor has 34 terminal records and no active operations.
+absent. PR #458's test compute environment, queue, IAM roles, security group,
+and log group are absent; one inactive AWS Batch job definition is retained by
+AWS. Its local state is empty. The run monitor has no active operations.
 Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 
