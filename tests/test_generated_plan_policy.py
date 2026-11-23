@@ -494,6 +494,40 @@ def sqs_queue_case(sqs_managed_sse_enabled, *, after_unknown=None):
     return document, proposal(resources)
 
 
+def ecr_repository_case(*, values=None, after_unknown=None):
+    address = "aws_ecr_repository.repository"
+    repository_values = {
+        "name": "davdeploy-test-images",
+        "image_tag_mutability": "IMMUTABLE",
+        "image_scanning_configuration": [{"scan_on_push": True}],
+        "encryption_configuration": [{"encryption_type": "AES256"}],
+        "force_delete": False,
+    }
+    repository_values.update(values or {})
+    document = plan(
+        resources=[
+            resource(address, "aws_ecr_repository", repository_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(address, "aws_ecr_repository", after_unknown=after_unknown or {}),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "repository",
+                "resource_type": "aws_ecr_repository",
+                "name": "repository",
+                "arguments": repository_values,
+                "rationale": "Store versioned application images in an encrypted private registry.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -666,6 +700,83 @@ def eventbridge_sqs_case(*, include_source_account=False):
             }
         )
     return document, proposal(proposal_resources)
+
+
+def test_ecr_repository_with_immutable_tags_encryption_and_scan_is_reviewable():
+    document, proposal_value = ecr_repository_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("ecr_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_code"),
+    [
+        ({"image_tag_mutability": "MUTABLE"}, "ecr_image_tags_must_be_immutable"),
+        (
+            {"image_scanning_configuration": [{"scan_on_push": False}]},
+            "ecr_scan_on_push_required",
+        ),
+        (
+            {"encryption_configuration": [{"encryption_type": "KMS"}]},
+            "ecr_encryption_required",
+        ),
+        ({"force_delete": True}, "ecr_force_delete_denied"),
+    ],
+)
+def test_ecr_repository_rejects_unsafe_configuration(values, expected_code):
+    document, proposal_value = ecr_repository_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_ecr_repository_denies_unknown_safety_configuration():
+    document, proposal_value = ecr_repository_case(
+        values={"image_tag_mutability": None},
+        after_unknown={"image_tag_mutability": True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert "ecr_image_tags_must_be_immutable" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("values", "after_unknown", "expected_code"),
+    [
+        (
+            {"image_scanning_configuration": [{"scan_on_push": None}]},
+            {"image_scanning_configuration": [{"scan_on_push": True}]},
+            "ecr_scan_on_push_required",
+        ),
+        (
+            {"encryption_configuration": [{"encryption_type": None}]},
+            {"encryption_configuration": [{"encryption_type": True}]},
+            "ecr_encryption_required",
+        ),
+        ({"force_delete": None}, {"force_delete": True}, "ecr_force_delete_denied"),
+    ],
+)
+def test_ecr_repository_denies_unknown_scanning_encryption_or_force_delete(
+    values, after_unknown, expected_code
+):
+    document, proposal_value = ecr_repository_case(
+        values=values,
+        after_unknown=after_unknown,
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert expected_code in codes(result)
 
 
 def test_sqs_queue_requires_sqs_managed_encryption():
