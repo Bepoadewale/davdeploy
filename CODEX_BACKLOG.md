@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-23
 
-Backend `main` is `f33ff461f85cb457fb4a6ed03b358a5a0615a180` (PR #463). The
+Backend `main` is `3f8e9785fdd32cffc4721cd8c1f5a14b07d3a1fd` (PR #466). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -33,6 +33,16 @@ encryption key, automatic rotation, single-Region scope, and a 30-day deletion
 window. No customer-managed key was created: AWS bills these keys and requires
 a 7–30 day deletion wait. Key policy, consumer binding, and root-specific
 lifecycle evidence remain open. See `docs/tickets/ticket463.md`.
+
+PR #465 adds source-only SSM parameter checks for known `SecureString`,
+Standard tier, and optional KMS key identity, and explicitly pins the module
+to Standard tier. It does not protect secret values in Terraform state or
+prove runtime access, rotation, or lifecycle. See `docs/tickets/ticket465.md`.
+
+PR #466 adds source-only OpenSearch plan checks for the module's bounded
+single-node/10 GiB shape, VPC mode, encryption, and TLS. Effective subnet and
+security-group binding, access policy, query lifecycle, and pricing remain
+open. No AWS domain was created. See `docs/tickets/ticket466.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

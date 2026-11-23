@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`f33ff461f85cb457fb4a6ed03b358a5a0615a180` (PR #463), 2026-11-23. PR #413
+`3f8e9785fdd32cffc4721cd8c1f5a14b07d3a1fd` (PR #466), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -68,6 +68,14 @@ PR #463 adds source-only KMS key-type, usage, rotation, Region-scope, and
 deletion-window checks. It does not test AWS KMS or establish key-policy,
 consumer-binding, cost, or lifecycle coverage; see
 [`ticket463.md`](../tickets/ticket463.md).
+PR #465 adds source-only SecureString, Standard-tier, and optional KMS key
+reference checks for Parameter Store. Secret values can still be present in
+Terraform state; no runtime retrieval or secret lifecycle is established. See
+[`ticket465.md`](../tickets/ticket465.md).
+PR #466 adds source-only OpenSearch module-shape, VPC-mode, encryption, HTTPS,
+and TLS checks. Subnet/security-group binding, effective access, search
+workload, lifecycle, and price remain unproven; see
+[`ticket466.md`](../tickets/ticket466.md).
 Merged PR #454's direct Step Functions test records a Lambda task failure,
 Catch recovery, a separate normal success path, and cleanup; see
 [`test454.md`](../test/test454.md). The five-resource test stack and local

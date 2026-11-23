@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`f33ff461f85cb457fb4a6ed03b358a5a0615a180` (PR #463). The last
+`3f8e9785fdd32cffc4721cd8c1f5a14b07d3a1fd` (PR #466). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -155,6 +155,18 @@ was created because AWS bills these keys and imposes a 7–30 day deletion wait.
 Key-policy safety, consumer binding, and root-specific customer lifecycle
 evidence remain open. The hosted control plane was not changed; see
 [`ticket463`](../tickets/ticket463.md).
+
+PR #465 adds source-only SSM parameter checks for `SecureString`, Standard
+tier, and a known optional KMS key reference. Standard is explicit in the
+module. The Terraform state can still contain plaintext parameter values, and
+runtime retrieval, rotation, and lifecycle evidence remain open. No AWS
+parameter was created; see [`ticket465`](../tickets/ticket465.md).
+
+PR #466 adds source-only OpenSearch checks for the module's one-node
+`t3.small.search` and 10 GiB gp3 shape, VPC mode, encryption, HTTPS, and TLS
+policy. It does not establish effective network access, query behavior,
+lifecycle, or pricing. No AWS domain was created; see
+[`ticket466`](../tickets/ticket466.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
 monitor has 41 terminal records and no active operations.
