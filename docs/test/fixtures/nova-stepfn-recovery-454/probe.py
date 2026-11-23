@@ -75,12 +75,12 @@ def run(region: str, state_machine_arn: str) -> dict:
     return {
         "body_omitted": True,
         "failure_execution_succeeded": failed_result.get("status") == "SUCCEEDED",
-        "failure_was_observed": "TaskFailed" in failed_history,
-        "recovery_task_succeeded": "TaskSucceeded" in failed_history,
+        "failure_was_observed": "LambdaFunctionFailed" in failed_history,
+        "recovery_task_succeeded": "LambdaFunctionSucceeded" in failed_history,
         "recovery_marker_matched": recovered_output.get("marker") == marker,
         "recovery_flag_set": recovered_output.get("recovered") is True,
         "success_execution_succeeded": success_result.get("status") == "SUCCEEDED",
-        "success_task_succeeded": "TaskSucceeded" in success_history,
+        "success_task_succeeded": "LambdaFunctionSucceeded" in success_history,
         "success_marker_matched": success_output.get("marker") == success_marker,
         "success_path_not_recovered": success_output.get("recovered") is False,
     }
