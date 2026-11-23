@@ -85,9 +85,13 @@ or hosted control-plane state.
 
 PR #452 adds explicit EventBridge retry bounds and requires a separate planned
 standard SQS dead-letter queue (DLQ) with an exact rule-scoped grant. It also
-records a controlled direct-service failure-to-DLQ, permission repair, recovery
-delivery, and teardown test. This remains customer-side service evidence, not
-Nova dispatch or hosted execution.
+records a controlled direct-service test: the deliberately restrictive target
+grant routed an event to the EventBridge DLQ, repairing the exact rule grant
+restored delivery, and the eight-resource test stack was destroyed and
+independently confirmed absent. Its seven CI checks passed on head `2162265`.
+This remains customer-side service evidence, not Nova dispatch or hosted
+execution. EventBridge target IAM roles and unknown or cross-account target
+shapes remain unsupported by the current plan policy.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint

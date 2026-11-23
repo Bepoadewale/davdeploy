@@ -52,34 +52,43 @@ permission repair, successful delivery, and teardown.
 
 ## Acceptance criteria
 
-- [ ] Retry policy values are known and within AWS ranges; missing and
+- [x] Retry policy values are known and within AWS ranges; missing and
       out-of-range values are denied.
-- [ ] A distinct planned standard DLQ is required, and its queue URL and
+- [x] A distinct planned standard DLQ is required, and its queue URL and
       EventBridge grant bind to the exact rule and queue.
-- [ ] An unplanned, FIFO, same-as-target, or incorrectly authorized DLQ is
+- [x] An unplanned, FIFO, same-as-target, or incorrectly authorized DLQ is
       denied.
-- [ ] One synthetic event fails delivery to the primary queue and reaches the
+- [x] One synthetic event fails delivery to the primary queue and reaches the
       EventBridge DLQ with a matching marker.
-- [ ] After repairing the exact source rule grant, a second synthetic event
+- [x] After repairing the exact source rule grant, a second synthetic event
       reaches the primary queue with a matching marker.
-- [ ] The probe prints no message bodies. The exact test stack is destroyed
+- [x] The probe prints no message bodies. The exact test stack is destroyed
       through the Terraform run monitor and independently confirmed absent.
-- [ ] The generated-plan policy test file, Ruff, docs conventions, and all
+- [x] The generated-plan policy test file, Ruff, docs conventions, and all
       seven required PR checks pass.
-- [ ] Control-plane runtime/state/locks and production/customer resources are
+- [x] Control-plane runtime/state/locks and production/customer resources are
       untouched; evidence is not described as Nova dispatch or customer apply.
 
 ## Acceptance status
 
-Policy checks, regression tests, the fixture, and a redacting probe are being
-prepared. No AWS resources have been created for this PR. PR and AWS evidence
-remain pending.
+All source, regression, direct-service, and cleanup criteria are met for this
+test shape. PR #452 remains a draft; its final head `2162265` passed all seven
+required checks in run
+[45215572683](https://github.com/Bepoadewale/davdeploy/actions/runs/45215572683).
+This is direct same-account EventBridge-to-SQS evidence only, not Nova
+dispatch, hosted execution, or broad customer certification.
 
 ## Tests / validation performed
 
 - `.venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py` —
   330 passed, including the retry and DLQ regression cases.
-- No AWS mutation or hosted control-plane operation has been performed.
+- Ruff, Python syntax, Terraform formatting/validation, documentation
+  conventions, and `git diff --check` passed for the fixture and policy.
+- The corrected isolated AWS test observed target failure to the exact
+  EventBridge DLQ, repaired the queue grant, observed recovery delivery, and
+  removed the exact eight-resource stack. `test452.md` records monitored run
+  IDs, plans, results, independent absence, and boundaries.
+- No hosted control-plane operation was performed.
 
 ## Evidence files produced
 
@@ -104,6 +113,6 @@ errors and message bodies out of output. Preserve protected untracked
 
 ## Follow-up work
 
-This test will cover one direct EventBridge-to-SQS target and DLQ shape. It
-does not prove Nova-generated plan/apply, EventBridge target roles, other target
+This test covers one direct EventBridge-to-SQS target and DLQ shape. It does
+not prove Nova-generated plan/apply, EventBridge target roles, other target
 families, replay/redrive behavior, or full `aws-jobs-events` coverage.
