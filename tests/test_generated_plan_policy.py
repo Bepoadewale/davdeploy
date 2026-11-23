@@ -719,6 +719,72 @@ def route53_zone_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def appconfig_environment_case(*, reference="aws_appconfig_application.this.id"):
+    application_address = "aws_appconfig_application.this"
+    environment_address = "aws_appconfig_environment.this"
+    application_values = {"id": None, "name": "service-flags"}
+    environment_values = {
+        "application_id": None,
+        "environment_id": None,
+        "name": "production",
+    }
+    document = plan(
+        resources=[
+            resource(application_address, "aws_appconfig_application", application_values),
+            resource(environment_address, "aws_appconfig_environment", environment_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(application_address, "aws_appconfig_application"),
+            change(environment_address, "aws_appconfig_environment"),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": application_address,
+                "expressions": {"name": {"constant_value": "service-flags"}},
+            },
+            {
+                "address": environment_address,
+                "expressions": {
+                    "application_id": {"references": [reference]},
+                    "name": {"constant_value": "production"},
+                },
+            },
+        ]
+    }
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "application",
+                "resource_type": "aws_appconfig_application",
+                "name": "this",
+                "arguments": application_values,
+                "rationale": "Group related runtime feature configuration.",
+                "outputs": [{"name": "id", "value_type": "string"}],
+            },
+            {
+                "resource_id": "environment",
+                "resource_type": "aws_appconfig_environment",
+                "name": "this",
+                "arguments": {
+                    "application_id": {
+                        "kind": "resource_reference",
+                        "resource_id": "application",
+                        "output_name": "id",
+                        "value_type": "string",
+                    },
+                    "name": "production",
+                },
+                "rationale": "Bind the environment to its same-plan application.",
+            },
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -1219,6 +1285,62 @@ def test_route53_zone_denies_unknown_identity_or_deletion_setting(attribute):
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_appconfig_environment_binds_to_same_plan_application():
+    document, proposal_value = appconfig_environment_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "appconfig_environment_application_binding_invalid" not in codes(result)
+
+
+def test_appconfig_environment_rejects_unplanned_application_reference():
+    document, proposal_value = appconfig_environment_case(
+        reference="aws_appconfig_application.unplanned.id"
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_environment_application_binding_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("kind", "address", "values", "after_unknown", "expected_code"),
+    [
+        (
+            "aws_appconfig_application",
+            "aws_appconfig_application.this",
+            {"name": None},
+            {"name": True},
+            "appconfig_application_name_unknown",
+        ),
+        (
+            "aws_appconfig_environment",
+            "aws_appconfig_environment.this",
+            {"name": None},
+            {"name": True},
+            "appconfig_environment_name_unknown",
+        ),
+    ],
+)
+def test_appconfig_names_must_be_known(kind, address, values, after_unknown, expected_code):
+    document, proposal_value = appconfig_environment_case()
+    planned = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == address
+    )
+    planned["values"].update(values)
+    update = next(item for item in document["resource_changes"] if item["address"] == address)
+    update["change"]["after_unknown"].update(after_unknown)
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert expected_code in codes(result)
 
 
 def test_sqs_queue_requires_sqs_managed_encryption():
