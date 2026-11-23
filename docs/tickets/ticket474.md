@@ -30,20 +30,22 @@ Reconcile the active Nova status, backlog, and evidence matrix with merged PR #4
 
 ## Acceptance criteria
 
-- [ ] Active status documents identify PR #473 and accurately describe its bounded policy scope.
-- [ ] No Nova workload, complete pricing, or customer lifecycle is claimed from this source-only change.
-- [ ] The direct same-account customer lifecycle acceptance remains stated for exact tested resource shapes.
+- [x] Active status documents identify PR #473 and accurately describe its bounded policy scope.
+- [x] No Nova workload, complete pricing, or customer lifecycle is claimed from this source-only change.
+- [x] The direct same-account customer lifecycle acceptance remains stated for exact tested resource shapes.
 - [ ] No AWS or hosted control-plane resources are changed.
-- [ ] Documentation conventions and `git diff --check` pass.
+- [x] Documentation conventions and `git diff --check` pass.
 - [ ] Final-head CI and review/merge state are tracked; merge only after required checks pass.
 
 ## Acceptance status
 
-Documentation reconciliation is in progress.
+Documentation reconciliation and local validation are complete; final-head CI is pending.
 
 ## Tests / validation performed
 
-- Pending.
+- `GITHUB_PR_NUMBER=474 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI — pending.
 
 ## Evidence files produced
 

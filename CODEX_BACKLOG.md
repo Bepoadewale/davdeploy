@@ -1,8 +1,8 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-23
+## Nova status snapshot — 2026-11-24
 
-Backend `main` is `7b88fcf74352d448614d374d502a3aff3409525a` (PR #471). The
+Backend `main` is `aa72c68fa51add00691459fec4907a937ec63c61` (PR #473). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -58,6 +58,14 @@ PR #471 binds each planned AppConfig environment to exactly one same-plan
 application. The module still creates no configuration profile or feature-flag
 deployment, and no AWS AppConfig resource was changed. See
 `docs/tickets/ticket471.md`.
+
+PR #473 adds source-only DynamoDB plan checks for known table/partition-key
+identity, on-demand billing, server-side encryption, deletion protection, and
+enabled point-in-time recovery. It explicitly enables deletion protection in
+the bounded module; intentional future teardown needs a separate reviewed plan
+to disable it. No AWS table was created. Application reads/writes, restore,
+complete regional pricing, and broader DynamoDB configurations remain open.
+See `docs/tickets/ticket473.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

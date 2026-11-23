@@ -2,8 +2,8 @@
 
 ## Current state
 
-**As of 2026-11-22, backend `main` is
-`c874b0de523f26c46561272a05b290ecf782aecc` (PR #445). The hosted control plane
+**As of 2026-11-24, backend `main` is
+`aa72c68fa51add00691459fec4907a937ec63c61` (PR #473). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -40,6 +40,13 @@ The stack, roles, bucket, queue, and table were removed and independently
 verified absent. This proves only the tested direct role actions; Nova's
 credential path, cross-account trust, full effective permissions, and hosted
 apply remain unverified.
+
+PR #473 merged with seven passing checks in CI run
+[45284594649](https://github.com/Bepoadewale/davdeploy/actions/runs/45284594649).
+It adds source-only DynamoDB plan checks for known table identity, on-demand
+billing, encryption, deletion protection, and point-in-time recovery. No AWS
+table or hosted control-plane resource was changed. It does not prove table
+operations, restore, full cost, or Nova dispatch.
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
