@@ -33,21 +33,28 @@ The Kinesis Terraform module uses one provisioned shard, 24-hour retention, and 
 
 ## Acceptance criteria
 
-- [ ] The module explicitly configures one provisioned shard, 24-hour retention, and KMS encryption with the AWS-managed Kinesis key.
-- [ ] Policy accepts the intended bounded shape and denies missing, unsafe, or unknown required settings.
-- [ ] Regression tests cover valid, unsafe, unknown, and finding-value redaction cases.
-- [ ] The evidence matrix does not claim consumer behavior, full pricing, lifecycle, or Nova dispatch from the policy checks.
-- [ ] No AWS or hosted control-plane resources are changed.
-- [ ] Focused policy tests, Ruff, Terraform formatting/validation, documentation conventions, and `git diff --check` pass.
+- [x] The module explicitly configures one provisioned shard, 24-hour retention, and KMS encryption with the AWS-managed Kinesis key.
+- [x] Policy accepts the intended bounded shape and denies missing, unsafe, or unknown required settings.
+- [x] Regression tests cover valid, unsafe, unknown, and finding-value redaction cases.
+- [x] The evidence matrix does not claim consumer behavior, full pricing, lifecycle, or Nova dispatch from the policy checks.
+- [x] No AWS or hosted control-plane resources are changed.
+- [x] Focused policy tests, Ruff, Terraform formatting/validation, documentation conventions, and `git diff --check` pass.
 - [ ] Final-head CI and review state are tracked; merge only after required checks pass.
 
 ## Acceptance status
 
-Implementation is pending.
+Implementation and all local validation are complete; final-head CI is pending.
 
 ## Tests / validation performed
 
-- Pending.
+- `tests/test_generated_plan_policy.py -q` — 420 passed.
+- Ruff — passed.
+- Terraform format check — passed.
+- `terraform -chdir=infrastructure/terraform/modules/kinesis-stream init -backend=false -input=false` — passed; generated provider lock file is preserved locally and not committed.
+- `terraform -chdir=infrastructure/terraform/modules/kinesis-stream validate` — passed.
+- `GITHUB_PR_NUMBER=475 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI — pending.
 
 ## Evidence files produced
 
@@ -60,6 +67,8 @@ Implementation is pending.
 ## Boundaries
 
 Source and documentation only. Do not create or change Kinesis resources. Do not access or change the hosted control plane. Do not claim stream consumers, replay, failure recovery, complete pricing, or Nova execution from plan checks.
+
+The 24-hour retention and single-shard limits define this module's bounded price/performance profile. AWS documents that retention above 24 hours adds charges; this policy is not a complete quote.
 
 ## Follow-up work
 

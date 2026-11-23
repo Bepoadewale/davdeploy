@@ -423,6 +423,46 @@ def dynamodb_case(point_in_time_recovery=_OMIT, *, backup_required=False, after_
     return document, proposal_value
 
 
+def kinesis_case(*, values=None, after_unknown=None):
+    stream_values = {
+        "name": "app-events",
+        "shard_count": 1,
+        "retention_period": 24,
+        "encryption_type": "KMS",
+        "kms_key_id": "alias/aws/kinesis",
+        "stream_mode_details": {"stream_mode": "PROVISIONED"},
+    }
+    stream_values.update(values or {})
+    address = "aws_kinesis_stream.events"
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "terraform_data"
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["type"] == "terraform_data"
+    ]
+    document["planned_values"]["root_module"]["resources"].append(
+        resource(address, "aws_kinesis_stream", stream_values)
+    )
+    document["resource_changes"].append(
+        change(address, "aws_kinesis_stream", after_unknown=after_unknown or {})
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "events",
+                "resource_type": "aws_kinesis_stream",
+                "name": "events",
+                "arguments": {"name": "app-events", "shard_count": 1},
+                "rationale": "Accept bounded event records for asynchronous processing.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def add_sqs_queue_policy(document, policy, **change_metadata):
     address = "aws_sqs_queue_policy.queue_access"
     document["planned_values"]["root_module"]["resources"].append(
@@ -5477,6 +5517,70 @@ def test_dynamodb_plan_requires_known_identity_and_on_demand_settings():
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_kinesis_safe_module_shape_is_eligible_for_review():
+    document, proposal_value = kinesis_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("kinesis_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_code"),
+    [
+        ("name", "", "kinesis_stream_name_invalid"),
+        ("shard_count", 2, "kinesis_shard_count_unsupported"),
+        ("retention_period", 48, "kinesis_retention_period_unsupported"),
+        ("encryption_type", "NONE", "kinesis_encryption_required"),
+        ("kms_key_id", "customer-key-id", "kinesis_key_unsupported"),
+        (
+            "stream_mode_details",
+            {"stream_mode": "ON_DEMAND"},
+            "kinesis_stream_mode_unsupported",
+        ),
+    ],
+)
+def test_kinesis_unsafe_stream_settings_are_denied(field, value, expected_code):
+    document, proposal_value = kinesis_case(values={field: value})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    "unknown_path",
+    [
+        "name",
+        "shard_count",
+        "retention_period",
+        "encryption_type",
+        "kms_key_id",
+        "stream_mode_details",
+    ],
+)
+def test_unknown_kinesis_safety_values_are_denied(unknown_path):
+    document, proposal_value = kinesis_case(after_unknown={unknown_path: True})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_kinesis_policy_findings_do_not_echo_plan_values():
+    document, proposal_value = kinesis_case(
+        values={"kms_key_id": "sensitive-customer-key-marker"}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert "kinesis_key_unsupported" in codes(result)
+    assert "sensitive-customer-key-marker" not in repr(result)
 
 
 def step_functions_lambda_case():

@@ -181,6 +181,14 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("point_in_time_recovery", "enabled"),
         ("point_in_time_recovery", "recovery_period_in_days"),
     ),
+    "aws_kinesis_stream": (
+        ("name",),
+        ("shard_count",),
+        ("retention_period",),
+        ("encryption_type",),
+        ("kms_key_id",),
+        ("stream_mode_details", "stream_mode"),
+    ),
     "aws_cloudfront_distribution": (
         ("default_cache_behavior", "viewer_protocol_policy"),
         ("ordered_cache_behavior", "viewer_protocol_policy"),
@@ -315,6 +323,7 @@ def _evaluate(
     _check_databases(resources, findings)
     _check_dynamodb_table_safety(resources, findings)
     _check_dynamodb_recovery(resources, findings)
+    _check_kinesis_streams(resources, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
@@ -2149,6 +2158,81 @@ def _check_dynamodb_table_safety(
                 address,
                 "Generated DynamoDB tables must have deletion protection enabled.",
             )
+
+
+def _check_kinesis_streams(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    """Require the module's single-shard, short-retention encrypted stream."""
+    for item in resources:
+        if item.get("type") != "aws_kinesis_stream":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "kinesis_stream_settings_invalid",
+                address,
+                "DavDeploy could not verify the required Kinesis stream settings.",
+            )
+            continue
+
+        name = values.get("name")
+        if not isinstance(name, str) or not name.strip():
+            _deny(
+                findings,
+                "kinesis_stream_name_invalid",
+                address,
+                "The Kinesis stream name must be known and non-empty.",
+            )
+
+        shard_count = values.get("shard_count")
+        if isinstance(shard_count, bool) or shard_count != 1:
+            _deny(
+                findings,
+                "kinesis_shard_count_unsupported",
+                address,
+                "Generated Kinesis streams are limited to one provisioned shard.",
+            )
+
+        retention = values.get("retention_period")
+        if isinstance(retention, bool) or retention != 24:
+            _deny(
+                findings,
+                "kinesis_retention_period_unsupported",
+                address,
+                "Generated Kinesis streams must use 24-hour record retention.",
+            )
+
+        if values.get("encryption_type") != "KMS":
+            _deny(
+                findings,
+                "kinesis_encryption_required",
+                address,
+                "Generated Kinesis streams must use KMS server-side encryption.",
+            )
+
+        if values.get("kms_key_id") != "alias/aws/kinesis":
+            _deny(
+                findings,
+                "kinesis_key_unsupported",
+                address,
+                "Generated Kinesis streams must use the AWS-managed Kinesis key.",
+            )
+
+        raw_mode = values.get("stream_mode_details")
+        if isinstance(raw_mode, list) and len(raw_mode) == 1:
+            raw_mode = raw_mode[0]
+        if not isinstance(raw_mode, dict) or raw_mode.get("stream_mode") != "PROVISIONED":
+            _deny(
+                findings,
+                "kinesis_stream_mode_unsupported",
+                address,
+                "Generated Kinesis streams must use provisioned capacity mode.",
+            )
+
+
 def _references_resource(references: tuple[str, ...], resource_address: Any) -> bool:
     if not isinstance(resource_address, str):
         return False
