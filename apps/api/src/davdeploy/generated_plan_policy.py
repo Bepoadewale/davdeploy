@@ -156,6 +156,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("key_algorithm",),
         ("options", "export"),
     ),
+    "aws_route53_zone": (("name",), ("vpc",), ("force_destroy",)),
     "aws_opensearch_domain": (
         ("engine_version",),
         ("cluster_config", "instance_type"),
@@ -286,6 +287,7 @@ def _evaluate(
     _check_ssm_parameters(resources, findings)
     _check_opensearch_domains(resources, findings)
     _check_acm_certificates(resources, findings)
+    _check_route53_zones(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -3281,6 +3283,47 @@ def _check_acm_certificates(
                 "acm_certificate_export_denied",
                 address,
                 "Exportable ACM certificates are outside the supported cost and key-handling policy.",
+            )
+
+
+def _check_route53_zones(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_route53_zone":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "route53_zone_configuration_unknown",
+                address,
+                "The plan does not show the hosted zone identity and deletion settings.",
+            )
+            continue
+
+        name = values.get("name")
+        if not isinstance(name, str) or not name.strip():
+            _deny(
+                findings,
+                "route53_zone_name_unknown",
+                address,
+                "The hosted zone name must be known and non-empty.",
+            )
+        if values.get("vpc") not in (None, [], {}):
+            _deny(
+                findings,
+                "route53_private_zone_unsupported",
+                address,
+                "Only public Route 53 hosted zones without VPC associations are covered by this policy.",
+            )
+        if values.get("force_destroy") is not False:
+            _deny(
+                findings,
+                "route53_zone_force_destroy_denied",
+                address,
+                "Hosted zones cannot delete their records implicitly during destruction.",
             )
 
 
