@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`8f6f94e92d750a3a496fde9da1d0b59c4baea802` (PR #450). The last
+`24000865fbf6e3d2c8325661a6e1494dd896de9b` (PR #451). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -76,12 +76,22 @@ exact topic, queue, attached queue-policy URL, and SNS `SendMessage` grant with
 exact source ARN and account conditions. It is not deployed and does not alter
 AWS or hosted control-plane state or enable Nova execution.
 
-PR #451 adds source-only generated-plan checks binding EventBridge SQS targets
-to an exact same-plan bus/rule, queue, attached queue-policy URL, and
-`events.amazonaws.com` `SendMessage` grant scoped to the exact rule ARN.
-Supported queue policies may include the exact source account condition.
-EventBridge target roles and unplanned or unknown target identities fail closed.
-This does not change AWS or hosted control-plane state.
+PR #451 merged as `2400086`; all seven checks passed in run `45207695073`. Its
+source-only generated-plan checks bind EventBridge SQS targets to an exact
+same-plan bus/rule, queue, attached queue-policy URL, and `events.amazonaws.com`
+`SendMessage` grant scoped to the exact rule ARN. EventBridge target roles and
+unplanned or unknown target identities fail closed. This does not change AWS
+or hosted control-plane state.
+
+PR #452 adds explicit EventBridge retry bounds and requires a separate planned
+standard SQS dead-letter queue (DLQ) with an exact rule-scoped grant. It also
+records a controlled direct-service test: the deliberately restrictive target
+grant routed an event to the EventBridge DLQ, repairing the exact rule grant
+restored delivery, and the eight-resource test stack was destroyed and
+independently confirmed absent. Its seven CI checks passed on head `2162265`.
+This remains customer-side service evidence, not Nova dispatch or hosted
+execution. EventBridge target IAM roles and unknown or cross-account target
+shapes remain unsupported by the current plan policy.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint

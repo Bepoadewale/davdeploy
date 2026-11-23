@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-23.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-23.3"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -2505,6 +2505,54 @@ def _valid_eventbridge_sqs_send_statement(
     )
 
 
+def _single_nested_plan_block(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict):
+        return value[0]
+    return None
+
+
+def _eventbridge_sqs_send_statements(
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    queue_urls: dict[str, str],
+    queue_arn: str,
+) -> list[dict[str, Any]]:
+    matching: list[dict[str, Any]] = []
+    for policy_item in resources:
+        if policy_item.get("type") != "aws_sqs_queue_policy":
+            continue
+        policy_values = policy_item.get("values")
+        if not isinstance(policy_values, dict):
+            continue
+        if _sqs_policy_queue_arn(queue_urls, policy_values.get("queue_url")) != queue_arn:
+            continue
+        policy = _json_document(
+            policy_values.get("policy"), findings, policy_item.get("address")
+        )
+        if policy is None:
+            continue
+        for statement in _statements(policy, require_resource=True, require_principal=True):
+            principal = statement.get("Principal")
+            is_eventbridge = (
+                isinstance(principal, dict)
+                and "events.amazonaws.com" in _string_list(principal.get("Service"))
+            )
+            resources_in_statement = _string_list(statement.get("Resource"))
+            if (
+                is_eventbridge
+                and str(statement.get("Effect", "")).lower() == "allow"
+                and _sqs_action_may_send(statement.get("Action"))
+                and any(
+                    fnmatchcase(queue_arn, resource_arn)
+                    for resource_arn in resources_in_statement
+                )
+            ):
+                matching.append(statement)
+    return matching
+
+
 def _check_eventbridge_sqs_bindings(
     resources: tuple[dict[str, Any], ...],
     findings: list[PlanPolicyFinding],
@@ -2573,6 +2621,7 @@ def _check_eventbridge_sqs_bindings(
         rules[key] = rule_arn
 
     queues: set[str] = set()
+    queue_names: dict[str, str] = {}
     queue_urls: dict[str, str] = {}
     for item in resources:
         if item.get("type") != "aws_sqs_queue":
@@ -2591,6 +2640,7 @@ def _check_eventbridge_sqs_bindings(
         queues.add(queue_arn)
         if queue_url is not None:
             queue_urls[queue_url] = queue_arn
+        queue_names[queue_arn] = values["name"]
 
     target_pairs: set[tuple[str, str]] = set()
     for target in resources:
@@ -2669,40 +2719,9 @@ def _check_eventbridge_sqs_bindings(
             )
             continue
         target_pairs.add(pair)
-        matching: list[dict[str, Any]] = []
-        for policy_item in resources:
-            if policy_item.get("type") != "aws_sqs_queue_policy":
-                continue
-            policy_values = policy_item.get("values")
-            if not isinstance(policy_values, dict):
-                continue
-            if (
-                _sqs_policy_queue_arn(queue_urls, policy_values.get("queue_url"))
-                != target_arn
-            ):
-                continue
-            policy = _json_document(
-                policy_values.get("policy"), findings, policy_item.get("address")
-            )
-            if policy is None:
-                continue
-            for statement in _statements(policy, require_resource=True, require_principal=True):
-                principal = statement.get("Principal")
-                is_eventbridge = (
-                    isinstance(principal, dict)
-                    and "events.amazonaws.com" in _string_list(principal.get("Service"))
-                )
-                resources_in_statement = _string_list(statement.get("Resource"))
-                if (
-                    is_eventbridge
-                    and str(statement.get("Effect", "")).lower() == "allow"
-                    and _sqs_action_may_send(statement.get("Action"))
-                    and any(
-                        fnmatchcase(target_arn, resource_arn)
-                        for resource_arn in resources_in_statement
-                    )
-                ):
-                    matching.append(statement)
+        matching = _eventbridge_sqs_send_statements(
+            resources, findings, queue_urls, target_arn
+        )
         valid = [
             statement
             for statement in matching
@@ -2720,6 +2739,82 @@ def _check_eventbridge_sqs_bindings(
                 target.get("address"),
                 "The target queue needs one exact EventBridge SendMessage grant with the matching rule source ARN.",
             )
+
+        retry_policy = _single_nested_plan_block(values.get("retry_policy"))
+        retry_attempts = (
+            retry_policy.get("maximum_retry_attempts")
+            if retry_policy is not None
+            else None
+        )
+        maximum_age = (
+            retry_policy.get("maximum_event_age_in_seconds")
+            if retry_policy is not None
+            else None
+        )
+        if (
+            type(retry_attempts) is not int
+            or not 0 <= retry_attempts <= 185
+            or type(maximum_age) is not int
+            or not 60 <= maximum_age <= 86400
+        ):
+            _deny(
+                findings,
+                "eventbridge_retry_policy_invalid",
+                target.get("address"),
+                "An SQS target needs known retry attempts from 0 to 185 and maximum event age from 60 to 86400 seconds.",
+            )
+
+        dead_letter_config = _single_nested_plan_block(
+            values.get("dead_letter_config")
+        )
+        dead_letter_arn = (
+            dead_letter_config.get("arn")
+            if dead_letter_config is not None
+            else None
+        )
+        if (
+            not isinstance(dead_letter_arn, str)
+            or dead_letter_arn not in queues
+            or dead_letter_arn == target_arn
+            or queue_names.get(dead_letter_arn, "").endswith(".fifo")
+        ):
+            _deny(
+                findings,
+                "eventbridge_dlq_invalid",
+                target.get("address"),
+                "An SQS target needs a distinct planned standard queue for its dead-letter destination.",
+            )
+        else:
+            dead_letter_pair = (rule_arn, dead_letter_arn)
+            if dead_letter_pair in target_pairs:
+                _deny(
+                    findings,
+                    "eventbridge_target_duplicate",
+                    target.get("address"),
+                    "An EventBridge rule may target a given SQS queue only once in this plan.",
+                )
+            else:
+                target_pairs.add(dead_letter_pair)
+            dead_letter_grants = _eventbridge_sqs_send_statements(
+                resources, findings, queue_urls, dead_letter_arn
+            )
+            valid_dead_letter_grants = [
+                statement
+                for statement in dead_letter_grants
+                if _valid_eventbridge_sqs_send_statement(
+                    statement,
+                    queue_arn=dead_letter_arn,
+                    rule_arn=rule_arn,
+                    account_id=expected_account_id,
+                )
+            ]
+            if len(dead_letter_grants) != 1 or len(valid_dead_letter_grants) != 1:
+                _deny(
+                    findings,
+                    "eventbridge_dlq_policy_binding_invalid",
+                    target.get("address"),
+                    "The dead-letter queue needs one exact EventBridge SendMessage grant with the matching rule source ARN.",
+                )
 
     for policy_item in resources:
         if policy_item.get("type") != "aws_sqs_queue_policy":
@@ -2888,6 +2983,18 @@ def _check_sqs_delivery_contract(
     redrive_pairs: dict[str, str] = {}
     redrive_targets: dict[str, str] = {}
     redrive_edges: dict[str, str] = {}
+    eventbridge_dlq_targets: set[str] = set()
+    for target in resources:
+        if target.get("type") != "aws_cloudwatch_event_target":
+            continue
+        values = target.get("values")
+        if not isinstance(values, dict):
+            continue
+        dead_letter = _single_nested_plan_block(values.get("dead_letter_config"))
+        dead_letter_arn = dead_letter.get("arn") if dead_letter is not None else None
+        if isinstance(dead_letter_arn, str) and dead_letter_arn in queue_by_arn:
+            eventbridge_dlq_targets.add(dead_letter_arn)
+
     for arn, (item, address, source_retention) in queue_details.items():
         values = item["values"]
         redrive_raw = values.get("redrive_policy")
@@ -3009,7 +3116,11 @@ def _check_sqs_delivery_contract(
 
     for arn, (item, address, _) in queue_details.items():
         values = item["values"]
-        if arn not in redrive_pairs and arn not in redrive_targets:
+        if (
+            arn not in redrive_pairs
+            and arn not in redrive_targets
+            and arn not in eventbridge_dlq_targets
+        ):
             _deny(
                 findings,
                 "sqs_redrive_contract_missing",
