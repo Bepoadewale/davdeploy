@@ -57,19 +57,25 @@ and deny plans that weaken or leave these settings unknown.
   and lifecycle evidence unproven.
 - [x] No AWS key is created, changed, or scheduled for deletion by this PR;
   hosted control-plane state is not accessed or changed.
-- [ ] Focused and full policy tests, formatting, Terraform validation,
+- [x] Focused and full policy tests, formatting, Terraform validation,
   documentation conventions, and `git diff --check` pass.
-- [ ] Final-head CI passes and the PR is reviewed and merged through GitHub.
+- [x] All seven checks pass on the PR head in CI run
+  [45265806821](https://github.com/Bepoadewale/davdeploy/actions/runs/45265806821).
 
 ## Acceptance status
 
-Implementation is in progress on PR #463. This work adds a plan-policy and
-module baseline only; it does not establish customer-managed KMS lifecycle
-support.
+Implementation and validation are complete on PR #463. It adds a plan-policy
+and module baseline only; it does not establish customer-managed KMS lifecycle
+support. GitHub review/merge state is tracked on the PR.
 
 ## Tests / validation performed
 
-Pending.
+- `tests/test_generated_plan_policy.py` — 359 passed.
+- Ruff on changed Python files — passed.
+- `terraform fmt -check` and `terraform validate` — passed.
+- `GITHUB_PR_NUMBER=463 python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI run 45265806821 — all seven checks passed.
 
 ## Evidence files produced
 
