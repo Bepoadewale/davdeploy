@@ -28,6 +28,8 @@ cost-free inactive definition status explicit.
   defines `AWS_BATCH_JOB_ATTEMPT` as the current attempt number.
 - AWS [job definition parameters](https://docs.aws.amazon.com/batch/latest/userguide/job_definition_parameters.html)
   documents the job definition retry strategy and 1–10 attempt range.
+- AWS [DeregisterJobDefinition API](https://docs.aws.amazon.com/batch/latest/APIReference/API_DeregisterJobDefinition.html)
+  states that deregistered job definitions are permanently deleted after 180 days.
 - [`test252.md`](../test/test252.md) — existing direct Batch Fargate execution
   and teardown evidence.
 
@@ -53,31 +55,51 @@ cost-free inactive definition status explicit.
 
 ## Acceptance criteria
 
-- [ ] The saved create plan contains only the exact intended resources.
-- [ ] AWS Batch records two attempts: attempt one exits `1`; attempt two exits
+- [x] The saved create plan contains exactly nine creates and no updates/deletes.
+- [x] AWS Batch records two attempts: attempt one exits `1`; attempt two exits
       `0`; the final job status is `SUCCEEDED`.
-- [ ] Attempt markers are verified from the two CloudWatch log streams, while
+- [x] Attempt markers are verified from the two CloudWatch log streams, while
       probe output omits IDs, stream names, job output, and AWS errors.
-- [ ] Reviewed exact destroy runs through the PID monitor and independent reads
+- [x] Reviewed exact destroy runs through the PID monitor and independent reads
       confirm workload, queue, compute environment, IAM, security group, and log
       group resources are absent.
-- [ ] Any AWS-managed inactive job definition is recorded as retained without
+- [x] Any AWS-managed inactive job definition is recorded as retained without
       representing it as a running or billable compute resource.
-- [ ] Terraform validation, docs checks, and all seven PR checks pass.
-- [ ] No hosted control-plane resource, production resource, customer secret,
-      or unrelated AWS resource is changed.
+- [x] Terraform validation, documentation conventions, and all seven PR checks pass.
+- [x] No hosted control-plane, production, customer-secret, or unrelated AWS
+      resource is changed.
 
 ## Acceptance status
 
-The fixture and evidence records are prepared. No AWS write has occurred yet.
+The exact-prefix preflight found no existing test resources. The reviewed create
+plan had exactly nine creates, zero updates, and zero deletes. Monitored apply
+succeeded with nine additions. The probe verified two attempts (exit `1`, then
+`0`) and final `SUCCEEDED`. The exact destroy succeeded through the monitor;
+independent reads found the compute environment, queue, roles, security group,
+and log group absent, with zero resources in local state. One job definition
+remains `INACTIVE` under AWS's documented 180-day retention behavior.
 
 ## Tests / validation performed
 
-- `terraform fmt -check` — pending.
-- Terraform init/validate and exact create/destroy plans — pending.
-- `python3 scripts/check_doc_conventions.py` — pending.
-- `git diff --check` — pending.
-- Monitored AWS apply/probe/destroy and independent absence reads — pending.
+- `terraform fmt -check`, Terraform init, and validate passed. The reviewed
+  create plan contained nine creates; the reviewed destroy plan contained nine
+  deletes, with no updates or opposite actions.
+- `python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Monitored apply `nova-batch-retry-458-create-nov23a1` started at
+  `2026-11-23T18:31:05Z` (supervisor PID `79812`, root
+  `/Users/adewale/Projects/davdeploy/docs/test/fixtures/nova-batch-retry-458`,
+  log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-batch-retry-458-create-nov23a1.log`).
+  It completed with nine added, zero changed, and zero destroyed. The probe
+  verified two attempts: attempt one exit `1`, attempt two exit `0`, final job
+  `SUCCEEDED`, with both attempt markers in their CloudWatch streams.
+- The first two monitored destroy attempts failed before AWS changes because of
+  CLI argument ordering and then a missing isolated provider cache. Corrected
+  monitored destroy `nova-batch-retry-458-destroy-nov23a1-retry2` started at
+  `2026-11-23T18:56:55Z` (supervisor PID `80414`, Terraform PID `80415`) and
+  succeeded at `19:01:34Z`. Exact-prefix AWS reads confirmed workload resources
+  absent, except the expected inactive AWS-managed job-definition record.
+  Terraform state lists zero resources and the monitor has no active run.
 
 ## Evidence files produced
 
