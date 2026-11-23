@@ -50,32 +50,31 @@ elsewhere. Reject those mismatches before human review.
 
 ## Acceptance criteria
 
-- [ ] A valid exact planned SNS-to-SQS subscription and attached queue policy
+- [x] A valid exact planned SNS-to-SQS subscription and attached queue policy
       remains eligible for human review.
-- [ ] Missing or mismatched topics, queues, queue URLs, protocols, principals,
+- [x] Missing or mismatched topics, queues, queue URLs, protocols, principals,
       actions, queue ARNs, source ARNs, or source accounts are denied.
-- [ ] Duplicate topic/queue subscriptions and unbound/extra SNS send grants
+- [x] Duplicate topic/queue subscriptions and unbound/extra SNS send grants
       are denied.
-- [ ] Findings do not echo policy values or source identifiers.
-- [ ] Existing generated-plan policy tests pass and Ruff reports no issues.
-- [ ] Ticket and product evidence pass documentation conventions; all seven
+- [x] Findings do not echo policy values or source identifiers.
+- [x] Existing generated-plan policy tests pass and Ruff reports no issues.
+- [x] Ticket and product evidence pass documentation conventions; all seven
       required PR checks pass before merge.
-- [ ] No AWS workload, hosted control-plane, or Terraform state/lock resource
+- [x] No AWS workload, hosted control-plane, or Terraform state/lock resource
       is changed. Claims distinguish direct service evidence from Nova dispatch.
 
 ## Acceptance status
 
-Implementation and regression tests are in progress on a feature branch. The
-full generated-plan policy test file currently passes 302 tests, and Ruff
-passes for the changed Python files. Documentation and PR checks remain.
+Implementation and regression tests are complete. The full generated-plan
+policy test file passes 302 tests; Ruff, documentation conventions, and all
+seven required PR checks pass. No AWS or hosted control-plane state changed.
 
 ## Tests / validation performed
 
 - `.venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py` —
   302 passed.
 - `.venv-pr399/bin/python -m ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
-- `git diff --check` — passed before the latest documentation edits; rerun
-  after the final diff.
+- `git diff --check` — passed.
 
 ## Evidence files produced
 
