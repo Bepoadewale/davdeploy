@@ -150,6 +150,19 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("multi_region",),
     ),
     "aws_ssm_parameter": (("type",), ("tier",), ("key_id",)),
+    "aws_opensearch_domain": (
+        ("engine_version",),
+        ("cluster_config", "instance_type"),
+        ("cluster_config", "instance_count"),
+        ("cluster_config", "zone_awareness_enabled"),
+        ("ebs_options", "ebs_enabled"),
+        ("ebs_options", "volume_type"),
+        ("ebs_options", "volume_size"),
+        ("encrypt_at_rest", "enabled"),
+        ("node_to_node_encryption", "enabled"),
+        ("domain_endpoint_options", "enforce_https"),
+        ("domain_endpoint_options", "tls_security_policy"),
+    ),
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
         ("deletion_protection_enabled",),
@@ -265,6 +278,7 @@ def _evaluate(
     _check_ecr_repositories(resources, findings)
     _check_kms_keys(resources, findings)
     _check_ssm_parameters(resources, findings)
+    _check_opensearch_domains(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -3065,6 +3079,152 @@ def _check_ssm_parameters(
                 address,
                 "A custom KMS key reference must be a known non-empty string.",
             )
+
+
+def _check_opensearch_domains(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_opensearch_domain":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "opensearch_configuration_unknown",
+                address,
+                "The plan does not show the OpenSearch domain safety settings.",
+            )
+            continue
+
+        if values.get("engine_version") != "OpenSearch_2.11":
+            _deny(
+                findings,
+                "opensearch_engine_version_unsupported",
+                address,
+                "Only the module's reviewed OpenSearch_2.11 engine setting is supported.",
+            )
+
+        cluster = _single_plan_block(values, "cluster_config")
+        if cluster is None:
+            _deny(
+                findings,
+                "opensearch_cluster_configuration_invalid",
+                address,
+                "The OpenSearch cluster must have one known cluster configuration block.",
+            )
+        else:
+            if cluster.get("instance_type") != "t3.small.search":
+                _deny(
+                    findings,
+                    "opensearch_instance_type_unsupported",
+                    address,
+                    "Only the module's bounded t3.small.search instance shape is supported.",
+                )
+            if cluster.get("instance_count") != 1 or isinstance(
+                cluster.get("instance_count"), bool
+            ):
+                _deny(
+                    findings,
+                    "opensearch_instance_count_unsupported",
+                    address,
+                    "Only a single OpenSearch data node is covered by this policy.",
+                )
+            if cluster.get("zone_awareness_enabled") is not False:
+                _deny(
+                    findings,
+                    "opensearch_zone_awareness_unsupported",
+                    address,
+                    "Multi-AZ OpenSearch configurations require separate cost and recovery review.",
+                )
+
+        ebs = _single_plan_block(values, "ebs_options")
+        if ebs is None:
+            _deny(
+                findings,
+                "opensearch_ebs_configuration_invalid",
+                address,
+                "The OpenSearch domain must have one known EBS configuration block.",
+            )
+        else:
+            if ebs.get("ebs_enabled") is not True:
+                _deny(
+                    findings,
+                    "opensearch_ebs_required",
+                    address,
+                    "The reviewed OpenSearch module requires EBS-backed storage.",
+                )
+            if ebs.get("volume_type") != "gp3":
+                _deny(
+                    findings,
+                    "opensearch_volume_type_unsupported",
+                    address,
+                    "Only gp3 OpenSearch storage is covered by this policy.",
+                )
+            if ebs.get("volume_size") != 10 or isinstance(ebs.get("volume_size"), bool):
+                _deny(
+                    findings,
+                    "opensearch_volume_size_unsupported",
+                    address,
+                    "Only the module's 10 GiB OpenSearch volume is covered by this policy.",
+                )
+
+        vpc = _single_plan_block(values, "vpc_options")
+        if (
+            vpc is None
+            or not isinstance(vpc.get("subnet_ids"), list)
+            or not vpc.get("subnet_ids")
+            or not isinstance(vpc.get("security_group_ids"), list)
+            or not vpc.get("security_group_ids")
+        ):
+            _deny(
+                findings,
+                "opensearch_vpc_required",
+                address,
+                "OpenSearch domains must use the reviewed VPC networking mode.",
+            )
+
+        encryption = _single_plan_block(values, "encrypt_at_rest")
+        if encryption is None or encryption.get("enabled") is not True:
+            _deny(
+                findings,
+                "opensearch_at_rest_encryption_required",
+                address,
+                "OpenSearch encryption at rest must be enabled.",
+            )
+
+        node_encryption = _single_plan_block(values, "node_to_node_encryption")
+        if node_encryption is None or node_encryption.get("enabled") is not True:
+            _deny(
+                findings,
+                "opensearch_node_encryption_required",
+                address,
+                "OpenSearch node-to-node encryption must be enabled.",
+            )
+
+        endpoint = _single_plan_block(values, "domain_endpoint_options")
+        if endpoint is None or endpoint.get("enforce_https") is not True:
+            _deny(
+                findings,
+                "opensearch_https_required",
+                address,
+                "OpenSearch domain endpoints must require HTTPS.",
+            )
+        elif endpoint.get("tls_security_policy") != "Policy-Min-TLS-1-2-2019-07":
+            _deny(
+                findings,
+                "opensearch_tls_policy_unsupported",
+                address,
+                "OpenSearch endpoints must use the reviewed TLS 1.2 policy.",
+            )
+
+
+def _single_plan_block(values: dict[str, Any], name: str) -> dict[str, Any] | None:
+    blocks = values.get(name)
+    if not isinstance(blocks, list) or len(blocks) != 1 or not isinstance(blocks[0], dict):
+        return None
+    return blocks[0]
 
 
 def _sqs_partition_for_region(region: str) -> str:
