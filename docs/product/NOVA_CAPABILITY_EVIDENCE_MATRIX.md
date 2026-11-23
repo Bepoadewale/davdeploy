@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`d2a9b5430d30e483e69bfb14438ad4960493b51f` (PR #456), 2026-11-23. PR #413
+`b2956ac1c56e2e3b7b385a5e0202e81f00f1b87c` (PR #458), 2026-11-23. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -64,11 +64,12 @@ Catch recovery, a separate normal success path, and cleanup; see
 state are absent. This service evidence does not establish state-machine role
 policy safety or Nova dispatch.
 Current AWS reads found no tested
-DavDeploy SageMaker endpoint, model, or endpoint configuration; four tagged
-Batch definitions are inactive and the SageMaker lineage action/context remain
-as retained audit evidence. The PR #443, #447, and #448 temporary resources
+DavDeploy SageMaker endpoint, model, or endpoint configuration. The four
+previously recorded tagged Batch definitions remain inactive, and PR #458's
+test job definition is also inactive after exact teardown. The SageMaker
+lineage action/context remain as retained audit evidence. The PR #443, #447, and #448 temporary resources
 are absent; PR #448's local Terraform state is empty. The Terraform run
-monitor has 34 terminal records and no active operations. Preserve the
+monitor has 38 terminal records and no active operations. Preserve the
 protected untracked
 `--only-show-errors`, `.venv-pr399/`, and retained lineage evidence.
 
@@ -302,7 +303,7 @@ are isolated AWS service/root evidence, not hosted customer execution.
 | `aws-bedrock-knowledge-base` | `modules/bedrock-knowledge-base` | `aws-ai-retrieval` / `ai-rag` | Shared S3/IAM/network checks; no ingestion-role/index/data-access policy suite | [`test262.md`](../test/test262.md): ingestion and real retrieval |
 | `aws-sagemaker-endpoint` | `modules/sagemaker-endpoint` | `aws-managed-ml`; possible CPU/GPU overlap / `machine-learning` | Shared IAM/S3/network checks only; no model artifact, endpoint exposure, quota, or inference cost policy | [`test261.md`](../test/test261.md): real endpoint inference and teardown |
 | `aws-kinesis-stream` | `modules/kinesis-stream` | `aws-stream-processing` / `async-data` | Shared IAM checks only; no stream retention, consumer, throughput, or data-key policy suite | [`test258.md`](../test/test258.md): one record accepted; no consumer processing |
-| `aws-batch-compute` | `modules/batch-compute` | `aws-jobs-events`, `aws-data-analytics` / `saas-backend`, `async-data` | Shared IAM/network checks only; no queue/job role, retry, capacity, or budget policy suite | [`test252.md`](../test/test252.md): controlled disposable Batch job; draft PR #458 records first-failure/second-attempt recovery and exact teardown |
+| `aws-batch-compute` | `modules/batch-compute` | `aws-jobs-events`, `aws-data-analytics` / `saas-backend`, `async-data` | Shared IAM/network checks only; no queue/job role, retry, capacity, or budget policy suite | [`test252.md`](../test/test252.md): controlled disposable Batch job; merged PR #458 [`test458.md`](../test/test458.md): first-attempt failure, automatic retry, success, and exact teardown |
 | `aws-eks-cluster` | `modules/eks` | `aws-kubernetes-platform`, `aws-gpu-inference` / `kubernetes` | Deployed PR #404 checks managed-node metadata only when the plan binds one in-plan launch template with IMDSv2 required. It does not cover Kubernetes/RBAC, cluster endpoint, quota policy, or customer-plan behavior. | [`test255.md`](../test/test255.md): workload service probe through EKS |
 | `aws-ec2-autoscaling` | `modules/ec2-autoscaling` | `aws-virtual-machine-service`, possible GPU compute / no scenario for VM/GPU | Merged-source IMDSv2 checks cover `aws_instance`, `aws_launch_template`, `aws_launch_configuration`, and regional defaults; no AMI, capacity, patching, or instance spend policy | [`test244.md`](../test/test244.md): zero-capacity ASG reached service-valid state |
 | `aws-vpc-private-network` | `modules/vpc` | `aws-private-connectivity` / `hybrid-network` | Security-group ingress checks only; no VPC topology, egress, endpoint, route, or NAT policy | [`test244.md`](../test/test244.md) VPC for EKS; [`test263.md`](../test/test263.md) includes routed topology |

@@ -1,8 +1,8 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-18
+## Nova status snapshot — 2026-11-23
 
-Backend `main` is `aef34c0cd6f5fc8a4e87a671246697061f9e9210` (PR #430). The
+Backend `main` is `b2956ac1c56e2e3b7b385a5e0202e81f00f1b87c` (PR #458). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -15,15 +15,19 @@ customer workload. PR #430 refreshed the 26-capability/30-root evidence map.
 
 PR #424's bounded Aurora pricing and PRs #425–#429's Nova provenance/schema
 evidence are in backend source but are not deployed by PR #420. Cost coverage
-remains partial. Open/draft PR #399 is at
-`81eabbbccb5f47bbb5e0f6929872d675c8a6ee10`, based on current `main`; its latest
-CI run [44204640591](https://github.com/Bepoadewale/davdeploy/actions/runs/44204640591)
-passed all seven checks. Its apply and credential gates remain disabled. The
-dedicated customer apply role and hosted customer lifecycle are not verified.
+remains partial. PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`;
+its apply and credential gates remain disabled in the hosted runtime. PR #413
+is merged and maps all 26 architecture entries and 30 Terraform roots to
+evidence; it does not establish support for every entry. PR #458 records a
+direct same-account Batch retry and teardown test; it does not exercise Nova
+dispatch.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
-recorded hosted plan. No Nova customer workload has been applied or certified.
+recorded hosted plan. No Nova-dispatched customer workload is certified. The
+owner accepts the isolated direct-Terraform ECS lifecycle as the general goal's
+customer-side lifecycle evidence; this does not verify Nova authorization or
+dispatch.
 See [`docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`](docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md)
 for the detailed acceptance map.
 
@@ -125,7 +129,7 @@ plan/apply/health/recovery/cleanup evidence.
 - [ ] Finish the hosted Nova plan-only customer journey and tenant-scoped remote-state path. The isolated runner, plan review, credential broker and state API are deployed, but no authenticated customer request has produced a hosted plan. A disposable IAM policy simulation is evidence only; real customer-role assumption, effective permissions, and service-limit checks remain incomplete. PRs #371/#372 add RDS planner metadata access and PR #379 adds bounded VPC/subnet/security-group metadata reads. No Nova-generated customer plan has been applied.
 - [ ] Extend the deployed regional pricing evaluator and usage contracts to cover all material supported resources and supporting costs. PRs #407–#416 add bounded evidence for selected families; PR #424 adds source-only pricing for one Aurora PostgreSQL Serverless v2 writer shape and is merged but not deployed. Unsupported or unpriced material resources continue to block approval. PR #318 remains closed and is not used as current pricing evidence.
 - [ ] Define and implement tenant-scoped secret references: bind customer-approved secret identifiers to the trusted deployment context, keep secret values out of Nova prompts and Terraform state, scope runtime reads, and cover rotation/revocation. PRs #365/#367 constrain generated literals and a narrow RDS ARN-reference path; PR #374 denies runtime secret-value grants until policy permissions can be bound to a verified typed reference. Runtime reads remain unavailable.
-- [ ] Prove worker restart/reconciliation, bounded retries, partial-failure recovery, typed output binding, and reverse graph cleanup in the hosted worker. Draft PR #399 has source tests for the fixed apply worker, but no hosted customer build has exercised it.
+- [ ] Prove worker restart/reconciliation, bounded retries, partial-failure recovery, typed output binding, and reverse graph cleanup in the hosted worker. PR #399 supplies source tests for the fixed apply worker, but no hosted customer build has exercised it.
 - [ ] Dispatch compatible approved module graphs through checked-in renderers with typed outputs, dependency ordering and reverse cleanup. CodeBuild remains single-module and fail-closed until this complete path is validated.
 - [ ] Certify each hosted renderer and composed workload through the customer execution runner, including health, update/recovery, destroy and independent absence verification.
 - [ ] Ingest real App Runner Terraform outputs and AWS resource observations through the product UI/API execution path.
