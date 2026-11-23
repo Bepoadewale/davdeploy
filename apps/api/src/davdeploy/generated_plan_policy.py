@@ -142,7 +142,13 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("metadata_options", "http_tokens"),
     ),
     "aws_ec2_instance_metadata_defaults": (("http_tokens",),),
-    "aws_kms_key": (("key_usage",), ("deletion_window_in_days",)),
+    "aws_kms_key": (
+        ("customer_master_key_spec",),
+        ("key_usage",),
+        ("enable_key_rotation",),
+        ("deletion_window_in_days",),
+        ("multi_region",),
+    ),
     "aws_dynamodb_table": (
         ("server_side_encryption", "enabled"),
         ("deletion_protection_enabled",),
@@ -256,6 +262,7 @@ def _evaluate(
     _check_cloudfront_viewer_tls(resources, findings)
     _check_cloudfront_origin_tls(resources, findings)
     _check_ecr_repositories(resources, findings)
+    _check_kms_keys(resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -2959,6 +2966,61 @@ def _check_ecr_repositories(
                 address,
                 "ECR repositories cannot use force_delete because it removes stored images with the repository.",
             )
+
+
+def _check_kms_keys(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    for item in resources:
+        if item.get("type") != "aws_kms_key":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "kms_key_configuration_unknown",
+                address,
+                "The plan does not show the KMS key safety settings.",
+            )
+            continue
+
+        requirements = (
+            (
+                "customer_master_key_spec",
+                "SYMMETRIC_DEFAULT",
+                "kms_key_must_be_symmetric",
+                "Only symmetric-default KMS keys are currently supported.",
+            ),
+            (
+                "key_usage",
+                "ENCRYPT_DECRYPT",
+                "kms_key_usage_invalid",
+                "KMS keys must use ENCRYPT_DECRYPT usage.",
+            ),
+            (
+                "enable_key_rotation",
+                True,
+                "kms_key_rotation_required",
+                "KMS key material rotation must be enabled.",
+            ),
+            (
+                "deletion_window_in_days",
+                30,
+                "kms_key_deletion_window_too_short",
+                "KMS keys must use the maximum 30-day deletion waiting period.",
+            ),
+            (
+                "multi_region",
+                False,
+                "kms_multi_region_unsupported",
+                "Multi-Region KMS keys are unsupported by the current policy.",
+            ),
+        )
+        for attribute, expected, code, message in requirements:
+            actual = values.get(attribute)
+            if actual != expected or isinstance(actual, bool) != isinstance(expected, bool):
+                _deny(findings, code, address, message)
 
 
 def _sqs_partition_for_region(region: str) -> str:

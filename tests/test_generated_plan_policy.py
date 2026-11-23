@@ -528,6 +528,42 @@ def ecr_repository_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def kms_key_case(*, values=None, after_unknown=None):
+    address = "aws_kms_key.this"
+    key_values = {
+        "description": "DavDeploy managed key: test",
+        "customer_master_key_spec": "SYMMETRIC_DEFAULT",
+        "key_usage": "ENCRYPT_DECRYPT",
+        "deletion_window_in_days": 30,
+        "enable_key_rotation": True,
+        "multi_region": False,
+        "tags": {"Product": "davdeploy"},
+    }
+    key_values.update(values or {})
+    document = plan(
+        resources=[
+            resource(address, "aws_kms_key", key_values),
+            resource("terraform_data.account_guard", "terraform_data", {"input": None}),
+        ],
+        changes=[
+            change(address, "aws_kms_key", after_unknown=after_unknown or {}),
+            change("terraform_data.account_guard", "terraform_data"),
+        ],
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "key",
+                "resource_type": "aws_kms_key",
+                "name": "this",
+                "arguments": key_values,
+                "rationale": "Use a rotating symmetric key with a bounded deletion wait.",
+            }
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -770,6 +806,60 @@ def test_ecr_repository_denies_unknown_scanning_encryption_or_force_delete(
     document, proposal_value = ecr_repository_case(
         values=values,
         after_unknown=after_unknown,
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+    assert expected_code in codes(result)
+
+
+def test_kms_key_with_supported_safety_settings_is_reviewable():
+    document, proposal_value = kms_key_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("kms_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_code"),
+    [
+        (
+            {"customer_master_key_spec": "RSA_2048"},
+            "kms_key_must_be_symmetric",
+        ),
+        ({"key_usage": "SIGN_VERIFY"}, "kms_key_usage_invalid"),
+        ({"enable_key_rotation": False}, "kms_key_rotation_required"),
+        ({"deletion_window_in_days": 7}, "kms_key_deletion_window_too_short"),
+        ({"multi_region": True}, "kms_multi_region_unsupported"),
+    ],
+)
+def test_kms_key_rejects_unsupported_or_weakened_settings(values, expected_code):
+    document, proposal_value = kms_key_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("attribute", "expected_code", "unknown_value"),
+    [
+        ("customer_master_key_spec", "kms_key_must_be_symmetric", True),
+        ("key_usage", "kms_key_usage_invalid", True),
+        ("enable_key_rotation", "kms_key_rotation_required", True),
+        ("deletion_window_in_days", "kms_key_deletion_window_too_short", True),
+        ("multi_region", "kms_multi_region_unsupported", True),
+    ],
+)
+def test_kms_key_denies_unknown_safety_settings(attribute, expected_code, unknown_value):
+    document, proposal_value = kms_key_case(
+        values={attribute: None},
+        after_unknown={attribute: unknown_value},
     )
 
     result = evaluate(document, proposal_value)
