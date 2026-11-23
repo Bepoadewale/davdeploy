@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-23.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-23.2"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -251,6 +251,9 @@ def _evaluate(
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
+        resources, findings, expected_account_id, expected_region
+    )
+    _check_eventbridge_sqs_bindings(
         resources, findings, expected_account_id, expected_region
     )
     _check_sqs_delivery_contract(
@@ -2217,6 +2220,10 @@ def _sqs_queue_url(name: Any, account_id: str, region: str) -> str | None:
     return f"https://sqs.{region}.{domain}/{account_id}/{name}"
 
 
+def _sqs_policy_queue_arn(queue_urls: dict[str, str], queue_url: Any) -> str | None:
+    return queue_urls.get(queue_url) if isinstance(queue_url, str) else None
+
+
 def _sqs_action_may_send(action: Any) -> bool:
     actions = _string_list(action)
     return any(
@@ -2340,7 +2347,9 @@ def _check_sns_sqs_subscription_bindings(
             policy_values = policy_item.get("values")
             if not isinstance(policy_values, dict):
                 continue
-            policy_queue = queue_urls.get(policy_values.get("queue_url"))
+            policy_queue = _sqs_policy_queue_arn(
+                queue_urls, policy_values.get("queue_url")
+            )
             if policy_queue != queue_arn:
                 continue
             policy = _json_document(
@@ -2350,6 +2359,12 @@ def _check_sns_sqs_subscription_bindings(
                 continue
             for statement in _statements(policy, require_resource=True, require_principal=True):
                 if str(statement.get("Effect", "")).lower() != "allow":
+                    continue
+                principal = statement.get("Principal")
+                if not (
+                    isinstance(principal, dict)
+                    and "sns.amazonaws.com" in _string_list(principal.get("Service"))
+                ):
                     continue
                 resources_in_statement = _string_list(statement.get("Resource"))
                 targets_queue = any(
@@ -2390,7 +2405,7 @@ def _check_sns_sqs_subscription_bindings(
         values = policy_item.get("values")
         if not isinstance(values, dict):
             continue
-        policy_queue = queue_urls.get(values.get("queue_url"))
+        policy_queue = _sqs_policy_queue_arn(queue_urls, values.get("queue_url"))
         policy = _json_document(values.get("policy"), findings, policy_item.get("address"))
         if policy is None:
             continue
@@ -2436,6 +2451,321 @@ def _check_sns_sqs_subscription_bindings(
                     "sns_sqs_policy_binding_invalid",
                     policy_item.get("address"),
                     "SNS may send to SQS only through one exact planned topic, queue, and subscription with source conditions.",
+                )
+
+
+def _event_bus_name(value: Any, account_id: str, region: str) -> str | None:
+    if value is None:
+        return "default"
+    if not isinstance(value, str):
+        return None
+    name_pattern = r"(?=.{1,256}\Z)[A-Za-z0-9_.-]+"
+    if re.fullmatch(name_pattern, value):
+        return value
+    expected_prefix = (
+        f"arn:{_sqs_partition_for_region(region)}:events:{region}:"
+        f"{account_id}:event-bus/"
+    )
+    if value.startswith(expected_prefix):
+        name = value[len(expected_prefix) :]
+        return name if re.fullmatch(name_pattern, name) else None
+    return None
+
+
+def _event_rule_arn(name: Any, event_bus: str, account_id: str, region: str) -> str | None:
+    if not isinstance(name, str) or not re.fullmatch(
+        r"(?=.{1,64}\Z)[A-Za-z0-9_.-]+", name
+    ):
+        return None
+    suffix = name if event_bus == "default" else f"{event_bus}/{name}"
+    return (
+        f"arn:{_sqs_partition_for_region(region)}:events:{region}:"
+        f"{account_id}:rule/{suffix}"
+    )
+
+
+def _valid_eventbridge_sqs_send_statement(
+    statement: dict[str, Any],
+    *,
+    queue_arn: str,
+    rule_arn: str,
+    account_id: str,
+) -> bool:
+    condition = {"ArnEquals": {"aws:SourceArn": rule_arn}}
+    condition_with_account = {
+        **condition,
+        "StringEquals": {"aws:SourceAccount": account_id},
+    }
+    return (
+        statement.get("Effect") == "Allow"
+        and statement.get("Principal") == {"Service": "events.amazonaws.com"}
+        and statement.get("Action") == "sqs:SendMessage"
+        and statement.get("Resource") == queue_arn
+        and statement.get("Condition") in (condition, condition_with_account)
+    )
+
+
+def _check_eventbridge_sqs_bindings(
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    """Bind EventBridge SQS targets to exact planned rules and queue grants."""
+    bus_names = {"default"}
+    for item in resources:
+        if item.get("type") != "aws_cloudwatch_event_bus":
+            continue
+        values = item.get("values")
+        name = values.get("name") if isinstance(values, dict) else None
+        if not isinstance(name, str) or not re.fullmatch(
+            r"(?=.{1,256}\Z)[A-Za-z0-9_.-]+", name
+        ):
+            continue
+        expected_arn = (
+            f"arn:{_sqs_partition_for_region(expected_region)}:events:"
+            f"{expected_region}:{expected_account_id}:event-bus/{name}"
+        )
+        planned_arn = values.get("arn") if isinstance(values, dict) else None
+        if planned_arn not in (None, expected_arn):
+            _deny(
+                findings,
+                "eventbridge_bus_identity_invalid",
+                item.get("address"),
+                "The planned EventBridge bus does not match the trusted account, region, and bus name.",
+            )
+            continue
+        bus_names.add(name)
+
+    rules: dict[tuple[str, str], str] = {}
+    for item in resources:
+        if item.get("type") != "aws_cloudwatch_event_rule":
+            continue
+        values = item.get("values")
+        if not isinstance(values, dict):
+            continue
+        event_bus = _event_bus_name(
+            values.get("event_bus_name"), expected_account_id, expected_region
+        )
+        rule_arn = _event_rule_arn(
+            values.get("name"), event_bus or "", expected_account_id, expected_region
+        )
+        if event_bus is None or event_bus not in bus_names or rule_arn is None:
+            continue
+        planned_arn = values.get("arn")
+        if planned_arn not in (None, rule_arn):
+            _deny(
+                findings,
+                "eventbridge_rule_identity_invalid",
+                item.get("address"),
+                "The planned EventBridge rule does not match the trusted account, region, bus, and rule name.",
+            )
+            continue
+        key = (event_bus, values["name"])
+        if key in rules:
+            _deny(
+                findings,
+                "eventbridge_rule_duplicate",
+                item.get("address"),
+                "An EventBridge bus and rule name may appear only once in the plan.",
+            )
+            continue
+        rules[key] = rule_arn
+
+    queues: set[str] = set()
+    queue_urls: dict[str, str] = {}
+    for item in resources:
+        if item.get("type") != "aws_sqs_queue":
+            continue
+        values = item.get("values")
+        if not isinstance(values, dict):
+            continue
+        queue_arn = _sqs_queue_arn(
+            values.get("name"), expected_account_id, expected_region
+        )
+        if queue_arn is None or values.get("arn") not in (None, queue_arn):
+            continue
+        queue_url = _sqs_queue_url(
+            values.get("name"), expected_account_id, expected_region
+        )
+        queues.add(queue_arn)
+        if queue_url is not None:
+            queue_urls[queue_url] = queue_arn
+
+    target_pairs: set[tuple[str, str]] = set()
+    for target in resources:
+        if target.get("type") != "aws_cloudwatch_event_target":
+            continue
+        values = target.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "eventbridge_target_unknown",
+                target.get("address"),
+                "The EventBridge target must have known rule, bus, and destination values.",
+            )
+            continue
+        target_arn = values.get("arn")
+        if target_arn is None:
+            _deny(
+                findings,
+                "eventbridge_target_unknown",
+                target.get("address"),
+                "The EventBridge target destination must be known before policy review.",
+            )
+            continue
+        if not isinstance(target_arn, str) or not target_arn.startswith("arn:"):
+            _deny(
+                findings,
+                "eventbridge_target_identity_invalid",
+                target.get("address"),
+                "The EventBridge target destination must be a known ARN.",
+            )
+            continue
+        if ":sqs:" not in target_arn:
+            continue
+
+        event_bus = _event_bus_name(
+            values.get("event_bus_name"), expected_account_id, expected_region
+        )
+        rule_name = values.get("rule")
+        rule_arn = (
+            rules.get((event_bus, rule_name))
+            if event_bus is not None and isinstance(rule_name, str)
+            else None
+        )
+        if rule_arn is None:
+            _deny(
+                findings,
+                "eventbridge_target_rule_unplanned",
+                target.get("address"),
+                "An SQS target must name one exact EventBridge rule and bus in the plan.",
+            )
+            continue
+        if target_arn not in queues:
+            _deny(
+                findings,
+                "eventbridge_sqs_queue_unplanned",
+                target.get("address"),
+                "An EventBridge SQS target must use one exact queue in the trusted plan account and region.",
+            )
+            continue
+        if values.get("role_arn"):
+            _deny(
+                findings,
+                "eventbridge_sqs_role_unsupported",
+                target.get("address"),
+                "This policy supports direct EventBridge-to-SQS resource grants, not target execution roles.",
+            )
+            continue
+
+        pair = (rule_arn, target_arn)
+        if pair in target_pairs:
+            _deny(
+                findings,
+                "eventbridge_target_duplicate",
+                target.get("address"),
+                "An EventBridge rule may target a given SQS queue only once in this plan.",
+            )
+            continue
+        target_pairs.add(pair)
+        matching: list[dict[str, Any]] = []
+        for policy_item in resources:
+            if policy_item.get("type") != "aws_sqs_queue_policy":
+                continue
+            policy_values = policy_item.get("values")
+            if not isinstance(policy_values, dict):
+                continue
+            if (
+                _sqs_policy_queue_arn(queue_urls, policy_values.get("queue_url"))
+                != target_arn
+            ):
+                continue
+            policy = _json_document(
+                policy_values.get("policy"), findings, policy_item.get("address")
+            )
+            if policy is None:
+                continue
+            for statement in _statements(policy, require_resource=True, require_principal=True):
+                principal = statement.get("Principal")
+                is_eventbridge = (
+                    isinstance(principal, dict)
+                    and "events.amazonaws.com" in _string_list(principal.get("Service"))
+                )
+                resources_in_statement = _string_list(statement.get("Resource"))
+                if (
+                    is_eventbridge
+                    and str(statement.get("Effect", "")).lower() == "allow"
+                    and _sqs_action_may_send(statement.get("Action"))
+                    and any(
+                        fnmatchcase(target_arn, resource_arn)
+                        for resource_arn in resources_in_statement
+                    )
+                ):
+                    matching.append(statement)
+        valid = [
+            statement
+            for statement in matching
+            if _valid_eventbridge_sqs_send_statement(
+                statement,
+                queue_arn=target_arn,
+                rule_arn=rule_arn,
+                account_id=expected_account_id,
+            )
+        ]
+        if len(matching) != 1 or len(valid) != 1:
+            _deny(
+                findings,
+                "eventbridge_sqs_policy_binding_invalid",
+                target.get("address"),
+                "The target queue needs one exact EventBridge SendMessage grant with the matching rule source ARN.",
+            )
+
+    for policy_item in resources:
+        if policy_item.get("type") != "aws_sqs_queue_policy":
+            continue
+        values = policy_item.get("values")
+        if not isinstance(values, dict):
+            continue
+        policy_queue = _sqs_policy_queue_arn(queue_urls, values.get("queue_url"))
+        policy = _json_document(values.get("policy"), findings, policy_item.get("address"))
+        if policy is None:
+            continue
+        for statement in _statements(policy, require_resource=True, require_principal=True):
+            principal = statement.get("Principal")
+            is_eventbridge = (
+                isinstance(principal, dict)
+                and "events.amazonaws.com" in _string_list(principal.get("Service"))
+            )
+            if (
+                not is_eventbridge
+                or str(statement.get("Effect", "")).lower() != "allow"
+                or not _sqs_action_may_send(statement.get("Action"))
+            ):
+                continue
+            source = statement.get("Condition")
+            arn_equals = source.get("ArnEquals") if isinstance(source, dict) else None
+            rule_arn = arn_equals.get("aws:SourceArn") if isinstance(arn_equals, dict) else None
+            resource_arns = _string_list(statement.get("Resource"))
+            matching_queues = [
+                arn for arn in resource_arns if arn in queues and arn == policy_queue
+            ]
+            if (
+                len(matching_queues) != 1
+                or not isinstance(rule_arn, str)
+                or (rule_arn, matching_queues[0]) not in target_pairs
+                or not _valid_eventbridge_sqs_send_statement(
+                    statement,
+                    queue_arn=matching_queues[0] if len(matching_queues) == 1 else "",
+                    rule_arn=rule_arn if isinstance(rule_arn, str) else "",
+                    account_id=expected_account_id,
+                )
+            ):
+                _deny(
+                    findings,
+                    "eventbridge_sqs_policy_binding_invalid",
+                    policy_item.get("address"),
+                    "EventBridge may send to SQS only through an exact planned rule, queue, and target.",
                 )
 
 

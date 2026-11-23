@@ -558,6 +558,79 @@ def sns_sqs_case():
     return document, proposal(proposal_resources)
 
 
+def eventbridge_sqs_case(*, include_source_account=False):
+    document, base_proposal = sqs_queue_case(True)
+    queue_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+    rule_arn = f"arn:aws:events:{REGION}:{ACCOUNT}:rule/orders/route-orders"
+    queue_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "AllowExactEventBridgeRule",
+                "Effect": "Allow",
+                "Principal": {"Service": "events.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": queue_arn,
+                "Condition": {
+                    "ArnEquals": {"aws:SourceArn": rule_arn},
+                    **(
+                        {"StringEquals": {"aws:SourceAccount": ACCOUNT}}
+                        if include_source_account
+                        else {}
+                    ),
+                },
+            }
+        ],
+    }
+    planned = [
+        (
+            "aws_cloudwatch_event_bus.orders",
+            "aws_cloudwatch_event_bus",
+            {"name": "orders"},
+        ),
+        (
+            "aws_cloudwatch_event_rule.route_orders",
+            "aws_cloudwatch_event_rule",
+            {"name": "route-orders", "event_bus_name": "orders"},
+        ),
+        (
+            "aws_cloudwatch_event_target.to_queue",
+            "aws_cloudwatch_event_target",
+            {
+                "rule": "route-orders",
+                "event_bus_name": "orders",
+                "arn": queue_arn,
+                "target_id": "orders-queue",
+            },
+        ),
+        (
+            "aws_sqs_queue_policy.eventbridge_publish",
+            "aws_sqs_queue_policy",
+            {
+                "queue_url": f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/async-work",
+                "policy": json.dumps(queue_policy),
+            },
+        ),
+    ]
+    proposal_resources = [item.model_dump(mode="json") for item in base_proposal.resources]
+    for address, kind, values in planned:
+        document["planned_values"]["root_module"]["resources"].append(
+            resource(address, kind, values)
+        )
+        document["resource_changes"].append(change(address, kind))
+        name = address.split(".", maxsplit=1)[1]
+        proposal_resources.append(
+            {
+                "resource_id": name.replace("_", "-"),
+                "resource_type": kind,
+                "name": name,
+                "arguments": values,
+                "rationale": "Bind a planned EventBridge rule to its exact test queue.",
+            }
+        )
+    return document, proposal(proposal_resources)
+
+
 def test_sqs_queue_requires_sqs_managed_encryption():
     document, proposal_value = sqs_queue_case(False)
 
@@ -608,6 +681,7 @@ def test_sns_sqs_subscription_with_exact_queue_policy_is_reviewable():
         "wrong_account",
         "extra_send_grant",
         "queue_url_mismatch",
+        "queue_url_malformed",
     ],
 )
 def test_sns_sqs_subscription_denies_unscoped_queue_send_policy(mutation):
@@ -635,6 +709,8 @@ def test_sns_sqs_subscription_denies_unscoped_queue_send_policy(mutation):
         policy_item["values"]["queue_url"] = (
             f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/another-queue"
         )
+    elif mutation == "queue_url_malformed":
+        policy_item["values"]["queue_url"] = {"unexpected": "object"}
     else:
         policy["Statement"].append(
             {
@@ -748,6 +824,227 @@ def test_sns_sqs_policy_finding_does_not_echo_policy_values():
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "sns_sqs_policy_binding_invalid" in codes(result)
     assert marker not in repr(result)
+
+
+@pytest.mark.parametrize("include_source_account", [False, True])
+def test_eventbridge_sqs_target_requires_exact_planned_rule_and_queue_grant(
+    include_source_account,
+):
+    document, proposal_value = eventbridge_sqs_case(
+        include_source_account=include_source_account
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "eventbridge_sqs_policy_binding_invalid" not in codes(result)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "wrong_principal",
+        "broad_action",
+        "wildcard_queue",
+        "wrong_source",
+        "wrong_account",
+        "extra_send_grant",
+        "queue_url_mismatch",
+        "queue_url_malformed",
+    ],
+)
+def test_eventbridge_sqs_target_denies_unscoped_queue_send_policy(mutation):
+    document, proposal_value = eventbridge_sqs_case()
+    policy_item = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sqs_queue_policy"
+    )
+    policy = json.loads(policy_item["values"]["policy"])
+    statement = policy["Statement"][0]
+    if mutation == "wrong_principal":
+        statement["Principal"] = {"Service": "sns.amazonaws.com"}
+    elif mutation == "broad_action":
+        statement["Action"] = "sqs:*"
+    elif mutation == "wildcard_queue":
+        statement["Resource"] = f"arn:aws:sqs:{REGION}:{ACCOUNT}:*"
+    elif mutation == "wrong_source":
+        statement["Condition"]["ArnEquals"]["aws:SourceArn"] = (
+            f"arn:aws:events:{REGION}:{ACCOUNT}:rule/orders/other"
+        )
+    elif mutation == "wrong_account":
+        statement["Condition"]["StringEquals"] = {"aws:SourceAccount": "111111111111"}
+    elif mutation == "queue_url_mismatch":
+        policy_item["values"]["queue_url"] = (
+            f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/another-queue"
+        )
+    elif mutation == "queue_url_malformed":
+        policy_item["values"]["queue_url"] = {"unexpected": "object"}
+    else:
+        policy["Statement"].append(
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "events.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work",
+                "Condition": {
+                    "ArnEquals": {
+                        "aws:SourceArn": f"arn:aws:events:{REGION}:{ACCOUNT}:rule/orders/other"
+                    }
+                },
+            }
+        )
+    policy_item["values"]["policy"] = json.dumps(policy)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_sqs_policy_binding_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "target_mutation,expected_code",
+    [
+        ("rule", "eventbridge_target_rule_unplanned"),
+        ("bus", "eventbridge_target_rule_unplanned"),
+        ("queue", "eventbridge_sqs_queue_unplanned"),
+        ("role", "eventbridge_sqs_role_unsupported"),
+    ],
+)
+def test_eventbridge_sqs_target_requires_supported_planned_identity(
+    target_mutation, expected_code
+):
+    document, proposal_value = eventbridge_sqs_case()
+    target = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_cloudwatch_event_target"
+    )
+    if target_mutation == "rule":
+        target["values"]["rule"] = "unplanned-rule"
+    elif target_mutation == "bus":
+        target["values"]["event_bus_name"] = "unplanned-bus"
+    elif target_mutation == "queue":
+        target["values"]["arn"] = f"arn:aws:sqs:{REGION}:111111111111:external"
+    else:
+        target["values"]["role_arn"] = f"arn:aws:iam::{ACCOUNT}:role/target-role"
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_eventbridge_sqs_policy_requires_same_plan_target():
+    document, proposal_value = eventbridge_sqs_case()
+    address = "aws_cloudwatch_event_target.to_queue"
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] != address
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["address"] != address
+    ]
+    proposal_resources = [
+        item.model_dump(mode="json")
+        for item in proposal_value.resources
+        if item.name != "to_queue"
+    ]
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_sqs_policy_binding_invalid" in codes(result)
+
+
+def test_eventbridge_sqs_target_requires_its_custom_bus_in_the_plan():
+    document, proposal_value = eventbridge_sqs_case()
+    address = "aws_cloudwatch_event_bus.orders"
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] != address
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["address"] != address
+    ]
+    proposal_resources = [
+        item.model_dump(mode="json")
+        for item in proposal_value.resources
+        if item.name != "orders"
+    ]
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_target_rule_unplanned" in codes(result)
+
+
+def test_eventbridge_and_sns_grants_can_share_an_exact_queue_policy():
+    document, proposal_value = eventbridge_sqs_case()
+    topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
+    queue_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+    policy_item = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sqs_queue_policy"
+    )
+    policy = json.loads(policy_item["values"]["policy"])
+    policy["Statement"].append(
+        {
+            "Effect": "Allow",
+            "Principal": {"Service": "sns.amazonaws.com"},
+            "Action": "sqs:SendMessage",
+            "Resource": queue_arn,
+            "Condition": {
+                "ArnEquals": {"aws:SourceArn": topic_arn},
+                "StringEquals": {"aws:SourceAccount": ACCOUNT},
+            },
+        }
+    )
+    policy_item["values"]["policy"] = json.dumps(policy)
+    address = "aws_sns_topic.notifications"
+    subscription_address = "aws_sns_topic_subscription.to_queue"
+    planned = [
+        (
+            address,
+            "aws_sns_topic",
+            {"name": "notifications", "arn": topic_arn},
+        ),
+        (
+            subscription_address,
+            "aws_sns_topic_subscription",
+            {
+                "protocol": "sqs",
+                "topic_arn": topic_arn,
+                "endpoint": queue_arn,
+            },
+        ),
+    ]
+    proposal_resources = [item.model_dump(mode="json") for item in proposal_value.resources]
+    for proposal_resource in proposal_resources:
+        if proposal_resource["name"] == "eventbridge_publish":
+            proposal_resource["arguments"]["policy"] = policy_item["values"]["policy"]
+    for resource_address, kind, values in planned:
+        document["planned_values"]["root_module"]["resources"].append(
+            resource(resource_address, kind, values)
+        )
+        document["resource_changes"].append(change(resource_address, kind))
+        name = resource_address.split(".", maxsplit=1)[1]
+        proposal_resources.append(
+            {
+                "resource_id": f"sns-{name.replace('_', '-')}",
+                "resource_type": kind,
+                "name": name,
+                "arguments": values,
+                "rationale": "Bind a separate notification topic to the same test queue.",
+            }
+        )
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
 
 
 def sqs_lambda_consumer_case(
