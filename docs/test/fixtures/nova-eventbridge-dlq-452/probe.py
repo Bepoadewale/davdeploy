@@ -12,9 +12,9 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 
-def receive(queue, queue_url: str, marker: str, deadline: float) -> tuple[bool, bool]:
+def receive(sqs, queue_url: str, marker_prefix: str, deadline: float) -> tuple[bool, bool]:
     while time.monotonic() < deadline:
-        response = queue.receive_message(
+        response = sqs.receive_message(
             QueueUrl=queue_url,
             MaxNumberOfMessages=10,
             WaitTimeSeconds=2,
@@ -22,8 +22,8 @@ def receive(queue, queue_url: str, marker: str, deadline: float) -> tuple[bool, 
             MessageAttributeNames=["All"],
         )
         for message in response.get("Messages", []):
-            matched = marker in message.get("Body", "")
-            queue.delete_message(
+            matched = marker_prefix in message.get("Body", "")
+            sqs.delete_message(
                 QueueUrl=queue_url,
                 ReceiptHandle=message["ReceiptHandle"],
             )
@@ -49,18 +49,20 @@ def publish(events, bus_name: str, marker: str) -> None:
 def run(stage: str, region: str, bus_name: str, target_url: str, dlq_url: str) -> dict:
     session = boto3.Session(region_name=region)
     events = session.client("events")
-    sqs = session.resource("sqs")
-    target = sqs.Queue(target_url)
-    dead_letter = sqs.Queue(dlq_url)
+    sqs = session.client("sqs")
     marker = f"nova-eventbridge-452-{uuid.uuid4()}"
     publish(events, bus_name, marker)
     deadline = time.monotonic() + 300
 
     if stage == "failure":
-        target_received, _ = receive(target, target_url, marker, time.monotonic() + 15)
+        target_received, _ = receive(
+            sqs, target_url, "nova-eventbridge-452-", time.monotonic() + 15
+        )
         if target_received:
             return {"published": True, "target_blocked": False, "body_omitted": True}
-        dlq_received, marker_matched = receive(dead_letter, dlq_url, marker, deadline)
+        dlq_received, marker_matched = receive(
+            sqs, dlq_url, "nova-eventbridge-452-", deadline
+        )
         return {
             "published": True,
             "target_blocked": True,
@@ -69,7 +71,9 @@ def run(stage: str, region: str, bus_name: str, target_url: str, dlq_url: str) -
             "body_omitted": True,
         }
 
-    target_received, marker_matched = receive(target, target_url, marker, deadline)
+    target_received, marker_matched = receive(
+        sqs, target_url, "nova-eventbridge-452-", deadline
+    )
     return {
         "published": True,
         "target_received": target_received,
@@ -94,7 +98,15 @@ def main() -> int:
             args.target_queue_url,
             args.dlq_url,
         )
-    except (BotoCoreError, ClientError, KeyError, RuntimeError, TypeError, ValueError) as error:
+    except (
+        AttributeError,
+        BotoCoreError,
+        ClientError,
+        KeyError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as error:
         print(json.dumps({"ok": False, "error_type": type(error).__name__}))
         return 1
     print(json.dumps(result, sort_keys=True))
