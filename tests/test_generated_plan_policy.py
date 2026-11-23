@@ -4765,3 +4765,273 @@ def test_dynamodb_pitr_policy_findings_do_not_include_plan_values():
 
     assert "dynamodb_pitr_disabled" in codes(result)
     assert "private-data-marker" not in repr(result)
+
+
+def step_functions_lambda_case():
+    document = plan()
+    root_resources = document["planned_values"]["root_module"]["resources"]
+    worker_arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:workflow-worker"
+    role_arn = f"arn:aws:iam::{ACCOUNT}:role/workflow"
+    role_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "states.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                    "Condition": {
+                        "ArnEquals": {
+                            "aws:SourceArn": f"arn:aws:states:{REGION}:{ACCOUNT}:stateMachine:workflow"
+                        },
+                        "StringEquals": {"aws:SourceAccount": ACCOUNT},
+                    },
+                }
+            ],
+        }
+    )
+    role_policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "lambda:InvokeFunction",
+                    "Resource": worker_arn,
+                }
+            ],
+        }
+    )
+    state_machine_arn = f"arn:aws:states:{REGION}:{ACCOUNT}:stateMachine:workflow"
+    definition = json.dumps(
+        {
+            "StartAt": "Invoke",
+            "States": {"Invoke": {"Type": "Task", "Resource": worker_arn, "End": True}},
+        }
+    )
+    additions = [
+        resource(
+            "aws_iam_role.workflow",
+            "aws_iam_role",
+            {
+                "name": "workflow",
+                "arn": role_arn,
+                "assume_role_policy": role_trust,
+            },
+        ),
+        resource(
+            "aws_iam_role_policy.workflow",
+            "aws_iam_role_policy",
+            {
+                "name": "workflow-invoke",
+                "role": "workflow",
+                "policy": role_policy,
+            },
+        ),
+        resource(
+            "aws_lambda_function.workflow",
+            "aws_lambda_function",
+            {
+                "function_name": "workflow-worker",
+                "arn": worker_arn,
+                "timeout": 10,
+            },
+        ),
+        resource(
+            "aws_sfn_state_machine.workflow",
+            "aws_sfn_state_machine",
+            {
+                "name": "workflow",
+                "arn": state_machine_arn,
+                "role_arn": role_arn,
+                "type": "STANDARD",
+                "definition": definition,
+            },
+        ),
+    ]
+    for item in additions:
+        root_resources.append(item)
+        document["resource_changes"].append(change(item["address"], item["type"]))
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": "aws_iam_role_policy.workflow",
+                "expressions": {"role": {"references": ["aws_iam_role.workflow.name"]}},
+            },
+            {
+                "address": "aws_sfn_state_machine.workflow",
+                "expressions": {
+                    "role_arn": {"references": ["aws_iam_role.workflow.arn"]},
+                    "definition": {"references": ["aws_lambda_function.workflow.arn"]},
+                },
+            },
+        ]
+    }
+    proposal_resources = [item.model_dump(mode="json") for item in proposal().resources]
+    proposal_resources.extend(
+        [
+            {
+                "resource_id": "workflow-role",
+                "resource_type": "aws_iam_role",
+                "name": "workflow",
+                "arguments": {"name": "workflow"},
+                "rationale": "Give the workflow a dedicated execution role.",
+            },
+            {
+                "resource_id": "workflow-policy",
+                "resource_type": "aws_iam_role_policy",
+                "name": "workflow",
+                "arguments": {"role": "workflow"},
+                "rationale": "Limit workflow access to its planned Lambda task.",
+            },
+            {
+                "resource_id": "workflow-worker",
+                "resource_type": "aws_lambda_function",
+                "name": "workflow",
+                "arguments": {"function_name": "workflow-worker"},
+                "rationale": "Run the workflow's bounded task.",
+            },
+            {
+                "resource_id": "workflow-machine",
+                "resource_type": "aws_sfn_state_machine",
+                "name": "workflow",
+                "arguments": {"name": "workflow", "type": "STANDARD"},
+                "rationale": "Coordinate the planned Lambda task.",
+            },
+        ]
+    )
+    return document, proposal(proposal_resources)
+
+
+def test_step_functions_requires_exact_same_plan_lambda_role_permissions():
+    document, proposal_value = step_functions_lambda_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(item.code.startswith("step_functions_") for item in result.findings)
+
+
+@pytest.mark.parametrize(
+    "action,resource_arn",
+    [
+        ("lambda:*", f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:workflow-worker"),
+        ("lambda:InvokeFunction", "*"),
+        ("s3:GetObject", "arn:aws:s3:::unrelated/*"),
+    ],
+)
+def test_step_functions_denies_broad_or_unrelated_role_permissions(action, resource_arn):
+    document, proposal_value = step_functions_lambda_case()
+    policy = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_iam_role_policy"
+    )
+    policy_doc = json.loads(policy["values"]["policy"])
+    policy_doc["Statement"][0]["Action"] = action
+    policy_doc["Statement"][0]["Resource"] = resource_arn
+    policy["values"]["policy"] = json.dumps(policy_doc)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "step_functions_role_scope_invalid" in codes(result)
+
+
+def test_step_functions_denies_unplanned_lambda():
+    document, proposal_value = step_functions_lambda_case()
+    machine = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sfn_state_machine"
+    )
+    asl = json.loads(machine["values"]["definition"])
+    asl["States"]["Invoke"]["Resource"] = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:outside"
+    machine["values"]["definition"] = json.dumps(asl)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "step_functions_task_unplanned" in codes(result)
+
+
+def test_step_functions_requires_confused_deputy_trust_conditions():
+    document, proposal_value = step_functions_lambda_case()
+    role = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_iam_role"
+    )
+    trust = json.loads(role["values"]["assume_role_policy"])
+    trust["Statement"][0]["Condition"]["ArnEquals"]["aws:SourceArn"] = (
+        f"arn:aws:states:{REGION}:{ACCOUNT}:stateMachine:*"
+    )
+    role["values"]["assume_role_policy"] = json.dumps(trust)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "step_functions_role_trust_invalid" in codes(result)
+
+
+def test_step_functions_rejects_express_and_service_integrations():
+    document, proposal_value = step_functions_lambda_case()
+    machine = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sfn_state_machine"
+    )
+    machine["values"]["type"] = "EXPRESS"
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "step_functions_type_unsupported" in codes(result)
+
+
+def test_step_functions_rejects_task_credentials_role_overrides():
+    document, proposal_value = step_functions_lambda_case()
+    machine = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_sfn_state_machine"
+    )
+    definition = json.loads(machine["values"]["definition"])
+    definition["States"]["Invoke"]["Credentials"] = {
+        "RoleArn": f"arn:aws:iam::{ACCOUNT}:role/other"
+    }
+    machine["values"]["definition"] = json.dumps(definition)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "step_functions_definition_unsupported" in codes(result)
+
+
+def test_step_functions_denies_unverified_managed_policy_attachment():
+    document, proposal_value = step_functions_lambda_case()
+    attachment = resource(
+        "aws_iam_role_policy_attachment.workflow_admin",
+        "aws_iam_role_policy_attachment",
+        {
+            "role": "workflow",
+            "policy_arn": "arn:aws:iam::aws:policy/ReadOnlyAccess",
+        },
+    )
+    document["planned_values"]["root_module"]["resources"].append(attachment)
+    document["resource_changes"].append(change(attachment["address"], attachment["type"]))
+    proposal_resources = [item.model_dump(mode="json") for item in proposal_value.resources]
+    proposal_resources.append(
+        {
+            "resource_id": "workflow-managed-policy",
+            "resource_type": "aws_iam_role_policy_attachment",
+            "name": "workflow_admin",
+            "arguments": {"role": "workflow", "policy_arn": "ReadOnlyAccess"},
+            "rationale": "Regression case for an unverified workflow managed policy.",
+        }
+    )
+
+    result = evaluate(document, proposal(proposal_resources))
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "step_functions_managed_policy_unverified" in codes(result)

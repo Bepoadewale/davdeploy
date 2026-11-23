@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-23.3"
+POLICY_VERSION = "nova-generated-plan-2026-11-23.4"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -104,6 +104,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("source_account",),
         ("source_arn",),
     ),
+    "aws_sfn_state_machine": (("definition",), ("role_arn",), ("type",)),
     "aws_apigatewayv2_route": (("authorization_type",),),
     "aws_db_instance": (
         ("publicly_accessible",),
@@ -257,6 +258,9 @@ def _evaluate(
         resources, findings, expected_account_id, expected_region
     )
     _check_sqs_delivery_contract(
+        document, resources, findings, expected_account_id, expected_region
+    )
+    _check_step_functions_role_scope(
         document, resources, findings, expected_account_id, expected_region
     )
     _check_lambda_permissions(resources, findings)
@@ -3149,6 +3153,327 @@ def _check_sqs_delivery_contract(
         findings,
         expected_account_id,
         expected_region,
+    )
+
+
+def _check_step_functions_role_scope(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    """Bound Standard workflows to exact same-plan Lambda invokes and role grants."""
+    configured = _configured_resource_references(document)
+    by_type: dict[str, list[dict[str, Any]]] = {}
+    for item in resources:
+        kind = item.get("type")
+        if isinstance(kind, str):
+            by_type.setdefault(kind, []).append(item)
+
+    for machine in by_type.get("aws_sfn_state_machine", []):
+        address = machine.get("address")
+        values = machine.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "step_functions_configuration_unknown",
+                address,
+                "The state machine is missing required plan values.",
+            )
+            continue
+        if values.get("type") != "STANDARD":
+            _deny(
+                findings,
+                "step_functions_type_unsupported",
+                address,
+                "Only Standard state machines are covered by the current execution policy.",
+            )
+            continue
+        if not _aws_arn_matches(
+            values.get("arn"), "states", expected_region, expected_account_id, "stateMachine:"
+        ):
+            _deny(
+                findings,
+                "step_functions_scope_mismatch",
+                address,
+                "The state machine ARN must match the approved account and region.",
+            )
+            continue
+        if values.get("logging_configuration") not in (None, [], {}):
+            _deny(
+                findings,
+                "step_functions_logging_unsupported",
+                address,
+                "State machine logging requires a separately reviewed log policy.",
+            )
+            continue
+
+        definition = values.get("definition")
+        try:
+            asl = json.loads(definition) if isinstance(definition, str) else None
+        except (json.JSONDecodeError, RecursionError):
+            asl = None
+        task_arns = _step_functions_lambda_tasks(asl)
+        if task_arns is None or not task_arns:
+            _deny(
+                findings,
+                "step_functions_definition_unsupported",
+                address,
+                "The state machine must use a known definition with direct Lambda task ARNs only.",
+            )
+            continue
+        if not all(
+            _aws_arn_matches(arn, "lambda", expected_region, expected_account_id, "function:")
+            for arn in task_arns
+        ):
+            _deny(
+                findings,
+                "step_functions_task_scope_mismatch",
+                address,
+                "Lambda task ARNs must match the approved account and region.",
+            )
+            continue
+
+        state_refs = configured.get(address, ())
+        role_candidates = [
+            role
+            for role in by_type.get("aws_iam_role", [])
+            if any(
+                _reference_targets_resource(reference, role.get("address", ""), "aws_iam_role")
+                for reference in state_refs
+            )
+        ]
+        if len(role_candidates) != 1:
+            _deny(
+                findings,
+                "step_functions_role_unbound",
+                address,
+                "The state machine must reference exactly one planned IAM execution role.",
+            )
+            continue
+
+        lambda_arns = {
+            item.get("values", {}).get("arn")
+            for item in by_type.get("aws_lambda_function", [])
+            if isinstance(item.get("values"), dict)
+        }
+        if not task_arns <= lambda_arns:
+            _deny(
+                findings,
+                "step_functions_task_unplanned",
+                address,
+                "Every direct Lambda task must target a function in this plan.",
+            )
+            continue
+
+        role = role_candidates[0]
+        role_address = role.get("address")
+        role_values = role.get("values")
+        role_arn = role_values.get("arn") if isinstance(role_values, dict) else None
+        role_name = role_values.get("name") if isinstance(role_values, dict) else None
+        if (
+            not isinstance(role_address, str)
+            or not isinstance(role_arn, str)
+            or not _aws_arn_matches(role_arn, "iam", "", expected_account_id, "role/")
+            or values.get("role_arn") != role_arn
+        ):
+            _deny(
+                findings,
+                "step_functions_role_unbound",
+                address,
+                "The execution role must have a known planned ARN.",
+            )
+            continue
+        role_trust = _json_document(role_values.get("assume_role_policy"), findings, role_address)
+        state_machine_arn = values.get("arn")
+        if (
+            role_trust is None
+            or not isinstance(state_machine_arn, str)
+            or not _step_functions_role_trust_is_exact(
+                role_trust, state_machine_arn, expected_account_id
+            )
+        ):
+            _deny(
+                findings,
+                "step_functions_role_trust_invalid",
+                role_address,
+                "The execution role must trust only the Step Functions service.",
+            )
+            continue
+
+        granted: set[str] = set()
+        unsupported = False
+        for policy_resource in by_type.get("aws_iam_role_policy", []):
+            policy_address = policy_resource.get("address")
+            policy_values = policy_resource.get("values")
+            if not isinstance(policy_address, str) or not isinstance(policy_values, dict):
+                continue
+            references = configured.get(policy_address, ())
+            bound = (
+                any(
+                    _reference_targets_resource(reference, role_address, "aws_iam_role")
+                    for reference in references
+                )
+                or policy_values.get("role") == role_name
+            )
+            if not bound:
+                continue
+            if policy_values.get("role") != role_name:
+                unsupported = True
+                _deny(
+                    findings,
+                    "step_functions_role_scope_invalid",
+                    policy_address,
+                    "The inline policy must attach to the referenced execution role.",
+                )
+                continue
+            policy = _json_document(policy_values.get("policy"), findings, policy_address)
+            if policy is None:
+                unsupported = True
+                continue
+            for statement in _statements(policy, require_resource=True):
+                effect = statement.get("Effect")
+                if str(effect).lower() == "deny":
+                    continue
+                actions = {item.lower() for item in _string_list(statement.get("Action"))}
+                statement_resources = set(_string_list(statement.get("Resource")))
+                if (
+                    str(effect).lower() != "allow"
+                    or actions != {"lambda:invokefunction"}
+                    or not statement_resources
+                    or not statement_resources <= task_arns
+                    or "Condition" in statement
+                    or "NotAction" in statement
+                    or "NotResource" in statement
+                ):
+                    unsupported = True
+                    _deny(
+                        findings,
+                        "step_functions_role_scope_invalid",
+                        policy_address,
+                        "The state machine role may grant only direct Lambda invocation on its exact planned task functions.",
+                    )
+                    continue
+                granted.update(statement_resources)
+
+        for attachment in (
+            *by_type.get("aws_iam_role_policy_attachment", []),
+            *by_type.get("aws_iam_policy_attachment", []),
+        ):
+            attachment_address = attachment.get("address")
+            references = (
+                configured.get(attachment_address, ())
+                if isinstance(attachment_address, str)
+                else ()
+            )
+            attachment_values = attachment.get("values")
+            attached_to_role = any(
+                _reference_targets_resource(reference, role_address, "aws_iam_role")
+                for reference in references
+            ) or (
+                isinstance(attachment_values, dict)
+                and (
+                    attachment_values.get("role_arn") == role_arn
+                    or attachment_values.get("role") == role_name
+                    or role_name in _string_list(attachment_values.get("roles"))
+                )
+            )
+            if attached_to_role:
+                unsupported = True
+                _deny(
+                    findings,
+                    "step_functions_managed_policy_unverified",
+                    attachment_address,
+                    "Managed policies attached to a state machine role are not covered by this policy.",
+                )
+
+        definition_references = set(state_refs)
+        task_resources_bound = all(
+            any(
+                _reference_targets_resource(
+                    reference, item.get("address", ""), "aws_lambda_function"
+                )
+                for reference in definition_references
+            )
+            for item in by_type.get("aws_lambda_function", [])
+            if isinstance(item.get("values"), dict) and item["values"].get("arn") in task_arns
+        )
+        if unsupported or not task_resources_bound or not task_arns <= granted:
+            _deny(
+                findings,
+                "step_functions_invoke_permission_missing",
+                address,
+                "The execution role must grant exact Lambda invoke access for every task in the state machine.",
+            )
+
+
+def _step_functions_lambda_tasks(asl: Any) -> set[str] | None:
+    """Return direct Lambda task ARNs; return None for unsupported ASL shapes."""
+    if not isinstance(asl, dict) or not isinstance(asl.get("States"), dict):
+        return None
+    tasks: set[str] = set()
+    pending = [asl["States"]]
+    while pending:
+        states = pending.pop()
+        if not isinstance(states, dict):
+            return None
+        for state in states.values():
+            if not isinstance(state, dict) or not isinstance(state.get("Type"), str):
+                return None
+            state_type = state["Type"]
+            if state_type == "Task":
+                if "Credentials" in state:
+                    return None
+                resource_arn = state.get("Resource")
+                if not isinstance(resource_arn, str) or not resource_arn.startswith("arn:"):
+                    return None
+                tasks.add(resource_arn)
+            elif state_type not in {
+                "Pass",
+                "Succeed",
+                "Fail",
+                "Wait",
+                "Choice",
+            }:
+                return None
+    return tasks
+
+
+def _step_functions_role_trust_is_exact(
+    policy: dict[str, Any], state_machine_arn: str, account_id: str
+) -> bool:
+    statements = _statements(policy, require_resource=False)
+    allows = [
+        statement for statement in statements if str(statement.get("Effect", "")).lower() == "allow"
+    ]
+    return bool(allows) and all(
+        {item.lower() for item in _string_list(statement.get("Action"))} == {"sts:assumerole"}
+        and isinstance(statement.get("Principal"), dict)
+        and set(_string_list(statement["Principal"].get("Service"))) == {"states.amazonaws.com"}
+        and statement.get("Condition")
+        == {
+            "ArnEquals": {"aws:SourceArn": state_machine_arn},
+            "StringEquals": {"aws:SourceAccount": account_id},
+        }
+        for statement in allows
+    )
+
+
+def _aws_arn_matches(
+    value: Any, service: str, region: str, account_id: str, resource_prefix: str
+) -> bool:
+    if not isinstance(value, str):
+        return False
+    parts = value.split(":", maxsplit=5)
+    return (
+        len(parts) == 6
+        and parts[0] == "arn"
+        and bool(parts[1])
+        and parts[2] == service
+        and parts[3] == region
+        and parts[4] == account_id
+        and parts[5].startswith(resource_prefix)
     )
 
 
