@@ -1,7 +1,12 @@
 # ticket438 — publish customer CloudFormation templates append-only
 
-PR: [#438](https://github.com/Bepoadewale/davdeploy/pull/438) (open, draft)
+PR: [#438](https://github.com/Bepoadewale/davdeploy/pull/438) (merged)
 Branch: `docs/template-host-append-only-20261119`
+
+Merged: `cb78865b66815287478892fe012257cf964413db` on 2026-11-19. All seven
+required checks passed in run
+[44593771329](https://github.com/Bepoadewale/davdeploy/actions/runs/44593771329)
+on PR head `3ae046ebd661ca2a71eed49e6514337da1de62a3`.
 
 ## Problem / goal
 
@@ -35,13 +40,13 @@ PR #381 retains older template objects, but its current-object resource does not
 - [x] Existing current, retained, and historical state addresses have one-destination moves forming an explicit chain to the new resource shape without renaming S3 keys.
 - [x] Existing template URLs remain unchanged; the output still points to the current source hash.
 - [x] Focused regression tests, Terraform format/validation, and documentation conventions pass.
-- [x] All seven PR CI checks passed in run `44504126648` on commit `98c8477`.
+- [x] All seven final-head PR CI checks passed in run `44593771329` on commit `3ae046ebd661ca2a71eed49e6514337da1de62a3`.
 - [x] The corrected lock-free protected-state plan shows exactly four object address moves, `0 to add, 0 to change, 0 to destroy`, and no prior-object replacement or deletion.
 - [x] No live AWS resources were modified, and no deployment is claimed.
 
 ## Acceptance status
 
-The implementation, local/static validation, and corrected lock-free plan against actual protected state pass. The initial plan attempt failed with `Ambiguous move statements` at `main.tf` lines 116, 121, and 126, before producing a plan. After correction, exactly four object addresses moved with `0 to add, 0 to change, 0 to destroy`. Neither attempt acquired a state lock or changed AWS resources/state. PR #438 remains draft; no apply is claimed.
+The implementation, local/static validation, and corrected lock-free plan against actual protected state passed. The initial plan attempt failed with `Ambiguous move statements` at `main.tf` lines 116, 121, and 126, before producing a plan. After correction, exactly four object addresses moved with `0 to add, 0 to change, 0 to destroy`. Neither attempt acquired a state lock or changed AWS resources/state. PR #438 is merged; no apply is claimed. A separate read-only changed-source plan has not yet been exercised.
 
 ## Tests / validation performed
 
@@ -59,4 +64,7 @@ This PR does not publish a template, update a hosted URL, apply Terraform, modif
 
 ## Follow-up work
 
-After merge, run and review a read-only plan against the protected template-host state. Proceed with a separate apply only with explicit approval and only if the plan preserves every existing key and proposes no prior-object mutation or deletion.
+The migration plan against protected state has been reviewed and merged. A
+read-only plan for a changed template source remains future evidence: it must
+add the new content-hash object while retaining all existing keys without
+updates or deletions. Any apply requires separate explicit approval.

@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`d2a9b5430d30e483e69bfb14438ad4960493b51f` (PR #456). The last
+`b2956ac1c56e2e3b7b385a5e0202e81f00f1b87c` (PR #458). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -110,7 +110,9 @@ Map/Parallel states, wildcard permissions, and attached managed policies until
 their policies are separately covered. This follows AWS's execution-role and
 Lambda permission guidance; it does not enable or deploy Step Functions.
 
-Draft PR #458 records a disposable AWS Batch Fargate retry test. The first
+PR #458 merged as `b2956ac`; all seven checks passed in run
+[45245276054](https://github.com/Bepoadewale/davdeploy/actions/runs/45245276054).
+It records a disposable AWS Batch Fargate retry test. The first
 attempt exited `1`, the automatic retry exited `0`, and the job succeeded. The
 exact stack was destroyed through the run monitor and independently checked
 absent; an AWS-managed inactive job definition remains subject to documented
@@ -119,7 +121,8 @@ hosted customer apply. The hosted control plane remained outside its scope.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint
-configuration. Four tagged Batch job definitions remain inactive. The test
+configuration. Four earlier tagged Batch job definitions remain inactive;
+PR #458's test added one inactive definition after teardown. The test
 SageMaker lineage action/context remain as audit evidence. The PR #443
 temporary roles and workload resources are absent. PR #446 and #447 test queue
 prefixes are absent; the existing production-tagged queue remains. The PR #447
@@ -129,7 +132,8 @@ PR #449's four-resource test stack and local state are absent. PR #452's
 eight-resource stack and PR #454's five-resource stack and local state are
 absent. PR #458's test compute environment, queue, IAM roles, security group,
 and log group are absent; one inactive AWS Batch job definition is retained by
-AWS. Its local state is empty. The run monitor has no active operations.
+AWS. Its local state lists zero resources. The run monitor has 38 terminal
+records and no active operations.
 Preserve the protected untracked
 `--only-show-errors` file, `.venv-pr399/`, and lineage evidence.
 

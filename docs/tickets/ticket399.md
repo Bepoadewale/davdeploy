@@ -13,14 +13,15 @@ CodeBuild project and `customer_executor`.
 
 ## Current repo state
 
-Backend `main` is `cb78865b66815287478892fe012257cf964413db` (through PR #438).
+Backend `main` is `b2956ac1c56e2e3b7b385a5e0202e81f00f1b87c` (PR #458).
 PR #437 adds the isolated customer-side ECS Express pilot; PR #438 adds the
 append-only content-hash template collection. PR #438's protected-state plan
 was read-only; no template-host apply or live change ran. The PR #399 update
 synchronizes with current `main` and places both discovery and default-off Nova
 apply-role templates in the same protected content-hash collection. The
-current template-host changes remain source-only; no live plan or apply was
-run. PR #399 remains open and draft with apply/credential gates disabled.
+current template-host changes remain source-only; no live template-host apply
+was run. PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d` on
+2026-11-19; apply/credential gates remain disabled in the hosted runtime.
 
 The owner accepts PR #437's isolated direct-Terraform ECS lifecycle as the
 general goal's customer-side plan/apply/health/update/recovery/teardown evidence
@@ -117,7 +118,7 @@ workload is claimed. Preserve the protected untracked `--only-show-errors` and
 
 ## Acceptance status
 
-- In progress on draft PR #399. Source includes the administrator-authorized
+- PR #399 is merged. Source includes the administrator-authorized
   apply-request API, durable run records and worker leases, fixed CodeBuild
   dispatch, exact saved-plan/workspace restoration, tenant-scoped state
   bootstrap, separately gated customer credentials, apply-role onboarding and
