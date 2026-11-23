@@ -9,31 +9,35 @@ import time
 
 import boto3
 
-
 TIMEOUT_SECONDS = 900
 POLL_SECONDS = 10
 
 
 def _attempt_marker(logs, log_stream_name: str) -> int | None:
-    token = None
-    lines: list[str] = []
-    while True:
-        arguments = {
-            "logGroupName": sys.argv[3],
-            "logStreamName": log_stream_name,
-            "startFromHead": True,
-            "limit": 100,
-        }
-        if token:
-            arguments["nextToken"] = token
-        response = logs.get_log_events(**arguments)
-        lines.extend(event.get("message", "") for event in response.get("events", []))
-        next_token = response.get("nextForwardToken")
-        if not next_token or next_token == token:
-            break
-        token = next_token
-    match = re.search(r"attempt=([12])", "\n".join(lines))
-    return int(match.group(1)) if match else None
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        token = None
+        lines: list[str] = []
+        while True:
+            arguments = {
+                "logGroupName": sys.argv[3],
+                "logStreamName": log_stream_name,
+                "startFromHead": True,
+                "limit": 100,
+            }
+            if token:
+                arguments["nextToken"] = token
+            response = logs.get_log_events(**arguments)
+            lines.extend(event.get("message", "") for event in response.get("events", []))
+            next_token = response.get("nextForwardToken")
+            if not next_token or next_token == token:
+                break
+            token = next_token
+        match = re.search(r"attempt=([12])", "\n".join(lines))
+        if match:
+            return int(match.group(1))
+        time.sleep(5)
+    return None
 
 
 def main() -> int:
@@ -91,6 +95,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except Exception:
+    except Exception:  # noqa: BLE001
         print(json.dumps({"job_succeeded": False, "retry_verified": False}))
         raise SystemExit(1) from None
