@@ -561,6 +561,7 @@ def sns_sqs_case():
 def eventbridge_sqs_case(*, include_source_account=False):
     document, base_proposal = sqs_queue_case(True)
     queue_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+    dead_letter_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:eventbridge-delivery-dlq"
     rule_arn = f"arn:aws:events:{REGION}:{ACCOUNT}:rule/orders/route-orders"
     queue_policy = {
         "Version": "2012-10-17",
@@ -579,6 +580,19 @@ def eventbridge_sqs_case(*, include_source_account=False):
                         else {}
                     ),
                 },
+            }
+        ],
+    }
+    dead_letter_policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "AllowExactEventBridgeRule",
+                "Effect": "Allow",
+                "Principal": {"Service": "events.amazonaws.com"},
+                "Action": "sqs:SendMessage",
+                "Resource": dead_letter_arn,
+                "Condition": {"ArnEquals": {"aws:SourceArn": rule_arn}},
             }
         ],
     }
@@ -601,6 +615,11 @@ def eventbridge_sqs_case(*, include_source_account=False):
                 "event_bus_name": "orders",
                 "arn": queue_arn,
                 "target_id": "orders-queue",
+                "retry_policy": {
+                    "maximum_retry_attempts": 0,
+                    "maximum_event_age_in_seconds": 60,
+                },
+                "dead_letter_config": {"arn": dead_letter_arn},
             },
         ),
         (
@@ -609,6 +628,24 @@ def eventbridge_sqs_case(*, include_source_account=False):
             {
                 "queue_url": f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/async-work",
                 "policy": json.dumps(queue_policy),
+            },
+        ),
+        (
+            "aws_sqs_queue.eventbridge_dead_letter",
+            "aws_sqs_queue",
+            {
+                "name": "eventbridge-delivery-dlq",
+                "sqs_managed_sse_enabled": True,
+                "visibility_timeout_seconds": 30,
+                "message_retention_seconds": 1209600,
+            },
+        ),
+        (
+            "aws_sqs_queue_policy.eventbridge_dlq_publish",
+            "aws_sqs_queue_policy",
+            {
+                "queue_url": f"https://sqs.{REGION}.amazonaws.com/{ACCOUNT}/eventbridge-delivery-dlq",
+                "policy": json.dumps(dead_letter_policy),
             },
         ),
     ]
@@ -933,6 +970,119 @@ def test_eventbridge_sqs_target_requires_supported_planned_identity(
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("maximum_retry_attempts", -1),
+        ("maximum_retry_attempts", 186),
+        ("maximum_event_age_in_seconds", 59),
+        ("maximum_event_age_in_seconds", 86401),
+    ],
+)
+def test_eventbridge_sqs_target_requires_bounded_retry_values(field, value):
+    document, proposal_value = eventbridge_sqs_case()
+    target = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_cloudwatch_event_target"
+    )
+    target["values"]["retry_policy"][field] = value
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_retry_policy_invalid" in codes(result)
+
+
+def test_eventbridge_sqs_target_denies_missing_retry_policy():
+    document, proposal_value = eventbridge_sqs_case()
+    target = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_cloudwatch_event_target"
+    )
+    del target["values"]["retry_policy"]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_retry_policy_invalid" in codes(result)
+
+
+@pytest.mark.parametrize("dead_letter_mode", ["missing", "unplanned", "same_queue", "fifo"])
+def test_eventbridge_sqs_target_requires_planned_standard_dead_letter_queue(
+    dead_letter_mode,
+):
+    document, proposal_value = eventbridge_sqs_case()
+    target = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_cloudwatch_event_target"
+    )
+    if dead_letter_mode == "missing":
+        del target["values"]["dead_letter_config"]
+    elif dead_letter_mode == "unplanned":
+        target["values"]["dead_letter_config"]["arn"] = (
+            f"arn:aws:sqs:{REGION}:{ACCOUNT}:unplanned-dlq"
+        )
+    elif dead_letter_mode == "same_queue":
+        target["values"]["dead_letter_config"]["arn"] = (
+            f"arn:aws:sqs:{REGION}:{ACCOUNT}:async-work"
+        )
+    else:
+        dead_letter_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:eventbridge-fifo.fifo"
+        target["values"]["dead_letter_config"]["arn"] = dead_letter_arn
+        address = "aws_sqs_queue.eventbridge_fifo"
+        values = {
+            "name": "eventbridge-fifo.fifo",
+            "sqs_managed_sse_enabled": True,
+            "visibility_timeout_seconds": 30,
+            "message_retention_seconds": 1209600,
+        }
+        document["planned_values"]["root_module"]["resources"].append(
+            resource(address, "aws_sqs_queue", values)
+        )
+        document["resource_changes"].append(change(address, "aws_sqs_queue"))
+        resources = [item.model_dump(mode="json") for item in proposal_value.resources]
+        resources.append(
+            {
+                "resource_id": "eventbridge-fifo",
+                "resource_type": "aws_sqs_queue",
+                "name": "eventbridge_fifo",
+                "arguments": {
+                    "name": values["name"],
+                    "sqs_managed_sse_enabled": True,
+                },
+                "rationale": "Regression case for unsupported EventBridge FIFO DLQ.",
+            }
+        )
+        proposal_value = proposal(resources)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_dlq_invalid" in codes(result)
+
+
+def test_eventbridge_sqs_target_requires_exact_dlq_queue_policy():
+    document, proposal_value = eventbridge_sqs_case()
+    policy_item = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_sqs_queue_policy.eventbridge_dlq_publish"
+    )
+    policy = json.loads(policy_item["values"]["policy"])
+    policy["Statement"][0]["Condition"]["ArnEquals"]["aws:SourceArn"] = (
+        f"arn:aws:events:{REGION}:{ACCOUNT}:rule/orders/another"
+    )
+    policy_item["values"]["policy"] = json.dumps(policy)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eventbridge_dlq_policy_binding_invalid" in codes(result)
 
 
 def test_eventbridge_sqs_policy_requires_same_plan_target():
