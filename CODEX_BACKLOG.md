@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-23
 
-Backend `main` is `b2956ac1c56e2e3b7b385a5e0202e81f00f1b87c` (PR #458). The
+Backend `main` is `d10a9f66b43ac8c696e227f39b40a452b8bd79f9` (PR #461). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -21,6 +21,12 @@ is merged and maps all 26 architecture entries and 30 Terraform roots to
 evidence; it does not establish support for every entry. PR #458 records a
 direct same-account Batch retry and teardown test; it does not exercise Nova
 dispatch.
+
+PR #461 adds source-only ECR generated-plan checks and records direct same-
+account creation, safety-setting verification, and teardown of the exact ECR
+module root. Its empty repository is independently confirmed absent. No image
+was pushed; provenance, effective scanning, pull/run behavior, and complete
+ECR pricing remain open. See `docs/test/test461.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
