@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-23
 
 The source baseline for this reconciliation is backend `main` at
-`24000865fbf6e3d2c8325661a6e1494dd896de9b` (PR #451). The last
+`67913448c57e39eb3438242ef4ccc3bd567995ec` (PR #454). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -93,11 +93,12 @@ customer-side service evidence, not Nova dispatch or hosted execution.
 EventBridge target IAM roles and unknown or cross-account target shapes remain
 unsupported by the current plan policy.
 
-Draft PR #454 records direct Step Functions behavior with a controlled Lambda
-failure, Catch recovery, a separate normal success path, and verified cleanup.
-The test stack is absent and the implementation/evidence head passed all seven
-CI checks. This does not establish Step Functions role-policy safety, Nova
-dispatch, or hosted execution.
+PR #454 merged as `6791344`; all seven checks passed on final head
+`a1a07882e767ae5f05e9a338f63ca7eed3d92138` in run
+[45229243421](https://github.com/Bepoadewale/davdeploy/actions/runs/45229243421).
+Its direct Step Functions test records a controlled Lambda failure, Catch
+recovery, a separate normal success path, and verified cleanup. This does not
+establish Step Functions role-policy safety, Nova dispatch, or hosted execution.
 
 Current read-only AWS checks in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, or endpoint

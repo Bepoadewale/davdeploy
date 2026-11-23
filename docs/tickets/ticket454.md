@@ -1,11 +1,12 @@
 # ticket454 — verify Step Functions failure recovery
 
 PR: https://github.com/Bepoadewale/davdeploy/pull/454
-Branch: `test/step-functions-recovery-454`
+Branch: `test/step-functions-recovery-454` (deleted after merge)
 
 ## Current repo state
 
-- Backend `main` is `28ffd9cae0fecff2b94a7ab19039053e93053aca` (PR #453).
+- Backend `main` is `67913448c57e39eb3438242ef4ccc3bd567995ec` (PR #454).
+- PR #454 merged at `2026-11-23T17:40:41Z`; its source branch was deleted.
 - The EventBridge #452 test stack is absent; Terraform monitor has no active
   operations.
 - The current Step Functions test `test256.md` records a successful execution,
@@ -38,7 +39,7 @@ recovers, along with a separate ordinary success path and exact teardown.
    function again with a unique marker. Also prove the ordinary success path.
 3. Redact input, output, exception details, and execution identifiers from
    probe output.
-4. Open this draft PR and its evidence records before AWS writes; keep all
+4. Open the PR and its evidence records before AWS writes; keep all
    Terraform state and generated archives outside the repository.
 5. Destroy the exact test stack through the repository Terraform monitor and
    independently verify AWS absence.
@@ -63,9 +64,10 @@ recovers, along with a separate ordinary success path and exact teardown.
 The five-resource fixture created successfully and both probe paths passed
 after the probe was corrected to match Lambda-specific history event names.
 All four executions ended `SUCCEEDED`. Monitored teardown succeeded; exact
-AWS reads and local state confirm cleanup. All seven checks passed on head
-`c301c6f8330851c95d5d915b4f418c4d9bcee463` in run `45226919117`; a final-head
-CI run will cover the AWS teardown evidence updates.
+AWS reads and local state confirm cleanup. PR #454 merged as
+`67913448c57e39eb3438242ef4ccc3bd567995ec`; final head
+`a1a07882e767ae5f05e9a338f63ca7eed3d92138` passed all seven checks in run
+`45229243421`.
 
 ## Tests / validation performed
 
@@ -75,7 +77,7 @@ CI run will cover the AWS teardown evidence updates.
 - Ruff, Python syntax, Terraform format, documentation conventions, and
   `git diff --check` passed.
 - All seven required checks passed on initial PR head `eddbcd6` in run
-  `45222597413`; a final-head run is required after the evidence update.
+  `45222597413`; later final-head CI runs are listed below.
 - The first monitored create failed before AWS calls because `AWS_PROFILE` was
   absent from the subprocess environment. Exact-name reads found no partial
   resources. The corrected monitored create added exactly five resources.
@@ -86,9 +88,8 @@ CI run will cover the AWS teardown evidence updates.
 - Monitored destroy `nova-stepfn-recovery-454-destroy-nov23a2` succeeded with
   five destroys. AWS confirmed the state machine, Lambda function, and both
   roles absent; Terraform state is empty and there are no active monitor runs.
-- Final PR head `c301c6f8330851c95d5d915b4f418c4d9bcee463` passed all seven
-  checks in run `45226919117`; final-head CI will rerun after recording the
-  teardown and matrix evidence.
+- Final PR head `a1a07882e767ae5f05e9a338f63ca7eed3d92138` passed all seven
+  checks in run `45229243421`; PR #454 is merged.
 
 ## Evidence files produced
 
