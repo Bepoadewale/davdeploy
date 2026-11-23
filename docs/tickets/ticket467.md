@@ -54,17 +54,20 @@ scope limits of those checks.
   unchanged.
 - [x] Monitor inventory reports 41 terminal records and no active runs.
 - [x] Protected and generated untracked files remain untouched.
-- [ ] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head CI and review/merge state are tracked on GitHub.
+- [x] Documentation conventions and `git diff --check` pass.
+- [x] Final-head CI and review/merge state are tracked on PR #467; merge only
+  after all required checks pass.
 
 ## Acceptance status
 
-The active documentation snapshots are reconciled locally. CI and PR review
-state are tracked on PR #467.
+The active documentation snapshots and validation record are reconciled on
+PR #467. GitHub review and merge state are tracked on the PR.
 
 ## Tests / validation performed
 
-Pending.
+- `GITHUB_PR_NUMBER=467 python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Final-head CI is tracked on PR #467.
 
 ## Evidence files produced
 
