@@ -69,6 +69,8 @@ resource "aws_sqs_queue" "target" {
     deadLetterTargetArn = local.consumer_dlq_arn
     maxReceiveCount     = 5
   })
+
+  depends_on = [aws_sqs_queue.consumer_dlq]
 }
 
 resource "aws_sqs_queue" "consumer_dlq" {
@@ -106,6 +108,8 @@ resource "aws_sqs_queue_policy" "target" {
       }
     }]
   })
+
+  depends_on = [aws_sqs_queue.target]
 }
 
 resource "aws_sqs_queue_policy" "eventbridge_dlq" {
@@ -125,6 +129,8 @@ resource "aws_sqs_queue_policy" "eventbridge_dlq" {
       }
     }]
   })
+
+  depends_on = [aws_sqs_queue.eventbridge_dlq]
 }
 
 resource "aws_cloudwatch_event_target" "test" {
