@@ -45,11 +45,11 @@ recovers, along with a separate ordinary success path and exact teardown.
 
 ## Acceptance criteria
 
-- [ ] Terraform plans exactly five creates with no updates or deletes.
-- [ ] A controlled Lambda task failure appears in Step Functions history and
+- [x] Terraform plans exactly five creates with no updates or deletes.
+- [x] A controlled Lambda task failure appears in Step Functions history and
       the Catch recovery execution completes with the expected marker.
-- [ ] A separate normal execution completes without using the recovery path.
-- [ ] The probe omits all execution input/output, exception text, and
+- [x] A separate normal execution completes without using the recovery path.
+- [x] The probe omits all execution input/output, exception text, and
       identifiers.
 - [ ] The exact five-resource stack is removed through monitored Terraform
       destroy; AWS and local state are independently confirmed empty.
@@ -60,12 +60,10 @@ recovers, along with a separate ordinary success path and exact teardown.
 
 ## Acceptance status
 
-The fixture and PR are open. Initial PR head `eddbcd6ac3d47846c7e44a0a5ea3bcd9f71f3686`
-passed all seven checks in run
-[45222597413](https://github.com/Bepoadewale/davdeploy/actions/runs/45222597413).
-The state-machine definition validated with zero diagnostics. The monitored
-AWS create retry is in progress; delivery, recovery, and cleanup acceptance
-remain pending.
+The five-resource fixture created successfully and the two probe paths passed
+after the probe was corrected to match Lambda-specific history event names.
+Four executions ended `SUCCEEDED`. Monitored teardown is in progress;
+independent absence and final-head CI remain pending.
 
 ## Tests / validation performed
 
@@ -78,7 +76,11 @@ remain pending.
   `45222597413`; a final-head run is required after the evidence update.
 - The first monitored create failed before AWS calls because `AWS_PROFILE` was
   absent from the subprocess environment. Exact-name reads found no partial
-  resources; the corrected monitored create is underway.
+  resources. The corrected monitored create added exactly five resources.
+- The first probe pass validated the service behavior but used generic task
+  history event names. The probe now checks `LambdaFunctionFailed` and
+  `LambdaFunctionSucceeded`; its corrected run passed all redacted assertions.
+- The reviewed exact five-delete plan is running through the Terraform monitor.
 
 ## Evidence files produced
 

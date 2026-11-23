@@ -2,7 +2,8 @@
 
 Date: 2026-11-23
 
-Execution type: Controlled disposable AWS workload validation in progress.
+Execution type: Controlled disposable AWS workload validation; teardown in
+progress.
 
 Customer repository: None; direct same-account AWS service test.
 
@@ -11,6 +12,8 @@ Commit: `bc44e0c` (fixture and initial evidence record).
 PR: [#454](https://github.com/Bepoadewale/davdeploy/pull/454), draft. Initial
 head `eddbcd6ac3d47846c7e44a0a5ea3bcd9f71f3686` passed all seven checks in run
 [45222597413](https://github.com/Bepoadewale/davdeploy/actions/runs/45222597413).
+The probe fix is at head `04edcc4cc81e56c2e37c6b9bca83dc6fb9cbcf7a`; its CI
+run is pending.
 
 AWS account: `654654474502`.
 
@@ -18,12 +21,12 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-No AWS resources have been created yet. The pinned fixture plans one Lambda
-execution role, one Lambda function, one
-Step Functions execution role with a single exact-function invoke grant, one
-Standard state machine, and one inline role policy. The exact prefix is
-`davdeploy-nova-stepfn-recovery-454-nov23a2`. State, plan files, and the
-packaged Lambda artifact stay outside the repository.
+The stack created five resources: one Lambda execution role, one Lambda
+function, one Step Functions execution role with a single exact-function invoke
+grant, one Standard state machine, and one inline role policy. The exact prefix
+is `davdeploy-nova-stepfn-recovery-454-nov23a2`. The reviewed destroy is in
+progress. State, plan files, and the packaged Lambda artifact stay outside the
+repository.
 
 ## Commands executed
 
@@ -40,17 +43,27 @@ packaged Lambda artifact stay outside the repository.
   AWS profile. Exact-name reads confirmed no resources were created. A fresh
   five-create plan was saved and the monitored retry
   `nova-stepfn-recovery-454-create-retry-nov23a2` started at
-  `2026-11-23T17:07:41Z` under the verified profile. Its result and subsequent
-  probes/teardown are pending.
+  `2026-11-23T17:07:41Z` under the verified profile. It completed at
+  `17:08:04Z` with five added, zero changed, and zero destroyed.
+- The state-machine validator returned `OK` with zero diagnostics. The
+  redacting probe executed a failure-and-Catch-recovery path and a normal
+  success path. It observed `LambdaFunctionFailed` before recovery and
+  `LambdaFunctionSucceeded` afterward; both outputs matched their unique
+  markers. Two probe invocations ran four total executions, all terminal
+  `SUCCEEDED`. Probe output contained booleans only; input and output were not
+  printed.
+- Monitored destroy `nova-stepfn-recovery-454-destroy-nov23a2` started at
+  `2026-11-23T17:15:59Z`; its terminal result and independent absence checks
+  are pending.
 
 ## Acceptance criteria
 
-- [ ] The controlled Lambda error is recorded as a failed task event.
-- [ ] The Catch transition reaches the recovery task and the execution succeeds
+- [x] The controlled Lambda error is recorded as a failed task event.
+- [x] The Catch transition reaches the recovery task and the execution succeeds
       with the expected marker.
-- [ ] The separate non-failing execution succeeds without taking the recovery
+- [x] The separate non-failing execution succeeds without taking the recovery
       branch.
-- [ ] The probe prints no execution input/output or exception message.
+- [x] The probe prints no execution input/output or exception message.
 - [ ] The exact stack is destroyed through the Terraform monitor and AWS
       absence is independently verified.
 - [ ] Local checks and all seven required PR checks pass.
@@ -59,13 +72,18 @@ packaged Lambda artifact stay outside the repository.
 
 ## Observed result
 
-The controlled run is in progress. The first create attempt stopped before
-AWS access due to a missing profile environment variable; exact-name checks
-confirmed that no resources were created by that attempt.
+The failure-path execution recorded `LambdaFunctionFailed`, entered the Catch
+recovery state, and completed through the Lambda recovery task. Its output
+contained the matching marker and recovery flag. The separate normal execution
+completed without recovery and returned its matching marker. The first probe
+check expected generic task-event names and exited nonzero even though both AWS
+executions succeeded; after matching Lambda-specific event names, the probe
+passed with four total successful executions and no execution data printed.
 
 ## Teardown
 
-Pending. The planned destroy is limited to the exact five-resource test root;
+The reviewed exact five-resource destroy is running under the Terraform
+monitor. It is limited to the exact test root;
 the hosted control plane, production resources, and other customer resources
 are out of scope.
 
