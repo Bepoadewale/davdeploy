@@ -4,3 +4,8 @@ variable "region" {
 }
 
 variable "test_id" { type = string }
+
+variable "redis_auth_token" {
+  type      = string
+  sensitive = true
+}
