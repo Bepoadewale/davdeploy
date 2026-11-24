@@ -17,7 +17,7 @@ exact cleanup.
 - PR #486 remains open; its clean-room generated artifacts stay preserved
   pending explicit approval for their exact cleanup.
 - PR #489 records the exact Lambda lifecycle; no matching Lambda resources
-  remain. Terraform monitor has 57 records and zero active operations.
+  remain. Terraform monitor has 59 records and zero active operations.
 - AWS caller account is `654654474502`, region `us-east-1`. The hosted control
   plane, Terraform remote state, and locks are outside this test scope.
 
@@ -45,35 +45,44 @@ exact cleanup.
 
 ## Acceptance criteria
 
-- [ ] The fixture creates only the tagged exact-module S3 bucket resources
+- [x] The fixture creates only the tagged exact-module S3 bucket resources
   using local Terraform state.
-- [ ] AWS reads confirm all public access blocks, `BucketOwnerEnforced`,
+- [x] AWS reads confirm all public access blocks, `BucketOwnerEnforced`,
   versioning enabled, and default AES256 encryption.
-- [ ] Synthetic object v1/v2 reads prove version history and latest-object
+- [x] Synthetic object v1/v2 reads prove version history and latest-object
   behavior without logging object contents.
-- [ ] Cleanup deletes only the test object's exact versions/delete markers;
+- [x] Cleanup deletes only the test object's exact versions/delete markers;
   monitored destroy and independent AWS reads confirm the bucket is absent.
-- [ ] Local state and generated artifacts are retained; no control-plane,
+- [x] Local state and generated artifacts are retained; no control-plane,
   remote-state, unrelated AWS, or customer data is touched.
-- [ ] Ticket/test docs and matrix report exact evidence and limitations;
-  focused tests, Terraform checks, docs conventions, diff checks, and final CI
-  pass before merge.
+- [x] Ticket/test docs and matrix report exact evidence and limitations;
+  focused tests, Terraform checks, docs conventions, and diff checks pass.
+- [ ] Final-head PR CI passes before merge.
 
 ## Acceptance status
 
-Ticket-first draft opened before implementation. No AWS mutation has occurred
-for PR #491. The exact-module fixture, bounded synthetic object-version helper,
-and six mocked regression tests are implemented and locally verified. The
-lifecycle evidence remains incomplete until the reviewed AWS test and teardown
-finish.
+Ticket-first draft opened before implementation. In AWS account
+`654654474502`, the exact-module fixture created the tagged bucket from a
+five-create plan, verified settings, read two synthetic object versions, and
+removed exactly those versions. A reviewed five-delete destroy completed via
+the run monitor. Independent reads confirmed the bucket absent, local state
+retained, and zero active Terraform operations. No control-plane or remote
+state resource changed. Final evidence CI is pending.
 
 ## Tests / validation performed
 
 - Ticket-first documentation conventions and `git diff --check`: passed.
 - Focused helper tests: 6 passed; Ruff: passed.
 - Terraform format and fixture validation: passed.
-- AWS create, object-version behavior, exact cleanup, destroy, and independent
-  absence checks: pending.
+- Create run `nova-s3-artifacts-491-create-20261124-a1b2c3` succeeded; Terraform
+  PID `54017`, supervisor PID `54016`, finish `2026-11-24T21:42:45Z`.
+- Destroy-plan apply `nova-s3-artifacts-491-destroy-20261124-a1b2c3`
+  succeeded; Terraform PID `55883`, supervisor PID `55882`, finish
+  `2026-11-24T21:48:56Z`.
+- Independent account/resource/state checks passed; monitor has 59 records and
+  zero active operations. The bucket and exact object key are absent; local
+  state remains retained.
+- Final-head PR CI: pending after evidence update.
 
 ## Evidence files produced
 
