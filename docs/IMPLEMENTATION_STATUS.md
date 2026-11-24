@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481); hosted runtime remains
+`72009437bd567f3e3b0a948efdf9451848523475` (PR #483); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -84,6 +84,18 @@ No EFS or hosted control-plane resource changed. The source policy does not
 prove mount/file operations, access authorization, lifecycle, complete costs,
 or Nova dispatch.
 
+PR #483 merged as `72009437bd567f3e3b0a948efdf9451848523475`. Final-head CI
+run [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
+and merged-main CI run
+[45426759569](https://github.com/Bepoadewale/davdeploy/actions/runs/45426759569)
+passed all seven checks. Its source-only EC2 Auto Scaling profile bounds
+capacity to three `t3.micro` instances, binds one fixed-version same-plan
+launch template, requires a known AMI ID and IMDSv2, and rejects unsupported
+launch configurations and mixed-instance policies. It does not establish AMI
+provenance, disk encryption, instance role scope, workload health, update or
+recovery, full cost, teardown, or Nova execution. No AWS or hosted resource
+changed.
+
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,
 one-to-one redrive/DLQ bounds, and direct same-plan Lambda consumer checks;
@@ -99,14 +111,14 @@ AWS permission attestation, and no customer plan has run.
 
 Read-only AWS inventory on 2026-11-24 verified account `654654474502`, region
 `us-east-1`. It found no tested DavDeploy SageMaker endpoint, model, endpoint
-configuration, execution role, or artifact bucket; no running Batch jobs or
-tagged Batch compute environments; four previously recorded tagged Batch job
-definitions and PR #458's test definition remain inactive. The CLI did not
-support the attempted Batch job-definition listing command, so this is not a
-complete Batch-definition inventory. The SageMaker lineage action/context and
-associated evidence remain preserved. The Terraform run monitor had 41
-terminal records and no active operation. Preserve the protected untracked
-`--only-show-errors`, `.venv-pr399/`, and lineage evidence.
+configuration, execution role, or artifact bucket. Batch listing returned no
+DavDeploy-named job queue or compute environment, and five DavDeploy-named job
+definitions were inactive: four earlier test definitions plus PR #458's test
+definition. This is a name-filtered test-resource inventory, not a complete
+account inventory. The SageMaker lineage action/context and associated
+evidence remain preserved. The Terraform run monitor had 41 records and zero
+active operations. Preserve the protected untracked `--only-show-errors`,
+`.venv-pr399/`, and lineage evidence.
 
 ## Executed locally
 

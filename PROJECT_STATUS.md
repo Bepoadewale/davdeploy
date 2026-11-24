@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481). The hosted control plane
+`72009437bd567f3e3b0a948efdf9451848523475` (PR #483). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -83,6 +83,16 @@ It binds the EFS mount-target security groups to same-plan NFS rules. This is
 source-only; no EFS or control-plane resource changed, and file access,
 authorization, lifecycle, full pricing, and Nova dispatch remain unproven.
 
+PR #483 merged as `72009437bd567f3e3b0a948efdf9451848523475`. Final-head CI
+run [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
+and merged-main CI run
+[45426759569](https://github.com/Bepoadewale/davdeploy/actions/runs/45426759569)
+passed all seven checks. It adds source-only Auto Scaling bounds, same-plan
+fixed launch-template version binding, known AMI-ID shape, `t3.micro`, and
+IMDSv2 requirements. No EC2/ASG or hosted control-plane resource was changed.
+AMI provenance, encrypted disks, scoped role, guest health, scaling/recovery,
+full cost, and Nova execution remain unproven.
+
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
 It adds source-only generated-plan checks for one-to-one SQS retry/DLQ pairs
@@ -94,14 +104,14 @@ not Nova dispatch or customer application certification.
 
 Read-only inventory on 2026-11-24 in account `654654474502`, region `us-east-1`,
 found no tested SageMaker endpoint, model, endpoint configuration, execution
-role, or artifact bucket; no running Batch jobs or tagged Batch compute
-environments; and four previously recorded tagged Batch job definitions plus
-PR #458's test definition inactive. The CLI did not support the attempted
-Batch definition-list command, so the inventory is not exhaustive. SageMaker
-lineage evidence remains retained. The SQS test prefix is absent; the existing
-production-tagged queue remains. The Terraform run monitor had 41 terminal
-records and no active operation. Preserve `--only-show-errors`, `.venv-pr399/`,
-and lineage evidence. The frontend status remains based on
+role, or artifact bucket. Batch listing returned no DavDeploy-named job queue
+or compute environment, and five DavDeploy-named job definitions were
+inactive: four earlier test definitions plus PR #458's test definition. This
+is a name-filtered test-resource inventory, not a complete account inventory.
+SageMaker lineage evidence remains retained. The SQS test prefix is absent;
+the existing production-tagged queue remains. The Terraform run monitor had 41
+terminal records and no active operation. Preserve `--only-show-errors`,
+`.venv-pr399/`, and lineage evidence. The frontend status remains based on
 the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
 ## What is implemented

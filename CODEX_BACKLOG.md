@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481). The
+Backend `main` is `72009437bd567f3e3b0a948efdf9451848523475` (PR #483). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -106,6 +106,17 @@ or hosted control-plane resource changed. Final-head CI run
 and merged-main CI run
 [45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009)
 passed all seven checks. See `docs/tickets/ticket481.md`.
+
+PR #483 adds source-only EC2 Auto Scaling checks for
+`0 <= min <= desired <= max <= 3`, one same-plan launch template with a fixed
+`latest_version`, known AMI ID, `t3.micro`, and IMDSv2. Final-head CI run
+[45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
+and merged-main CI run
+[45426759569](https://github.com/Bepoadewale/davdeploy/actions/runs/45426759569)
+passed all seven checks. No ASG, EC2 instance, or control-plane resource was
+created. AMI provenance, encrypted disks, scoped role, workload health,
+update/recovery, teardown, full cost, and Nova execution remain unproven. See
+`docs/tickets/ticket483.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
