@@ -39,6 +39,15 @@ resource "aws_launch_template" "this" {
   image_id               = var.ami_id
   instance_type          = var.instance_type
   vpc_security_group_ids = var.security_group_ids
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      delete_on_termination = true
+      encrypted             = true
+      volume_size           = 8
+      volume_type           = "gp3"
+    }
+  }
   metadata_options {
     http_endpoint = "enabled"
     http_tokens   = "required"

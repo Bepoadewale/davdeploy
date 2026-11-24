@@ -45,11 +45,11 @@ the hosted control plane.
 
 ## Acceptance criteria
 
-- [ ] Module plans explicitly select encrypted gp3 8 GiB root storage and
+- [x] Module plans explicitly select encrypted gp3 8 GiB root storage and
   delete-on-termination.
-- [ ] Generated-plan policy accepts the exact shape and denies missing,
+- [x] Generated-plan policy accepts the exact shape and denies missing,
   unknown, unencrypted, oversized, wrong-device/type, or retained mappings.
-- [ ] Regression tests cover the accepted and rejected shapes with redacted
+- [x] Regression tests cover the accepted and rejected shapes with redacted
   findings.
 - [ ] A fresh isolated AWS test verifies the running instance's EBS volume is
   encrypted, the ASG is healthy, and termination removes the volume.
@@ -74,12 +74,26 @@ protected local files. Retain local state artifacts after teardown.
 
 ## Acceptance status
 
-Implementation, lifecycle evidence, and CI are pending. No `nova-asg-486`
-resources have been created.
+Implementation and regression tests pass locally. The isolated AWS create,
+verification, and cleanup are in progress. CI is pending. No hosted
+control-plane resource or state was touched.
 
 ## Tests / validation performed
 
-- Pending implementation and test execution.
+- `make verify`: passed (1,746 tests; one existing Starlette/httpx
+  deprecation warning; OpenAPI snapshot and Compose configuration passed).
+- `.venv-pr399/bin/python -m pytest tests/test_generated_plan_policy.py -q
+  -k autoscaling`: 36 passed.
+- `.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py
+  tests/test_generated_plan_policy.py`: passed.
+- `terraform -chdir=docs/test/fixtures/nova-asg-486 fmt -check -recursive`:
+  passed.
+- `terraform -chdir=docs/test/fixtures/nova-asg-486 validate`: passed.
+- `GITHUB_PR_NUMBER=486 .venv-pr399/bin/python
+  scripts/check_doc_conventions.py`: passed.
+- Reviewed saved plan `/tmp/davdeploy-nova-asg-486/create-fresh.tfplan`: nine
+  creates, zero updates or deletes. It specifies one `/dev/xvda` mapping with
+  `encrypted=true`, `delete_on_termination=true`, gp3, and 8 GiB.
 
 ## Evidence files produced
 

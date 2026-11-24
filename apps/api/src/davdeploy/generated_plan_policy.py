@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-24.4"
+POLICY_VERSION = "nova-generated-plan-2026-11-24.5"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -128,12 +128,12 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
     "aws_rds_cluster_instance": (("publicly_accessible",),),
     "aws_redshift_cluster": (("publicly_accessible",), ("encrypted",)),
-    "aws_ebs_volume": (("encrypted",),),
-    "aws_instance": (
+    "aws_launch_template": (
         ("metadata_options", "http_endpoint"),
         ("metadata_options", "http_tokens"),
     ),
-    "aws_launch_template": (
+    "aws_ebs_volume": (("encrypted",),),
+    "aws_instance": (
         ("metadata_options", "http_endpoint"),
         ("metadata_options", "http_tokens"),
     ),
@@ -1995,6 +1995,13 @@ def _check_autoscaling_groups(
         if item.get("type") == "aws_launch_template"
         and isinstance(item.get("address"), str)
     }
+    template_changes = {
+        item.get("address"): item
+        for item in document.get("resource_changes", [])
+        if isinstance(item, dict)
+        and item.get("type") == "aws_launch_template"
+        and isinstance(item.get("address"), str)
+    }
     configured = _configured_resources(document)
     for group in resources:
         if group.get("type") != "aws_autoscaling_group":
@@ -2099,8 +2106,79 @@ def _check_autoscaling_groups(
             )
 
         template = templates[next(iter(template_addresses))]
+        template_change = template_changes.get(template.get("address"))
+        template_change_values = (
+            template_change.get("change") if isinstance(template_change, dict) else None
+        )
+        after_unknown = (
+            template_change_values.get("after_unknown")
+            if isinstance(template_change_values, dict)
+            else None
+        )
+        root_unknown_paths = (
+            ("block_device_mappings", "device_name"),
+            ("block_device_mappings", "ebs", "delete_on_termination"),
+            ("block_device_mappings", "ebs", "encrypted"),
+            ("block_device_mappings", "ebs", "volume_size"),
+            ("block_device_mappings", "ebs", "volume_type"),
+        )
+        if not isinstance(after_unknown, dict) or not _valid_unknown_tree(after_unknown):
+            _deny(
+                findings,
+                "autoscaling_root_volume_unverifiable",
+                template.get("address"),
+                "The Auto Scaling root EBS settings could not be verified from the plan.",
+            )
+        elif any(_path_contains_unknown(after_unknown, path) for path in root_unknown_paths):
+            _deny(
+                findings,
+                "autoscaling_root_volume_unverifiable",
+                template.get("address"),
+                "The Auto Scaling root EBS settings must be known in the plan.",
+            )
         template_values = template.get("values")
         template_values = template_values if isinstance(template_values, dict) else {}
+        mappings = template_values.get("block_device_mappings")
+        mapping = mappings[0] if isinstance(mappings, list) and len(mappings) == 1 else None
+        ebs_mappings = mapping.get("ebs") if isinstance(mapping, dict) else None
+        ebs = ebs_mappings[0] if isinstance(ebs_mappings, list) and len(ebs_mappings) == 1 else None
+        if (
+            not isinstance(mapping, dict)
+            or mapping.get("device_name") != "/dev/xvda"
+            or not isinstance(ebs, dict)
+        ):
+            _deny(
+                findings,
+                "autoscaling_root_volume_unverifiable",
+                template.get("address"),
+                "The Auto Scaling launch template must define one known root EBS mapping.",
+            )
+        else:
+            root_settings = (
+                ebs.get("encrypted"),
+                ebs.get("delete_on_termination"),
+                ebs.get("volume_type"),
+                ebs.get("volume_size"),
+            )
+            if any(value is None for value in root_settings):
+                _deny(
+                    findings,
+                    "autoscaling_root_volume_unverifiable",
+                    template.get("address"),
+                    "The Auto Scaling root EBS encryption, retention, and size settings must be known.",
+                )
+            elif (
+                ebs.get("encrypted") != "true"
+                or ebs.get("delete_on_termination") != "true"
+                or ebs.get("volume_type") != "gp3"
+                or ebs.get("volume_size") != 8
+            ):
+                _deny(
+                    findings,
+                    "autoscaling_root_volume_unsafe",
+                    template.get("address"),
+                    "The Auto Scaling root EBS volume must be encrypted gp3, 8 GiB, and deleted with its instance.",
+                )
         image_id = template_values.get("image_id")
         if not isinstance(image_id, str) or not re.fullmatch(r"ami-[0-9a-fA-F]{8,17}", image_id):
             _deny(

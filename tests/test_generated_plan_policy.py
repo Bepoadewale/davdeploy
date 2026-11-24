@@ -3230,6 +3230,19 @@ def autoscaling_case(
         "image_id": "ami-0123456789abcdef0",
         "instance_type": "t3.micro",
         "instance_market_options": None,
+        "block_device_mappings": [
+            {
+                "device_name": "/dev/xvda",
+                "ebs": [
+                    {
+                        "delete_on_termination": "true",
+                        "encrypted": "true",
+                        "volume_size": 8,
+                        "volume_type": "gp3",
+                    }
+                ],
+            }
+        ],
         "metadata_options": [
             {"http_endpoint": "enabled", "http_tokens": "required"}
         ],
@@ -3402,6 +3415,117 @@ def test_autoscaling_template_requires_known_ami_t3_micro_and_imdsv2(
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    "mappings",
+    [
+        None,
+        [],
+        [{"device_name": "/dev/xvda", "ebs": [{"encrypted": "true"}]}] * 2,
+        [{"device_name": "/dev/xvda", "ebs": [{"encrypted": "true"}] * 2}],
+        [{"device_name": "/dev/sda1", "ebs": [{"encrypted": "true"}]}],
+    ],
+)
+def test_autoscaling_root_volume_requires_one_verifiable_root_mapping(mappings):
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": mappings}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_volume_unknown_is_denied():
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": None}
+    )
+    template_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_launch_template"
+    )
+    template_change["change"]["after_unknown"]["block_device_mappings"] = True
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_volume_critical_unknown_metadata_is_denied():
+    document, proposal_value = autoscaling_case()
+    template_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_launch_template"
+    )
+    template_change["change"]["after_unknown"]["block_device_mappings"] = [
+        {"ebs": [{"encrypted": True}]}
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "ebs_overrides",
+    [
+        {"encrypted": "false"},
+        {"delete_on_termination": "false"},
+        {"volume_type": "gp2"},
+        {"volume_size": 9},
+    ],
+)
+def test_autoscaling_root_volume_requires_encryption_and_bounded_storage(ebs_overrides):
+    mapping = {
+        "device_name": "/dev/xvda",
+        "ebs": [
+            {
+                "delete_on_termination": "true",
+                "encrypted": "true",
+                "volume_size": 8,
+                "volume_type": "gp3",
+                **ebs_overrides,
+            }
+        ],
+    }
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": [mapping]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unsafe" in codes(result)
+
+
+@pytest.mark.parametrize("field", ["encrypted", "delete_on_termination", "volume_type", "volume_size"])
+def test_autoscaling_root_volume_rejects_unknown_critical_settings(field):
+    mapping = {
+        "device_name": "/dev/xvda",
+        "ebs": [
+            {
+                "delete_on_termination": "true",
+                "encrypted": "true",
+                "volume_size": 8,
+                "volume_type": "gp3",
+            }
+        ],
+    }
+    mapping["ebs"][0][field] = None
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": [mapping]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
 
 
 @pytest.mark.parametrize(
