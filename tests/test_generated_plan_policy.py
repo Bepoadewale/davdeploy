@@ -3220,9 +3220,11 @@ def autoscaling_case(
     group_values=None,
     template_values=None,
     launch_template_references=None,
+    include_second_template=False,
 ):
     document = plan()
     template_address = "aws_launch_template.web"
+    second_template_address = "aws_launch_template.worker"
     group_address = "aws_autoscaling_group.web"
     template = {
         "image_id": "ami-0123456789abcdef0",
@@ -3242,23 +3244,39 @@ def autoscaling_case(
         "mixed_instances_policy": None,
     }
     group.update(group_values or {})
+    planned_templates = [resource(template_address, "aws_launch_template", template)]
+    template_changes = [change(template_address, "aws_launch_template")]
+    if include_second_template:
+        planned_templates.append(
+            resource(second_template_address, "aws_launch_template", template)
+        )
+        template_changes.append(change(second_template_address, "aws_launch_template"))
     document["planned_values"]["root_module"]["resources"].extend(
-        [
-            resource(template_address, "aws_launch_template", template),
-            resource(group_address, "aws_autoscaling_group", group),
-        ]
+        [*planned_templates, resource(group_address, "aws_autoscaling_group", group)]
     )
     document["resource_changes"].extend(
-        [change(template_address, "aws_launch_template"), change(group_address, "aws_autoscaling_group")]
+        [*template_changes, change(group_address, "aws_autoscaling_group")]
     )
     references = (
         [f"{template_address}.id", f"{template_address}.latest_version"]
+        + (
+            [f"{second_template_address}.id", f"{second_template_address}.latest_version"]
+            if include_second_template
+            else []
+        )
         if launch_template_references is None
         else launch_template_references
     )
+    configured_template_resources = [
+        {"address": template_address, "expressions": {}}
+    ]
+    if include_second_template:
+        configured_template_resources.append(
+            {"address": second_template_address, "expressions": {}}
+        )
     document["configuration"]["root_module"] = {
         "resources": [
-            {"address": template_address, "expressions": {}},
+            *configured_template_resources,
             {
                 "address": group_address,
                 "expressions": {"launch_template": {"references": references}},
@@ -3267,23 +3285,33 @@ def autoscaling_case(
         "module_calls": {},
     }
     proposal_resources = [item.model_dump(mode="json") for item in proposal().resources]
-    proposal_resources.extend(
-        [
+    proposal_resources.append(
+        {
+            "resource_id": "web-template",
+            "resource_type": "aws_launch_template",
+            "name": "web",
+            "arguments": template,
+            "rationale": "Use a bounded, metadata-protected web instance profile.",
+        }
+    )
+    if include_second_template:
+        proposal_resources.append(
             {
-                "resource_id": "web-template",
+                "resource_id": "worker-template",
                 "resource_type": "aws_launch_template",
-                "name": "web",
+                "name": "worker",
                 "arguments": template,
-                "rationale": "Use a bounded, metadata-protected web instance profile.",
-            },
-            {
-                "resource_id": "web-asg",
-                "resource_type": "aws_autoscaling_group",
-                "name": "web",
-                "arguments": group,
-                "rationale": "Keep web capacity within the reviewed small-instance limit.",
-            },
-        ]
+                "rationale": "Provide a second template for the negative binding test.",
+            }
+        )
+    proposal_resources.append(
+        {
+            "resource_id": "web-asg",
+            "resource_type": "aws_autoscaling_group",
+            "name": "web",
+            "arguments": group,
+            "rationale": "Keep web capacity within the reviewed small-instance limit.",
+        }
     )
     return document, proposal(proposal_resources)
 
@@ -3329,6 +3357,15 @@ def test_autoscaling_capacity_must_be_known_and_at_most_three(group_values):
 )
 def test_autoscaling_requires_exact_same_plan_launch_template_version(references):
     document, proposal_value = autoscaling_case(launch_template_references=references)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_launch_template_unverifiable" in codes(result)
+
+
+def test_autoscaling_rejects_multiple_same_plan_launch_templates():
+    document, proposal_value = autoscaling_case(include_second_template=True)
 
     result = evaluate(document, proposal_value)
 

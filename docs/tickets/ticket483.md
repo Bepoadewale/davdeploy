@@ -66,15 +66,15 @@ review. No AWS, Terraform state, or hosted control-plane resource has changed.
 
 ## Tests / validation performed
 
-- `PYTHONPATH=apps/api/src .venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py -k autoscaling` — 20 passed.
-- `PYTHONPATH=apps/api/src .venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py` — 501 passed.
-- `make verify` — passed: 1,730 tests, Actions configuration, Ruff, OpenAPI, and Docker Compose checks; one existing Starlette/httpx deprecation warning.
+- `PYTHONPATH=apps/api/src .venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py -k autoscaling` — 21 passed.
+- `PYTHONPATH=apps/api/src .venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py` — 502 passed.
+- `make verify` — passed: 1,731 tests, Actions configuration, Ruff, OpenAPI, and Docker Compose checks; one existing Starlette/httpx deprecation warning.
 - `.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
 - `terraform fmt -check infrastructure/terraform/modules/ec2-autoscaling/main.tf` — passed.
 - Offline `terraform init -backend=false -input=false -lockfile=readonly` could not install AWS provider v5.100.0 because the provider registry connection failed; `terraform validate` then passed using the existing local provider cache.
 - `GITHUB_PR_NUMBER=483 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Initial ticket-only PR CI run 45389007983 — all seven checks passed. CI for the implementation head remains pending.
+- PR CI run 45391202592 passed all seven checks on `999fd06`. The final head adds one test-only regression for two same-plan templates; CI for that final head remains pending.
 - The full local clean-room demo cycle was not run because its `clean-local` target deletes `.venv` and `.local`, and the current session's deletion boundary protects local files. The final PR's fresh-runner CI remains required.
 
 ## Evidence files produced
