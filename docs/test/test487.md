@@ -6,7 +6,7 @@ Execution type: Direct same-account AWS test using local Terraform state.
 
 Customer repository: None.
 
-Commit: Bootstrap documentation only; implementation and test run pending.
+Commit: Implementation/test changes on PR #487; final evidence commit pending.
 
 AWS account: `654654474502`.
 
@@ -52,18 +52,31 @@ than assuming elapsed time is sufficient.
 
 The saved create plan contained exactly one create, zero changes, and zero
 deletes. It specified the exact table name/tag, `PAY_PER_REQUEST`, enabled
-server-side encryption, enabled PITR, and enabled deletion protection. The
-monitored create run `nova-dynamodb-pitr-487-create-20261124` started at
-`2026-11-24T19:26:35Z`; its terminal result and Terraform PID are pending the
-five-minute monitor interval. No item write or restore has run yet.
+server-side encryption, enabled PITR, and enabled deletion protection.
+Monitored create `nova-dynamodb-pitr-487-create-20261124` succeeded at
+`2026-11-24T19:26:50Z` (Terraform PID `9433`); log:
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-dynamodb-pitr-487-create-20261124.log`.
+
+AWS described the source as `ACTIVE`, `PAY_PER_REQUEST`, encryption
+`ENABLED`, deletion protection true, PITR `ENABLED` with a 35-day period, and
+all three test tags present. In the first script attempt, the restored table
+reached `ACTIVE` with on-demand billing and encryption. Strongly consistent
+reads returned `baseline` for the baseline key and no value for the later
+marker, proving the restore timestamp boundary. The first delete attempt hit
+`ResourceInUseException` because tag updates were still in progress. The
+restored table was tagged and removed after the harness added bounded retry;
+its independent absence check is pending. A complete repeat with fresh item
+keys is running under run ID `20261124c3d4`.
 
 ## Teardown
 
-Pending. The restored table will be tagged and deleted by the evidence script.
-After its recovery assertions pass, source-table deletion protection will be
-disabled through one exact DynamoDB API call; the source destroy will run
-through the Terraform monitor. Independent AWS absence checks and an empty
-local state will be recorded.
+The restored-table cleanup waiter succeeded after retrying the AWS tag-update
+race. Independent restored-table absence verification remains pending. The
+source table remains protected. After the second recovery run and its
+assertions pass, source-table deletion protection will be disabled through
+one exact DynamoDB API call; the source destroy will run through the Terraform
+monitor. Independent AWS absence checks and an empty local state will be
+recorded.
 
 ## Final boundary
 

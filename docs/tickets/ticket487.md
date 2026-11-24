@@ -69,18 +69,22 @@ control plane.
 ## Acceptance status
 
 The fixture and recovery harness are implemented. The reviewed create plan
-contains exactly one tagged table; monitored apply
-`nova-dynamodb-pitr-487-create-20261124` has started and its terminal result
-is pending. No restore or item write has been attempted yet. The package is
-direct same-account service evidence only; it does not claim Nova dispatch or
-hosted execution.
+contained exactly one tagged table. Monitored apply
+`nova-dynamodb-pitr-487-create-20261124` succeeded (Terraform PID `9433`).
+AWS independently observed the table `ACTIVE`, on-demand, encrypted,
+deletion-protected, and PITR-enabled. A first restore reached `ACTIVE`; direct
+reads confirmed the baseline item and absence of the later marker. The first
+cleanup hit AWS `ResourceInUseException` while tags were updating. The
+harness now retries that case, and unit coverage passes. A full retry with a
+new marker set is in progress. This remains direct same-account service
+evidence; it does not claim Nova dispatch or hosted execution.
 
 ## Tests / validation performed
 
 The bootstrap documentation commit opened the draft PR before substantive
-implementation. Five harness unit tests, Ruff, Terraform formatting and
-validation, full local verification, documentation checks, and diff checks
-pass. The live AWS lifecycle is in progress.
+implementation. Six harness unit tests pass. `make verify` passes 1,737 tests;
+Ruff, Terraform formatting and validation, documentation checks, and diff
+checks pass. The live AWS lifecycle is in progress.
 
 ## Evidence files produced
 

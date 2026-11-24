@@ -103,7 +103,15 @@ def cleanup_restored_table(dynamodb: Any, table_name: str, test_id: str) -> None
         table = wait_for_table(dynamodb, table_name, "ACTIVE")
         if table.get("DeletionProtectionEnabled") is not False:
             raise AssertionError("Restored table deletion protection did not disable.")
-    dynamodb.delete_table(TableName=table_name)
+    for attempt in range(8):
+        try:
+            dynamodb.delete_table(TableName=table_name)
+            break
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code")
+            if code != "ResourceInUseException" or attempt == 7:
+                raise
+            time.sleep(min(2 ** (attempt + 1), 20))
     wait_for_table(dynamodb, table_name, "ABSENT")
 
 

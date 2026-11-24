@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from botocore.exceptions import ClientError
 
 from scripts import dynamodb_pitr_lifecycle as lifecycle
 
@@ -34,6 +35,7 @@ class FakeDynamoDB:
         self.tags = None
         self.updated_table = None
         self.deleted = None
+        self.delete_failures = 0
 
     def describe_table(self, *, TableName):
         if self.table is None:
@@ -56,6 +58,12 @@ class FakeDynamoDB:
         self.table["DeletionProtectionEnabled"] = kwargs["DeletionProtectionEnabled"]
 
     def delete_table(self, *, TableName):
+        if self.delete_failures:
+            self.delete_failures -= 1
+            raise ClientError(
+                {"Error": {"Code": "ResourceInUseException", "Message": "tags updating"}},
+                "DeleteTable",
+            )
         self.deleted = TableName
         self.table = None
 
@@ -133,5 +141,21 @@ def test_cleanup_disables_protection_only_on_restored_table(monkeypatch):
 
     assert fake.deleted == "test-restored"
     assert fake.updated_table == "test-restored"
+    assert fake.table is None
+
+
+def test_cleanup_retries_delete_while_tags_are_updating(monkeypatch):
+    fake = FakeDynamoDB()
+    fake.table["TableName"] = "test-restored"
+    fake.table["TableArn"] = "arn:aws:dynamodb:us-east-1:654654474502:table/test-restored"
+    fake.table["DeletionProtectionEnabled"] = False
+    fake.delete_failures = 2
+    sleeps = []
+    monkeypatch.setattr(lifecycle.time, "sleep", sleeps.append)
+
+    lifecycle.cleanup_restored_table(fake, "test-restored", "test-id-487")
+
+    assert fake.deleted == "test-restored"
+    assert sleeps == [2, 4]
     assert fake.table is None
 
