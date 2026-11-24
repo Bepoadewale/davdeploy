@@ -9,7 +9,8 @@ Repository: `Bepoadewale/davdeploy`.
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: Implementation is in progress on PR #486; final evidence commit pending.
+Commit: `b348324` (Terraform module and test fixture; applied run). PR #486
+records the final evidence and follow-up regression test.
 
 AWS account: `654654474502`.
 
@@ -34,9 +35,12 @@ Test ID: `nova-asg-486`.
 
 ## Resources created
 
-Pending. The reviewed plan is expected to create one VPC, two subnets, one
-route table, two route-table associations, one security group, one launch
-template, and one Auto Scaling group.
+The reviewed plan created nine resources: VPC `vpc-0e806bd2d5b31bcf7`, two
+subnets (`subnet-02cede3cdc7ef69fe`, `subnet-0d17e0568020b79e2`), route table
+`rtb-0f133560d80c00382`, two route-table associations, security group
+`sg-0e74ec8ed63c66e70`, launch template `lt-0bf4282b398f04cbd`, and ASG
+`davdeploy-nova-asg-486`. The ASG launched instance
+`i-070ba188abdaf25b2` with root volume `vol-0174d4dd0b14672bc`.
 
 ## Commands executed
 
@@ -54,32 +58,63 @@ template, and one Auto Scaling group.
   gp3, 8 GiB.
 - First monitored apply attempt `nova-asg-486-create-20261124` failed before
   AWS changes because no AWS profile was inherited. The monitored log records
-  `No valid credential sources found`.
+  `No valid credential sources found`; Terraform PID `73211`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-create-20261124.log`.
 - The credentialed retry `nova-asg-486-create-keyprofile-20261124` failed
   before AWS changes because the saved plan was stale after local state
-  metadata had been initialized.
+  metadata had been initialized; Terraform PID `75833`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-create-keyprofile-20261124.log`.
 - Refreshed and reviewed `/tmp/davdeploy-nova-asg-486/create-fresh.tfplan`
   with `AWS_PROFILE=ai-platform-pilot-key`: nine creates, zero changes or
-  deletes. The monitored apply `nova-asg-486-create-fresh-20261124` started at
-  `2026-11-24T18:00:05Z`; completion and AWS checks are pending.
+  deletes. Monitored apply `nova-asg-486-create-fresh-20261124` started at
+  `2026-11-24T18:00:05Z`, Terraform PID `78954`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-create-fresh-20261124.log`;
+  monitor result `SUCCEEDED`.
+- AWS observed ASG min/desired/max `1/1/1`, with instance
+  `i-070ba188abdaf25b2` `Healthy` / `InService`. It was `running`, type
+  `t3.micro`, had no public IP, and required IMDSv2. EC2 instance and system
+  status checks were both `ok`.
+- AWS confirmed root device `/dev/xvda`, volume
+  `vol-0174d4dd0b14672bc`, 8 GiB gp3, `Encrypted=true`,
+  `DeleteOnTermination=true`, and attachment state `in-use`.
+- The isolated security group had no ingress or egress rules. Both subnet
+  `MapPublicIpOnLaunch` values were false, and the VPC route table had only
+  its local route.
+- The reviewed destroy plan contains exactly nine deletes and no creates,
+  updates, or replacements. Monitored run `nova-asg-486-destroy-20261124`
+  started at `2026-11-24T18:06:41Z`, Terraform PID `81609`, log
+  `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-20261124.log`;
+  monitor result `SUCCEEDED`.
+- Independent AWS absence checks returned no ASG, launch template, VPC,
+  subnet, route table, or security group tagged for this test. The EC2 record
+  is `terminated`; no EBS volumes remain attached to it. Terraform state lists
+  zero resources, and the run monitor has zero active runs.
 
 ## Observed result
 
-Pending. The credential-less attempt failed before mutation. The correctly
-profiled monitored attempt is in progress; verify its terminal state before
-recording any AWS resource outcome.
+The ASG and instance reached healthy service state. AWS verified the
+encrypted 8 GiB gp3 root volume and its delete-on-termination setting. After
+monitored teardown, the ASG, launch template, VPC, subnets, route table,
+security group, and EBS volume were absent; the EC2 history record is
+terminated. Terraform state lists zero resources. The local state artifact is
+retained and is not committed.
 
 ## Results
 
-Pending.
+ASG and EC2 infrastructure health, IMDSv2, network isolation, root EBS
+settings, volume deletion, and cleanup passed for this exact test profile.
 
 ## Teardown
 
-Destroy through `scripts/terraform_run_monitor.py`. Retain local state artifacts
-and do not commit state files. Independently verify the exact ASG, launch
-template, VPC, subnets, route table, security group, instances, and volumes are
-absent or terminated. Distinguish retained AWS instance history from active
-resources.
+The reviewed destroy plan contained exactly nine deletes, zero creates,
+updates, or replacements. Monitored run `nova-asg-486-destroy-20261124`
+(Terraform PID `81609`) completed successfully. Independent AWS checks found
+the ASG, launch template, VPC, subnets, route table, security group, and volume
+absent; instance `i-070ba188abdaf25b2` is terminated. `terraform state list`
+returned zero resources. Local state artifacts are retained and are not
+committed. The run log is
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-20261124.log`.
+AWS keeps the terminated instance history record; it is not active.
 
 ## Final boundary
 

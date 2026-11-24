@@ -51,17 +51,17 @@ the hosted control plane.
   unknown, unencrypted, oversized, wrong-device/type, or retained mappings.
 - [x] Regression tests cover the accepted and rejected shapes with redacted
   findings.
-- [ ] A fresh isolated AWS test verifies the running instance's EBS volume is
+- [x] A fresh isolated AWS test verifies the running instance's EBS volume is
   encrypted, the ASG is healthy, and termination removes the volume.
-- [ ] The test is destroyed through the Terraform run monitor; the ASG,
+- [x] The test is destroyed through the Terraform run monitor; the ASG,
   launch template, and network are independently absent and instance records
   are terminated.
-- [ ] Evidence keeps AMI provenance, instance-role scope, guest health,
+- [x] Evidence keeps AMI provenance, instance-role scope, guest health,
   update/recovery, full pricing, remote Nova state, and Nova dispatch as
   separate open gates.
 - [ ] Docs conventions, focused/full verification, Terraform formatting and
   validation, `git diff --check`, and all required CI checks pass before merge.
-- [ ] No hosted control-plane resource or state changes; protected local files
+- [x] No hosted control-plane resource or state changes; protected local files
   and lineage evidence remain untouched.
 
 ## Boundaries
@@ -74,9 +74,9 @@ protected local files. Retain local state artifacts after teardown.
 
 ## Acceptance status
 
-Implementation and regression tests pass locally. The isolated AWS create,
-verification, and cleanup are in progress. CI is pending. No hosted
-control-plane resource or state was touched.
+Implementation, regression tests, and isolated AWS lifecycle evidence pass.
+All test resources are removed and local state is retained. CI is pending.
+No hosted control-plane resource or state was touched.
 
 ## Tests / validation performed
 
@@ -94,6 +94,14 @@ control-plane resource or state was touched.
 - Reviewed saved plan `/tmp/davdeploy-nova-asg-486/create-fresh.tfplan`: nine
   creates, zero updates or deletes. It specifies one `/dev/xvda` mapping with
   `encrypted=true`, `delete_on_termination=true`, gp3, and 8 GiB.
+- AWS observed the ASG `Healthy` / `InService`, EC2 instance and system checks
+  `ok`, IMDSv2 required, and no public IP. The attached root volume was
+  encrypted, 8 GiB gp3, and delete-on-termination.
+- The reviewed destroy plan contained exactly nine deletes. Monitored destroy
+  run `nova-asg-486-destroy-20261124` succeeded; independent AWS checks found
+  the ASG, launch template, VPC, subnets, route table, security group, and
+  volume absent. The instance is terminated, Terraform state lists zero
+  resources, and the Terraform run monitor has zero active operations.
 
 ## Evidence files produced
 
