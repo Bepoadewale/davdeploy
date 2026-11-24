@@ -1,6 +1,6 @@
 # ticket493 — verify Parameter Store module lifecycle
 
-PR: #493 — draft, ticket-first implementation.
+PR: [#493 — test: verify Parameter Store module lifecycle](https://github.com/Bepoadewale/davdeploy/pull/493) (draft).
 Branch: `test/parameter-config-lifecycle-493`.
 
 ## Problem / goal
@@ -31,6 +31,8 @@ never print either value.
   `tests/test_generated_plan_policy.py`.
 - The root-specific acceptance requirements in
   `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`.
+- [AWS Parameter Store setup and default `aws/ssm` key](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-store-setting-up.html).
+- [AWS `SecureString` KMS encryption behavior](https://docs.aws.amazon.com/systems-manager/latest/userguide/secure-string-parameter-kms-encryption.html).
 
 ## Work planned for the PR
 
@@ -64,17 +66,38 @@ never print either value.
 
 ## Acceptance status
 
-Ticket-first work is staged. No fixture or helper implementation, AWS resource,
-Terraform operation, or control-plane change has occurred yet.
+Ticket-first draft PR #493 is open. The local-state fixture and redacted
+verification helper are implemented. Nine focused tests, Ruff, Terraform
+format/validation, and documentation checks pass. In account `654654474502`,
+the exact target name was absent and a saved plan proposed exactly one create,
+zero changes, and zero deletes; Terraform redacted the synthetic value. No
+resource has been applied and the hosted control plane remains untouched.
 
 ## Tests / validation performed
 
-- Ticket-first `git diff --check` and documentation-convention checks will be
-  recorded after the initial ticket structure is complete.
+- Ticket-first `git diff --check` and
+  `GITHUB_PR_NUMBER=493 python3 scripts/check_doc_conventions.py`: passed.
+- `.venv-pr399/bin/python -m pytest
+  tests/test_parameter_config_lifecycle_script.py -q`: 9 passed.
+- `.venv-pr399/bin/ruff check scripts/parameter_config_lifecycle.py
+  tests/test_parameter_config_lifecycle_script.py`: passed.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`: 1,757
+  tests passed, including lint, configuration checks, OpenAPI snapshot, and
+  Compose configuration (one existing Starlette/httpx deprecation warning).
+- Terraform format, initialization, and validation of
+  `docs/test/fixtures/nova-parameter-config-493`: passed.
+- Read-only identity check returned account `654654474502`; exact SSM name
+  `/davdeploy/nova-parameter-config-493/20261125-d0f5ab/synthetic` was absent.
+- Saved plan `/tmp/davdeploy-nova-parameter-config-493-20261125-d0f5ab/create-v1.tfplan`
+  contains exactly one create, zero updates, and zero deletes. The sensitive
+  value is redacted in the plan output. No apply or destroy has run.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket493.md`
+- `docs/test/fixtures/nova-parameter-config-493/`
+- `scripts/parameter_config_lifecycle.py`
+- `tests/test_parameter_config_lifecycle_script.py`
 
 ## Boundaries
 
@@ -84,6 +107,8 @@ local Terraform state file. Use synthetic values only. Confirm account and
 state contents. No cleanup is allowed outside the exact test parameter. Do not
 touch hosted control-plane, remote-state, lock-table, unrelated AWS, or
 customer resources. Preserve generated state and local evidence after teardown.
+Do not apply the saved plan until explicit approval covers destroying only the
+exact test parameter named above; otherwise keep the package source-only.
 
 ## Follow-up work
 
