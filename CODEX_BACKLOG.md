@@ -124,7 +124,10 @@ and back, observed healthy ASG/EC2 status checks, then destroyed the test
 stack. The group, launch template, and network are absent; both instance
 records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
-cross-account isolation. Final-head CI and review remain.
+cross-account isolation. Its implementation/evidence head
+`223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in run
+[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384);
+the PR remains open for final status-reconciliation checks and review.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

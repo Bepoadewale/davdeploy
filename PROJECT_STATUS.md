@@ -98,7 +98,10 @@ bounded EC2 Auto Scaling profile. The isolated no-egress stack reached
 capacity one and two with healthy ASG and EC2 checks, returned to one, and was
 destroyed with independent absence checks. Both EC2 records are terminated;
 the local Terraform state is retained and empty. No Nova dispatch or guest
-application health is claimed. PR #485 is not merged pending final-head CI.
+application health is claimed. PR #485 remains open and unmerged.
+Its implementation/evidence head `223eab9ab972cf40b099077293ab407e0c8bc7d6`
+passed all seven required checks in CI run
+[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).

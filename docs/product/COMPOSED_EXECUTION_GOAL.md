@@ -51,7 +51,9 @@ then one; EC2 system and instance checks passed at both capacities. The
 no-egress test stack was destroyed and its service/network resources were
 independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. PR #485
-remains unmerged pending final-head CI.
+remains open and unmerged. Its implementation/evidence head
+`223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in CI run
+[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
 
 PR #483 passed all seven checks on final head in CI run
 [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)

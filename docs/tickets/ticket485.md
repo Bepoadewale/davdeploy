@@ -1,6 +1,6 @@
 # ticket485
 
-PR: [#485 — feat: validate EC2 Auto Scaling lifecycle](https://github.com/Bepoadewale/davdeploy/pull/485) (draft)
+PR: [#485 — feat: validate EC2 Auto Scaling lifecycle](https://github.com/Bepoadewale/davdeploy/pull/485) (open)
 Branch: `feat/autoscaling-lifecycle-485`
 
 ## Problem / goal
@@ -66,7 +66,7 @@ absence.
 - [x] The evidence and matrix state the exact behavior proved and retain gaps
   for application health, image provenance, update/recovery, complete price,
   Nova dispatch, and cross-account isolation.
-- [ ] Documentation conventions, Terraform formatting/validation, reviewed
+- [x] Documentation conventions, Terraform formatting/validation, reviewed
   plan, `git diff --check`, and all required CI checks pass before merge.
 - [x] No hosted control-plane resource or state is changed; protected local
   files and existing audit evidence remain untouched.
@@ -82,8 +82,9 @@ resource or file.
 
 ## Acceptance status
 
-Isolated AWS lifecycle evidence is complete. Pull-request CI and final review
-remain before merge.
+Isolated AWS lifecycle evidence is complete. All seven required checks passed
+on implementation/evidence commit `223eab9ab972cf40b099077293ab407e0c8bc7d6`
+in run `45447414384`. Final-head checks for this status update are running.
 
 ## Tests / validation performed
 
@@ -95,8 +96,9 @@ remain before merge.
 - Reviewed teardown plan — nine deletes, zero creates/updates.
 - `GITHUB_PR_NUMBER=485 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Initial draft PR commit reported no checks; final-head CI must be reconciled
-  before merge.
+- Initial draft PR commit reported no checks. The implementation/evidence head
+  passed all seven PR checks in run
+  [45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
 
 ## Evidence files produced
 

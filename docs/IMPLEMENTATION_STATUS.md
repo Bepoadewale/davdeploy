@@ -102,7 +102,9 @@ and EC2 system/instance checks. Its isolated no-egress stack was destroyed;
 the ASG, launch template, and test network are absent, and the two EC2 records
 are terminated. Local state lists zero resources and is retained. This does
 not prove guest application health, update/recovery, pricing, or Nova dispatch.
-PR #485 remains unmerged pending final-head CI.
+PR #485 remains open and unmerged. Its implementation/evidence head
+`223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in CI run
+[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,

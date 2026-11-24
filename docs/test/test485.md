@@ -101,11 +101,11 @@ run `nova-asg-485-destroy-apply-20261124` (PID `59497`).
 
 Independent AWS checks found the ASG absent, both test instances terminated,
 and the VPC, both subnets, security group, route table, and launch template
-absent. No volumes remained attached to either instance. Terraform `state
-list` returned zero resources; the local state file is retained in this
-fixture and is not committed. The run monitor had 46 records and zero active
-operations. AWS retains the terminated instance records; they are not running
-resources. Logs for both destroy attempts are under
+absent. No volumes remained attached to either instance. The command
+`terraform state list` returned zero resources; the local state file is
+retained in this fixture and is not committed. The run monitor had 46 records
+and zero active operations. AWS retains terminated instance records; they are
+not active resources. Logs for both destroy attempts are under
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/`.
 
 ## Final boundary
