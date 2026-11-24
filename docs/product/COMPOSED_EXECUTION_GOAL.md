@@ -1,20 +1,30 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-23. This handoff tracks the Nova-led infrastructure goal
+Updated: 2026-11-24. This handoff tracks the Nova-led infrastructure goal
 without claiming launch readiness. Source, hosted control-plane state,
 customer-side AWS evidence, Nova execution, application behavior, and per-entry
 lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-23
+## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`7b88fcf74352d448614d374d502a3aff3409525a` (PR #471). The last
+`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
 [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
 This reconciliation did not access or change the hosted control plane.
+
+PR #477 passed all seven checks on its final head in CI run
+[45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734).
+Merged-main CI run
+[45342278085](https://github.com/Bepoadewale/davdeploy/actions/runs/45342278085)
+also passed all seven checks. The source-only package requires encrypted EFS,
+General Purpose performance, Bursting throughput, and TCP/2049 ingress from a
+security-group source. It does not prove mount-target binding, file access,
+tenant isolation, lifecycle, complete pricing, or Nova execution. No AWS or
+hosted control-plane resource was changed.
 
 PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
 passed in [run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
@@ -122,10 +132,13 @@ absent; an AWS-managed inactive job definition remains subject to documented
 180-day retention. This is direct service evidence, not Nova dispatch or a
 hosted customer apply. The hosted control plane remained outside its scope.
 
-Current read-only AWS checks in account `654654474502`, region `us-east-1`,
-returned no tested DavDeploy SageMaker endpoint, model, or endpoint
-configuration. Four earlier tagged Batch job definitions remain inactive;
-PR #458's test added one inactive definition after teardown. The test
+Read-only AWS checks on 2026-11-24 in account `654654474502`, region `us-east-1`,
+returned no tested DavDeploy SageMaker endpoint, model, endpoint configuration,
+execution role, or artifact bucket; no running Batch jobs or tagged Batch
+compute environments. Four earlier tagged Batch job definitions remain inactive;
+PR #458's test added one inactive definition after teardown. The CLI did not
+support the attempted Batch job-definition listing command, so the inventory
+is not exhaustive. The test
 SageMaker lineage action/context remain as audit evidence. The PR #443
 temporary roles and workload resources are absent. PR #446 and #447 test queue
 prefixes are absent; the existing production-tagged queue remains. The PR #447

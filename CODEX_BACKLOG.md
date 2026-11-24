@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475). The
+Backend `main` is `be22c3866fa023f61aae0eaa82931179393242fa` (PR #477). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -72,6 +72,18 @@ provisioned shard, 24-hour retention, KMS encryption, and the AWS-managed
 Kinesis key. No stream was created. The prior one-record service test still
 does not prove consumer processing, replay, full pricing, or Nova dispatch.
 See `docs/tickets/ticket475.md`.
+
+PR #477 adds source-only EFS plan checks for encryption, General Purpose
+performance, Bursting throughput, and TCP/2049 ingress from a security-group
+source. The module does not yet prove the NFS source is bound to its mount
+targets or that file access is authorized. No AWS resource or hosted
+control-plane resource changed. All seven checks passed in CI run
+[45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734);
+merged-main CI run
+[45342278085](https://github.com/Bepoadewale/davdeploy/actions/runs/45342278085)
+also passed all seven checks. File read/write, tenant isolation, lifecycle,
+complete EFS pricing, and Nova dispatch remain open. See
+`docs/tickets/ticket477.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

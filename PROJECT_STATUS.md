@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475). The hosted control plane
+`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -55,6 +55,16 @@ and encryption with the AWS-managed Kinesis key. No stream or hosted
 control-plane resource was changed. This does not prove consumer behavior,
 complete pricing, lifecycle, or Nova dispatch.
 
+PR #477 merged with all seven checks passing in CI run
+[45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734);
+merged-main CI run
+[45342278085](https://github.com/Bepoadewale/davdeploy/actions/runs/45342278085)
+also passed all seven checks. It adds source-only EFS checks for encryption,
+General Purpose performance, Bursting throughput, and exact TCP/2049 NFS
+ingress from a security-group source. No EFS or control-plane resource changed.
+Mount-target binding, file I/O, access authorization, lifecycle, complete
+pricing, and Nova dispatch remain unproven.
+
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
 It adds source-only generated-plan checks for one-to-one SQS retry/DLQ pairs
@@ -64,13 +74,16 @@ records an isolated SQS message-to-DLQ lifecycle. The test queues were
 destroyed and independently confirmed absent. This is direct service evidence,
 not Nova dispatch or customer application certification.
 
-The latest read-only inventory in account `654654474502`, region `us-east-1`,
-found no tested SageMaker endpoint, model, or endpoint configuration. Four
-tagged DavDeploy Batch job definitions remain inactive. One SageMaker lineage
-action/context remains as retained audit evidence. The SQS test prefix is
-absent; the existing production-tagged queue remains. The Terraform run monitor
-has 19 terminal records and no active run. Preserve `--only-show-errors`,
-`.venv-pr399/`, and lineage evidence. The frontend status remains based on
+Read-only inventory on 2026-11-24 in account `654654474502`, region `us-east-1`,
+found no tested SageMaker endpoint, model, endpoint configuration, execution
+role, or artifact bucket; no running Batch jobs or tagged Batch compute
+environments; and four previously recorded tagged Batch job definitions plus
+PR #458's test definition inactive. The CLI did not support the attempted
+Batch definition-list command, so the inventory is not exhaustive. SageMaker
+lineage evidence remains retained. The SQS test prefix is absent; the existing
+production-tagged queue remains. The Terraform run monitor had 41 terminal
+records and no active operation. Preserve `--only-show-errors`, `.venv-pr399/`,
+and lineage evidence. The frontend status remains based on
 the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
 ## What is implemented
