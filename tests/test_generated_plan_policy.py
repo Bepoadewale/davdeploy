@@ -3472,6 +3472,31 @@ def test_autoscaling_root_volume_critical_unknown_metadata_is_denied():
     assert "autoscaling_root_volume_unverifiable" in codes(result)
 
 
+def test_autoscaling_root_volume_allows_unknown_optional_provider_defaults():
+    document, proposal_value = autoscaling_case()
+    template_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_launch_template"
+    )
+    template_change["change"]["after_unknown"]["block_device_mappings"] = [
+        {
+            "ebs": [
+                {
+                    "iops": True,
+                    "throughput": True,
+                    "volume_initialization_rate": True,
+                }
+            ]
+        }
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("autoscaling_") for code in codes(result))
+
+
 @pytest.mark.parametrize(
     "ebs_overrides",
     [

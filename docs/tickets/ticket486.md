@@ -80,10 +80,10 @@ control-plane resource or state was touched.
 
 ## Tests / validation performed
 
-- `make verify`: passed (1,746 tests; one existing Starlette/httpx
+- `make verify`: passed (1,747 tests; one existing Starlette/httpx
   deprecation warning; OpenAPI snapshot and Compose configuration passed).
 - `.venv-pr399/bin/python -m pytest tests/test_generated_plan_policy.py -q
-  -k autoscaling`: 36 passed.
+  -k autoscaling`: 37 passed.
 - `.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py
   tests/test_generated_plan_policy.py`: passed.
 - `terraform -chdir=docs/test/fixtures/nova-asg-486 fmt -check -recursive`:
