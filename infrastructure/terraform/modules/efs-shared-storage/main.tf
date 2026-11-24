@@ -21,8 +21,10 @@ resource "aws_vpc_security_group_ingress_rule" "nfs" {
 }
 
 resource "aws_efs_file_system" "this" {
-  encrypted = true
-  tags      = merge(var.tags, { Name = var.name })
+  encrypted        = true
+  performance_mode = "generalPurpose"
+  throughput_mode  = "bursting"
+  tags             = merge(var.tags, { Name = var.name })
 }
 
 resource "aws_efs_mount_target" "this" {

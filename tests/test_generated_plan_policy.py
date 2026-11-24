@@ -463,6 +463,72 @@ def kinesis_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_unknown=None):
+    file_system_values = {
+        "encrypted": True,
+        "performance_mode": "generalPurpose",
+        "throughput_mode": "bursting",
+    }
+    file_system_values.update(values or {})
+    nfs_values = {
+        "security_group_id": "sg-efs",
+        "referenced_security_group_id": "sg-application",
+        "ip_protocol": "tcp",
+        "from_port": 2049,
+        "to_port": 2049,
+        "cidr_ipv4": None,
+        "cidr_ipv6": None,
+        "prefix_list_id": None,
+    }
+    nfs_values.update(ingress_values or {})
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "terraform_data"
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["type"] == "terraform_data"
+    ]
+    file_system_address = "aws_efs_file_system.shared"
+    nfs_address = "aws_vpc_security_group_ingress_rule.nfs"
+    document["planned_values"]["root_module"]["resources"].extend(
+        [
+            resource(file_system_address, "aws_efs_file_system", file_system_values),
+            resource(nfs_address, "aws_vpc_security_group_ingress_rule", nfs_values),
+        ]
+    )
+    document["resource_changes"].extend(
+        [
+            change(file_system_address, "aws_efs_file_system", after_unknown=after_unknown or {}),
+            change(
+                nfs_address,
+                "aws_vpc_security_group_ingress_rule",
+                after_unknown=ingress_unknown or {},
+            ),
+        ]
+    )
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "shared",
+                "resource_type": "aws_efs_file_system",
+                "name": "shared",
+                "arguments": {},
+                "rationale": "Store shared application files encrypted at rest.",
+            },
+            {
+                "resource_id": "nfs",
+                "resource_type": "aws_vpc_security_group_ingress_rule",
+                "name": "nfs",
+                "arguments": {"from_port": 2049, "to_port": 2049, "ip_protocol": "tcp"},
+                "rationale": "Allow NFS only from the application security group.",
+            },
+        ]
+    )
+    return document, proposal_value
+
+
 def add_sqs_queue_policy(document, policy, **change_metadata):
     address = "aws_sqs_queue_policy.queue_access"
     document["planned_values"]["root_module"]["resources"].append(
@@ -5581,6 +5647,94 @@ def test_kinesis_policy_findings_do_not_echo_plan_values():
 
     assert "kinesis_key_unsupported" in codes(result)
     assert "sensitive-customer-key-marker" not in repr(result)
+
+
+def test_efs_safe_module_shape_and_security_group_nfs_ingress_pass():
+    document, proposal_value = efs_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("efs_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_code"),
+    [
+        ("encrypted", False, "efs_encryption_required"),
+        ("performance_mode", "maxIO", "efs_performance_mode_unsupported"),
+        ("throughput_mode", "elastic", "efs_throughput_mode_unsupported"),
+    ],
+)
+def test_efs_unsafe_file_system_settings_are_denied(field, value, expected_code):
+    document, proposal_value = efs_case(values={field: value})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize("unknown_path", ["encrypted", "performance_mode", "throughput_mode"])
+def test_unknown_efs_file_system_settings_are_denied(unknown_path):
+    document, proposal_value = efs_case(after_unknown={unknown_path: True})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "ingress_values",
+    [
+        {"cidr_ipv4": "10.0.0.0/8", "referenced_security_group_id": None},
+        {"from_port": 2048},
+        {"to_port": 2050},
+        {"ip_protocol": "-1"},
+        {"referenced_security_group_id": None},
+        {"prefix_list_id": "pl-private", "referenced_security_group_id": None},
+    ],
+)
+def test_efs_nfs_ingress_must_be_exact_port_from_security_group(ingress_values):
+    document, proposal_value = efs_case(ingress_values=ingress_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_nfs_ingress_unsupported" in codes(result)
+
+
+def test_unknown_efs_nfs_ingress_is_denied():
+    document, proposal_value = efs_case(
+        ingress_values={"referenced_security_group_id": None},
+        ingress_unknown={"referenced_security_group_id": True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_efs_nfs_ingress_without_known_protocol_is_denied():
+    document, proposal_value = efs_case(ingress_values={"ip_protocol": None})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_nfs_ingress_unknown" in codes(result)
+
+
+def test_efs_policy_findings_do_not_echo_plan_values():
+    document, proposal_value = efs_case(
+        values={"throughput_mode": "private-mode-marker"}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert "efs_throughput_mode_unsupported" in codes(result)
+    assert "private-mode-marker" not in repr(result)
 
 
 def step_functions_lambda_case():
