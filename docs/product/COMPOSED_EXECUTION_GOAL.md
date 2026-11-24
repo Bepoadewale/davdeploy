@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481). The last
+`72009437bd567f3e3b0a948efdf9451848523475` (PR #483). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -43,6 +43,16 @@ and merged-main run
 It binds each EFS mount target and its NFS/2049 ingress rule to same-plan
 security groups. This is source-only; no EFS or hosted resource changed. File
 access, authorization, lifecycle, full pricing, and Nova dispatch remain
+unproven.
+
+PR #483 passed all seven checks on final head in CI run
+[45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
+and merged-main run
+[45426759569](https://github.com/Bepoadewale/davdeploy/actions/runs/45426759569).
+It adds source-only Auto Scaling capacity bounds, one same-plan fixed-version
+launch template, known AMI-ID, `t3.micro`, and IMDSv2 checks. No AWS or hosted
+resource changed. Instance-image provenance, encrypted volumes, role scope,
+application health, scaling/recovery, teardown, cost, and Nova dispatch remain
 unproven.
 
 PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
@@ -153,12 +163,12 @@ hosted customer apply. The hosted control plane remained outside its scope.
 
 Read-only AWS checks on 2026-11-24 in account `654654474502`, region `us-east-1`,
 returned no tested DavDeploy SageMaker endpoint, model, endpoint configuration,
-execution role, or artifact bucket; no running Batch jobs or tagged Batch
-compute environments. Four earlier tagged Batch job definitions remain inactive;
-PR #458's test added one inactive definition after teardown. The CLI did not
-support the attempted Batch job-definition listing command, so the inventory
-is not exhaustive. The test
-SageMaker lineage action/context remain as audit evidence. The PR #443
+execution role, or artifact bucket. Batch listing returned no DavDeploy-named
+job queue or compute environment, and five DavDeploy-named job definitions
+were inactive: four earlier test definitions plus PR #458's test definition.
+This is a name-filtered test-resource inventory, not a complete account
+inventory. The test SageMaker lineage action/context remain as audit evidence.
+The PR #443
 temporary roles and workload resources are absent. PR #446 and #447 test queue
 prefixes are absent; the existing production-tagged queue remains. The PR #447
 Lambda, event mapping, test role, and generated log group are absent. PR #448
