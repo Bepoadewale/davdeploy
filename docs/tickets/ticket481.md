@@ -58,13 +58,15 @@ ingress target to use one of those mount-target groups.
   file read/write, tenant authorization, lifecycle, pricing, or Nova dispatch.
 - [x] No AWS or hosted control-plane resource is changed.
 - [x] Local verification, ticket conventions, and diff checks pass.
-- [ ] All seven CI checks pass on the final PR head before merge.
+- [x] All seven CI checks pass on implementation head `8bd35ac`; merge only
+  after the evidence-update head also passes all required checks.
 
 ## Acceptance status
 
-Implementation and local verification are complete. Required CI must pass on
-the final PR head before merge. No AWS or hosted control-plane resource has
-been changed.
+Implementation and local verification are complete. Implementation head
+`8bd35ac` passed all seven required checks in CI run `45380053141`. The
+evidence-update head must pass before merge. No AWS or hosted control-plane
+resource has been changed.
 
 ## Tests / validation performed
 
@@ -79,6 +81,8 @@ been changed.
 - `terraform fmt -check -recursive infrastructure/terraform/modules/efs-shared-storage`
   — passed.
 - `git diff --check` — passed.
+- PR #481 implementation head `8bd35ac` passed all seven checks in CI run
+  [45380053141](https://github.com/Bepoadewale/davdeploy/actions/runs/45380053141).
 
 ## Evidence files produced
 
