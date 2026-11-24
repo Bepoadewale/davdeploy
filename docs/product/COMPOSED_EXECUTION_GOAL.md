@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`72009437bd567f3e3b0a948efdf9451848523475` (PR #483). The last
+`8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -44,6 +44,14 @@ It binds each EFS mount target and its NFS/2049 ingress rule to same-plan
 security groups. This is source-only; no EFS or hosted resource changed. File
 access, authorization, lifecycle, full pricing, and Nova dispatch remain
 unproven.
+
+Draft PR #485 records isolated same-account Auto Scaling lifecycle evidence
+for the bounded PR #483 profile. Direct Terraform observed capacity one, two,
+then one; EC2 system and instance checks passed at both capacities. The
+no-egress test stack was destroyed and its service/network resources were
+independently verified absent. This is exact-shape customer-side evidence, not
+Nova dispatch, guest application health, or cross-account isolation. PR #485
+remains unmerged pending final-head CI.
 
 PR #483 passed all seven checks on final head in CI run
 [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)

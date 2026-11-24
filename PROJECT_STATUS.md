@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`72009437bd567f3e3b0a948efdf9451848523475` (PR #483). The hosted control plane
+`8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -92,6 +92,13 @@ fixed launch-template version binding, known AMI-ID shape, `t3.micro`, and
 IMDSv2 requirements. No EC2/ASG or hosted control-plane resource was changed.
 AMI provenance, encrypted disks, scoped role, guest health, scaling/recovery,
 full cost, and Nova execution remain unproven.
+
+Draft PR #485 adds direct same-account lifecycle evidence for PR #483's
+bounded EC2 Auto Scaling profile. The isolated no-egress stack reached
+capacity one and two with healthy ASG and EC2 checks, returned to one, and was
+destroyed with independent absence checks. Both EC2 records are terminated;
+the local Terraform state is retained and empty. No Nova dispatch or guest
+application health is claimed. PR #485 is not merged pending final-head CI.
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).

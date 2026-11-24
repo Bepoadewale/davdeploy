@@ -7,6 +7,8 @@
 *.p12
 *.sqlite
 *.db
+*.tfstate
+*.tfstate.*
 dist/
 build/
 .terraform/

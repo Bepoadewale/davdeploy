@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`72009437bd567f3e3b0a948efdf9451848523475` (PR #483); hosted runtime remains
+`8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -95,6 +95,14 @@ launch configurations and mixed-instance policies. It does not establish AMI
 provenance, disk encryption, instance role scope, workload health, update or
 recovery, full cost, teardown, or Nova execution. No AWS or hosted resource
 changed.
+
+Draft PR #485 records a direct same-account EC2 Auto Scaling lifecycle test
+for the bounded PR #483 profile: capacity one, scale to two, return to one,
+and EC2 system/instance checks. Its isolated no-egress stack was destroyed;
+the ASG, launch template, and test network are absent, and the two EC2 records
+are terminated. Local state lists zero resources and is retained. This does
+not prove guest application health, update/recovery, pricing, or Nova dispatch.
+PR #485 remains unmerged pending final-head CI.
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,

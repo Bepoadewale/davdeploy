@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `72009437bd567f3e3b0a948efdf9451848523475` (PR #483). The
+Backend `main` is `8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -117,6 +117,14 @@ passed all seven checks. No ASG, EC2 instance, or control-plane resource was
 created. AMI provenance, encrypted disks, scoped role, workload health,
 update/recovery, teardown, full cost, and Nova execution remain unproven. See
 `docs/tickets/ticket483.md`.
+
+Draft PR #485 records isolated direct Auto Scaling lifecycle evidence for the
+bounded PR #483 profile. The no-egress test scaled from one `t3.micro` to two
+and back, observed healthy ASG/EC2 status checks, then destroyed the test
+stack. The group, launch template, and network are absent; both instance
+records are terminated and local state is empty. This does not prove guest
+application health, recovery, complete pricing, Nova dispatch, or
+cross-account isolation. Final-head CI and review remain.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

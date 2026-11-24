@@ -18,11 +18,14 @@ absence.
   (PR #484).
 - PR #483's bounded Auto Scaling module and generated-plan policy are merged.
 - The AWS caller was verified as account `654654474502` in `us-east-1`.
-- No `nova-asg-485` Auto Scaling group or EC2 instance exists.
+- Before the test, no `nova-asg-485` Auto Scaling group or EC2 instance existed.
 - The account currently has the platform database VPC and default VPC; the
   test must create a dedicated, non-overlapping VPC with no internet gateway,
   NAT gateway, public IP, or ingress rule.
-- The Terraform run monitor has 41 terminal records and no active operation.
+- The test has since been destroyed: no test ASG, launch template, VPC,
+  subnets, route table, or security group remain. Both launched instance
+  records are terminated; local Terraform state lists zero resources.
+- The run monitor has 46 records and no active operation.
 - Hosted control-plane state, locks, runtime, and endpoints are out of scope.
 
 ## Research / references used
@@ -49,22 +52,23 @@ absence.
 
 ## Acceptance criteria
 
-- [ ] The test root is isolated from all existing VPCs and has no public route,
+- [x] The test root is isolated from all existing VPCs and has no public route,
   public address, inbound rule, or general internet egress.
-- [ ] Plan/apply uses a fresh local state file and only creates the tagged test
+- [x] Plan/apply uses a fresh local state file and only creates the tagged test
   resources; no remote backend, hosted control-plane request, or Nova apply is
   involved.
-- [ ] ASG desired capacity is observed at one and two and returned to one;
+- [x] ASG desired capacity is observed at one and two and returned to one;
   instance status checks and ASG lifecycle state are recorded without exposing
   credentials or customer data.
-- [ ] The stack is destroyed through the Terraform run monitor and AWS
-  independently confirms its test resources are absent.
-- [ ] The evidence and matrix state the exact behavior proved and retain gaps
+- [x] The stack is destroyed through the Terraform run monitor and AWS
+  independently confirms the group, launch template, and network resources
+  absent; both EC2 instance records are terminated with no attached volumes.
+- [x] The evidence and matrix state the exact behavior proved and retain gaps
   for application health, image provenance, update/recovery, complete price,
   Nova dispatch, and cross-account isolation.
 - [ ] Documentation conventions, Terraform formatting/validation, reviewed
   plan, `git diff --check`, and all required CI checks pass before merge.
-- [ ] No hosted control-plane resource or state is changed; protected local
+- [x] No hosted control-plane resource or state is changed; protected local
   files and existing audit evidence remain untouched.
 
 ## Boundaries
@@ -78,13 +82,21 @@ resource or file.
 
 ## Acceptance status
 
-Implementation and AWS lifecycle evidence are in progress. No resource has
-been applied yet.
+Isolated AWS lifecycle evidence is complete. Pull-request CI and final review
+remain before merge.
 
 ## Tests / validation performed
 
-- Terraform formatting, validation, and reviewed-plan checks are pending.
-- Documentation conventions and pull-request CI are pending.
+- `terraform fmt -check -recursive docs/test/fixtures/nova-asg-485` — passed.
+- `terraform -chdir=docs/test/fixtures/nova-asg-485 validate` — passed.
+- Reviewed creation plan — nine creates, zero changes/destroys, zero security
+  group rules.
+- Reviewed capacity-two and scale-back plans — one in-place ASG update each.
+- Reviewed teardown plan — nine deletes, zero creates/updates.
+- `GITHUB_PR_NUMBER=485 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Initial draft PR commit reported no checks; final-head CI must be reconciled
+  before merge.
 
 ## Evidence files produced
 
