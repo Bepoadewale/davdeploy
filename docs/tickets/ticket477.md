@@ -57,15 +57,14 @@ only from security groups.
   file I/O, tenant isolation, lifecycle, hosted execution, and full regional
   price evidence open.
 - [x] No AWS or hosted control-plane resource is changed.
-- [ ] Focused tests, Ruff, Terraform format/validation, documentation
-  conventions, `git diff --check`, and required GitHub checks pass. Local
-  checks pass; required GitHub checks are pending.
+- [x] Focused tests, Ruff, Terraform format/validation, documentation
+  conventions, `git diff --check`, and all seven required GitHub checks pass.
 
 ## Acceptance status
 
-Implementation and local validation are complete. The draft PR's required
-GitHub checks and review remain pending. No AWS or hosted control-plane resource
-has been changed.
+Implementation and local validation are complete. All seven checks passed on
+the implementation head; the final ticket-update head must rerun CI before
+merge. No AWS or hosted control-plane resource has been changed.
 
 ## Evidence files produced
 
@@ -89,7 +88,9 @@ has been changed.
 - `GITHUB_PR_NUMBER=477 .venv-pr399/bin/python scripts/check_doc_conventions.py`
   — passed.
 - `git diff --check` — passed.
-- Required GitHub checks have not run on the implementation head yet.
+- Initial implementation head `f1cd1ba` passed all seven required checks in
+  [CI run 45340389662](https://github.com/Bepoadewale/davdeploy/actions/runs/45340389662).
+- Final ticket-update head checks are pending.
 
 ## Boundaries
 
