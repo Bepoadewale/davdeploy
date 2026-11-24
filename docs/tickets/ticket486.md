@@ -59,7 +59,7 @@ the hosted control plane.
 - [x] Evidence keeps AMI provenance, instance-role scope, guest health,
   update/recovery, full pricing, remote Nova state, and Nova dispatch as
   separate open gates.
-- [ ] Docs conventions, focused/full verification, Terraform formatting and
+- [x] Docs conventions, focused/full verification, Terraform formatting and
   validation, `git diff --check`, and all required CI checks pass before merge.
 - [x] No hosted control-plane resource or state changes; protected local files
   and lineage evidence remain untouched.
@@ -75,8 +75,9 @@ protected local files. Retain local state artifacts after teardown.
 ## Acceptance status
 
 Implementation, regression tests, and isolated AWS lifecycle evidence pass.
-All test resources are removed and local state is retained. CI is pending.
-No hosted control-plane resource or state was touched.
+All test resources are removed and local state is retained. PR run
+`45457478616` passed all seven checks on head `24f44e3`. No hosted
+control-plane resource or state was touched.
 
 ## Tests / validation performed
 
@@ -102,6 +103,7 @@ No hosted control-plane resource or state was touched.
   the ASG, launch template, VPC, subnets, route table, security group, and
   volume absent. The instance is terminated, Terraform state lists zero
   resources, and the Terraform run monitor has zero active operations.
+- PR checks run `45457478616`: all seven checks passed on head `24f44e3`.
 
 ## Evidence files produced
 
