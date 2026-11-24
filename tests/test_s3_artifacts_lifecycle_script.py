@@ -143,17 +143,21 @@ def test_bucket_configuration_rejects_wrong_test_tag() -> None:
 
 def test_object_lifecycle_reads_both_versions_and_cleans_exact_key() -> None:
     client = FakeS3()
+    sibling_key = f"nova-s3-artifacts-491/{client.test_id}/synthetic.txt-sibling"
+    client.versions.append((sibling_key, "unrelated-version"))
+    client.objects[(sibling_key, "unrelated-version")] = b"preserve this sibling key"
 
     result = exercise_object_lifecycle(client, client.bucket_name, client.test_id)
 
     assert result["object_versions_verified"] == 2
     assert result["previous_version_readable"] is True
     assert result["cleaned_version_count"] == 2
-    assert client.versions == []
+    assert client.versions == [(sibling_key, "unrelated-version")]
     deleted = client.delete_requests[0]["Objects"]
     assert {item["Key"] for item in deleted} == {
         f"nova-s3-artifacts-491/{client.test_id}/synthetic.txt"
     }
+    assert client.objects[(sibling_key, "unrelated-version")] == b"preserve this sibling key"
 
 
 def test_cleanup_rejects_wrong_test_tag_before_deleting() -> None:
