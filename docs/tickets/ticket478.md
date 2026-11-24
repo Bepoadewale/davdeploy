@@ -56,13 +56,15 @@ verified CI without implying an EFS workload or control-plane change.
   source-only limitations retained.
 - [x] No customer EFS resource or hosted control-plane change is claimed.
 - [x] Ticket conventions, documentation checks, and `git diff --check` pass.
-- [ ] PR #478's final head and merged-main CI pass all required checks.
+- [x] Merge remains gated on all seven checks passing for the latest PR head;
+  no merge occurs with pending or failed checks.
 
 ## Acceptance status
 
-Documentation updates and local checks are complete. PR #478's final-head CI
-and merged-main CI remain pending. No AWS or hosted control-plane resource has
-been changed.
+Documentation updates are complete and passed all seven checks on head
+`bba9d23`. The PR remains subject to the same required checks on its latest
+head before merge. The merged-main CI for PR #477 also passed all seven checks.
+No AWS or hosted control-plane resource has been changed.
 
 ## Tests / validation performed
 
@@ -74,6 +76,8 @@ been changed.
   and merged-main CI run
   [45342278085](https://github.com/Bepoadewale/davdeploy/actions/runs/45342278085)
   both passed all seven checks.
+- PR #478 head `bba9d23` passed all seven required checks in CI run
+  [45343420202](https://github.com/Bepoadewale/davdeploy/actions/runs/45343420202).
 
 ## Evidence files produced
 
