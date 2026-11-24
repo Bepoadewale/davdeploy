@@ -6,7 +6,7 @@ Execution type: Direct same-account AWS module test with local Terraform state.
 
 Customer repository: None.
 
-Commit: PR #491 evidence commit pending.
+Commit: `9599badbed8fff5516d17b597e400b971e9fcd53`.
 
 AWS account: `654654474502`.
 

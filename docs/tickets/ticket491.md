@@ -57,7 +57,7 @@ exact cleanup.
   remote-state, unrelated AWS, or customer data is touched.
 - [x] Ticket/test docs and matrix report exact evidence and limitations;
   focused tests, Terraform checks, docs conventions, and diff checks pass.
-- [ ] Final-head PR CI passes before merge.
+- [x] Final-head PR CI passes before merge.
 
 ## Acceptance status
 
@@ -67,7 +67,7 @@ five-create plan, verified settings, read two synthetic object versions, and
 removed exactly those versions. A reviewed five-delete destroy completed via
 the run monitor. Independent reads confirmed the bucket absent, local state
 retained, and zero active Terraform operations. No control-plane or remote
-state resource changed. Final evidence CI is pending.
+state resource changed. Final-head CI run `45497998644` passed all seven checks.
 
 ## Tests / validation performed
 
@@ -82,7 +82,8 @@ state resource changed. Final evidence CI is pending.
 - Independent account/resource/state checks passed; monitor has 59 records and
   zero active operations. The bucket and exact object key are absent; local
   state remains retained.
-- Final-head PR CI: pending after evidence update.
+- Final-head PR CI run `45497998644` on commit
+  `9599badbed8fff5516d17b597e400b971e9fcd53`: all seven checks passed.
 
 ## Evidence files produced
 
