@@ -54,7 +54,8 @@ customer lifecycle, cost, and application proof gaps explicit.
 ## Acceptance status
 
 Documentation implementation is complete and local docs and diff checks pass.
-Required PR CI must pass on the final head before merge. No AWS or hosted
+Implementation head `cc0a23a` passed all seven checks in CI run `45383615742`.
+This ticket update needs a fresh final-head run before merge. No AWS or hosted
 control-plane resource has been changed.
 
 ## Tests / validation performed
@@ -67,6 +68,8 @@ control-plane resource has been changed.
   and merged-main CI run
   [45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009)
   both passed all seven checks.
+- PR #482 implementation head `cc0a23a` passed all seven checks in CI run
+  [45383615742](https://github.com/Bepoadewale/davdeploy/actions/runs/45383615742).
 
 ## Evidence files produced
 
