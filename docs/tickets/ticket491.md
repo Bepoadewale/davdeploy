@@ -62,13 +62,16 @@ exact cleanup.
 ## Acceptance status
 
 Ticket-first draft opened before implementation. No AWS mutation has occurred
-for PR #491. The lifecycle harness and evidence will be incomplete until the
-reviewed AWS test and teardown finish.
+for PR #491. The exact-module fixture, bounded synthetic object-version helper,
+and six mocked regression tests are implemented and locally verified. The
+lifecycle evidence remains incomplete until the reviewed AWS test and teardown
+finish.
 
 ## Tests / validation performed
 
-- Ticket-first documentation conventions and diff check: pending.
-- Terraform fixture validation and helper regression tests: pending.
+- Ticket-first documentation conventions and `git diff --check`: passed.
+- Focused helper tests: 6 passed; Ruff: passed.
+- Terraform format and fixture validation: passed.
 - AWS create, object-version behavior, exact cleanup, destroy, and independent
   absence checks: pending.
 
