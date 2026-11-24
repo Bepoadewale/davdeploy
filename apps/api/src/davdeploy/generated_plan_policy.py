@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-24.3"
+POLICY_VERSION = "nova-generated-plan-2026-11-24.4"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -374,6 +374,7 @@ def _evaluate(
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
+    _check_autoscaling_groups(document, resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -1979,6 +1980,148 @@ def _check_instance_metadata(
                 "instance_metadata_v2_required",
                 address,
                 "Instances with metadata access must require Instance Metadata Service Version 2 tokens.",
+            )
+
+
+def _check_autoscaling_groups(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Allow only a small, predictable ASG backed by a same-plan launch template."""
+    templates = {
+        item.get("address"): item
+        for item in resources
+        if item.get("type") == "aws_launch_template"
+        and isinstance(item.get("address"), str)
+    }
+    configured = _configured_resources(document)
+    for group in resources:
+        if group.get("type") != "aws_autoscaling_group":
+            continue
+        address = group.get("address")
+        values = group.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "autoscaling_capacity_unknown",
+                address,
+                "Auto Scaling capacity must be known and within the supported limit.",
+            )
+            continue
+
+        minimum = values.get("min_size")
+        desired = values.get("desired_capacity")
+        maximum = values.get("max_size")
+        capacities = (minimum, desired, maximum)
+        if (
+            any(not isinstance(value, int) or isinstance(value, bool) for value in capacities)
+            or minimum < 0
+            or minimum > desired
+            or desired > maximum
+            or maximum > 3
+        ):
+            _deny(
+                findings,
+                "autoscaling_capacity_out_of_bounds",
+                address,
+                "Auto Scaling capacity must satisfy 0 <= minimum <= desired <= maximum <= 3.",
+            )
+
+        group_config = configured.get(address)
+        expressions = group_config.get("expressions") if isinstance(group_config, dict) else None
+        template_expression = (
+            expressions.get("launch_template") if isinstance(expressions, dict) else None
+        )
+        references = (
+            template_expression.get("references")
+            if isinstance(template_expression, dict)
+            else None
+        )
+        template_addresses = {
+            template_address
+            for reference in references or ()
+            if isinstance(reference, str)
+            for template_address in templates
+            if _reference_targets_resource(
+                reference, template_address, "aws_launch_template"
+            )
+        }
+        template_references = [
+            reference
+            for reference in references or ()
+            if isinstance(reference, str)
+            and any(
+                _reference_targets_resource(reference, template_address, "aws_launch_template")
+                for template_address in templates
+            )
+        ]
+        version_bound = any(
+            ".latest_version" in reference for reference in template_references
+        )
+        references_are_bound = bool(references) and len(template_references) == len(references)
+        launch_templates = values.get("launch_template")
+        template_config = (
+            launch_templates[0]
+            if isinstance(launch_templates, list)
+            and len(launch_templates) == 1
+            and isinstance(launch_templates[0], dict)
+            else None
+        )
+        template_version = template_config.get("version") if template_config else None
+        version_is_fixed = (
+            isinstance(template_version, int)
+            and not isinstance(template_version, bool)
+            and template_version > 0
+        ) or (isinstance(template_version, str) and template_version.isdigit())
+        if (
+            len(template_addresses) != 1
+            or not references_are_bound
+            or not version_bound
+            or not version_is_fixed
+        ):
+            _deny(
+                findings,
+                "autoscaling_launch_template_unverifiable",
+                address,
+                "Auto Scaling requires one same-plan launch template with a fixed version from that template.",
+            )
+            continue
+
+        if values.get("launch_configuration") not in (None, "") or values.get(
+            "mixed_instances_policy"
+        ) not in (None, [], {}):
+            _deny(
+                findings,
+                "autoscaling_profile_unsupported",
+                address,
+                "Launch configurations and mixed-instance Auto Scaling profiles are unsupported.",
+            )
+
+        template = templates[next(iter(template_addresses))]
+        template_values = template.get("values")
+        template_values = template_values if isinstance(template_values, dict) else {}
+        image_id = template_values.get("image_id")
+        if not isinstance(image_id, str) or not re.fullmatch(r"ami-[0-9a-fA-F]{8,17}", image_id):
+            _deny(
+                findings,
+                "autoscaling_ami_unknown",
+                template.get("address"),
+                "The Auto Scaling launch template must use a known AMI ID.",
+            )
+        if template_values.get("instance_type") != "t3.micro":
+            _deny(
+                findings,
+                "autoscaling_instance_type_unsupported",
+                template.get("address"),
+                "The supported Auto Scaling profile uses t3.micro instances.",
+            )
+        if template_values.get("instance_market_options") not in (None, [], {}):
+            _deny(
+                findings,
+                "autoscaling_profile_unsupported",
+                template.get("address"),
+                "Spot market options are unsupported by the bounded Auto Scaling profile.",
             )
 
 

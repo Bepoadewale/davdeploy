@@ -44,28 +44,38 @@ whose version is explicitly referenced through `latest_version`.
 
 ## Acceptance criteria
 
-- [ ] Policy accepts a known bounded ASG and its same-plan launch-template
+- [x] Policy accepts a known bounded ASG and its same-plan launch-template
   reference to `latest_version`.
-- [ ] Policy denies unknown or out-of-range capacity, an external/missing or
+- [x] Policy denies unknown or out-of-range capacity, an external/missing or
   multiple launch templates, dynamic `$Latest`/`$Default`, and unsupported
   mixed-instance or launch-configuration profiles.
-- [ ] The launch template must use `t3.micro`, a known AMI ID, and IMDSv2.
-- [ ] Tests cover the accepted shape, unsafe capacities, unknown values,
+- [x] The launch template must use `t3.micro`, a known AMI ID, and IMDSv2.
+- [x] Tests cover the accepted shape, unsafe capacities, unknown values,
   external references, dynamic template versions, and finding redaction.
-- [ ] The matrix retains AMI provenance, volume encryption, ongoing instance
+- [x] The matrix retains AMI provenance, volume encryption, ongoing instance
   hours, workload health, update/recovery, teardown, and Nova execution gaps.
-- [ ] No AWS, remote Terraform state, or hosted control-plane resource changes.
+- [x] No AWS, remote Terraform state, or hosted control-plane resource changes.
 - [ ] Local verification, docs conventions, `git diff --check`, and all seven
   CI checks pass before merge.
 
 ## Acceptance status
 
-Ticket-first bootstrap is present. Implementation and validation are pending.
-No AWS or hosted control-plane resource has been changed.
+Implementation and local policy validation are complete. The final PR head
+still needs seven passing CI checks before this draft can be considered for
+review. No AWS, Terraform state, or hosted control-plane resource has changed.
 
 ## Tests / validation performed
 
-Pending implementation.
+- `PYTHONPATH=apps/api/src .venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py -k autoscaling` — 20 passed.
+- `PYTHONPATH=apps/api/src .venv-pr399/bin/python -m pytest -q tests/test_generated_plan_policy.py` — 501 passed.
+- `make verify` — passed: 1,730 tests, Actions configuration, Ruff, OpenAPI, and Docker Compose checks; one existing Starlette/httpx deprecation warning.
+- `.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
+- `terraform fmt -check infrastructure/terraform/modules/ec2-autoscaling/main.tf` — passed.
+- Offline `terraform init -backend=false -input=false -lockfile=readonly` could not install AWS provider v5.100.0 because the provider registry connection failed; `terraform validate` then passed using the existing local provider cache.
+- `GITHUB_PR_NUMBER=483 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Initial ticket-only PR CI run 45389007983 — all seven checks passed. CI for the implementation head remains pending.
+- The full local clean-room demo cycle was not run because its `clean-local` target deletes `.venv` and `.local`, and the current session's deletion boundary protects local files. The final PR's fresh-runner CI remains required.
 
 ## Evidence files produced
 
