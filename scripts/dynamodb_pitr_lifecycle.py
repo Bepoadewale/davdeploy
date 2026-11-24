@@ -40,6 +40,16 @@ def continuous_backup_description(dynamodb: Any, table_name: str) -> dict[str, A
     return response["ContinuousBackupsDescription"]["PointInTimeRecoveryDescription"]
 
 
+def require_item_payload(dynamodb: Any, table_name: str, key: str, expected: str) -> None:
+    item = dynamodb.get_item(
+        TableName=table_name,
+        Key={"pk": {"S": key}},
+        ConsistentRead=True,
+    ).get("Item")
+    if item is None or item.get("payload", {}).get("S") != expected:
+        raise AssertionError(f"DynamoDB item read did not return expected value for {key}.")
+
+
 def wait_for_restore_point(
     dynamodb: Any,
     table_name: str,
@@ -140,6 +150,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         TableName=args.source_table,
         Item={"pk": {"S": baseline_key}, "payload": {"S": "baseline"}},
     )
+    require_item_payload(dynamodb, args.source_table, baseline_key, "baseline")
 
     restore_at, recovery = wait_for_restore_point(
         dynamodb,
@@ -153,6 +164,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         TableName=args.source_table,
         Item={"pk": {"S": later_key}, "payload": {"S": "after-restore-point"}},
     )
+    require_item_payload(dynamodb, args.source_table, later_key, "after-restore-point")
 
     restore_started_at = datetime.now(UTC)
     dynamodb.restore_table_to_point_in_time(

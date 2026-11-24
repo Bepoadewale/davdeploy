@@ -47,23 +47,22 @@ control plane.
 
 ## Acceptance criteria
 
-- [ ] A fresh isolated local-state root uses the exact bounded DynamoDB
+- [x] A fresh isolated local-state root uses the exact bounded DynamoDB
   module and only tagged resources in the verified test account/region.
-- [ ] The live source table's billing, encryption, PITR, and deletion
+- [x] The live source table's billing, encryption, PITR, and deletion
   protection settings are independently observed.
-- [ ] PITR restoration to a captured valid timestamp recovers a baseline item
+- [x] PITR restoration to a captured valid timestamp recovers a baseline item
   and omits a later synthetic write; restored table reaches `ACTIVE`.
-- [ ] The restored table is deleted, source deletion protection is disabled
-  on the exact disposable table only after the restore assertions pass, and
-  monitored teardown removes the source.
-- [ ] Independent AWS checks find no test tables; local Terraform state is
-  empty and retained.
-- [ ] Ticket, test evidence, and capability matrix distinguish direct
+- [x] The restored table is deleted, and source deletion protection was
+  disabled on the exact disposable table only after restore assertions passed.
+- [x] Monitored teardown removes the source. Independent AWS checks find no
+  test tables; local Terraform state is empty and retained.
+- [x] Ticket, test evidence, and capability matrix distinguish direct
   customer-side data/recovery evidence from Nova dispatch or hosted execution.
 - [ ] Required focused/full verification, Terraform format/validate,
   documentation checks, diff check, and all required CI checks pass before
   merge.
-- [ ] No hosted control-plane resource, Terraform remote state, or customer
+- [x] No hosted control-plane resource, Terraform remote state, or customer
   workload changes.
 
 ## Acceptance status
@@ -72,19 +71,30 @@ The fixture and recovery harness are implemented. The reviewed create plan
 contained exactly one tagged table. Monitored apply
 `nova-dynamodb-pitr-487-create-20261124` succeeded (Terraform PID `9433`).
 AWS independently observed the table `ACTIVE`, on-demand, encrypted,
-deletion-protected, and PITR-enabled. A first restore reached `ACTIVE`; direct
-reads confirmed the baseline item and absence of the later marker. The first
-cleanup hit AWS `ResourceInUseException` while tags were updating. The
-harness now retries that case, and unit coverage passes. A full retry with a
-new marker set is in progress. This remains direct same-account service
-evidence; it does not claim Nova dispatch or hosted execution.
+deletion-protected, and PITR-enabled. The restore reached `ACTIVE`; reads on
+the restored table confirmed the baseline item and absence of the later
+marker. The first cleanup hit AWS `ResourceInUseException` while tags were
+updating. The harness now retries that case, and unit coverage passes. A full
+retry with fresh synthetic keys succeeded; the captured restore point was
+`2026-11-24T19:44:42Z`, the restored table became `ACTIVE`, and cleanup
+verified it absent. Source deletion protection was disabled only after
+recovery checks passed. The reviewed source destroy plan had one deletion and
+no additions or changes. Monitored destroy
+`nova-dynamodb-pitr-487-destroy-20261124` succeeded (Terraform PID `19380`).
+Independent AWS inventory found no matching tables; local Terraform state
+lists no resources and is retained; the run monitor has no active operations.
+The evidence is direct same-account service testing of source writes and PITR
+restored-table reads; it does not claim source read assertions were run live,
+Nova dispatch, or hosted execution.
 
 ## Tests / validation performed
 
 The bootstrap documentation commit opened the draft PR before substantive
-implementation. Six harness unit tests pass. `make verify` passes 1,737 tests;
-Ruff, Terraform formatting and validation, documentation checks, and diff
-checks pass. The live AWS lifecycle is in progress.
+implementation. Seven harness unit tests pass. `make verify` passes 1,738
+tests; Ruff, Terraform formatting and validation, documentation checks, and
+diff checks pass. CI run `45473745224` passed all seven checks on head
+`202ec72`; the latest harness and evidence edits require fresh CI. The live
+AWS create, recovery, and teardown lifecycle completed successfully.
 
 ## Evidence files produced
 

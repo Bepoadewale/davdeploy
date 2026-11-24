@@ -36,6 +36,8 @@ class FakeDynamoDB:
         self.updated_table = None
         self.deleted = None
         self.delete_failures = 0
+        self.items = {}
+        self.read_requests = []
 
     def describe_table(self, *, TableName):
         if self.table is None:
@@ -49,6 +51,11 @@ class FakeDynamoDB:
         else:
             response = self.recovery
         return {"ContinuousBackupsDescription": {"PointInTimeRecoveryDescription": response}}
+
+    def get_item(self, *, TableName, Key, ConsistentRead):
+        self.read_requests.append((TableName, Key, ConsistentRead))
+        item = self.items.get(Key["pk"]["S"])
+        return {"Item": {"payload": {"S": item}}} if item is not None else {}
 
     def tag_resource(self, *, ResourceArn, Tags):
         self.tags = (ResourceArn, Tags)
@@ -101,6 +108,17 @@ def test_verify_source_table_checks_data_safety_settings():
     assert result["encryption"] == "ENABLED"
     assert result["deletion_protection"] is True
     assert result["pitr_status"] == "ENABLED"
+
+
+def test_require_item_payload_uses_consistent_read():
+    fake = FakeDynamoDB()
+    fake.items["test-key"] = "synthetic-value"
+
+    lifecycle.require_item_payload(fake, "test-table", "test-key", "synthetic-value")
+
+    assert fake.read_requests == [
+        ("test-table", {"pk": {"S": "test-key"}}, True)
+    ]
 
 
 def test_verify_source_table_fails_closed_when_deletion_protection_is_off():
