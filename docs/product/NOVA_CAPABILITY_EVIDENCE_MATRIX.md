@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475), 2026-11-24. PR #413
+`3cb7c373bd0a03e3c522475908a3c792a205af49` (PR #476), 2026-11-24. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -18,6 +18,11 @@ restore, complete-cost, or Nova-dispatch evidence.
 PR #475 merged with seven checks passing in CI run
 [45288480162](https://github.com/Bepoadewale/davdeploy/actions/runs/45288480162).
 It adds bounded source-only Kinesis policy checks; no AWS stream was created.
+
+PR #476 reconciles the status, backlog, and evidence snapshot through PR #475;
+its final seven checks passed in CI run
+[45290021353](https://github.com/Bepoadewale/davdeploy/actions/runs/45290021353).
+No workload or cloud resource was created.
 
 PR #399 adds the exact-plan Nova apply path and customer role template in
 source; its apply and credential gates remain disabled. PR #437's isolated
@@ -333,7 +338,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-dynamodb-table` | `modules/dynamodb-table` | `aws-nosql-data` / `saas-backend` | PR #473 requires known table/partition-key identity, `PAY_PER_REQUEST`, server-side encryption, deletion protection, and enabled PITR with a bounded recovery period. This source-only policy does not cover indexes, streams, replicas, consumer permissions, or all usage costs. | [`test244.md`](../test/test244.md): SSE and point-in-time recovery; no app read/write or restore |
 | `aws-elasticache-redis` | `modules/elasticache-redis` | No cache module in catalogue / no scenario | No Redis-specific encryption, auth, network, or failover rule | [`test244.md`](../test/test244.md): replication group available; no client operation |
 | `aws-opensearch` | `modules/opensearch` | `aws-search`, `aws-ai-retrieval` / `ai-rag` | PR #466 bounds plans to the module's one-node `t3.small.search`, 10 GiB gp3, VPC-mode, encrypted-at-rest/node-to-node, HTTPS/TLS 1.2 shape. It does not verify the subnet/SG attachment chain, access policy, index permissions, or current price. | [`test244.md`](../test/test244.md) domain ready; [`test262.md`](../test/test262.md) uses OpenSearch Serverless for KB retrieval; neither verifies this module's complete lifecycle |
-| `aws-efs-shared-storage` | `modules/efs-shared-storage` | No explicit EFS catalogue module; possible `aws-file-storage` overlap / no exact scenario mapping | Shared network/IAM checks only; no EFS mount/access-point policy | [`test244.md`](../test/test244.md): EFS available; no file read/write |
+| `aws-efs-shared-storage` | `modules/efs-shared-storage` | No explicit EFS catalogue module; possible `aws-file-storage` overlap / no exact scenario mapping | PR #477 adds source-only checks for encryption, General Purpose performance, Bursting throughput, and exact TCP/2049 ingress from a security group. It does not prove mount-target binding, access-point identity, file permissions, lifecycle, or full costs. | [`test244.md`](../test/test244.md): EFS available; no file read/write |
 | `aws-sqs-queue` | `modules/sqs-queue` | `aws-jobs-events`, `aws-payments-webhooks` / `saas-backend`, `async-data` | PR #441 requires known `sqs_managed_sse_enabled=true`; queue policies reject public/unverified principals and unbounded resource scope. Merged PRs #445/#446 add plan safety and correct dependency ordering. PR #447 adds a Lambda retry/DLQ cycle. PR #448 adds idempotent processing, code update, managed redrive, recovery, and cleanup. Merged PR #450 binds exact SNS subscription/queue-policy scope; merged PRs #451/#452 bind EventBridge target grants, bounded retries, and exact standard DLQ policy. KMS-backed encryption, managed-policy contents, other producers and non-Lambda consumers remain open. | [`test257.md`](../test/test257.md): EventBridge delivery; [`test446.md`](../test/test446.md): delivery, retries, DLQ transition, teardown; [`test447.md`](../test/test447.md): Lambda retries and paired DLQ; [`test448.md`](../test/test448.md): duplicate suppression, update, redrive, recovery, teardown; [`test449.md`](../test/test449.md): SNS delivery and teardown; [`test452.md`](../test/test452.md): EventBridge failure, DLQ, repair, recovery, teardown. None proves Nova dispatch. |
 | `aws-eventbridge-bus` | `modules/eventbridge-bus` | `aws-jobs-events` / `saas-backend`, `async-data` | Merged PR #451 binds exact planned bus/rule, SQS target, attached queue policy URL, EventBridge principal, `sqs:SendMessage`, queue ARN, and rule source ARN. Merged PR #452 adds known bounded retry policy and a distinct planned standard SQS DLQ with exact rule-scoped grant. EventBridge target roles and unknown/cross-account target shapes are unsupported. | [`test257.md`](../test/test257.md): same-account EventBridge-to-SQS delivery; [`test452.md`](../test/test452.md): failure-to-DLQ, repair, recovery, and teardown | No Nova-dispatched event, target-role policy, broader target families, or hosted recovery proof |
 | `aws-step-functions` | `modules/step-functions` | `aws-jobs-events` / `saas-backend`, `async-data` | Merged PR #456 requires Standard workflows, exact `states.amazonaws.com` trust scoped to the state machine ARN/account, and inline `lambda:InvokeFunction` grants limited to same-plan Lambda task ARNs. Other integrations, logging, Map/Parallel, and managed policies fail closed. | [`test256.md`](../test/test256.md): execution completed; merged PR #454's [`test454.md`](../test/test454.md): Lambda task failure, Catch recovery, normal success, and exact cleanup |

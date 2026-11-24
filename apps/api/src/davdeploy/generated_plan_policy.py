@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-23.4"
+POLICY_VERSION = "nova-generated-plan-2026-11-24.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -189,6 +189,32 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("kms_key_id",),
         ("stream_mode_details", "stream_mode"),
     ),
+    "aws_efs_file_system": (
+        ("encrypted",),
+        ("performance_mode",),
+        ("throughput_mode",),
+    ),
+    "aws_security_group": (("ingress",),),
+    "aws_security_group_rule": (
+        ("type",),
+        ("protocol",),
+        ("from_port",),
+        ("to_port",),
+        ("cidr_blocks",),
+        ("ipv6_cidr_blocks",),
+        ("prefix_list_ids",),
+        ("source_security_group_id",),
+        ("self",),
+    ),
+    "aws_vpc_security_group_ingress_rule": (
+        ("ip_protocol",),
+        ("from_port",),
+        ("to_port",),
+        ("cidr_ipv4",),
+        ("cidr_ipv6",),
+        ("prefix_list_id",),
+        ("referenced_security_group_id",),
+    ),
     "aws_cloudfront_distribution": (
         ("default_cache_behavior", "viewer_protocol_policy"),
         ("ordered_cache_behavior", "viewer_protocol_policy"),
@@ -324,6 +350,8 @@ def _evaluate(
     _check_dynamodb_table_safety(resources, findings)
     _check_dynamodb_recovery(resources, findings)
     _check_kinesis_streams(resources, findings)
+    _check_efs_file_systems(resources, findings)
+    _check_efs_nfs_ingress(resources, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
@@ -2231,6 +2259,153 @@ def _check_kinesis_streams(
                 address,
                 "Generated Kinesis streams must use provisioned capacity mode.",
             )
+
+
+def _check_efs_file_systems(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    """Require encryption and the module's bounded EFS performance profile."""
+    for item in resources:
+        if item.get("type") != "aws_efs_file_system":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "efs_settings_invalid",
+                address,
+                "DavDeploy could not verify the required EFS file-system settings.",
+            )
+            continue
+
+        if values.get("encrypted") is not True:
+            _deny(
+                findings,
+                "efs_encryption_required",
+                address,
+                "Generated EFS file systems must encrypt data at rest.",
+            )
+        if values.get("performance_mode") != "generalPurpose":
+            _deny(
+                findings,
+                "efs_performance_mode_unsupported",
+                address,
+                "Generated EFS file systems must use the reviewed General Purpose mode.",
+            )
+        if values.get("throughput_mode") != "bursting":
+            _deny(
+                findings,
+                "efs_throughput_mode_unsupported",
+                address,
+                "Generated EFS file systems must use the reviewed Bursting throughput mode.",
+            )
+
+
+def _check_efs_nfs_ingress(
+    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+) -> None:
+    """Require any planned NFS ingress to be TCP/2049 from a security group."""
+    for item in resources:
+        kind = item.get("type")
+        if kind not in {
+            "aws_security_group",
+            "aws_security_group_rule",
+            "aws_vpc_security_group_ingress_rule",
+        }:
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            continue
+
+        if kind == "aws_security_group":
+            rules = values.get("ingress", [])
+            legacy = True
+        elif kind == "aws_security_group_rule":
+            if values.get("type") != "ingress":
+                continue
+            rules = [values]
+            legacy = True
+        else:
+            rules = [values]
+            legacy = False
+        if not isinstance(rules, list):
+            _deny(
+                findings,
+                "efs_nfs_ingress_unknown",
+                address,
+                "The plan does not make NFS inbound access clear.",
+            )
+            continue
+
+        for rule in rules:
+            if not isinstance(rule, dict):
+                _deny(
+                    findings,
+                    "efs_nfs_ingress_unknown",
+                    address,
+                    "The plan does not make NFS inbound access clear.",
+                )
+                continue
+            protocol = rule.get("protocol" if legacy else "ip_protocol")
+            from_port = _integer(rule.get("from_port"))
+            to_port = _integer(rule.get("to_port"))
+            if protocol == "-1":
+                is_nfs = True
+            elif protocol == "tcp" and from_port is not None and to_port is not None:
+                is_nfs = from_port <= 2049 <= to_port
+            elif protocol is None or from_port is None or to_port is None:
+                _deny(
+                    findings,
+                    "efs_nfs_ingress_unknown",
+                    address,
+                    "The plan does not make NFS inbound access clear.",
+                )
+                continue
+            else:
+                is_nfs = False
+            if not is_nfs:
+                continue
+
+            source_fields = (
+                ("source_security_group_id", "security_groups")
+                if legacy
+                else ("referenced_security_group_id",)
+            )
+            group_source = any(
+                isinstance(rule.get(key), str)
+                and bool(rule[key].strip())
+                or isinstance(rule.get(key), list)
+                and bool(rule[key])
+                and all(isinstance(value, str) and value.strip() for value in rule[key])
+                for key in source_fields
+            )
+            has_ip_source = any(
+                rule.get(key) not in (None, "", [])
+                for key in (
+                    "cidr_ipv4",
+                    "cidr_ipv6",
+                    "cidr_blocks",
+                    "ipv6_cidr_blocks",
+                    "prefix_list_id",
+                    "prefix_list_ids",
+                )
+            )
+            if (
+                protocol != "tcp"
+                or from_port != 2049
+                or to_port != 2049
+                or not group_source
+                or has_ip_source
+                or rule.get("self") is True
+            ):
+                _deny(
+                    findings,
+                    "efs_nfs_ingress_unsupported",
+                    address,
+                    "NFS access must use exactly TCP port 2049 from a security group.",
+                )
 
 
 def _references_resource(references: tuple[str, ...], resource_address: Any) -> bool:
@@ -4837,7 +5012,7 @@ def _source_is_unknown(rule: dict[str, Any]) -> bool:
     for key in present:
         value = rule[key]
         if value is None:
-            return True
+            continue
         if key == "self":
             if value is not True and value is not False:
                 return True
