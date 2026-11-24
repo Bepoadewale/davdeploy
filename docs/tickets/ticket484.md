@@ -59,22 +59,22 @@ execution claims distinct.
   hosted control plane remains PR #420.
 - [x] Current read-only AWS and Terraform monitor findings are recorded
   without changing or deleting resources.
-- [ ] No AWS, Terraform state, lineage evidence, or hosted control-plane
+- [x] No AWS, Terraform state, lineage evidence, or hosted control-plane
   resource changes.
-- [ ] Documentation conventions, `git diff --check`, and all seven PR CI
+- [x] Documentation conventions, `git diff --check`, and all seven PR CI
   checks pass on the final head before merge.
 
 ## Acceptance status
 
 Documentation is reconciled through PR #483. Local documentation conventions
-and diff checks passed; final-head CI remains required. No AWS or hosted
-resource has been changed.
+and diff checks passed. Final-head CI run 45429533758 passed all seven checks
+on `d04a71d`. No AWS or hosted resource has been changed.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=484 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final PR CI — pending.
+- Final-head PR CI run 45429533758 — all seven checks passed on `d04a71d`.
 - PR #483 final-head CI run 45425670662 and merged-main CI run 45426759569 passed all seven checks.
 - Read-only AWS/monitor reconciliation: account `654654474502`; no matching SageMaker test endpoint/model/configuration/role/artifact bucket; one lineage action and context remain; five DavDeploy-named Batch definitions are inactive; no DavDeploy-named Batch queue/compute environment was listed; monitor has 41 records and zero active operations.
 - No AWS resource, remote Terraform state, lineage evidence, or hosted control-plane resource was changed or deleted.
