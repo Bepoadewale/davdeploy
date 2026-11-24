@@ -1,6 +1,6 @@
 # ticket486
 
-PR: [#486 — feat: require encrypted Auto Scaling root volumes](https://github.com/Bepoadewale/davdeploy/pull/486) (draft)
+PR: [#486 — feat: require encrypted Auto Scaling root volumes](https://github.com/Bepoadewale/davdeploy/pull/486)
 Branch: `feat/autoscaling-ebs-bounds-486`
 
 ## Problem / goal
@@ -42,24 +42,29 @@ the hosted control plane.
    ASG/EC2 health and the attached volume's encryption/termination settings,
    then destroy and independently verify cleanup.
 5. Reconcile resource-family and goal status without claiming Nova dispatch.
+6. Bind the launch template's AMI ID and device mapping to the same planned
+   `aws_ami` root-device metadata; fail closed if the source or metadata is
+   missing or unknown.
 
 ## Acceptance criteria
 
-- [x] Module plans explicitly select encrypted gp3 8 GiB root storage and
-  delete-on-termination.
-- [x] Generated-plan policy accepts the exact shape and denies missing,
+- [ ] Module plans explicitly select the selected AMI's actual root device,
+  encrypted gp3 8 GiB root storage, and delete-on-termination.
+- [ ] Generated-plan policy binds the image and root mapping to one known
+  `aws_ami` metadata source and denies mismatched or unknown root devices.
+- [ ] Generated-plan policy accepts the exact shape and denies missing,
   unknown, unencrypted, oversized, wrong-device/type, or retained mappings.
-- [x] Regression tests cover the accepted and rejected shapes with redacted
+- [ ] Regression tests cover the accepted and rejected shapes with redacted
   findings.
-- [x] A fresh isolated AWS test verifies the running instance's EBS volume is
+- [ ] A fresh isolated AWS test verifies the running instance's EBS volume is
   encrypted, the ASG is healthy, and termination removes the volume.
-- [x] The test is destroyed through the Terraform run monitor; the ASG,
+- [ ] The test is destroyed through the Terraform run monitor; the ASG,
   launch template, and network are independently absent and instance records
   are terminated.
-- [x] Evidence keeps AMI provenance, instance-role scope, guest health,
+- [ ] Evidence keeps AMI provenance, instance-role scope, guest health,
   update/recovery, full pricing, remote Nova state, and Nova dispatch as
   separate open gates.
-- [x] Docs conventions, focused/full verification, Terraform formatting and
+- [ ] Docs conventions, focused/full verification, Terraform formatting and
   validation, `git diff --check`, and all required CI checks pass before merge.
 - [x] No hosted control-plane resource or state changes; protected local files
   and lineage evidence remain untouched.
@@ -74,15 +79,21 @@ protected local files. Retain local state artifacts after teardown.
 
 ## Acceptance status
 
-Implementation, regression tests, and isolated AWS lifecycle evidence pass.
-All test resources are removed and local state is retained. PR run
-`45457478616` passed all seven checks on head `24f44e3`. No hosted
-control-plane resource or state was touched.
+Automated review found that a hard-coded `/dev/xvda` does not prove it is the
+selected AMI's root device, and required the clean-room gate for Terraform
+behavior. The implementation now queries `aws_ami` metadata and binds the
+image ID and root mapping to that source. Focused tests are being rerun;
+cycle-two AWS evidence and clean-room validation are pending. The previous
+head's PR run `45458519266` passed all seven checks; changes after that head
+require fresh CI. No hosted control-plane resource or state was touched.
 
 ## Tests / validation performed
 
-- `make verify`: passed (1,747 tests; one existing Starlette/httpx
-  deprecation warning; OpenAPI snapshot and Compose configuration passed).
+- `.venv-pr399/bin/python -m pytest tests/test_generated_plan_policy.py -q
+  -k autoscaling`: 41 passed after the AMI-root binding change.
+- `make verify`: passed (1,751 tests after the AMI-root binding change; one
+  existing Starlette/httpx deprecation warning; OpenAPI snapshot and Compose
+  configuration passed).
 - `.venv-pr399/bin/python -m pytest tests/test_generated_plan_policy.py -q
   -k autoscaling`: 37 passed.
 - `.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py
@@ -104,6 +115,10 @@ control-plane resource or state was touched.
   volume absent. The instance is terminated, Terraform state lists zero
   resources, and the Terraform run monitor has zero active operations.
 - PR checks run `45457478616`: all seven checks passed on head `24f44e3`.
+- AWS `aws_ami` data lookup for this test returned AMI
+  `ami-0aacbf72109c53c0c`, root device `/dev/xvda`; the refreshed plan contains
+  that metadata in `prior_state` and references it from the image and device
+  mapping expressions.
 
 ## Evidence files produced
 

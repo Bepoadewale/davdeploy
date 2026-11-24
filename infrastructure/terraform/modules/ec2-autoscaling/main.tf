@@ -34,13 +34,20 @@ variable "max_size" {
 }
 variable "tags" { type = map(string) }
 
+data "aws_ami" "this" {
+  filter {
+    name   = "image-id"
+    values = [var.ami_id]
+  }
+}
+
 resource "aws_launch_template" "this" {
   name_prefix            = "${var.name}-"
-  image_id               = var.ami_id
+  image_id               = data.aws_ami.this.id
   instance_type          = var.instance_type
   vpc_security_group_ids = var.security_group_ids
   block_device_mappings {
-    device_name = "/dev/xvda"
+    device_name = data.aws_ami.this.root_device_name
     ebs {
       delete_on_termination = true
       encrypted             = true
