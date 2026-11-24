@@ -481,6 +481,7 @@ def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_un
         "prefix_list_id": None,
     }
     nfs_values.update(ingress_values or {})
+    security_group_address = "aws_security_group.efs"
     document = plan()
     document["planned_values"]["root_module"]["resources"] = [
         item
@@ -491,16 +492,29 @@ def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_un
         item for item in document["resource_changes"] if item["type"] == "terraform_data"
     ]
     file_system_address = "aws_efs_file_system.shared"
+    mount_target_address = "aws_efs_mount_target.target"
     nfs_address = "aws_vpc_security_group_ingress_rule.nfs"
     document["planned_values"]["root_module"]["resources"].extend(
         [
             resource(file_system_address, "aws_efs_file_system", file_system_values),
+            resource(security_group_address, "aws_security_group", {"ingress": []}),
+            resource(
+                mount_target_address,
+                "aws_efs_mount_target",
+                {
+                    "file_system_id": "fs-efs",
+                    "subnet_id": "subnet-efs",
+                    "security_groups": ["sg-efs"],
+                },
+            ),
             resource(nfs_address, "aws_vpc_security_group_ingress_rule", nfs_values),
         ]
     )
     document["resource_changes"].extend(
         [
             change(file_system_address, "aws_efs_file_system", after_unknown=after_unknown or {}),
+            change(security_group_address, "aws_security_group"),
+            change(mount_target_address, "aws_efs_mount_target"),
             change(
                 nfs_address,
                 "aws_vpc_security_group_ingress_rule",
@@ -508,6 +522,32 @@ def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_un
             ),
         ]
     )
+    document["configuration"] = {
+        "provider_config": {"aws": {"expressions": {"region": {"constant_value": REGION}}}},
+        "root_module": {
+            "resources": [
+                {
+                    "address": mount_target_address,
+                    "expressions": {
+                        "file_system_id": {
+                            "references": [f"{file_system_address}.id"]
+                        },
+                        "security_groups": {
+                            "references": [f"{security_group_address}.id"]
+                        },
+                    },
+                },
+                {
+                    "address": nfs_address,
+                    "expressions": {
+                        "security_group_id": {
+                            "references": [f"{security_group_address}.id"]
+                        }
+                    },
+                },
+            ]
+        },
+    }
     proposal_value = proposal(
         [
             {
@@ -516,6 +556,20 @@ def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_un
                 "name": "shared",
                 "arguments": {},
                 "rationale": "Store shared application files encrypted at rest.",
+            },
+            {
+                "resource_id": "efs-security-group",
+                "resource_type": "aws_security_group",
+                "name": "efs",
+                "arguments": {},
+                "rationale": "Attach private NFS ingress to the EFS mount target.",
+            },
+            {
+                "resource_id": "mount-target",
+                "resource_type": "aws_efs_mount_target",
+                "name": "target",
+                "arguments": {},
+                "rationale": "Provide private network access to the EFS file system.",
             },
             {
                 "resource_id": "nfs",
@@ -5800,6 +5854,106 @@ def test_efs_safe_module_shape_and_security_group_nfs_ingress_pass():
 
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert not any(code.startswith("efs_") for code in codes(result))
+
+
+def test_efs_nfs_ingress_must_target_the_mount_target_security_group():
+    document, proposal_value = efs_case()
+    nfs = next(
+        item
+        for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_vpc_security_group_ingress_rule.nfs"
+    )
+    nfs["expressions"]["security_group_id"]["references"] = [
+        "aws_security_group.unattached.id"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_nfs_ingress_target_binding_invalid" in codes(result)
+
+
+def test_efs_mount_target_requires_a_same_plan_security_group_reference():
+    document, proposal_value = efs_case()
+    mount_target = document["configuration"]["root_module"]["resources"][0]
+    mount_target["expressions"]["security_groups"]["references"] = [
+        "aws_security_group.unattached.id"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_mount_target_security_group_binding_invalid" in codes(result)
+
+
+def test_efs_file_system_requires_a_same_plan_mount_target():
+    document, proposal_value = efs_case()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] != "aws_efs_mount_target"
+    ]
+    document["resource_changes"] = [
+        item
+        for item in document["resource_changes"]
+        if item["type"] != "aws_efs_mount_target"
+    ]
+    proposal_value = proposal(
+        [
+            item.model_dump(mode="json", exclude_none=True)
+            for item in proposal_value.resources
+            if item.resource_type != "aws_efs_mount_target"
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_mount_target_missing" in codes(result)
+
+
+def test_efs_mount_target_security_group_requires_same_plan_nfs_ingress():
+    document, proposal_value = efs_case()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] != "aws_vpc_security_group_ingress_rule"
+    ]
+    document["resource_changes"] = [
+        item
+        for item in document["resource_changes"]
+        if item["type"] != "aws_vpc_security_group_ingress_rule"
+    ]
+    document["configuration"]["root_module"]["resources"] = [
+        item
+        for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] != "aws_vpc_security_group_ingress_rule.nfs"
+    ]
+    proposal_value = proposal(
+        [
+            item.model_dump(mode="json", exclude_none=True)
+            for item in proposal_value.resources
+            if item.resource_type != "aws_vpc_security_group_ingress_rule"
+        ]
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_nfs_ingress_missing" in codes(result)
+
+
+def test_efs_mount_target_must_reference_exactly_one_same_plan_file_system():
+    document, proposal_value = efs_case()
+    mount_target = document["configuration"]["root_module"]["resources"][0]
+    mount_target["expressions"]["file_system_id"]["references"] = [
+        "aws_efs_file_system.other.id"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "efs_mount_target_file_system_binding_invalid" in codes(result)
 
 
 @pytest.mark.parametrize(

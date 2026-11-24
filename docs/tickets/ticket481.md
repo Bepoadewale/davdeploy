@@ -46,28 +46,39 @@ ingress target to use one of those mount-target groups.
 
 ## Acceptance criteria
 
-- [ ] Policy accepts a same-plan EFS file system, mount target, mount-target
+- [x] Policy accepts a same-plan EFS file system, mount target, mount-target
   security group, and exact NFS ingress target/source relationship.
-- [ ] Policy denies an ingress rule aimed at a different security group and
+- [x] Policy denies an ingress rule aimed at a different security group and
   mount targets with missing, unknown, or non-same-plan security-group binding.
-- [ ] Existing exact TCP/2049, security-group source, and EFS encryption/mode
+- [x] Existing exact TCP/2049, security-group source, and EFS encryption/mode
   requirements remain enforced.
-- [ ] Findings do not expose plan values and tests cover accepted and rejected
+- [x] Findings do not expose plan values and tests cover accepted and rejected
   bindings.
-- [ ] Evidence matrix states that source policy still does not prove mounted
+- [x] Evidence matrix states that source policy still does not prove mounted
   file read/write, tenant authorization, lifecycle, pricing, or Nova dispatch.
-- [ ] No AWS or hosted control-plane resource is changed.
-- [ ] Local verification, ticket conventions, diff checks, and all seven CI
-  checks pass before merge.
+- [x] No AWS or hosted control-plane resource is changed.
+- [x] Local verification, ticket conventions, and diff checks pass.
+- [ ] All seven CI checks pass on the final PR head before merge.
 
 ## Acceptance status
 
-Ticket-first bootstrap is present. Implementation and verification are pending.
-No AWS or hosted control-plane resource has been changed.
+Implementation and local verification are complete. Required CI must pass on
+the final PR head before merge. No AWS or hosted control-plane resource has
+been changed.
 
 ## Tests / validation performed
 
-Pending implementation.
+- `.venv/bin/python -m pytest tests/test_generated_plan_policy.py -k 'efs_' -q`
+  — 21 passed after the final policy-version update.
+- `.venv/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py`
+  — passed after the final policy-version update.
+- `make verify` — passed: 1,710 tests, Actions configuration, Ruff, OpenAPI,
+  and Docker Compose checks; one existing Starlette/httpx deprecation warning.
+- `GITHUB_PR_NUMBER=481 .venv-pr399/bin/python scripts/check_doc_conventions.py`
+  — passed.
+- `terraform fmt -check -recursive infrastructure/terraform/modules/efs-shared-storage`
+  — passed.
+- `git diff --check` — passed.
 
 ## Evidence files produced
 
