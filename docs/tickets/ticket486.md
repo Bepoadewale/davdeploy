@@ -1,0 +1,98 @@
+# ticket486
+
+PR: [#486 — feat: require encrypted Auto Scaling root volumes](https://github.com/Bepoadewale/davdeploy/pull/486) (draft)
+Branch: `feat/autoscaling-ebs-bounds-486`
+
+## Problem / goal
+
+PR #483 bounds the Auto Scaling profile and requires IMDSv2, but its launch
+template leaves the root EBS volume settings implicit. Explicitly require an
+encrypted, bounded gp3 root volume that is deleted when its instance
+terminates, and reject plans where the mapping is missing, unknown, or unsafe.
+Verify the exact module shape in a fresh same-account test without touching
+the hosted control plane.
+
+## Current repo state
+
+- Backend `main` is `13e34c4c29d72b72cee3b553176e1b93059e3244` (merged PR #485).
+- PR #483's generated-plan policy checks ASG capacity, launch-template
+  binding, instance type, AMI-ID shape, and IMDSv2, but not root EBS mapping.
+- PR #485 records isolated capacity 1→2→1 evidence with EC2 status checks;
+  its test did not verify root-volume encryption.
+- AWS account `654654474502`, region `us-east-1`; hosted control-plane
+  resources and state remain outside scope.
+
+## Research / references used
+
+- [Terraform AWS launch template resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template)
+- [AWS launch-template block device mappings](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/block-device-mapping-concepts.html)
+- `infrastructure/terraform/modules/ec2-autoscaling/main.tf`
+- `apps/api/src/davdeploy/generated_plan_policy.py`
+- `tests/test_generated_plan_policy.py`
+
+## Work planned for the PR
+
+1. Add one explicit `/dev/xvda` EBS mapping: encrypted, gp3, 8 GiB, and
+   delete-on-termination.
+2. Require that exact known root-volume profile in generated ASG plans and
+   fail closed for missing, unknown, multiple, or unsafe mappings.
+3. Add regression tests for acceptance, unknown values, unencrypted volumes,
+   wrong device/type/size, and retained-on-termination settings.
+4. Apply the module in a new isolated local-state customer test root; verify
+   ASG/EC2 health and the attached volume's encryption/termination settings,
+   then destroy and independently verify cleanup.
+5. Reconcile resource-family and goal status without claiming Nova dispatch.
+
+## Acceptance criteria
+
+- [ ] Module plans explicitly select encrypted gp3 8 GiB root storage and
+  delete-on-termination.
+- [ ] Generated-plan policy accepts the exact shape and denies missing,
+  unknown, unencrypted, oversized, wrong-device/type, or retained mappings.
+- [ ] Regression tests cover the accepted and rejected shapes with redacted
+  findings.
+- [ ] A fresh isolated AWS test verifies the running instance's EBS volume is
+  encrypted, the ASG is healthy, and termination removes the volume.
+- [ ] The test is destroyed through the Terraform run monitor; the ASG,
+  launch template, and network are independently absent and instance records
+  are terminated.
+- [ ] Evidence keeps AMI provenance, instance-role scope, guest health,
+  update/recovery, full pricing, remote Nova state, and Nova dispatch as
+  separate open gates.
+- [ ] Docs conventions, focused/full verification, Terraform formatting and
+  validation, `git diff --check`, and all required CI checks pass before merge.
+- [ ] No hosted control-plane resource or state changes; protected local files
+  and lineage evidence remain untouched.
+
+## Boundaries
+
+Only fresh resources tagged for `nova-asg-486` may be created in account
+`654654474502`, region `us-east-1`. Use an isolated VPC with no public route,
+public IP, ingress, or internet egress, and local Terraform state. Do not
+change the hosted control plane, remote state, unrelated AWS resources, or
+protected local files. Retain local state artifacts after teardown.
+
+## Acceptance status
+
+Implementation, lifecycle evidence, and CI are pending. No `nova-asg-486`
+resources have been created.
+
+## Tests / validation performed
+
+- Pending implementation and test execution.
+
+## Evidence files produced
+
+- `infrastructure/terraform/modules/ec2-autoscaling/main.tf`
+- `apps/api/src/davdeploy/generated_plan_policy.py`
+- `tests/test_generated_plan_policy.py`
+- `docs/test/fixtures/nova-asg-486/`
+- `docs/test/test486.md`
+- `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
+- `docs/tickets/ticket486.md`
+
+## Follow-up work
+
+Keep AMI provenance, instance-role permissions, workload health, update and
+failure recovery, complete cost, Nova remote-state configuration, and Nova
+dispatch as separate gates.
