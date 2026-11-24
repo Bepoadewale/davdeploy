@@ -754,17 +754,17 @@ def _planned_resources(document: dict[str, Any]) -> tuple[dict[str, Any], ...]:
 
 def _planned_data_resources(document: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     inventories = []
+    prior_state = document.get("prior_state")
+    prior_values = prior_state.get("values") if isinstance(prior_state, dict) else None
+    prior_root = prior_values.get("root_module") if isinstance(prior_values, dict) else None
+    if isinstance(prior_root, dict):
+        inventories.append(prior_root)
     planned_values = document.get("planned_values")
     planned_root = (
         planned_values.get("root_module") if isinstance(planned_values, dict) else None
     )
     if isinstance(planned_root, dict):
         inventories.append(planned_root)
-    prior_state = document.get("prior_state")
-    prior_values = prior_state.get("values") if isinstance(prior_state, dict) else None
-    prior_root = prior_values.get("root_module") if isinstance(prior_values, dict) else None
-    if isinstance(prior_root, dict):
-        inventories.append(prior_root)
     resources_by_address: dict[str, dict[str, Any]] = {}
     for root in inventories:
         modules = [root]

@@ -48,17 +48,17 @@ the hosted control plane.
 
 ## Acceptance criteria
 
-- [ ] Module plans explicitly select the selected AMI's actual root device,
+- [x] Module plans explicitly select the selected AMI's actual root device,
   encrypted gp3 8 GiB root storage, and delete-on-termination.
-- [ ] Generated-plan policy binds the image and root mapping to one known
+- [x] Generated-plan policy binds the image and root mapping to one known
   `aws_ami` metadata source and denies mismatched or unknown root devices.
-- [ ] Generated-plan policy accepts the exact shape and denies missing,
+- [x] Generated-plan policy accepts the exact shape and denies missing,
   unknown, unencrypted, oversized, wrong-device/type, or retained mappings.
-- [ ] Regression tests cover the accepted and rejected shapes with redacted
+- [x] Regression tests cover the accepted and rejected shapes with redacted
   findings.
-- [ ] A fresh isolated AWS test verifies the running instance's EBS volume is
+- [x] A fresh isolated AWS test verifies the running instance's EBS volume is
   encrypted, the ASG is healthy, and termination removes the volume.
-- [ ] The test is destroyed through the Terraform run monitor; the ASG,
+- [x] Both isolated test cycles were destroyed through the Terraform run monitor; the ASG,
   launch template, and network are independently absent and instance records
   are terminated.
 - [ ] Evidence keeps AMI provenance, instance-role scope, guest health,
@@ -82,21 +82,28 @@ protected local files. Retain local state artifacts after teardown.
 Automated review found that a hard-coded `/dev/xvda` does not prove it is the
 selected AMI's root device, and required the clean-room gate for Terraform
 behavior. The implementation now queries `aws_ami` metadata and binds the
-image ID and root mapping to that source. Focused tests are being rerun;
-cycle-two AWS evidence and clean-room validation are pending. The previous
-head's PR run `45458519266` passed all seven checks; changes after that head
-require fresh CI. No hosted control-plane resource or state was touched.
+image ID and root mapping to that source. Two fresh isolated AWS cycles passed
+and were destroyed with independent absence checks. A regression test now
+covers planned AMI metadata taking precedence over stale prior state. The
+clean-room cycle passed at base `d6c8585`; the updated policy and regression
+test from this PR were then synchronized into the isolated worktree, where all
+demos and full verification passed again (1,752 tests). Final cleanup of its
+generated artifacts is pending explicit approval. Current committed head
+`d6c8585` has all seven checks green in run `45464063135`; local
+code/test/evidence edits still require a commit and fresh CI. No hosted
+control-plane resource or state was touched.
 
 ## Tests / validation performed
 
-- `.venv-pr399/bin/python -m pytest tests/test_generated_plan_policy.py -q
-  -k autoscaling`: 41 passed after the AMI-root binding change.
-- `make verify`: passed (1,751 tests after the AMI-root binding change; one
+- `.venv/bin/python -m pytest -q tests/test_generated_plan_policy.py -k
+  autoscaling`: 42 passed, 481 deselected.
+- `make verify`: passed (1,752 tests after the AMI-root binding change; one
   existing Starlette/httpx deprecation warning; OpenAPI snapshot and Compose
   configuration passed).
-- `.venv-pr399/bin/python -m pytest tests/test_generated_plan_policy.py -q
-  -k autoscaling`: 37 passed.
-- `.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py
+- `.venv/bin/python -m pytest tests/test_generated_plan_policy.py -k
+  'autoscaling_planned_ami_metadata_takes_precedence_over_prior_state or
+  autoscaling_root_device'`: 4 passed, 519 deselected.
+- `.venv/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py
   tests/test_generated_plan_policy.py`: passed.
 - `terraform -chdir=docs/test/fixtures/nova-asg-486 fmt -check -recursive`:
   passed.
@@ -114,11 +121,28 @@ require fresh CI. No hosted control-plane resource or state was touched.
   the ASG, launch template, VPC, subnets, route table, security group, and
   volume absent. The instance is terminated, Terraform state lists zero
   resources, and the Terraform run monitor has zero active operations.
-- PR checks run `45457478616`: all seven checks passed on head `24f44e3`.
+- Cycle two's reviewed destroy plan also contained exactly nine deletes, zero
+  creates, updates, or replacements. Monitored run
+  `nova-asg-486-destroy-cycle2-20261124` (Terraform PID `95699`) succeeded.
+  Both test instances are terminated; all tagged resources, the specific root
+  volume, and the Auto Scaling group are absent; Terraform state and active
+  monitor operations are empty.
+- PR checks run `45464063135`: all seven checks passed on committed head
+  `d6c8585`; this uncommitted evidence update requires a fresh run.
 - AWS `aws_ami` data lookup for this test returned AMI
   `ami-0aacbf72109c53c0c`, root device `/dev/xvda`; the refreshed plan contains
   that metadata in `prior_state` and references it from the image and device
   mapping expressions.
+- Isolated clean-room worktree `/private/tmp/davdeploy-pr486-cleanroom-20261124`
+  based on `d6c8585`, with the current policy and regression test synchronized,
+  used Compose project
+  `davdeploy-pr486-cleanroom-20261124`. Initial `make clean-local` passed with
+  no prior artifacts or project containers/volumes. `make bootstrap-local`,
+  smoke, API contract, local customer-plan E2E, fixture seeding, simple/complex/
+  degraded/Day-2 demos, policy-failure/readiness-failure demos, trace check,
+  and `make verify` all passed (1,752 tests). Final `make clean-local` is
+  waiting on explicit approval to remove only this worktree's generated
+  `.venv`, `.local`, and Compose volumes.
 
 ## Evidence files produced
 

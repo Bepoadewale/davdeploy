@@ -9,8 +9,8 @@ Repository: `Bepoadewale/davdeploy`.
 
 Customer repository: None; direct same-account AWS service test.
 
-Commit: `b348324` (Terraform module and test fixture; applied run). PR #486
-records the final evidence and follow-up regression test.
+Commit: Cycle 1 used `b348324`; cycle 2 uses `d6c8585` with the AMI-root
+metadata binding fix.
 
 AWS account: `654654474502`.
 
@@ -115,6 +115,35 @@ returned zero resources. Local state artifacts are retained and are not
 committed. The run log is
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-20261124.log`.
 AWS keeps the terminated instance history record; it is not active.
+
+## Cycle 2 — AMI root-device binding
+
+The second run exercises the reviewed fix: the module reads `aws_ami.root_device_name`
+and uses it for the launch-template mapping. The fresh plan contains nine
+creates, zero updates, and zero deletes. Its refreshed data-source state binds
+AMI `ami-0aacbf72109c53c0c` to `/dev/xvda`, and both the launch-template image
+ID and device-name expressions reference that same data source.
+
+Monitored apply `nova-asg-486-create-cycle2-20261124` completed successfully;
+Terraform PID `90936`, log
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-create-cycle2-20261124.log`.
+AWS observed ASG `davdeploy-nova-asg-486` at min/desired/max `1/1/1`, with
+instance `i-0bbee566ffa755e9a` `Healthy` / `InService`. EC2 instance and system
+status checks were `ok`. The `t3.micro` had no public IP and required IMDSv2.
+AWS confirmed the AMI and instance root device were `/dev/xvda`, and attached
+volume `vol-0d88cbcf3c59377cf` was encrypted, 8 GiB gp3, and configured to be
+deleted on instance termination. The no-rule security group, local-only VPC
+route, and non-public subnets were also verified.
+
+The reviewed destroy plan contained exactly nine deletes, zero creates,
+updates, or replacements. Monitored run `nova-asg-486-destroy-cycle2-20261124`
+(Terraform PID `95699`) completed successfully; its log is
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-cycle2-20261124.log`.
+Independent checks found the test Auto Scaling group, launch template, VPC,
+subnets, route table, security group, and volume absent. Instances
+`i-070ba188abdaf25b2` and `i-0bbee566ffa755e9a` are terminated. Terraform state
+lists zero resources and the run monitor has zero active operations. Local
+state artifacts are retained and are not committed.
 
 ## Final boundary
 

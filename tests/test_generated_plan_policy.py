@@ -3531,6 +3531,25 @@ def test_autoscaling_root_device_uses_refreshed_prior_state_ami_metadata():
     assert not any(code.startswith("autoscaling_") for code in codes(result))
 
 
+def test_autoscaling_planned_ami_metadata_takes_precedence_over_prior_state():
+    document, proposal_value = autoscaling_case()
+    planned_ami = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") == "aws_ami"
+    )
+    stale_ami = {**planned_ami, "values": dict(planned_ami["values"])}
+    stale_ami["values"]["root_device_name"] = "/dev/sda1"
+    document["prior_state"] = {
+        "values": {"root_module": {"resources": [stale_ami], "child_modules": []}}
+    }
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("autoscaling_") for code in codes(result))
+
+
 def test_autoscaling_image_and_root_mapping_must_share_ami_source():
     document, proposal_value = autoscaling_case()
     template_config = next(
