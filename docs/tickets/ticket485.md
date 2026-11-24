@@ -84,7 +84,10 @@ resource or file.
 
 Isolated AWS lifecycle evidence is complete. All seven required checks passed
 on implementation/evidence commit `223eab9ab972cf40b099077293ab407e0c8bc7d6`
-in run `45447414384`. Final-head checks for this status update are running.
+in run `45447414384`; the status-reconciliation commit
+`87803725c2f8528467d4b16d9f4cde877aa5a843` also passed all seven checks in
+run `45448665281`. This follow-up records that result and is receiving its
+own CI run before merge.
 
 ## Tests / validation performed
 
@@ -99,6 +102,8 @@ in run `45447414384`. Final-head checks for this status update are running.
 - Initial draft PR commit reported no checks. The implementation/evidence head
   passed all seven PR checks in run
   [45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
+- The status-reconciliation commit passed all seven checks in run
+  [45448665281](https://github.com/Bepoadewale/davdeploy/actions/runs/45448665281).
 
 ## Evidence files produced
 

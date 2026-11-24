@@ -126,8 +126,11 @@ records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
 cross-account isolation. Its implementation/evidence head
 `223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in run
-[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384);
-the PR remains open for final status-reconciliation checks and review.
+[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
+The status-reconciliation head `87803725c2f8528467d4b16d9f4cde877aa5a843`
+also passed all seven checks in run
+[45448665281](https://github.com/Bepoadewale/davdeploy/actions/runs/45448665281).
+The PR remains open pending merge review.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a
