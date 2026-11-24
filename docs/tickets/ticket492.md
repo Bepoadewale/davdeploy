@@ -61,13 +61,14 @@ between targets and verified facts.
 The strategy document is written with all four stages, ARR scenarios,
 ownership assumptions, current DavDeploy limitations, and linked market/company
 references. Documentation conventions and diff checks pass. Final-head CI run
-`45497407816` passed all seven checks.
+`45498092884` passed all seven checks on commit
+`701d6ff65caacd7a616079f7a1a52f35de383df6`.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=492 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Final-head PR CI run `45497407816`: passed all seven checks.
+- Final-head PR CI run `45498092884`: passed all seven checks.
 
 ## Evidence files produced
 
