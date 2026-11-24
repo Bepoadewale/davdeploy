@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484). The hosted control plane
+`426d81da901555b3fdabbde19d2c2d971319212d` (PR #487). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -11,7 +11,8 @@ Both jobs succeeded, including database migrations. Read-only checks found all
 six backend Lambdas on code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`
 and `/healthz` returned HTTP 200 in account `654654474502`, region
 `us-east-1`. This is control-plane deployment evidence only. This status
-refresh did not access or change the hosted control plane.**
+refresh did not access or change the hosted control plane. The older runtime
+health observation above is historical and was not rechecked here.**
 
 Source includes durable plan requests, isolated Terraform state, plan review,
 actual-plan policy, typed health/recovery requirements, exact workspace
@@ -93,18 +94,39 @@ IMDSv2 requirements. No EC2/ASG or hosted control-plane resource was changed.
 AMI provenance, encrypted disks, scoped role, guest health, scaling/recovery,
 full cost, and Nova execution remain unproven.
 
-Draft PR #485 adds direct same-account lifecycle evidence for PR #483's
+PR #485 merged as `13e34c4c29d72b72cee3b553176e1b93059e3244`; its final-head
+CI run [45449491450](https://github.com/Bepoadewale/davdeploy/actions/runs/45449491450)
+and merged-main CI run
+[45450437306](https://github.com/Bepoadewale/davdeploy/actions/runs/45450437306)
+passed all seven checks. It records direct same-account lifecycle evidence for PR #483's
 bounded EC2 Auto Scaling profile. The isolated no-egress stack reached
 capacity one and two with healthy ASG and EC2 checks, returned to one, and was
 destroyed with independent absence checks. Both EC2 records are terminated;
 the local Terraform state is retained and empty. No Nova dispatch or guest
-application health is claimed. PR #485 remains open and unmerged.
-Its implementation/evidence head `223eab9ab972cf40b099077293ab407e0c8bc7d6`
-passed all seven required checks in CI run
-[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
-The CI-status reconciliation commit `87803725c2f8528467d4b16d9f4cde877aa5a843`
-also passed all seven checks in run
-[45448665281](https://github.com/Bepoadewale/davdeploy/actions/runs/45448665281).
+application health is claimed. The merge added no AWS or control-plane
+resources.
+
+PR #486 remains open and unmerged at
+`d8f0d7aff2851815cb46150fb187f01bd5ba9782`. Its final-head CI run
+[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
+passed all seven checks. Two isolated direct same-account cycles verified an
+encrypted 8 GiB gp3 root volume, healthy ASG/EC2 checks, and teardown with
+independent absence checks. Its remaining review finding requires final
+clean-room cleanup; that cleanup would remove the clean-room worktree's
+generated `.venv`, `.local`, and Compose volumes and remains pending explicit
+approval. Those local artifacts are preserved.
+
+PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Final-head CI
+run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
+and merged-main CI run
+[45477538617](https://github.com/Bepoadewale/davdeploy/actions/runs/45477538617)
+passed all seven checks. Its exact `modules/dynamodb-table` test observed
+on-demand billing, encryption, deletion protection, and enabled 35-day PITR;
+a captured restore returned the baseline item and omitted a later synthetic
+write. Monitored cleanup removed the restored and source tables; independent
+AWS inventory found no test table, and retained local state lists no
+resources. The evidence proves source writes and restored-table reads, not
+Nova dispatch or live source-read assertions.
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
@@ -122,8 +144,10 @@ or compute environment, and five DavDeploy-named job definitions were
 inactive: four earlier test definitions plus PR #458's test definition. This
 is a name-filtered test-resource inventory, not a complete account inventory.
 SageMaker lineage evidence remains retained. The SQS test prefix is absent;
-the existing production-tagged queue remains. The Terraform run monitor had 41
-terminal records and no active operation. Preserve `--only-show-errors`,
+the existing production-tagged queue remains. A later read-only recheck
+verified account `654654474502`, no matching DynamoDB test table or Auto
+Scaling group, no matching EC2 test instance, and 54 monitor records with no
+active run. Preserve `--only-show-errors`,
 `.venv-pr399/`, and lineage evidence. The frontend status remains based on
 the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
