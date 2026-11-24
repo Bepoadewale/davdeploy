@@ -12,7 +12,7 @@ using or changing the hosted control plane. Keep the Terraform state local and
 the network isolated, then tear down the test stack and independently verify
 absence.
 
-## Current state
+## Current repo state
 
 - Backend `main` starts from commit `8ff3061f34e10d5bf824a23bc71f8099d0e6e58f`
   (PR #484).
@@ -25,7 +25,15 @@ absence.
 - The Terraform run monitor has 41 terminal records and no active operation.
 - Hosted control-plane state, locks, runtime, and endpoints are out of scope.
 
-## Planned work
+## Research / references used
+
+- [Terraform AWS Auto Scaling Group resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/autoscaling_group)
+- [Terraform AWS security group resource](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
+- [EC2 instance status checks](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/monitoring-system-instance-status-check.html)
+- `infrastructure/terraform/modules/ec2-autoscaling/main.tf`
+- `apps/api/src/davdeploy/generated_plan_policy.py`
+
+## Work planned for the PR
 
 1. Add a narrowly scoped test root using local Terraform state and unique
    `TestId=nova-asg-485` tags.
@@ -54,8 +62,8 @@ absence.
 - [ ] The evidence and matrix state the exact behavior proved and retain gaps
   for application health, image provenance, update/recovery, complete price,
   Nova dispatch, and cross-account isolation.
-- [ ] Documentation conventions, Terraform formatting/validation, focused
-  tests, `git diff --check`, and all required CI checks pass before merge.
+- [ ] Documentation conventions, Terraform formatting/validation, reviewed
+  plan, `git diff --check`, and all required CI checks pass before merge.
 - [ ] No hosted control-plane resource or state is changed; protected local
   files and existing audit evidence remain untouched.
 
@@ -67,3 +75,25 @@ Nova certification. It may create temporary test AWS resources in account
 above. The hosted control plane and its state/lock resources must not be
 changed. Do not delete the retained local Terraform state or any unrelated
 resource or file.
+
+## Acceptance status
+
+Implementation and AWS lifecycle evidence are in progress. No resource has
+been applied yet.
+
+## Tests / validation performed
+
+- Terraform formatting, validation, and reviewed-plan checks are pending.
+- Documentation conventions and pull-request CI are pending.
+
+## Evidence files produced
+
+- `docs/test/fixtures/nova-asg-485/`
+- `docs/test/test485.md`
+- `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
+- `docs/tickets/ticket485.md`
+
+## Follow-up work
+
+Keep application health, AMI provenance, update/recovery, complete pricing,
+cross-account isolation, and Nova dispatch as separate open evidence gates.

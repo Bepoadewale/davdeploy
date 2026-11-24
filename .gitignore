@@ -9,6 +9,7 @@
 *.db
 dist/
 build/
+.terraform/
 .venv/
 .local/
 __pycache__/
