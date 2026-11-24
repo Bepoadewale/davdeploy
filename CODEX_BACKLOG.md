@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `be22c3866fa023f61aae0eaa82931179393242fa` (PR #477). The
+Backend `main` is `a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -84,6 +84,18 @@ merged-main CI run
 also passed all seven checks. File read/write, tenant isolation, lifecycle,
 complete EFS pricing, and Nova dispatch remain open. See
 `docs/tickets/ticket477.md`.
+
+PR #479 adds source-only ElastiCache plan checks for a sensitive Redis AUTH
+token, TLS-required Redis OSS 7.1, one `cache.t4g.micro` node, and exact
+TCP/6379 security-group ingress bound to the replication group's security
+group. Final-head CI run
+[45373475770](https://github.com/Bepoadewale/davdeploy/actions/runs/45373475770)
+and merged-main CI run
+[45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792)
+passed all seven checks. No Redis workload was created. Client authentication,
+failover, lifecycle, full pricing, and Nova dispatch remain unproven. The AUTH
+token may be present in protected Terraform plan/state artifacts. See
+`docs/tickets/ticket479.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

@@ -43,22 +43,31 @@ plane and AWS resources remain untouched.
 
 ## Acceptance criteria
 
-- [ ] All affected status documents identify `a6435df` / PR #479 as the current
+- [x] All affected status documents identify `a6435df` / PR #479 as the current
   source baseline and accurately report the monitor snapshot.
-- [ ] PR #479's implementation and seven-check CI evidence are recorded with
+- [x] PR #479's implementation and seven-check CI evidence are recorded with
   source-only limitations retained.
-- [ ] No Redis workload or hosted control-plane change is claimed.
-- [ ] Documentation conventions and `git diff --check` pass.
+- [x] No Redis workload or hosted control-plane change is claimed.
+- [x] Documentation conventions and `git diff --check` pass.
 - [ ] Merge only after all seven required checks pass on the final PR head.
 
 ## Acceptance status
 
-Ticket-first bootstrap is present. Documentation implementation and required
-CI are pending. No AWS or hosted control-plane resource has been changed.
+Documentation implementation is complete and the local documentation and diff
+checks pass. Required PR CI must pass on the final head before merge. No AWS or
+hosted control-plane resource has been changed.
 
 ## Tests / validation performed
 
-Pending documentation implementation.
+- `GITHUB_PR_NUMBER=480 .venv-pr399/bin/python scripts/check_doc_conventions.py`
+  — passed.
+- `git diff --check` — passed.
+- PR #479 final-head CI run
+  [45373475770](https://github.com/Bepoadewale/davdeploy/actions/runs/45373475770)
+  and merged-main CI run
+  [45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792)
+  both passed all seven checks.
+- PR #480 final-head CI is pending.
 
 ## Evidence files produced
 
