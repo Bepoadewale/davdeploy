@@ -25,25 +25,50 @@ secrets or customer data are used.
 
 ## Commands executed
 
-1. Verify the AWS caller account and ensure no active Terraform monitor
-   operation exists.
-2. Review a create plan containing exactly the function, role, scoped policy,
-   and log group, then apply it through `scripts/terraform_run_monitor.py`.
-3. Invoke the function and verify the `v1` response without printing payloads.
-4. Review a Terraform update plan for the same function, apply it through the
-   monitor, and verify the same function ARN returns `v2`.
-5. Review and apply the destroy plan through the monitor. Independently verify
-   the function, role, and log group are absent; retain local state and archive
-   files.
+1. Verify AWS account `654654474502`, ensure the unique function, role, and log
+   group names are absent, and confirm no active monitor operation exists.
+2. Review the create plan (`4 to add, 0 to change, 0 to destroy`), then apply
+   it through `scripts/terraform_run_monitor.py`. Run ID:
+   `nova-lambda-service-489-create-20261124`; Terraform PID `33754`; finish
+   time `2026-11-24T20:36:33Z`.
+3. Invoke the function with the synthetic test ID and verify the `v1` response.
+4. Review the update plan (`0 to add, 1 to change, 0 to destroy`), then apply
+   through the monitor. Run ID: `nova-lambda-service-489-update-20261124`;
+   Terraform PID `35930`; finish time `2026-11-24T20:43:49Z`. Invoke the same
+   function and verify the `v2` response.
+5. Review the destroy plan (`0 to add, 0 to change, 4 to destroy`) and apply
+   it through the monitor. Run ID:
+   `nova-lambda-service-489-destroy-20261124`; Terraform PID `39105`; finished
+   at `2026-11-24T20:54:34Z`.
 
 ## Observed result
 
-Live AWS creation, invocation, update, and teardown are pending.
+The create plan contained four creates and zero updates/deletes. Monitored
+create `nova-lambda-service-489-create-20261124` used Terraform PID `33754`,
+finished at `2026-11-24T20:36:33Z`, and logged to
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-lambda-service-489-create-20261124.log`.
+The helper verified the `v1` response.
+
+The reviewed update plan contained zero adds, one in-place function update,
+and zero deletes. Monitored update
+`nova-lambda-service-489-update-20261124` used Terraform PID `35930`, finished
+at `2026-11-24T20:43:49Z`, and logged to
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-lambda-service-489-update-20261124.log`.
+The same function returned the expected `v2` response. The helper printed
+only the function name, verified version, and result status; it did not print
+the synthetic payload.
 
 ## Teardown
 
-Terraform and AWS teardown are pending. Local Terraform state and generated
-Lambda archives will be retained.
+The reviewed destroy plan contained zero adds, zero changes, and four deletes.
+Monitored destroy `nova-lambda-service-489-destroy-20261124` used Terraform
+PID `39105`, succeeded at `2026-11-24T20:54:34Z`, and logged to
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-lambda-service-489-destroy-20261124.log`.
+Independent AWS reads in account `654654474502`, region `us-east-1`, returned
+no matching Lambda function, execution role, or log group. The Terraform state
+list returned empty; local state is retained. The monitor has 57 records and
+no active operations. Generated archives and local provider files remain
+retained.
 
 ## Final boundary
 

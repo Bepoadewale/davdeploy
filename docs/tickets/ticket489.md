@@ -41,27 +41,41 @@ a code update, and reviewed teardown.
 
 ## Acceptance criteria
 
-- [ ] A reviewed create plan contains only the tagged exact-module test scope.
-- [ ] The function invokes the synthetic v1 handler successfully.
-- [ ] A reviewed Terraform update changes the same function to v2, and live
+- [x] A reviewed create plan contains only the tagged exact-module test scope.
+- [x] The function invokes the synthetic v1 handler successfully.
+- [x] A reviewed Terraform update changes the same function to v2, and live
   invocation observes v2.
-- [ ] Reviewed monitored teardown removes the function, role/policy, and log
+- [x] Reviewed monitored teardown removes the function, role/policy, and log
   group; independent AWS reads confirm absence; local state is retained.
-- [ ] Documentation and capability matrix report the exact evidence and limits.
-- [ ] Focused/full checks, Terraform format/validate, docs conventions, diff
-  checks, and final-head CI pass before merge.
-- [ ] No control-plane, remote-state, unrelated AWS, or customer workload
+- [x] Documentation and capability matrix report the exact evidence and limits.
+- [x] Focused tests, Terraform format/validate, docs conventions, and diff
+  checks pass locally.
+- [ ] Final-head CI passes before merge.
+- [x] No control-plane, remote-state, unrelated AWS, or customer workload
   resources change.
 
 ## Acceptance status
 
-Ticket-first draft opened before implementation. No AWS mutation has occurred
-for PR #489. The package remains incomplete until live evidence and final CI
-are recorded.
+The tagged create plan contained four creates: the function, role, scoped log
+policy, and log group. Monitored create
+`nova-lambda-service-489-create-20261124` succeeded (Terraform PID `33754`).
+The synthetic `v1` handler returned the expected response. The reviewed update
+plan contained one in-place function change and no adds or deletes; monitored
+update `nova-lambda-service-489-update-20261124` succeeded (Terraform PID
+`35930`), and the same function returned `v2`. Monitored destroy
+`nova-lambda-service-489-destroy-20261124` succeeded (Terraform PID `39105`)
+from a reviewed four-delete plan. Independent AWS reads confirmed the function,
+execution role, and log group absent; Terraform state lists no resources and
+is retained; the run monitor has 57 records and zero active operations. No
+control-plane or remote-state resource was changed. Final-head CI is pending.
 
 ## Tests / validation performed
 
-- Ticket-first documentation checks and PR creation are pending completion.
+- Focused lifecycle harness tests: 4 passed.
+- Ruff, Terraform formatting and validation, documentation conventions,
+  matrix evidence update, and diff checks passed locally.
+- Initial implementation CI run `45482372222` passed all seven checks; the
+  final evidence content requires a fresh run.
 
 ## Evidence files produced
 
