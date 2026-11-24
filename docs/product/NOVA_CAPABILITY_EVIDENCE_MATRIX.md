@@ -4,10 +4,11 @@ Status snapshot: backend `main` at
 `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491), 2026-11-25. PR #492
 records the bootstrapped growth strategy as roadmap-only; it changes no
 product behavior or AWS resources. Draft PR #493 adds the Parameter Store
-lifecycle fixture and redacted verifier; all seven CI checks passed in run
-`45507936770`, but no AWS apply has run because cleanup of the exact synthetic
-parameter still needs explicit approval. A fresh read found that parameter
-absent. PR #413
+lifecycle fixture and redacted verifier. Its exact synthetic parameter was
+created, updated from version 1 to 2, verified without printing either value,
+destroyed through the Terraform run monitor, and independently confirmed
+absent. Local state and plans are retained with mode 600; Nova dispatch is not
+claimed. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -358,7 +359,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-dns-zone` | `modules/dns-zone` | `aws-edge-https` / `multi-region` | PR #470 requires known zone name, no VPC associations, and `force_destroy=false`. It does not verify ownership, records, delegation, failover, or DNS cost. | [`test260.md`](../test/test260.md), [`test244.md`](../test/test244.md); neither proves this module's complete customer lifecycle |
 | `aws-acm-certificate` | `modules/acm-certificate` | `aws-edge-https` / `multi-region` | PR #468 requires known domain, DNS validation, RSA_2048, and export disabled. It does not verify domain ownership, certificate issuance/renewal, or DNS record publication. | [`test254.md`](../test/test254.md) records ACM/SES DNS validation; it does not certify this module's complete lifecycle |
 | `aws-kms-key` | `modules/kms-key` | `aws-secrets-config` (candidate; KMS not listed in module services) / no scenario | PR #463 requires known symmetric `ENCRYPT_DECRYPT` keys, automatic rotation, regional scope, and a 30-day deletion window. It does not validate the key policy or consumer binding. | `test244` used AWS-managed KMS encryption for Kinesis, not this customer-managed-key root; no root-specific evidence found. No customer-managed-key apply because AWS charges for keys and deletion has a 7–30 day waiting period. |
-| `aws-parameter-config` | `modules/parameter-config` | `aws-secrets-config` / no scenario | PR #465 requires `SecureString`, Standard tier, and a known optional KMS key reference. It does not protect the value from Terraform state, validate consumer access, or handle rotation. | Draft PR #493 implements the exact-module synthetic lifecycle fixture and redacted verifier; CI is green, but live apply/update/destroy evidence is pending explicit approval for exact-resource cleanup. |
+| `aws-parameter-config` | `modules/parameter-config` | `aws-secrets-config` / no scenario | PR #465 requires `SecureString`, Standard tier, and a known optional KMS key reference. It does not protect the value from Terraform state, validate consumer access, or handle rotation. | Draft PR #493 records exact-module synthetic version 1→2 retrieval, in-memory redacted verification, monitored destroy, independent absence, and retained mode-600 state/plans in [`test493.md`](../test/test493.md); no Nova dispatch. |
 | `aws-feature-flags` | `modules/feature-flags` | No matching catalogue module / no scenario | PR #471 requires each planned AppConfig environment to reference exactly one same-plan application and requires known names. It does not create a configuration profile, feature flag, deployment strategy, or rollout. | No root-specific workload evidence found |
 | `aws-s3-private-storage` | `modules/artifacts` | `aws-file-storage`, `aws-static-web`, `aws-ai-retrieval` / `ai-rag`, `web-application` | S3 block-public-access/public ACL checks; merged PRs #434–#436 require same-plan TLS-deny, default encryption, and `BucketOwnerEnforced`. Not a complete private-upload policy | [`test262.md`](../test/test262.md) private source bucket; draft PR #491 [`test491.md`](../test/test491.md) records exact `modules/artifacts` settings, synthetic v1/v2 reads, and monitored teardown; no Nova dispatch |
 | `aws-cloudfront-delivery` | `modules/cloudfront-delivery` | `aws-edge-https`, `aws-static-web` / `multi-region`, `web-application` | Merged PRs #432/#433 deny unknown or cleartext viewer policies and check custom-origin HTTPS/TLS 1.2; standard S3 origins rely on viewer HTTPS. Source-only. No response-header, private-origin-access, or cache-safety policy | [`test253.md`](../test/test253.md) |
