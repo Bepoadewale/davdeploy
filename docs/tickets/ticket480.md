@@ -54,8 +54,9 @@ plane and AWS resources remain untouched.
 ## Acceptance status
 
 Documentation implementation is complete and the local documentation and diff
-checks pass. Required PR CI must pass on the final head before merge. No AWS or
-hosted control-plane resource has been changed.
+checks pass. Implementation head `3e567f9` passed all seven CI checks in run
+`45376421551`. The evidence-only follow-up head still needs its required CI run
+before merge. No AWS or hosted control-plane resource has been changed.
 
 ## Tests / validation performed
 
@@ -67,7 +68,9 @@ hosted control-plane resource has been changed.
   and merged-main CI run
   [45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792)
   both passed all seven checks.
-- PR #480 final-head CI is pending.
+- PR #480 implementation head `3e567f9` passed all seven checks in CI run
+  [45376421551](https://github.com/Bepoadewale/davdeploy/actions/runs/45376421551).
+- The evidence-only follow-up commit must also pass all seven required checks.
 
 ## Evidence files produced
 
