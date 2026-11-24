@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`b36d9ffb41d920ab3d88cdfb3b12c51906e8fcc2` (PR #475); hosted runtime remains
+`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -53,6 +53,16 @@ It bounds Kinesis plans to one provisioned shard, 24-hour retention, and KMS
 encryption with the AWS-managed Kinesis key. No stream was created. Consumer
 behavior, replay, full price, and Nova execution remain open.
 
+PR #477 merged with all seven checks passing on its final head in CI run
+[45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734).
+Merged-main CI run
+[45342278085](https://github.com/Bepoadewale/davdeploy/actions/runs/45342278085)
+also passed all seven checks. It adds source-only EFS plan checks for
+encryption, General Purpose performance, Bursting throughput, and NFS ingress
+from a security-group source. No EFS resource or hosted control-plane resource
+was changed. The plan checks do not prove mount-target binding, file I/O,
+authorization, lifecycle, complete pricing, or Nova dispatch.
+
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,
 one-to-one redrive/DLQ bounds, and direct same-plan Lambda consumer checks;
@@ -66,13 +76,16 @@ plan-role trust and the bounded inline policy profile, repeated before plan
 credentials are issued. The change is not deployed. This is not full effective
 AWS permission attestation, and no customer plan has run.
 
-Last read-only inventory on 2026-11-22 in account `654654474502`, region
-`us-east-1`, found no tested SageMaker endpoint, model, or endpoint
-configuration; four tagged DavDeploy Batch job definitions were inactive; one
-SageMaker lineage action/context and associated evidence remain preserved. The
-Terraform monitor was empty and no Terraform operation was active at that
-check. The monitor currently has 16 terminal records and no active run. Preserve the protected untracked `--only-show-errors` file,
-`.venv-pr399/`, and lineage evidence.
+Read-only AWS inventory on 2026-11-24 verified account `654654474502`, region
+`us-east-1`. It found no tested DavDeploy SageMaker endpoint, model, endpoint
+configuration, execution role, or artifact bucket; no running Batch jobs or
+tagged Batch compute environments; four previously recorded tagged Batch job
+definitions and PR #458's test definition remain inactive. The CLI did not
+support the attempted Batch job-definition listing command, so this is not a
+complete Batch-definition inventory. The SageMaker lineage action/context and
+associated evidence remain preserved. The Terraform run monitor had 41
+terminal records and no active operation. Preserve the protected untracked
+`--only-show-errors`, `.venv-pr399/`, and lineage evidence.
 
 ## Executed locally
 
