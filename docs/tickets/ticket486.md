@@ -89,9 +89,10 @@ clean-room cycle passed at base `d6c8585`; the updated policy and regression
 test from this PR were then synchronized into the isolated worktree, where all
 demos and full verification passed again (1,752 tests). Final cleanup of its
 generated artifacts is pending explicit approval. Current committed head
-`d6c8585` has all seven checks green in run `45464063135`; local
-code/test/evidence edits still require a commit and fresh CI. No hosted
-control-plane resource or state was touched.
+`15fefca` has all seven checks green in run `45465652485`. The root-device
+review finding is addressed in code; the clean-room review finding remains
+open until final cleanup is approved and recorded. No hosted control-plane
+resource or state was touched.
 
 ## Tests / validation performed
 
