@@ -93,10 +93,10 @@ planned AMI metadata taking precedence over stale prior state. The clean-room
 cycle passed at base `d6c8585`; the updated policy and regression
 test from this PR were then synchronized into the isolated worktree, where all
 demos and full verification passed again (1,752 tests). Final cleanup of its
-generated artifacts is pending explicit approval. The synchronized branch
-head `4623530` passed all seven checks in run `45502916393`. This ticket update
-records the latest main/status reconciliation and will receive its own
-final-head CI run. The root-device review finding is addressed in code; the
+generated artifacts is pending explicit approval. The synchronized status
+head `4623530` passed all seven checks in run `45502916393`; ticket-evidence
+head `76f5629` passed all seven checks in run `45503868241`. The root-device
+review finding is addressed in code; the
 clean-room review finding remains open until final cleanup is approved and recorded. No
 hosted control-plane resource or state was touched.
 
@@ -134,8 +134,8 @@ hosted control-plane resource or state was touched.
   Both test instances are terminated; all tagged resources, the specific root
   volume, and the Auto Scaling group are absent; Terraform state and active
   monitor operations are empty.
-- PR checks run `45502916393`: all seven checks passed on synchronized status
-  head `4623530`; CI for this ticket evidence update is required before merge.
+- PR checks run `45503868241`: all seven checks passed on ticket-evidence head
+  `76f5629`; a fresh run is required for this ticket follow-up.
 - AWS `aws_ami` data lookup for this test returned AMI
   `ami-0aacbf72109c53c0c`, root device `/dev/xvda`; the refreshed plan contains
   that metadata in `prior_state` and references it from the image and device
