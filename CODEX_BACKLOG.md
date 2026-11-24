@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484). The
+Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -118,19 +118,50 @@ created. AMI provenance, encrypted disks, scoped role, workload health,
 update/recovery, teardown, full cost, and Nova execution remain unproven. See
 `docs/tickets/ticket483.md`.
 
-Draft PR #485 records isolated direct Auto Scaling lifecycle evidence for the
+PR #485 merged as `13e34c4c29d72b72cee3b553176e1b93059e3244`; final-head CI
+run [45449491450](https://github.com/Bepoadewale/davdeploy/actions/runs/45449491450)
+and merged-main CI run
+[45450437306](https://github.com/Bepoadewale/davdeploy/actions/runs/45450437306)
+passed all seven checks. It records isolated direct Auto Scaling lifecycle evidence for the
 bounded PR #483 profile. The no-egress test scaled from one `t3.micro` to two
 and back, observed healthy ASG/EC2 status checks, then destroyed the test
 stack. The group, launch template, and network are absent; both instance
 records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
-cross-account isolation. Its implementation/evidence head
-`223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in run
-[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
-The status-reconciliation head `87803725c2f8528467d4b16d9f4cde877aa5a843`
-also passed all seven checks in run
-[45448665281](https://github.com/Bepoadewale/davdeploy/actions/runs/45448665281).
-The PR remains open pending merge review.
+cross-account isolation. The merge added no AWS resources.
+
+PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782` with all
+seven checks passing in run
+[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590).
+It verifies encrypted Auto Scaling root volumes in two direct same-account
+cycles. The clean-room review finding remains open until final cleanup of only
+that worktree's generated `.venv`, `.local`, and Compose volumes; preserve these
+artifacts pending explicit approval.
+
+PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head run
+[45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
+and merged-main run
+[45477538617](https://github.com/Bepoadewale/davdeploy/actions/runs/45477538617)
+passed all seven checks. Its exact DynamoDB module test verified the bounded
+configuration, restored a baseline while excluding a later write, and removed
+both test tables. Local state is retained and empty; Nova dispatch is not
+claimed. See `docs/test/test487.md`.
+
+PR #488 reconciles the canonical status files through PR #487. PR #489 merged
+as `5691f070400ac882c9291885668ba3d0150e48a2`; its final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. Its exact `modules/lambda-service` test recorded a
+reviewed create, synthetic v1 invocation, in-place v2 code update, monitored
+teardown, and independent absence checks for the function, role, and log group.
+Local state is retained and empty. See `docs/test/test489.md`; this is evidence
+for the tested shape only and does not prove Nova dispatch.
+
+Read-only recheck confirmed AWS account `654654474502`, no matching test
+DynamoDB table, Auto Scaling group, EC2 instance, or PR #489 Lambda resources,
+and zero active Terraform monitor operations (57 historical records). The
+hosted control plane and its state/locks were not touched.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

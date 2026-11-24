@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484); hosted runtime remains
+`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -96,18 +96,44 @@ provenance, disk encryption, instance role scope, workload health, update or
 recovery, full cost, teardown, or Nova execution. No AWS or hosted resource
 changed.
 
-Draft PR #485 records a direct same-account EC2 Auto Scaling lifecycle test
+PR #485 merged as `13e34c4c29d72b72cee3b553176e1b93059e3244`; its final-head
+CI run [45449491450](https://github.com/Bepoadewale/davdeploy/actions/runs/45449491450)
+and merged-main CI run
+[45450437306](https://github.com/Bepoadewale/davdeploy/actions/runs/45450437306)
+passed all seven checks. It records a direct same-account EC2 Auto Scaling lifecycle test
 for the bounded PR #483 profile: capacity one, scale to two, return to one,
 and EC2 system/instance checks. Its isolated no-egress stack was destroyed;
 the ASG, launch template, and test network are absent, and the two EC2 records
 are terminated. Local state lists zero resources and is retained. This does
 not prove guest application health, update/recovery, pricing, or Nova dispatch.
-PR #485 remains open and unmerged. Its implementation/evidence head
-`223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in CI run
-[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
-The CI-status reconciliation commit `87803725c2f8528467d4b16d9f4cde877aa5a843`
-also passed all seven checks in run
-[45448665281](https://github.com/Bepoadewale/davdeploy/actions/runs/45448665281).
+The merge added no AWS resources.
+
+PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782`; final-head
+CI run [45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
+passed all seven checks. Its two direct same-account cycles verified encrypted
+8 GiB gp3 Auto Scaling root volumes and teardown. The clean-room review finding
+still awaits approval for final cleanup of that worktree's generated
+`.venv`, `.local`, and Compose volumes; those artifacts remain preserved.
+
+PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head CI
+run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
+and merged-main run
+[45477538617](https://github.com/Bepoadewale/davdeploy/actions/runs/45477538617)
+passed all seven checks. The exact DynamoDB module test verified on-demand
+billing, encryption, deletion protection, PITR recovery, restored-table reads,
+and independent teardown. It proves source writes and restored-table reads;
+source reads and Nova dispatch are not claimed.
+
+PR #488 reconciles status through PR #487. PR #489 merged as
+`5691f070400ac882c9291885668ba3d0150e48a2`; final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. Its exact Lambda-service module test recorded a
+reviewed create, synthetic v1 invoke, in-place v2 update, monitored teardown,
+and independent AWS absence checks. The empty local state is retained. This
+proves the tested direct customer-side Lambda lifecycle shape, not Nova
+dispatch or customer-workload certification. See `docs/test/test489.md`.
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,
@@ -129,8 +155,9 @@ DavDeploy-named job queue or compute environment, and five DavDeploy-named job
 definitions were inactive: four earlier test definitions plus PR #458's test
 definition. This is a name-filtered test-resource inventory, not a complete
 account inventory. The SageMaker lineage action/context and associated
-evidence remain preserved. The Terraform run monitor had 41 records and zero
-active operations. Preserve the protected untracked `--only-show-errors`,
+evidence remain preserved. The Terraform run monitor had 57 records and zero
+active operations. PR #489's Lambda test resources are absent. Preserve the
+protected untracked `--only-show-errors`,
 `.venv-pr399/`, and lineage evidence.
 
 ## Executed locally

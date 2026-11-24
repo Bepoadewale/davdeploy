@@ -8,13 +8,15 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`8ff3061f34e10d5bf824a23bc71f8099d0e6e58f` (PR #484). The last
+`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
 [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
-This reconciliation did not access or change the hosted control plane.
+This reconciliation did not access or change the hosted control plane. The
+recorded health observation belongs to the earlier deployment check and was
+not repeated here.
 
 PR #477 passed all seven checks on its final head in CI run
 [45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734).
@@ -45,18 +47,46 @@ security groups. This is source-only; no EFS or hosted resource changed. File
 access, authorization, lifecycle, full pricing, and Nova dispatch remain
 unproven.
 
-Draft PR #485 records isolated same-account Auto Scaling lifecycle evidence
+PR #485 merged as `13e34c4c29d72b72cee3b553176e1b93059e3244`; its final-head CI
+run [45449491450](https://github.com/Bepoadewale/davdeploy/actions/runs/45449491450)
+and merged-main CI run
+[45450437306](https://github.com/Bepoadewale/davdeploy/actions/runs/45450437306)
+passed all seven checks. It records isolated same-account Auto Scaling lifecycle evidence
 for the bounded PR #483 profile. Direct Terraform observed capacity one, two,
 then one; EC2 system and instance checks passed at both capacities. The
 no-egress test stack was destroyed and its service/network resources were
 independently verified absent. This is exact-shape customer-side evidence, not
-Nova dispatch, guest application health, or cross-account isolation. PR #485
-remains open and unmerged. Its implementation/evidence head
-`223eab9ab972cf40b099077293ab407e0c8bc7d6` passed all seven checks in CI run
-[45447414384](https://github.com/Bepoadewale/davdeploy/actions/runs/45447414384).
-The CI-status reconciliation commit `87803725c2f8528467d4b16d9f4cde877aa5a843`
-also passed all seven checks in run
-[45448665281](https://github.com/Bepoadewale/davdeploy/actions/runs/45448665281).
+Nova dispatch, guest application health, or cross-account isolation. The merge
+added no AWS resources.
+
+PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782`; its
+final-head CI run
+[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
+passed all seven checks. Two same-account cycles verified encrypted 8 GiB gp3
+root volumes and teardown. Its final clean-room cleanup remains pending
+approval to remove generated artifacts and Compose volumes in that specific
+worktree; those artifacts are preserved.
+
+PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
+CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
+and merged-main run
+[45477538617](https://github.com/Bepoadewale/davdeploy/actions/runs/45477538617)
+passed all seven checks. The exact DynamoDB module test verified on-demand
+billing, encryption, deletion protection, PITR recovery of a baseline, absence
+of a later write in the restored table, and independent cleanup. This direct
+test is customer-side evidence for that exact shape; it does not prove Nova
+dispatch or live source-read assertions.
+
+PR #488 reconciled canonical status through PR #487. PR #489 merged as
+`5691f070400ac882c9291885668ba3d0150e48a2`; final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. The exact Lambda-service module test verified a
+reviewed four-resource create, synthetic v1 invocation, in-place v2 code
+update, monitored destroy, and independent function/role/log-group absence.
+This is direct customer-side evidence for the tested Lambda shape; it is not
+Nova authorization, dispatch, or customer workload certification.
 
 PR #483 passed all seven checks on final head in CI run
 [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
@@ -240,7 +270,8 @@ and no AppConfig workload or lifecycle was tested; see
 [`ticket471`](../tickets/ticket471.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
-monitor has 41 terminal records and no active operations.
+monitor has 57 records and no active operations. The PR #489 Lambda test
+function, role, and log group are absent.
 Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
 lineage evidence.
 
@@ -284,7 +315,7 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `48911bfb74fafc626076d216f6ed78a21f3be4ee`. The last
+- Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
