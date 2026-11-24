@@ -17,7 +17,8 @@ never print either value.
 
 ## Current repo state
 
-- Backend `main` is `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491).
+- Backend `main` is `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491),
+  including merged roadmap documentation from PR #492.
 - PR #486 remains open; its synchronized CI is green, while its clean-room
   artifact cleanup awaits explicit approval. Preserve those artifacts.
 - AWS test account is `654654474502`, region `us-east-1`. The hosted control
@@ -51,7 +52,7 @@ never print either value.
 
 ## Acceptance criteria
 
-- [ ] The fixture creates only one tagged exact-module Standard `SecureString`
+- [x] The fixture creates only one tagged exact-module Standard `SecureString`
   parameter using local Terraform state and synthetic values.
 - [ ] AWS confirms the parameter name, ARN, Standard tier, SecureString type,
   and expected KMS key identity without outputting the value.
@@ -59,9 +60,9 @@ never print either value.
   both versions without logging either value.
 - [ ] Monitored destroy and independent AWS reads confirm only the test
   parameter is absent; state and local evidence remain retained.
-- [ ] Helper regressions, Terraform checks, docs conventions, diff checks, and
+- [x] Helper regressions, Terraform checks, docs conventions, diff checks, and
   final-head CI pass.
-- [ ] No hosted control-plane, remote-state, unrelated AWS, or customer data is
+- [x] No hosted control-plane, remote-state, unrelated AWS, or customer data is
   touched.
 
 ## Acceptance status
@@ -72,6 +73,10 @@ format/validation, and documentation checks pass. In account `654654474502`,
 the exact target name was absent and a saved plan proposed exactly one create,
 zero changes, and zero deletes; Terraform redacted the synthetic value. No
 resource has been applied and the hosted control plane remains untouched.
+Final-head CI run `45507936770` passed all seven checks. A fresh read still
+finds the exact parameter absent, and the Terraform monitor has 59 terminal
+records with zero active operations. The AWS lifecycle remains pending explicit
+approval to destroy only this exact synthetic parameter after verification.
 
 ## Tests / validation performed
 
@@ -91,6 +96,11 @@ resource has been applied and the hosted control plane remains untouched.
 - Saved plan `/tmp/davdeploy-nova-parameter-config-493-20261125-d0f5ab/create-v1.tfplan`
   contains exactly one create, zero updates, and zero deletes. The sensitive
   value is redacted in the plan output. No apply or destroy has run.
+- `gh pr checks 493` — all seven checks passed in final-head run
+  `45507936770`.
+- Read-only Parameter Store lookup after CI confirmed the exact synthetic
+  parameter remains absent; `python3 scripts/terraform_run_monitor.py status`
+  reported 59 terminal runs and zero active operations.
 
 ## Evidence files produced
 
