@@ -39,9 +39,9 @@ control plane.
 3. Write a baseline item, restore to a recorded valid PITR timestamp, then
    write a later marker and prove the restored table includes the baseline
    but excludes the later marker.
-4. Remove the unmanaged restored table, disable source deletion protection
-   in a reviewed second plan, destroy the source through the Terraform run
-   monitor, and independently verify absence.
+4. Remove the unmanaged restored table, explicitly disable deletion
+   protection on the exact disposable source table after test success, review
+   the destroy plan, and destroy the source through the Terraform run monitor.
 5. Record costs only as observed/verified; retain local state and keep Nova
    dispatch and hosted control-plane evidence separate.
 
@@ -54,7 +54,8 @@ control plane.
 - [ ] PITR restoration to a captured valid timestamp recovers a baseline item
   and omits a later synthetic write; restored table reaches `ACTIVE`.
 - [ ] The restored table is deleted, source deletion protection is disabled
-  only by an exact reviewed plan, and monitored teardown removes the source.
+  on the exact disposable table only after the restore assertions pass, and
+  monitored teardown removes the source.
 - [ ] Independent AWS checks find no test tables; local Terraform state is
   empty and retained.
 - [ ] Ticket, test evidence, and capability matrix distinguish direct
@@ -67,15 +68,19 @@ control plane.
 
 ## Acceptance status
 
-Planning and the documentation-only PR bootstrap are complete. No test table,
-restore, or AWS mutation has been performed yet. The package is direct
-same-account service evidence only; it does not claim Nova dispatch or hosted
-execution.
+The fixture and recovery harness are implemented. The reviewed create plan
+contains exactly one tagged table; monitored apply
+`nova-dynamodb-pitr-487-create-20261124` has started and its terminal result
+is pending. No restore or item write has been attempted yet. The package is
+direct same-account service evidence only; it does not claim Nova dispatch or
+hosted execution.
 
 ## Tests / validation performed
 
-No runtime or AWS tests have been run yet. This ticket and the test procedure
-are the bootstrap commit for the draft PR.
+The bootstrap documentation commit opened the draft PR before substantive
+implementation. Five harness unit tests, Ruff, Terraform formatting and
+validation, full local verification, documentation checks, and diff checks
+pass. The live AWS lifecycle is in progress.
 
 ## Evidence files produced
 

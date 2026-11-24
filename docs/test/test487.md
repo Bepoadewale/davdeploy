@@ -14,12 +14,13 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-The fixture creates one `modules/dynamodb-table` source table tagged with
-`TestId=nova-dynamodb-pitr-487-<run-id>`. It uses on-demand billing, module
-defaults for encryption/PITR/deletion protection, and no indexes, streams,
-replicas, or other AWS services. The AWS CLI profile and caller account are
-verified before any mutation. Terraform state remains local and is retained
-after teardown.
+The fixture creates one `modules/dynamodb-table` source table named
+`davdeploy-nova-dynamodb-pitr-487-20261124a1b2`, tagged with
+`TestId=nova-dynamodb-pitr-487-20261124a1b2`. It uses on-demand billing,
+module defaults for encryption/PITR/deletion protection, and no indexes,
+streams, replicas, or other AWS services. The AWS CLI profile and caller
+account were verified before mutation. Terraform state remains local and will
+be retained after teardown.
 
 The PITR restore creates one second temporary DynamoDB table. Neither table
 has indexes, streams, replicas, or other AWS services.
@@ -36,9 +37,10 @@ has indexes, streams, replicas, or other AWS services.
 4. Verify the restored table becomes `ACTIVE`, contains the baseline, and
    excludes the later item. Tag and delete the restored table; verify its
    absence.
-5. Review/apply an exact Terraform plan that disables source-table deletion
-   protection. Review the destroy plan, destroy through the run monitor, and
-   independently verify the source table is absent and state is empty.
+5. After the restore assertions pass, disable deletion protection directly on
+   the exact disposable source table and confirm the change. Review the source
+   destroy plan, destroy through the run monitor, and independently verify the
+   source table is absent and local state is empty.
 
 AWS documents that a PITR restore creates a new table, the latest restorable
 time typically lags current time by about five minutes, and tags, deletion
@@ -48,14 +50,20 @@ than assuming elapsed time is sufficient.
 
 ## Observed result
 
-Pending. No AWS resource has been created.
+The saved create plan contained exactly one create, zero changes, and zero
+deletes. It specified the exact table name/tag, `PAY_PER_REQUEST`, enabled
+server-side encryption, enabled PITR, and enabled deletion protection. The
+monitored create run `nova-dynamodb-pitr-487-create-20261124` started at
+`2026-11-24T19:26:35Z`; its terminal result and Terraform PID are pending the
+five-minute monitor interval. No item write or restore has run yet.
 
 ## Teardown
 
-Pending. The restored table will be tagged and deleted. The source table's
-deletion protection will be disabled only through a reviewed Terraform plan;
-its destroy plan will run through the Terraform run monitor. Independent AWS
-absence checks and an empty local state will be recorded.
+Pending. The restored table will be tagged and deleted by the evidence script.
+After its recovery assertions pass, source-table deletion protection will be
+disabled through one exact DynamoDB API call; the source destroy will run
+through the Terraform monitor. Independent AWS absence checks and an empty
+local state will be recorded.
 
 ## Final boundary
 
