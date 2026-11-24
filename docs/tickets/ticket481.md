@@ -1,0 +1,108 @@
+# ticket481
+
+PR: [#481 — feat: bind EFS NFS rules to mount targets](https://github.com/Bepoadewale/davdeploy/pull/481) (draft)
+Branch: `feat/efs-mount-target-binding-481`
+
+## Problem / goal
+
+The generated-plan policy requires NFS ingress to use exactly TCP/2049 from a
+security-group source, but it does not verify that the ingress rule targets a
+security group attached to an EFS mount target. A safe source group and port
+alone do not show that NFS reaches the intended mount target. Bind each planned
+EFS mount target to a same-plan security group and require every planned NFS
+ingress target to use one of those mount-target groups.
+
+## Current repo state
+
+- Backend `main` is `63e9276cf1eeb692464d895b9730a6a3ea7c4138` (PR #480).
+- PR #477 requires encrypted EFS, General Purpose performance, Bursting
+  throughput, and exact TCP/2049 ingress from a security-group source.
+- The module attaches its EFS security group to mount targets and targets that
+  group from NFS ingress, but current policy does not bind these relationships.
+- AWS states that mount-target security groups must allow inbound NFS 2049 from
+  client security groups. No EFS resource or hosted control-plane change is
+  required for this source-only package.
+
+## Research / references used
+
+- [AWS EFS security group network access](https://docs.aws.amazon.com/efs/latest/ug/network-access.html)
+- [Terraform `aws_efs_mount_target`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_mount_target)
+- [Terraform JSON output format](https://developer.hashicorp.com/terraform/internals/json-format)
+- `apps/api/src/davdeploy/generated_plan_policy.py`
+- `infrastructure/terraform/modules/efs-shared-storage/main.tf`
+- `tests/test_generated_plan_policy.py`
+- `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
+
+## Work planned for the PR
+
+1. Bind each EFS mount target's configured `security_groups` references to
+   same-plan security-group resources.
+2. Require each NFS ingress target to match a group attached to a planned EFS
+   mount target; fail closed on missing, unknown, unrelated, or mismatched
+   target references.
+3. Add regression tests for the accepted reference chain and missing/mismatched
+   targets, then update the evidence matrix with remaining mount and file-access
+   limitations.
+
+## Acceptance criteria
+
+- [x] Policy accepts a same-plan EFS file system, mount target, mount-target
+  security group, and exact NFS ingress target/source relationship.
+- [x] Policy denies an ingress rule aimed at a different security group and
+  mount targets with missing, unknown, or non-same-plan security-group binding.
+- [x] Existing exact TCP/2049, security-group source, and EFS encryption/mode
+  requirements remain enforced.
+- [x] Findings do not expose plan values and tests cover accepted and rejected
+  bindings.
+- [x] Evidence matrix states that source policy still does not prove mounted
+  file read/write, tenant authorization, lifecycle, pricing, or Nova dispatch.
+- [x] No AWS or hosted control-plane resource is changed.
+- [x] Local verification, ticket conventions, and diff checks pass.
+- [x] All seven CI checks pass on implementation head `8bd35ac` and ticket
+  update head `b19c054`.
+- [ ] All seven checks pass on the final PR head before merge.
+
+## Acceptance status
+
+Implementation and local verification are complete. Implementation head
+`8bd35ac` passed all seven required checks in CI run `45380053141`; ticket
+update head `b19c054` also passed all seven in run `45380791051`. The final
+ticket update still requires CI before merge. No AWS or hosted control-plane
+resource has been changed.
+
+## Tests / validation performed
+
+- `.venv/bin/python -m pytest tests/test_generated_plan_policy.py -k 'efs_' -q`
+  — 21 passed after the final policy-version update.
+- `.venv/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py`
+  — passed after the final policy-version update.
+- `make verify` — passed: 1,710 tests, Actions configuration, Ruff, OpenAPI,
+  and Docker Compose checks; one existing Starlette/httpx deprecation warning.
+- `GITHUB_PR_NUMBER=481 .venv-pr399/bin/python scripts/check_doc_conventions.py`
+  — passed.
+- `terraform fmt -check -recursive infrastructure/terraform/modules/efs-shared-storage`
+  — passed.
+- `git diff --check` — passed.
+- PR #481 implementation head `8bd35ac` passed all seven checks in CI run
+  [45380053141](https://github.com/Bepoadewale/davdeploy/actions/runs/45380053141).
+- PR #481 ticket-update head `b19c054` passed all seven checks in CI run
+  [45380791051](https://github.com/Bepoadewale/davdeploy/actions/runs/45380791051).
+
+## Evidence files produced
+
+- `apps/api/src/davdeploy/generated_plan_policy.py`
+- `tests/test_generated_plan_policy.py`
+- `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
+- `docs/tickets/ticket481.md`
+
+## Boundaries
+
+Source and documentation only. Do not modify AWS resources, the hosted control
+plane, or existing audit evidence. Do not claim EFS file access or lifecycle
+from plan-policy tests.
+
+## Follow-up work
+
+Direct isolated EFS lifecycle evidence must separately verify client mount and
+authorized file operations, denied access where applicable, teardown, and
+independent absence. Pricing and Nova-hosted execution remain separate gates.

@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-24.2"
+POLICY_VERSION = "nova-generated-plan-2026-11-24.3"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -368,6 +368,7 @@ def _evaluate(
     _check_kinesis_streams(resources, findings)
     _check_efs_file_systems(resources, findings)
     _check_efs_nfs_ingress(resources, findings)
+    _check_efs_mount_target_binding(document, resources, findings)
     _check_elasticache_replication_groups(document, resources, findings)
     _check_redis_ingress(document, resources, findings)
     _check_rds_final_snapshot_changes(document, findings)
@@ -2326,6 +2327,162 @@ def _check_efs_nfs_ingress(
     """Require any planned NFS ingress to be TCP/2049 from a security group."""
     _check_security_group_port_ingress(
         resources, port=2049, service_name="NFS", finding_prefix="efs_nfs", findings=findings
+    )
+
+
+def _check_efs_mount_target_binding(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Bind EFS mount targets and NFS rules to the same planned security groups."""
+    efs_file_systems = {
+        item.get("address")
+        for item in resources
+        if item.get("type") == "aws_efs_file_system"
+        and isinstance(item.get("address"), str)
+    }
+    if not efs_file_systems:
+        return
+
+    configured = _configured_resource_references(document)
+    security_groups = {
+        item.get("address")
+        for item in resources
+        if item.get("type") == "aws_security_group"
+        and isinstance(item.get("address"), str)
+    }
+    mount_target_groups: dict[str, set[str]] = {}
+    mount_targets_by_file_system: dict[str, set[str]] = {
+        address: set() for address in efs_file_systems
+    }
+    for item in resources:
+        if item.get("type") != "aws_efs_mount_target":
+            continue
+        address = item.get("address")
+        if not isinstance(address, str):
+            continue
+        references = configured.get(address, ())
+        file_system_refs = {
+            file_system
+            for file_system in efs_file_systems
+            if _references_resource(references, file_system)
+        }
+        if len(file_system_refs) != 1:
+            _deny(
+                findings,
+                "efs_mount_target_file_system_binding_invalid",
+                address,
+                "Each EFS mount target must reference exactly one same-plan file system.",
+            )
+        else:
+            mount_targets_by_file_system[next(iter(file_system_refs))].add(address)
+
+        group_refs = {
+            security_group
+            for security_group in security_groups
+            if _references_resource(references, security_group)
+        }
+        if not group_refs:
+            _deny(
+                findings,
+                "efs_mount_target_security_group_binding_invalid",
+                address,
+                "Each EFS mount target must reference a same-plan security group.",
+            )
+        mount_target_groups[address] = group_refs
+
+    for file_system, targets in mount_targets_by_file_system.items():
+        if not targets:
+            _deny(
+                findings,
+                "efs_mount_target_missing",
+                file_system,
+                "Each generated EFS file system must have a same-plan mount target.",
+            )
+
+    nfs_target_groups: dict[str, set[str]] = {}
+    for item in resources:
+        kind = item.get("type")
+        if kind == "aws_security_group":
+            values = item.get("values")
+            rules = values.get("ingress", []) if isinstance(values, dict) else []
+            if not isinstance(rules, list):
+                continue
+            for rule in rules:
+                if not isinstance(rule, dict) or not _rule_includes_port(rule, 2049):
+                    continue
+                address = item.get("address")
+                if isinstance(address, str):
+                    nfs_target_groups.setdefault(address, set()).add(address)
+            continue
+        if kind not in {
+            "aws_security_group_rule",
+            "aws_vpc_security_group_ingress_rule",
+        }:
+            continue
+        values = item.get("values")
+        if not isinstance(values, dict):
+            continue
+        if kind == "aws_security_group_rule" and values.get("type") != "ingress":
+            continue
+        protocol = values.get(
+            "protocol" if kind == "aws_security_group_rule" else "ip_protocol"
+        )
+        if not _rule_includes_port(values, 2049, protocol=protocol):
+            continue
+        address = item.get("address")
+        references = configured.get(address, ())
+        target_groups = {
+            security_group
+            for security_group in security_groups
+            if _references_resource(references, security_group)
+        }
+        if not target_groups:
+            _deny(
+                findings,
+                "efs_nfs_ingress_target_binding_invalid",
+                address,
+                "NFS ingress must target a same-plan security group attached to an EFS mount target.",
+            )
+        nfs_target_groups[address] = target_groups
+
+    attached_groups = {
+        group
+        for groups in mount_target_groups.values()
+        for group in groups
+    }
+    bound_nfs_groups = {
+        group for groups in nfs_target_groups.values() for group in groups
+    }
+    for security_group in attached_groups.difference(bound_nfs_groups):
+        _deny(
+            findings,
+            "efs_nfs_ingress_missing",
+            security_group,
+            "Each EFS mount-target security group must have a same-plan TCP/2049 ingress rule.",
+        )
+    for address, groups in nfs_target_groups.items():
+        if not groups.intersection(attached_groups):
+            _deny(
+                findings,
+                "efs_nfs_ingress_target_mismatch",
+                address,
+                "NFS ingress must target a security group attached to a same-plan EFS mount target.",
+            )
+
+
+def _rule_includes_port(
+    rule: dict[str, Any], port: int, *, protocol: Any = None
+) -> bool:
+    protocol = rule.get("protocol") if protocol is None else protocol
+    from_port = _integer(rule.get("from_port"))
+    to_port = _integer(rule.get("to_port"))
+    return protocol == "-1" or (
+        protocol == "tcp"
+        and from_port is not None
+        and to_port is not None
+        and from_port <= port <= to_port
     )
 
 
