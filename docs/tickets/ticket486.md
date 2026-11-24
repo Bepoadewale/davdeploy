@@ -14,9 +14,10 @@ the hosted control plane.
 
 ## Current repo state
 
-- Backend `main` is `13e34c4c29d72b72cee3b553176e1b93059e3244` (merged PR #485).
+- Backend `main` is `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (merged PR #491).
 - PR #483's generated-plan policy checks ASG capacity, launch-template
-  binding, instance type, AMI-ID shape, and IMDSv2, but not root EBS mapping.
+  binding, instance type, AMI-ID shape, and IMDSv2. This PR adds verified AMI
+  root-device binding and bounded encrypted root EBS settings.
 - PR #485 records isolated capacity 1→2→1 evidence with EC2 status checks;
   its test did not verify root-volume encryption.
 - AWS account `654654474502`, region `us-east-1`; hosted control-plane
@@ -32,8 +33,8 @@ the hosted control plane.
 
 ## Work planned for the PR
 
-1. Add one explicit `/dev/xvda` EBS mapping: encrypted, gp3, 8 GiB, and
-   delete-on-termination.
+1. Add one EBS mapping for the selected AMI's verified root device: encrypted,
+   gp3, 8 GiB, and delete-on-termination.
 2. Require that exact known root-volume profile in generated ASG plans and
    fail closed for missing, unknown, multiple, or unsafe mappings.
 3. Add regression tests for acceptance, unknown values, unencrypted volumes,
@@ -61,11 +62,15 @@ the hosted control plane.
 - [x] Both isolated test cycles were destroyed through the Terraform run monitor; the ASG,
   launch template, and network are independently absent and instance records
   are terminated.
-- [ ] Evidence keeps AMI provenance, instance-role scope, guest health,
+- [x] Evidence keeps AMI provenance, instance-role scope, guest health,
   update/recovery, full pricing, remote Nova state, and Nova dispatch as
   separate open gates.
+- [ ] The required clean-room validation has completed its final clean step;
+  the targeted generated artifacts remain preserved pending explicit approval
+  for deletion.
 - [ ] Docs conventions, focused/full verification, Terraform formatting and
-  validation, `git diff --check`, and all required CI checks pass before merge.
+  validation, `git diff --check`, and all required CI checks pass on the final
+  synchronized head before merge.
 - [x] No hosted control-plane resource or state changes; protected local files
   and lineage evidence remain untouched.
 
@@ -83,16 +88,17 @@ Automated review found that a hard-coded `/dev/xvda` does not prove it is the
 selected AMI's root device, and required the clean-room gate for Terraform
 behavior. The implementation now queries `aws_ami` metadata and binds the
 image ID and root mapping to that source. Two fresh isolated AWS cycles passed
-and were destroyed with independent absence checks. A regression test now
-covers planned AMI metadata taking precedence over stale prior state. The
-clean-room cycle passed at base `d6c8585`; the updated policy and regression
+and were destroyed with independent absence checks. Regression tests cover
+planned AMI metadata taking precedence over stale prior state. The clean-room
+cycle passed at base `d6c8585`; the updated policy and regression
 test from this PR were then synchronized into the isolated worktree, where all
 demos and full verification passed again (1,752 tests). Final cleanup of its
 generated artifacts is pending explicit approval. Current committed head
-`15fefca` has all seven checks green in run `45465652485`. The root-device
-review finding is addressed in code; the clean-room review finding remains
-open until final cleanup is approved and recorded. No hosted control-plane
-resource or state was touched.
+`d8f0d7a` passed all seven checks in run `45466557590`; this synchronized PR
+branch now includes `main` through merge commit `8dd1ff8`, and its new CI is
+pending. The root-device review finding is addressed in code; the clean-room
+review finding remains open until final cleanup is approved and recorded. No
+hosted control-plane resource or state was touched.
 
 ## Tests / validation performed
 
@@ -128,8 +134,9 @@ resource or state was touched.
   Both test instances are terminated; all tagged resources, the specific root
   volume, and the Auto Scaling group are absent; Terraform state and active
   monitor operations are empty.
-- PR checks run `45464063135`: all seven checks passed on committed head
-  `d6c8585`; this uncommitted evidence update requires a fresh run.
+- PR checks run `45466557590`: all seven checks passed on head `d8f0d7a` before
+  synchronization with current `main`; the synchronized head requires fresh
+  CI before merge.
 - AWS `aws_ami` data lookup for this test returned AMI
   `ami-0aacbf72109c53c0c`, root device `/dev/xvda`; the refreshed plan contains
   that metadata in `prior_state` and references it from the image and device
