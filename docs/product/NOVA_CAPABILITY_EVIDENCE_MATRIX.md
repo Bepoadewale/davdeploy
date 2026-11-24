@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489), 2026-11-24. PR #413
+`fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491), 2026-11-24. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -10,17 +10,20 @@ after plan [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/ru
 The hosted control plane was not accessed or changed for this reconciliation.
 
 PR #485 is merged and records direct same-account Auto Scaling scale/health/
-teardown evidence for its bounded shape. PR #486 remains open; its encrypted
-root-volume tests passed, while final clean-room cleanup is pending approval
-and its generated local artifacts remain preserved. PR #487 is merged and
+teardown evidence for its bounded shape. PR #486 remains open; its AMI-bound
+encrypted root-volume tests passed, while final clean-room cleanup is pending
+approval and its generated local artifacts remain preserved. PR #487 is merged and
 records exact-module DynamoDB point-in-time recovery and teardown. PR #489 is
 merged with final-head CI run [45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
 and merged-main run [45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
 passing all seven checks. It records exact-module Lambda v1 invocation,
 in-place v2 update, teardown, and independent absence verification. A read-only AWS check found no matching
 DynamoDB test table, Auto Scaling group, EC2 instance, or Lambda test resources.
-These tests count only for the tested shapes and do not establish Nova
-dispatch. Terraform monitor: 57 records, no active operations.
+PR #491 is merged after verifying the exact `modules/artifacts` bucket
+settings, synthetic object versions, exact-key cleanup, monitored destroy,
+and independent absence checks. The S3 test uses local Terraform state and
+does not establish Nova dispatch. These tests count only for the tested
+shapes. Terraform monitor: 59 records, no active operations.
 
 PR #473 merged with seven checks passing in CI run
 [45284594649](https://github.com/Bepoadewale/davdeploy/actions/runs/45284594649).

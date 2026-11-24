@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The hosted control plane
+`fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -106,15 +106,20 @@ the local Terraform state is retained and empty. No Nova dispatch or guest
 application health is claimed. The merge added no AWS or control-plane
 resources.
 
-PR #486 remains open and unmerged at
-`d8f0d7aff2851815cb46150fb187f01bd5ba9782`. Its final-head CI run
-[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
-passed all seven checks. Two isolated direct same-account cycles verified an
-encrypted 8 GiB gp3 root volume, healthy ASG/EC2 checks, and teardown with
-independent absence checks. Its remaining review finding requires final
-clean-room cleanup; that cleanup would remove the clean-room worktree's
-generated `.venv`, `.local`, and Compose volumes and remains pending explicit
-approval. Those local artifacts are preserved.
+PR #491 merged at `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4`; final-head and
+merged-main CI runs `45499107914` and `45500400235` passed all seven checks.
+Its direct `modules/artifacts` test verified private access settings,
+versioned synthetic object reads, exact-key cleanup, monitored destroy, and
+independent bucket absence. Local state is retained; no Nova dispatch is
+claimed.
+
+PR #486 remains open. Its synchronized branch passed all seven checks in
+[run 45501814671](https://github.com/Bepoadewale/davdeploy/actions/runs/45501814671)
+before this status refresh. Two direct same-account cycles verified the
+AMI-bound encrypted 8 GiB gp3 root volume, healthy ASG/EC2 checks, and teardown
+with independent absence checks. Final clean-room cleanup remains pending
+approval to remove only that worktree's generated `.venv`, `.local`, and
+Compose volume; those artifacts are preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

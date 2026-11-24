@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The
+Backend `main` is `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -12,6 +12,8 @@ The recorded deployment passed database migrations; all six Lambda packages
 shared code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz`
 returned HTTP 200. These checks describe the hosted control plane, not a
 customer workload. PR #430 refreshed the 26-capability/30-root evidence map.
+PR #491 adds direct exact-module S3 artifact lifecycle evidence; it does not
+prove Nova dispatch.
 
 PR #424's bounded Aurora pricing and PRs #425–#429's Nova provenance/schema
 evidence are in backend source but are not deployed by PR #420. Cost coverage
@@ -130,12 +132,12 @@ records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
 cross-account isolation. The merge added no AWS resources.
 
-PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782` with all
-seven checks passing in run
-[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590).
-It verifies encrypted Auto Scaling root volumes in two direct same-account
-cycles. The clean-room review finding remains open until final cleanup of only
-that worktree's generated `.venv`, `.local`, and Compose volumes; preserve these
+PR #486 remains open with its branch synchronized to `main` through PR #491.
+It verifies the AMI-bound encrypted Auto Scaling root-volume profile in two
+direct same-account cycles. Run [45501814671](https://github.com/Bepoadewale/davdeploy/actions/runs/45501814671)
+passed all seven checks before the latest status-document update. The
+clean-room review finding remains open until final cleanup of only that
+worktree's generated `.venv`, `.local`, and Compose volume; preserve those
 artifacts pending explicit approval.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head run

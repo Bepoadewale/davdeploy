@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
+`fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -59,13 +59,20 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782`; its
-final-head CI run
-[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
-passed all seven checks. Two same-account cycles verified encrypted 8 GiB gp3
-root volumes and teardown. Its final clean-room cleanup remains pending
-approval to remove generated artifacts and Compose volumes in that specific
-worktree; those artifacts are preserved.
+PR #486 remains open with its branch synchronized to current `main` through
+PR #491. Its latest pre-status-update CI run
+[45501814671](https://github.com/Bepoadewale/davdeploy/actions/runs/45501814671)
+passed all seven checks. Two same-account cycles verified AMI-bound encrypted
+8 GiB gp3 root volumes and teardown. Final clean-room cleanup remains pending
+approval to remove only the generated `.venv`, `.local`, and Compose volume in
+that specific worktree; those artifacts are preserved.
+
+PR #491 merged at `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4`; final-head run
+[45499107914](https://github.com/Bepoadewale/davdeploy/actions/runs/45499107914)
+and merged-main run
+[45500400235](https://github.com/Bepoadewale/davdeploy/actions/runs/45500400235)
+passed all seven checks. It adds exact-shape `modules/artifacts` customer-side
+evidence; Nova dispatch remains unproven.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
 CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
