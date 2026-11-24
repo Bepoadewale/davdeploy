@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479). The
+Backend `main` is `2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -96,6 +96,16 @@ passed all seven checks. No Redis workload was created. Client authentication,
 failover, lifecycle, full pricing, and Nova dispatch remain unproven. The AUTH
 token may be present in protected Terraform plan/state artifacts. See
 `docs/tickets/ticket479.md`.
+
+PR #481 binds each planned EFS mount target to a same-plan file system and
+security group, requires NFS ingress on each attached target group, and denies
+NFS rules aimed at unrelated security groups. It does not prove mounted file
+access, authorization, lifecycle, complete pricing, or Nova execution. No AWS
+or hosted control-plane resource changed. Final-head CI run
+[45381617316](https://github.com/Bepoadewale/davdeploy/actions/runs/45381617316)
+and merged-main CI run
+[45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009)
+passed all seven checks. See `docs/tickets/ticket481.md`.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

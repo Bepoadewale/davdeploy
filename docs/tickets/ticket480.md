@@ -1,6 +1,6 @@
 # ticket480
 
-PR: [#480 — docs: reconcile Nova status through PR #479](https://github.com/Bepoadewale/davdeploy/pull/480) (draft)
+PR: [#480 — docs: reconcile Nova status through PR #479](https://github.com/Bepoadewale/davdeploy/pull/480) (merged)
 Branch: `docs/reconcile-nova-status-480`
 
 ## Problem / goal
@@ -49,14 +49,14 @@ plane and AWS resources remain untouched.
   source-only limitations retained.
 - [x] No Redis workload or hosted control-plane change is claimed.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] Merge only after all seven required checks pass on the final PR head.
+- [x] Final PR head and merged-main CI each pass all seven required checks.
 
 ## Acceptance status
 
-Documentation implementation is complete and the local documentation and diff
-checks pass. Implementation head `3e567f9` passed all seven CI checks in run
-`45376421551`. The evidence-only follow-up head still needs its required CI run
-before merge. No AWS or hosted control-plane resource has been changed.
+PR #480 merged at `63e9276cf1eeb692464d895b9730a6a3ea7c4138`. Final head
+`2966748` passed all seven CI checks in run `45377123498`; merged-main CI
+`45377903734` also passed all seven. No AWS or hosted control-plane resource
+was changed.
 
 ## Tests / validation performed
 
@@ -70,7 +70,11 @@ before merge. No AWS or hosted control-plane resource has been changed.
   both passed all seven checks.
 - PR #480 implementation head `3e567f9` passed all seven checks in CI run
   [45376421551](https://github.com/Bepoadewale/davdeploy/actions/runs/45376421551).
-- The evidence-only follow-up commit must also pass all seven required checks.
+- PR #480 ticket-update head `2966748` passed all seven checks in run
+  [45377123498](https://github.com/Bepoadewale/davdeploy/actions/runs/45377123498).
+- Merged-main CI run
+  [45377903734](https://github.com/Bepoadewale/davdeploy/actions/runs/45377903734)
+  passed all seven checks.
 
 ## Evidence files produced
 

@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479); hosted runtime remains
+`2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -73,6 +73,16 @@ the Redis security group. No Redis workload or hosted control-plane resource
 was changed. Client authentication, failover, lifecycle, complete pricing, and
 Nova dispatch remain unproven; the token may enter protected Terraform
 plan/state artifacts.
+
+PR #481 merged with all seven checks passing on its final head in CI run
+[45381617316](https://github.com/Bepoadewale/davdeploy/actions/runs/45381617316).
+Merged-main CI run
+[45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009)
+also passed all seven checks. It binds EFS file systems, mount targets,
+security groups, and exact TCP/2049 ingress through same-plan references.
+No EFS or hosted control-plane resource changed. The source policy does not
+prove mount/file operations, access authorization, lifecycle, complete costs,
+or Nova dispatch.
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,
