@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`426d81da901555b3fdabbde19d2c2d971319212d` (PR #487). The hosted control plane
+`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -128,6 +128,18 @@ AWS inventory found no test table, and retained local state lists no
 resources. The evidence proves source writes and restored-table reads, not
 Nova dispatch or live source-read assertions.
 
+PR #488 reconciled status through PR #487. PR #489 merged as
+`5691f070400ac882c9291885668ba3d0150e48a2`; final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. Its exact `modules/lambda-service` test verified a
+reviewed four-resource create, synthetic v1 invocation, one in-place v2 code
+update, monitored teardown, and independent absence of the function, role, and
+log group. Local state is retained and empty. This is direct customer-side
+evidence for the tested Lambda shape, not Nova dispatch or workload
+certification.
+
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
 It adds source-only generated-plan checks for one-to-one SQS retry/DLQ pairs
@@ -146,8 +158,9 @@ is a name-filtered test-resource inventory, not a complete account inventory.
 SageMaker lineage evidence remains retained. The SQS test prefix is absent;
 the existing production-tagged queue remains. A later read-only recheck
 verified account `654654474502`, no matching DynamoDB test table or Auto
-Scaling group, no matching EC2 test instance, and 54 monitor records with no
-active run. Preserve `--only-show-errors`,
+Scaling group, no matching EC2 test instance, and 57 monitor records with no
+active run. PR #489's Lambda function, execution role, and log group are absent.
+Preserve `--only-show-errors`,
 `.venv-pr399/`, and lineage evidence. The frontend status remains based on
 the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
@@ -174,7 +187,7 @@ the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 - PRs #299–#303 add gated S3 and DynamoDB renderer bindings and typed Lambda/API inputs. PR #303 (`ea9de3a`) fixes the dispatcher allowlist for `table_name` and is included in later hosted control-plane releases. These gated renderers still lack hosted composed customer workload evidence.
 - Nova proposal repair, generated-plan policy, durable requests, remote state, saved-plan review and exact workspace artifacts are implemented and included in the current control-plane release. The plan-only runner and review APIs are deployed, but there is no recorded authenticated customer request producing a Nova plan. The App Runner customer renderer remains the only generally enabled workload path; Nova S3/DynamoDB and serverless renderers remain gated, and hosted multi-module composition is not certified.
 - Merged PRs #407–#416 add regional pricing for selected bounded resource families and expose the assumptions in plan review. Merged PRs #417–#420 make the protected control-plane plan summaries inspectable while keeping values redacted. These changes are deployed in PR #420's release, but unpriced material costs still block approval.
-- Draft PR #399 contains the source-level exact-plan apply credential/input APIs, staged artifacts, fixed apply worker and result reconciliation. Its gates remain disabled; the customer apply role, hosted apply and full workload lifecycle have not been verified.
+- PR #399 merged with the source-level exact-plan apply credential/input APIs, staged artifacts, fixed apply worker and result reconciliation. Its gates remain disabled; the customer apply role, hosted apply and full workload lifecycle have not been verified.
 - Backend PR #279 improves the local Terraform run monitor. PR #280 adds atomic worker claims, lease heartbeats and explicit reconciliation for uncertain outcomes. Protected Terraform apply run `41716835229` deployed the merged worker/database changes from PRs #277, #278 and #280. Customer-execution gates remain unchanged.
 - A bounded Day-2 loop: deterministic latency evidence, a transparent replica recommendation, immutable `CHANGE` plan, independent production approval, durable worker, observed result and audit. It is local fixture evidence, not autonomous remediation or cloud monitoring.
 - One selected AWS customer-plan review with durable submit, administrator approval/rejection, editable draft/rejected constraint revisions, filtered administrator review queues, rich review evidence and explicit self-approval audit paths. Approval remains separate from execution.

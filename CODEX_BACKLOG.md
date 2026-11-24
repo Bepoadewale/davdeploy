@@ -2,7 +2,7 @@
 
 ## Nova status snapshot — 2026-11-24
 
-Backend `main` is `426d81da901555b3fdabbde19d2c2d971319212d` (PR #487). The
+Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -147,10 +147,21 @@ configuration, restored a baseline while excluding a later write, and removed
 both test tables. Local state is retained and empty; Nova dispatch is not
 claimed. See `docs/test/test487.md`.
 
+PR #488 reconciles the canonical status files through PR #487. PR #489 merged
+as `5691f070400ac882c9291885668ba3d0150e48a2`; its final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. Its exact `modules/lambda-service` test recorded a
+reviewed create, synthetic v1 invocation, in-place v2 code update, monitored
+teardown, and independent absence checks for the function, role, and log group.
+Local state is retained and empty. See `docs/test/test489.md`; this is evidence
+for the tested shape only and does not prove Nova dispatch.
+
 Read-only recheck confirmed AWS account `654654474502`, no matching test
-DynamoDB table, Auto Scaling group, or EC2 instance, and zero active Terraform
-monitor operations. The hosted control plane and its state/locks were not
-touched.
+DynamoDB table, Auto Scaling group, EC2 instance, or PR #489 Lambda resources,
+and zero active Terraform monitor operations (57 historical records). The
+hosted control plane and its state/locks were not touched.
 
 The plan-only runner, review, role trust verification, and tenant state APIs
 are deployed, but no authenticated customer Nova request has produced a

@@ -1,6 +1,6 @@
 # ticket489 — verify the Lambda service module lifecycle
 
-PR: [#489 — test: verify Lambda service module lifecycle](https://github.com/Bepoadewale/davdeploy/pull/489) (draft)
+PR: [#489 — test: verify Lambda service module lifecycle](https://github.com/Bepoadewale/davdeploy/pull/489) (merged)
 Branch: `test/lambda-service-lifecycle-489`
 
 ## Problem / goal
@@ -13,10 +13,10 @@ a code update, and reviewed teardown.
 
 ## Current repo state
 
-- Backend `main` is `6e744ca6d3fea4d8df4cb73064207221979e6e60` (PR #488).
+- Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489).
 - The hosted control plane and its Terraform state/locks must remain untouched.
 - AWS test account is `654654474502`, region `us-east-1`; the run monitor has
-  54 terminal records and no active mutation at test start.
+  57 records and no active mutation after teardown.
 - The test will use local Terraform state and unique test tags; it is not a Nova
   dispatch or hosted execution test.
 
@@ -50,7 +50,7 @@ a code update, and reviewed teardown.
 - [x] Documentation and capability matrix report the exact evidence and limits.
 - [x] Focused tests, Terraform format/validate, docs conventions, and diff
   checks pass locally.
-- [ ] Final-head CI passes before merge.
+- [x] Final-head CI passes before merge; merged-main CI also passes.
 - [x] No control-plane, remote-state, unrelated AWS, or customer workload
   resources change.
 
@@ -67,15 +67,16 @@ update `nova-lambda-service-489-update-20261124` succeeded (Terraform PID
 from a reviewed four-delete plan. Independent AWS reads confirmed the function,
 execution role, and log group absent; Terraform state lists no resources and
 is retained; the run monitor has 57 records and zero active operations. No
-control-plane or remote-state resource was changed. Final-head CI is pending.
+control-plane or remote-state resource was changed. Final-head CI run
+`45487279034` and merged-main CI run `45488186730` passed all seven checks.
 
 ## Tests / validation performed
 
 - Focused lifecycle harness tests: 4 passed.
 - Ruff, Terraform formatting and validation, documentation conventions,
   matrix evidence update, and diff checks passed locally.
-- Initial implementation CI run `45482372222` passed all seven checks; the
-  final evidence content requires a fresh run.
+- Initial implementation CI run `45482372222`, final-head run `45487279034`,
+  and merged-main run `45488186730` passed all seven checks.
 
 ## Evidence files produced
 

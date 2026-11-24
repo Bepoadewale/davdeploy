@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`426d81da901555b3fdabbde19d2c2d971319212d` (PR #487). The last
+`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -76,6 +76,17 @@ billing, encryption, deletion protection, PITR recovery of a baseline, absence
 of a later write in the restored table, and independent cleanup. This direct
 test is customer-side evidence for that exact shape; it does not prove Nova
 dispatch or live source-read assertions.
+
+PR #488 reconciled canonical status through PR #487. PR #489 merged as
+`5691f070400ac882c9291885668ba3d0150e48a2`; final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. The exact Lambda-service module test verified a
+reviewed four-resource create, synthetic v1 invocation, in-place v2 code
+update, monitored destroy, and independent function/role/log-group absence.
+This is direct customer-side evidence for the tested Lambda shape; it is not
+Nova authorization, dispatch, or customer workload certification.
 
 PR #483 passed all seven checks on final head in CI run
 [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
@@ -259,7 +270,8 @@ and no AppConfig workload or lifecycle was tested; see
 [`ticket471`](../tickets/ticket471.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
-monitor has 41 terminal records and no active operations.
+monitor has 57 records and no active operations. The PR #489 Lambda test
+function, role, and log group are absent.
 Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
 lineage evidence.
 
@@ -303,7 +315,7 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `48911bfb74fafc626076d216f6ed78a21f3be4ee`. The last
+- Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
