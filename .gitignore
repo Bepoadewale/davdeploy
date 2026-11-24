@@ -7,8 +7,11 @@
 *.p12
 *.sqlite
 *.db
+*.tfstate
+*.tfstate.*
 dist/
 build/
+.terraform/
 .venv/
 .local/
 __pycache__/
