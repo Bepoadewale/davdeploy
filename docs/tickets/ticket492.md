@@ -1,6 +1,6 @@
 # ticket492 — add DavDeploy bootstrapped growth strategy
 
-PR: [#492 — docs: add bootstrapped DavDeploy growth strategy](https://github.com/Bepoadewale/davdeploy/pull/492) (draft)
+PR: [#492 — docs: add bootstrapped DavDeploy growth strategy](https://github.com/Bepoadewale/davdeploy/pull/492)
 Branch: `docs/bootstrapped-growth-plan-492`
 
 ## Problem / goal
@@ -52,24 +52,22 @@ between targets and verified facts.
   work and avoids unsupported customer, revenue, or valuation claims.
 - [x] Sources and comparables are linked, with material differences in funding
   history or transaction status made clear.
-- [x] Documentation conventions and diff checks pass locally; required PR CI
-  remains before merge.
+- [x] Documentation conventions, diff checks, and final-head PR CI pass.
 - [x] No AWS, hosted control-plane, product runtime, financial account, or
   pricing configuration is changed.
-- [ ] Final-head PR CI passes before merge.
 
 ## Acceptance status
 
 The strategy document is written with all four stages, ARR scenarios,
 ownership assumptions, current DavDeploy limitations, and linked market/company
-references. Documentation conventions and diff checks pass. Final-head PR CI
-is pending.
+references. Documentation conventions and diff checks pass. Final-head CI run
+`45497407816` passed all seven checks.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=492 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Final-head PR CI: pending.
+- Final-head PR CI run `45497407816`: passed all seven checks.
 
 ## Evidence files produced
 
