@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477), 2026-11-24. PR #413
+`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479), 2026-11-24. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -24,13 +24,17 @@ its final seven checks passed in CI run
 [45290021353](https://github.com/Bepoadewale/davdeploy/actions/runs/45290021353).
 No workload or cloud resource was created.
 
-Draft PR #479 adds source-only ElastiCache checks for Redis OSS 7.1, one
-`cache.t4g.micro` node, TLS-required connections, a sensitive AUTH token applied
-with the `SET` strategy, and exact TCP/6379 security-group ingress. It is not
-merged or deployed. The token can enter Terraform plan/state and therefore
-requires the existing protected, encrypted artifact/state handling. No client
-authentication, failover, lifecycle, complete price, or Nova execution is
-proven.
+PR #479 merged with all seven checks passing in final-head CI run
+[45373475770](https://github.com/Bepoadewale/davdeploy/actions/runs/45373475770)
+and merged-main CI run
+[45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792).
+Its source-only ElastiCache checks require Redis OSS 7.1, one `cache.t4g.micro`
+node, TLS-required connections, a sensitive AUTH token applied with the `SET`
+strategy, and exact TCP/6379 ingress bound to the replication group's
+security group. The token can enter Terraform plan/state and therefore
+requires the existing protected, encrypted artifact/state handling. No Redis
+workload, client authentication, failover, lifecycle, complete price, or Nova
+execution is proven.
 
 PR #399 adds the exact-plan Nova apply path and customer role template in
 source; its apply and credential gates remain disabled. PR #437's isolated
@@ -344,7 +348,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-ecr-image` | `modules/ecr` | `aws-managed-application`, `aws-container-service`, `aws-kubernetes-platform` / `saas-backend`, `kubernetes` | PR #461 adds source checks for immutable image tags, declared scan-on-push, AES256 repository encryption, and `force_delete=false`. AWS now deprecates repository-level scan configuration in favor of registry-level scanning, so this field is configuration intent, not proof scanning is active. No image-provenance or repository-policy scope is enforced. | [`test461.md`](../test/test461.md) records direct same-account creation, setting verification, and teardown of this module's empty repository; [`test239.md`](../test/test239.md) records ECR settings in a combined stack. Neither test pushes/runs an image. | No verified image digest/source provenance, registry-level scan result, scoped pull/run, full application lifecycle, or complete ECR cost |
 | `aws-aurora-postgres` | `modules/aurora-postgres` | `aws-relational-data` / `saas-backend` | RDS public access/encryption and bounded deletion/final-snapshot unknown checks | [`test244.md`](../test/test244.md): Aurora available; no app query or restore |
 | `aws-dynamodb-table` | `modules/dynamodb-table` | `aws-nosql-data` / `saas-backend` | PR #473 requires known table/partition-key identity, `PAY_PER_REQUEST`, server-side encryption, deletion protection, and enabled PITR with a bounded recovery period. This source-only policy does not cover indexes, streams, replicas, consumer permissions, or all usage costs. | [`test244.md`](../test/test244.md): SSE and point-in-time recovery; no app read/write or restore |
-| `aws-elasticache-redis` | `modules/elasticache-redis` | No cache module in catalogue / no scenario | Draft PR #479 requires source-only checks for Redis OSS 7.1, one `cache.t4g.micro` node, AUTH token marked sensitive with `SET`, at-rest/TLS encryption, same-plan subnet/security-group references, and exact TCP/6379 ingress bound to the Redis security group. The token may enter Terraform plan/state. This does not prove client authorization, failover, lifecycle, or complete costs. | [`test244.md`](../test/test244.md): replication group available; no client operation |
+| `aws-elasticache-redis` | `modules/elasticache-redis` | No cache module in catalogue / no scenario | Merged PR #479 requires source-only checks for Redis OSS 7.1, one `cache.t4g.micro` node, AUTH token marked sensitive with `SET`, at-rest/TLS encryption, same-plan subnet/security-group references, and exact TCP/6379 ingress bound to the Redis security group. The token may enter Terraform plan/state. This does not prove client authorization, failover, lifecycle, or complete costs. | [`test244.md`](../test/test244.md): replication group available; no client operation |
 | `aws-opensearch` | `modules/opensearch` | `aws-search`, `aws-ai-retrieval` / `ai-rag` | PR #466 bounds plans to the module's one-node `t3.small.search`, 10 GiB gp3, VPC-mode, encrypted-at-rest/node-to-node, HTTPS/TLS 1.2 shape. It does not verify the subnet/SG attachment chain, access policy, index permissions, or current price. | [`test244.md`](../test/test244.md) domain ready; [`test262.md`](../test/test262.md) uses OpenSearch Serverless for KB retrieval; neither verifies this module's complete lifecycle |
 | `aws-efs-shared-storage` | `modules/efs-shared-storage` | No explicit EFS catalogue module; possible `aws-file-storage` overlap / no exact scenario mapping | PR #477 adds source-only checks for encryption, General Purpose performance, Bursting throughput, and exact TCP/2049 ingress from a security group. It does not prove mount-target binding, access-point identity, file permissions, lifecycle, or full costs. | [`test244.md`](../test/test244.md): EFS available; no file read/write |
 | `aws-sqs-queue` | `modules/sqs-queue` | `aws-jobs-events`, `aws-payments-webhooks` / `saas-backend`, `async-data` | PR #441 requires known `sqs_managed_sse_enabled=true`; queue policies reject public/unverified principals and unbounded resource scope. Merged PRs #445/#446 add plan safety and correct dependency ordering. PR #447 adds a Lambda retry/DLQ cycle. PR #448 adds idempotent processing, code update, managed redrive, recovery, and cleanup. Merged PR #450 binds exact SNS subscription/queue-policy scope; merged PRs #451/#452 bind EventBridge target grants, bounded retries, and exact standard DLQ policy. KMS-backed encryption, managed-policy contents, other producers and non-Lambda consumers remain open. | [`test257.md`](../test/test257.md): EventBridge delivery; [`test446.md`](../test/test446.md): delivery, retries, DLQ transition, teardown; [`test447.md`](../test/test447.md): Lambda retries and paired DLQ; [`test448.md`](../test/test448.md): duplicate suppression, update, redrive, recovery, teardown; [`test449.md`](../test/test449.md): SNS delivery and teardown; [`test452.md`](../test/test452.md): EventBridge failure, DLQ, repair, recovery, teardown. None proves Nova dispatch. |

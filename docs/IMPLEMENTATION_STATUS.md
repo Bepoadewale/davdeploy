@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477); hosted runtime remains
+`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -62,6 +62,17 @@ encryption, General Purpose performance, Bursting throughput, and NFS ingress
 from a security-group source. No EFS resource or hosted control-plane resource
 was changed. The plan checks do not prove mount-target binding, file I/O,
 authorization, lifecycle, complete pricing, or Nova dispatch.
+
+PR #479 merged with all seven checks passing on its final head in CI run
+[45373475770](https://github.com/Bepoadewale/davdeploy/actions/runs/45373475770).
+Merged-main CI run
+[45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792)
+also passed all seven checks. It requires a sensitive AUTH token, TLS-required
+Redis OSS 7.1, one `cache.t4g.micro` node, and exact TCP/6379 ingress bound to
+the Redis security group. No Redis workload or hosted control-plane resource
+was changed. Client authentication, failover, lifecycle, complete pricing, and
+Nova dispatch remain unproven; the token may enter protected Terraform
+plan/state artifacts.
 
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,

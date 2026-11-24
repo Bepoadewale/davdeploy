@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477). The hosted control plane
+`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -64,6 +64,16 @@ General Purpose performance, Bursting throughput, and exact TCP/2049 NFS
 ingress from a security-group source. No EFS or control-plane resource changed.
 Mount-target binding, file I/O, access authorization, lifecycle, complete
 pricing, and Nova dispatch remain unproven.
+
+PR #479 merged with all seven checks passing in CI run
+[45373475770](https://github.com/Bepoadewale/davdeploy/actions/runs/45373475770)
+and merged-main CI run
+[45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792).
+It adds source-only Redis plan checks for a sensitive AUTH token, TLS-required
+Redis OSS 7.1, one `cache.t4g.micro` node, and exact security-group-bound
+TCP/6379 ingress. No Redis or hosted control-plane resource changed. Client
+authorization, failover, lifecycle, complete pricing, and Nova dispatch remain
+unproven; Terraform plan/state may contain the token.
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).

@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`be22c3866fa023f61aae0eaa82931179393242fa` (PR #477). The last
+`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -25,6 +25,16 @@ General Purpose performance, Bursting throughput, and TCP/2049 ingress from a
 security-group source. It does not prove mount-target binding, file access,
 tenant isolation, lifecycle, complete pricing, or Nova execution. No AWS or
 hosted control-plane resource was changed.
+
+PR #479 passed all seven checks on its final head in CI run
+[45373475770](https://github.com/Bepoadewale/davdeploy/actions/runs/45373475770);
+merged-main CI run
+[45374665792](https://github.com/Bepoadewale/davdeploy/actions/runs/45374665792)
+also passed all seven checks. It adds source-only Redis plan constraints for
+AUTH, TLS, the bounded Redis OSS 7.1 single-node profile, and security-group-
+bound TCP/6379 ingress. No Redis workload or hosted control-plane resource was
+changed. Client behavior, failover, lifecycle, full price, and Nova dispatch
+remain unproven; the AUTH token may enter protected plan/state artifacts.
 
 PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
 passed in [run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).
