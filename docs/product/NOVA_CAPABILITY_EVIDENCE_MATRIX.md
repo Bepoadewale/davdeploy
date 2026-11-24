@@ -1,7 +1,7 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`6e744ca6d3fea4d8df4cb73064207221979e6e60` (PR #488), 2026-11-24. PR #413
+`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489), 2026-11-24. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -13,9 +13,11 @@ PR #485 is merged and records direct same-account Auto Scaling scale/health/
 teardown evidence for its bounded shape. PR #486 remains open; its encrypted
 root-volume tests passed, while final clean-room cleanup is pending approval
 and its generated local artifacts remain preserved. PR #487 is merged and
-records exact-module DynamoDB point-in-time recovery and teardown. Draft PR #489
-records exact-module Lambda v1 invocation, in-place v2 update, teardown, and
-independent absence verification. A read-only AWS check found no matching
+records exact-module DynamoDB point-in-time recovery and teardown. PR #489 is
+merged with final-head CI run [45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run [45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passing all seven checks. It records exact-module Lambda v1 invocation,
+in-place v2 update, teardown, and independent absence verification. A read-only AWS check found no matching
 DynamoDB test table, Auto Scaling group, EC2 instance, or Lambda test resources.
 These tests count only for the tested shapes and do not establish Nova
 dispatch. Terraform monitor: 57 records, no active operations.
@@ -355,7 +357,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-s3-private-storage` | `modules/artifacts` | `aws-file-storage`, `aws-static-web`, `aws-ai-retrieval` / `ai-rag`, `web-application` | S3 block-public-access/public ACL checks; merged PRs #434–#436 require same-plan TLS-deny, default encryption, and `BucketOwnerEnforced`. Not a complete private-upload policy | [`test262.md`](../test/test262.md) private source bucket; not hosted `modules/artifacts` lifecycle evidence |
 | `aws-cloudfront-delivery` | `modules/cloudfront-delivery` | `aws-edge-https`, `aws-static-web` / `multi-region`, `web-application` | Merged PRs #432/#433 deny unknown or cleartext viewer policies and check custom-origin HTTPS/TLS 1.2; standard S3 origins rely on viewer HTTPS. Source-only. No response-header, private-origin-access, or cache-safety policy | [`test253.md`](../test/test253.md) |
 | `aws-api-gateway-http` | `modules/api-gateway-http` | `aws-serverless-api`; generic API building block for payments / `web-application` | Shared network/IAM checks only; no route auth, authorizer, throttling, or WAF rule | [`test268.md`](../test/test268.md) |
-| `aws-lambda-service` | `modules/lambda-service` | `aws-serverless-api`, `aws-ai-retrieval`; generic building block for other APIs / `web-application`, `ai-rag` | Shared IAM checks only; no Lambda-specific execution-role, egress, secret, or artifact policy | [`test268.md`](../test/test268.md) exercises Lambda through a separate serverless renderer root; draft PR #489 [`test489.md`](../test/test489.md) records exact-module v1 invoke, in-place v2 code update, teardown, and independent absence verification |
+| `aws-lambda-service` | `modules/lambda-service` | `aws-serverless-api`, `aws-ai-retrieval`; generic building block for other APIs / `web-application`, `ai-rag` | Shared IAM checks only; no Lambda-specific execution-role, egress, secret, or artifact policy | [`test268.md`](../test/test268.md) exercises Lambda through a separate serverless renderer root; merged PR #489 [`test489.md`](../test/test489.md) records exact-module v1 invoke, in-place v2 code update, teardown, and independent absence verification |
 | `aws-ecr-image` | `modules/ecr` | `aws-managed-application`, `aws-container-service`, `aws-kubernetes-platform` / `saas-backend`, `kubernetes` | PR #461 adds source checks for immutable image tags, declared scan-on-push, AES256 repository encryption, and `force_delete=false`. AWS now deprecates repository-level scan configuration in favor of registry-level scanning, so this field is configuration intent, not proof scanning is active. No image-provenance or repository-policy scope is enforced. | [`test461.md`](../test/test461.md) records direct same-account creation, setting verification, and teardown of this module's empty repository; [`test239.md`](../test/test239.md) records ECR settings in a combined stack. Neither test pushes/runs an image. | No verified image digest/source provenance, registry-level scan result, scoped pull/run, full application lifecycle, or complete ECR cost |
 | `aws-aurora-postgres` | `modules/aurora-postgres` | `aws-relational-data` / `saas-backend` | RDS public access/encryption and bounded deletion/final-snapshot unknown checks | [`test244.md`](../test/test244.md): Aurora available; no app query or restore |
 | `aws-dynamodb-table` | `modules/dynamodb-table` | `aws-nosql-data` / `saas-backend` | PR #473 requires known table/partition-key identity, `PAY_PER_REQUEST`, server-side encryption, deletion protection, and enabled PITR with a bounded recovery period. This source-only policy does not cover indexes, streams, replicas, consumer permissions, or all usage costs. | [`test244.md`](../test/test244.md): SSE and PITR configuration; merged PR #487 [`test487.md`](../test/test487.md): direct same-account source writes, restore to a captured PITR time, restored-table reads, and isolated teardown. No Nova dispatch. |

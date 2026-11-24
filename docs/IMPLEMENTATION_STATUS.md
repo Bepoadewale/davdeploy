@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-24. Backend `main` is
-`426d81da901555b3fdabbde19d2c2d971319212d` (PR #487); hosted runtime remains
+`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -124,6 +124,17 @@ billing, encryption, deletion protection, PITR recovery, restored-table reads,
 and independent teardown. It proves source writes and restored-table reads;
 source reads and Nova dispatch are not claimed.
 
+PR #488 reconciles status through PR #487. PR #489 merged as
+`5691f070400ac882c9291885668ba3d0150e48a2`; final-head CI run
+[45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
+and merged-main run
+[45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
+passed all seven checks. Its exact Lambda-service module test recorded a
+reviewed create, synthetic v1 invoke, in-place v2 update, monitored teardown,
+and independent AWS absence checks. The empty local state is retained. This
+proves the tested direct customer-side Lambda lifecycle shape, not Nova
+dispatch or customer-workload certification. See `docs/test/test489.md`.
+
 PR #445 merged in source with all seven CI checks passing in run
 `45072091356`. It adds source-only SQS queue visibility/retention,
 one-to-one redrive/DLQ bounds, and direct same-plan Lambda consumer checks;
@@ -144,8 +155,9 @@ DavDeploy-named job queue or compute environment, and five DavDeploy-named job
 definitions were inactive: four earlier test definitions plus PR #458's test
 definition. This is a name-filtered test-resource inventory, not a complete
 account inventory. The SageMaker lineage action/context and associated
-evidence remain preserved. The Terraform run monitor had 41 records and zero
-active operations. Preserve the protected untracked `--only-show-errors`,
+evidence remain preserved. The Terraform run monitor had 57 records and zero
+active operations. PR #489's Lambda test resources are absent. Preserve the
+protected untracked `--only-show-errors`,
 `.venv-pr399/`, and lineage evidence.
 
 ## Executed locally
