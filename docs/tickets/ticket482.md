@@ -54,10 +54,10 @@ customer lifecycle, cost, and application proof gaps explicit.
 ## Acceptance status
 
 Documentation implementation is complete and local docs and diff checks pass.
-Implementation head `cc0a23a` and ticket-update head `3457a69` passed all
-seven checks in runs `45383615742` and `45384822427`, respectively. The final
-ticket evidence update needs its own run before merge. No AWS or hosted
-control-plane resource has been changed.
+Implementation head `cc0a23a`, ticket head `3457a69`, and evidence head
+`4f23756` passed all seven checks in runs `45383615742`, `45384822427`, and
+`45385507424`, respectively. The final ticket evidence update needs its own
+run before merge. No AWS or hosted control-plane resource has changed.
 
 ## Tests / validation performed
 
@@ -73,6 +73,8 @@ control-plane resource has been changed.
   [45383615742](https://github.com/Bepoadewale/davdeploy/actions/runs/45383615742).
 - PR #482 ticket-update head `3457a69` passed all seven checks in CI run
   [45384822427](https://github.com/Bepoadewale/davdeploy/actions/runs/45384822427).
+- PR #482 evidence-update head `4f23756` passed all seven checks in CI run
+  [45385507424](https://github.com/Bepoadewale/davdeploy/actions/runs/45385507424).
 
 ## Evidence files produced
 
