@@ -42,23 +42,31 @@ customer lifecycle, cost, and application proof gaps explicit.
 
 ## Acceptance criteria
 
-- [ ] All affected documents identify `2ed17bd` / PR #481 as the source
+- [x] All affected documents identify `2ed17bd` / PR #481 as the source
   baseline and accurately report the current monitor snapshot.
-- [ ] PR #481 implementation and CI evidence are recorded, with limitations
+- [x] PR #481 implementation and CI evidence are recorded, with limitations
   retained.
-- [ ] No EFS workload, customer certification, or hosted control-plane change
+- [x] No EFS workload, customer certification, or hosted control-plane change
   is claimed.
-- [ ] Documentation conventions and `git diff --check` pass.
+- [x] Documentation conventions and `git diff --check` pass.
 - [ ] Merge only after all seven checks pass on the final PR head.
 
 ## Acceptance status
 
-Ticket-first bootstrap is present. Documentation implementation and CI are
-pending. No AWS or hosted control-plane resource has been changed.
+Documentation implementation is complete and local docs and diff checks pass.
+Required PR CI must pass on the final head before merge. No AWS or hosted
+control-plane resource has been changed.
 
 ## Tests / validation performed
 
-Pending documentation implementation.
+- `GITHUB_PR_NUMBER=482 .venv-pr399/bin/python scripts/check_doc_conventions.py`
+  — passed.
+- `git diff --check` — passed.
+- PR #481 final-head CI run
+  [45381617316](https://github.com/Bepoadewale/davdeploy/actions/runs/45381617316)
+  and merged-main CI run
+  [45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009)
+  both passed all seven checks.
 
 ## Evidence files produced
 

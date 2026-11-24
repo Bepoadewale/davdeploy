@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-24
 
 The source baseline for this reconciliation is backend `main` at
-`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479). The last
+`2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -35,6 +35,15 @@ AUTH, TLS, the bounded Redis OSS 7.1 single-node profile, and security-group-
 bound TCP/6379 ingress. No Redis workload or hosted control-plane resource was
 changed. Client behavior, failover, lifecycle, full price, and Nova dispatch
 remain unproven; the AUTH token may enter protected plan/state artifacts.
+
+PR #481 passed all seven checks on final head in CI run
+[45381617316](https://github.com/Bepoadewale/davdeploy/actions/runs/45381617316)
+and merged-main run
+[45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009).
+It binds each EFS mount target and its NFS/2049 ingress rule to same-plan
+security groups. This is source-only; no EFS or hosted resource changed. File
+access, authorization, lifecycle, full pricing, and Nova dispatch remain
+unproven.
 
 PR #399 merged as `ff6ffae9ab88a37facbc443dfb35efe8c11b598d`; all seven checks
 passed in [run 44598735006](https://github.com/Bepoadewale/davdeploy/actions/runs/44598735006).

@@ -3,7 +3,7 @@
 ## Current state
 
 **As of 2026-11-24, backend `main` is
-`a6435dfdf1cb0c5fd4d90713e2f1807ef1154959` (PR #479). The hosted control plane
+`2ed17bdf408a1b16a84ff0789c9d6f360d8fad7e` (PR #481). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -74,6 +74,14 @@ Redis OSS 7.1, one `cache.t4g.micro` node, and exact security-group-bound
 TCP/6379 ingress. No Redis or hosted control-plane resource changed. Client
 authorization, failover, lifecycle, complete pricing, and Nova dispatch remain
 unproven; Terraform plan/state may contain the token.
+
+PR #481 merged with all seven checks passing in CI run
+[45381617316](https://github.com/Bepoadewale/davdeploy/actions/runs/45381617316)
+and merged-main CI run
+[45382317009](https://github.com/Bepoadewale/davdeploy/actions/runs/45382317009).
+It binds the EFS mount-target security groups to same-plan NFS rules. This is
+source-only; no EFS or control-plane resource changed, and file access,
+authorization, lifecycle, full pricing, and Nova dispatch remain unproven.
 
 PR #445 merged with all seven checks passing in
 [run 45072091356](https://github.com/Bepoadewale/davdeploy/actions/runs/45072091356).
