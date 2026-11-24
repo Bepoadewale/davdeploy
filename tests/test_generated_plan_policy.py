@@ -529,6 +529,150 @@ def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_un
     return document, proposal_value
 
 
+def redis_case(
+    *,
+    values=None,
+    after_unknown=None,
+    ingress_values=None,
+    ingress_unknown=None,
+    auth_token_sensitive=True,
+):
+    replication_group_values = {
+        "replication_group_id": "app-cache",
+        "description": "Application cache",
+        "engine": "redis",
+        "engine_version": "7.1",
+        "node_type": "cache.t4g.micro",
+        "num_cache_clusters": 1,
+        "port": 6379,
+        "auth_token": "RedisToken123456789!",
+        "auth_token_update_strategy": "SET",
+        "subnet_group_name": "app-cache",
+        "security_group_ids": None,
+        "at_rest_encryption_enabled": True,
+        "transit_encryption_enabled": True,
+        "transit_encryption_mode": "required",
+        "automatic_failover_enabled": False,
+        "multi_az_enabled": False,
+    }
+    replication_group_values.update(values or {})
+    ingress = {
+        "security_group_id": "sg-redis",
+        "referenced_security_group_id": "sg-application",
+        "from_port": 6379,
+        "to_port": 6379,
+        "ip_protocol": "tcp",
+        "cidr_ipv4": None,
+        "cidr_ipv6": None,
+        "prefix_list_id": None,
+    }
+    ingress.update(ingress_values or {})
+    document = plan()
+    document["planned_values"]["root_module"]["resources"] = [
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "terraform_data"
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item["type"] == "terraform_data"
+    ]
+    replication_group_address = "aws_elasticache_replication_group.cache"
+    subnet_group_address = "aws_elasticache_subnet_group.cache"
+    security_group_address = "aws_security_group.cache"
+    ingress_address = "aws_vpc_security_group_ingress_rule.redis"
+    document["planned_values"]["root_module"]["resources"].extend(
+        [
+            resource(
+                replication_group_address,
+                "aws_elasticache_replication_group",
+                replication_group_values,
+            ),
+            resource(
+                subnet_group_address,
+                "aws_elasticache_subnet_group",
+                {"name": "app-cache", "subnet_ids": ["subnet-a", "subnet-b"]},
+            ),
+            resource(
+                security_group_address,
+                "aws_security_group",
+                {"name": "app-cache-redis", "vpc_id": "vpc-123", "ingress": [], "egress": []},
+            ),
+            resource(ingress_address, "aws_vpc_security_group_ingress_rule", ingress),
+        ]
+    )
+    document["resource_changes"].extend(
+        [
+            change(
+                replication_group_address,
+                "aws_elasticache_replication_group",
+                after_unknown=after_unknown or {},
+                after_sensitive={"auth_token": True} if auth_token_sensitive else {},
+            ),
+            change(subnet_group_address, "aws_elasticache_subnet_group"),
+            change(security_group_address, "aws_security_group"),
+            change(
+                ingress_address,
+                "aws_vpc_security_group_ingress_rule",
+                after_unknown=ingress_unknown or {},
+            ),
+        ]
+    )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": replication_group_address,
+                "expressions": {
+                    "subnet_group_name": {"references": [f"{subnet_group_address}.name"]},
+                    "security_group_ids": {"references": [f"{security_group_address}.id"]},
+                    "auth_token": {"references": ["var.auth_token"]},
+                },
+            },
+            {
+                "address": ingress_address,
+                "expressions": {
+                    "security_group_id": {"references": [f"{security_group_address}.id"]},
+                    "referenced_security_group_id": {
+                        "references": ["var.application_security_group_ids[0]"]
+                    },
+                },
+            },
+        ]
+    }
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "cache",
+                "resource_type": "aws_elasticache_replication_group",
+                "name": "cache",
+                "arguments": {"engine": "redis", "port": 6379},
+                "rationale": "Provide an encrypted, authenticated application cache.",
+            },
+            {
+                "resource_id": "cache-subnets",
+                "resource_type": "aws_elasticache_subnet_group",
+                "name": "cache",
+                "arguments": {"name": "app-cache"},
+                "rationale": "Place the cache in application subnets.",
+            },
+            {
+                "resource_id": "cache-security-group",
+                "resource_type": "aws_security_group",
+                "name": "cache",
+                "arguments": {"name": "app-cache-redis"},
+                "rationale": "Restrict the cache to approved application sources.",
+            },
+            {
+                "resource_id": "redis-ingress",
+                "resource_type": "aws_vpc_security_group_ingress_rule",
+                "name": "redis",
+                "arguments": {"from_port": 6379, "to_port": 6379, "ip_protocol": "tcp"},
+                "rationale": "Allow Redis only from an application security group.",
+            },
+        ]
+    )
+    return document, proposal_value
+
+
 def add_sqs_queue_policy(document, policy, **change_metadata):
     address = "aws_sqs_queue_policy.queue_access"
     document["planned_values"]["root_module"]["resources"].append(
@@ -5735,6 +5879,169 @@ def test_efs_policy_findings_do_not_echo_plan_values():
 
     assert "efs_throughput_mode_unsupported" in codes(result)
     assert "private-mode-marker" not in repr(result)
+
+
+def test_redis_safe_authenticated_module_shape_passes():
+    document, proposal_value = redis_case(
+        after_unknown={"security_group_ids": True}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "sensitive_change_requires_review" in codes(result)
+    assert not any(code.startswith("redis_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected_code"),
+    [
+        ("replication_group_id", "", "redis_identity_invalid"),
+        ("engine", "valkey", "redis_engine_unsupported"),
+        ("engine_version", "6.2", "redis_engine_version_unsupported"),
+        ("node_type", "cache.r7g.large", "redis_node_type_unsupported"),
+        ("num_cache_clusters", 2, "redis_cluster_size_unsupported"),
+        ("port", 6380, "redis_port_unsupported"),
+        ("auth_token_update_strategy", "ROTATE", "redis_auth_strategy_unsupported"),
+        ("transit_encryption_mode", "preferred", "redis_tls_mode_unsupported"),
+        ("automatic_failover_enabled", True, "redis_failover_shape_unsupported"),
+        ("multi_az_enabled", True, "redis_multi_az_shape_unsupported"),
+        ("at_rest_encryption_enabled", False, "redis_at_rest_encryption_required"),
+        ("transit_encryption_enabled", False, "redis_transit_encryption_required"),
+        ("auth_token", "short", "redis_auth_token_invalid"),
+        ("subnet_group_name", "", "redis_network_binding_invalid"),
+    ],
+)
+def test_unsafe_redis_replication_group_settings_are_denied(field, value, expected_code):
+    document, proposal_value = redis_case(values={field: value})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    "unknown_path",
+    [
+        "replication_group_id",
+        "engine",
+        "engine_version",
+        "node_type",
+        "num_cache_clusters",
+        "port",
+        "auth_token",
+        "auth_token_update_strategy",
+        "subnet_group_name",
+        "at_rest_encryption_enabled",
+        "transit_encryption_enabled",
+        "transit_encryption_mode",
+        "automatic_failover_enabled",
+        "multi_az_enabled",
+    ],
+)
+def test_unknown_redis_replication_group_settings_are_denied(unknown_path):
+    document, proposal_value = redis_case(after_unknown={unknown_path: True})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_redis_auth_token_must_be_marked_sensitive():
+    document, proposal_value = redis_case(auth_token_sensitive=False)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "redis_auth_token_not_sensitive" in codes(result)
+
+
+def test_redis_invalid_auth_token_is_never_echoed_in_findings():
+    token = "Redis token value with spaces"
+    document, proposal_value = redis_case(values={"auth_token": token})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "redis_auth_token_invalid" in codes(result)
+    assert token not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "ingress_values",
+    [
+        {"cidr_ipv4": "10.0.0.0/8", "referenced_security_group_id": None},
+        {"from_port": 6378},
+        {"to_port": 6380},
+        {"ip_protocol": "-1"},
+        {"referenced_security_group_id": None},
+        {"prefix_list_id": "pl-private", "referenced_security_group_id": None},
+    ],
+)
+def test_redis_ingress_requires_exact_tcp_port_from_security_group(ingress_values):
+    document, proposal_value = redis_case(ingress_values=ingress_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "redis_ingress_unsupported" in codes(result)
+
+
+def test_unknown_redis_ingress_source_is_denied():
+    document, proposal_value = redis_case(
+        ingress_values={"referenced_security_group_id": None},
+        ingress_unknown={"referenced_security_group_id": True},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
+
+
+def test_redis_ingress_must_bind_to_replication_group_security_group():
+    document, proposal_value = redis_case()
+    ingress_configuration = next(
+        resource
+        for resource in document["configuration"]["root_module"]["resources"]
+        if resource["address"] == "aws_vpc_security_group_ingress_rule.redis"
+    )
+    ingress_configuration["expressions"]["security_group_id"]["references"] = [
+        "aws_security_group.unrelated.id"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "redis_ingress_group_binding_invalid" in codes(result)
+
+
+def test_redis_inline_ingress_on_bound_replication_group_security_group_passes():
+    document, proposal_value = redis_case()
+    security_group = next(
+        resource
+        for resource in document["planned_values"]["root_module"]["resources"]
+        if resource["type"] == "aws_security_group"
+    )
+    security_group["values"]["ingress"] = [
+        {
+            "protocol": "tcp",
+            "from_port": 6379,
+            "to_port": 6379,
+            "security_groups": ["sg-application"],
+            "cidr_blocks": [],
+            "ipv6_cidr_blocks": [],
+            "prefix_list_ids": [],
+            "self": False,
+        }
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "redis_ingress_group_binding_invalid" not in codes(result)
 
 
 def step_functions_lambda_case():

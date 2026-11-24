@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-24.1"
+POLICY_VERSION = "nova-generated-plan-2026-11-24.2"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -193,6 +193,22 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("encrypted",),
         ("performance_mode",),
         ("throughput_mode",),
+    ),
+    "aws_elasticache_replication_group": (
+        ("replication_group_id",),
+        ("engine",),
+        ("engine_version",),
+        ("node_type",),
+        ("num_cache_clusters",),
+        ("port",),
+        ("auth_token",),
+        ("auth_token_update_strategy",),
+        ("subnet_group_name",),
+        ("at_rest_encryption_enabled",),
+        ("transit_encryption_enabled",),
+        ("transit_encryption_mode",),
+        ("automatic_failover_enabled",),
+        ("multi_az_enabled",),
     ),
     "aws_security_group": (("ingress",),),
     "aws_security_group_rule": (
@@ -352,6 +368,8 @@ def _evaluate(
     _check_kinesis_streams(resources, findings)
     _check_efs_file_systems(resources, findings)
     _check_efs_nfs_ingress(resources, findings)
+    _check_elasticache_replication_groups(document, resources, findings)
+    _check_redis_ingress(document, resources, findings)
     _check_rds_final_snapshot_changes(document, findings)
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
@@ -2306,6 +2324,107 @@ def _check_efs_nfs_ingress(
     resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
 ) -> None:
     """Require any planned NFS ingress to be TCP/2049 from a security group."""
+    _check_security_group_port_ingress(
+        resources, port=2049, service_name="NFS", finding_prefix="efs_nfs", findings=findings
+    )
+
+
+def _check_redis_ingress(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Require Redis ingress to be TCP/6379 from a security group."""
+    _check_security_group_port_ingress(
+        resources, port=6379, service_name="Redis", finding_prefix="redis", findings=findings
+    )
+    configured = _configured_resource_references(document)
+    redis_groups = tuple(
+        resource.get("address")
+        for resource in resources
+        if resource.get("type") == "aws_security_group"
+        and isinstance(resource.get("address"), str)
+        and any(
+            resource_ref == resource["address"]
+            or resource_ref.startswith(f"{resource['address']}.")
+            for item in resources
+            if item.get("type") == "aws_elasticache_replication_group"
+            for resource_ref in configured.get(item.get("address"), ())
+        )
+    )
+    if not redis_groups:
+        return
+    for item in resources:
+        if item.get("type") == "aws_security_group":
+            values = item.get("values")
+            rules = values.get("ingress", []) if isinstance(values, dict) else []
+            if not isinstance(rules, list):
+                continue
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    continue
+                protocol = rule.get("protocol")
+                from_port = _integer(rule.get("from_port"))
+                to_port = _integer(rule.get("to_port"))
+                includes_redis = protocol == "-1" or (
+                    protocol == "tcp"
+                    and from_port is not None
+                    and to_port is not None
+                    and from_port <= 6379 <= to_port
+                )
+                if includes_redis and item.get("address") not in redis_groups:
+                    _deny(
+                        findings,
+                        "redis_ingress_group_binding_invalid",
+                        item.get("address"),
+                        "Redis ingress must attach to the security group used by the replication group.",
+                    )
+            continue
+        if item.get("type") not in {
+            "aws_vpc_security_group_ingress_rule",
+            "aws_security_group_rule",
+        }:
+            continue
+        values = item.get("values")
+        if not isinstance(values, dict):
+            continue
+        if item.get("type") == "aws_security_group_rule" and values.get("type") != "ingress":
+            continue
+        protocol = values.get(
+            "protocol" if item.get("type") == "aws_security_group_rule" else "ip_protocol"
+        )
+        from_port = _integer(values.get("from_port"))
+        to_port = _integer(values.get("to_port"))
+        if not (
+            protocol == "-1"
+            or protocol == "tcp"
+            and from_port is not None
+            and to_port is not None
+            and from_port <= 6379 <= to_port
+        ):
+            continue
+        references = configured.get(item.get("address"), ())
+        if not any(
+            _references_resource(references, group_address)
+            for group_address in redis_groups
+        ):
+            _deny(
+                findings,
+                "redis_ingress_group_binding_invalid",
+                item.get("address"),
+                "Redis ingress must attach to the security group used by the replication group.",
+            )
+
+
+def _check_security_group_port_ingress(
+    resources: tuple[dict[str, Any], ...],
+    *,
+    port: int,
+    service_name: str,
+    finding_prefix: str,
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Require scoped source groups for exact single-port TCP service ingress."""
     for item in resources:
         kind = item.get("type")
         if kind not in {
@@ -2333,9 +2452,9 @@ def _check_efs_nfs_ingress(
         if not isinstance(rules, list):
             _deny(
                 findings,
-                "efs_nfs_ingress_unknown",
+                f"{finding_prefix}_ingress_unknown",
                 address,
-                "The plan does not make NFS inbound access clear.",
+                f"The plan does not make {service_name} inbound access clear.",
             )
             continue
 
@@ -2343,29 +2462,29 @@ def _check_efs_nfs_ingress(
             if not isinstance(rule, dict):
                 _deny(
                     findings,
-                    "efs_nfs_ingress_unknown",
+                    f"{finding_prefix}_ingress_unknown",
                     address,
-                    "The plan does not make NFS inbound access clear.",
+                    f"The plan does not make {service_name} inbound access clear.",
                 )
                 continue
             protocol = rule.get("protocol" if legacy else "ip_protocol")
             from_port = _integer(rule.get("from_port"))
             to_port = _integer(rule.get("to_port"))
             if protocol == "-1":
-                is_nfs = True
+                is_service_port = True
             elif protocol == "tcp" and from_port is not None and to_port is not None:
-                is_nfs = from_port <= 2049 <= to_port
+                is_service_port = from_port <= port <= to_port
             elif protocol is None or from_port is None or to_port is None:
                 _deny(
                     findings,
-                    "efs_nfs_ingress_unknown",
+                    f"{finding_prefix}_ingress_unknown",
                     address,
-                    "The plan does not make NFS inbound access clear.",
+                    f"The plan does not make {service_name} inbound access clear.",
                 )
                 continue
             else:
-                is_nfs = False
-            if not is_nfs:
+                is_service_port = False
+            if not is_service_port:
                 continue
 
             source_fields = (
@@ -2394,18 +2513,150 @@ def _check_efs_nfs_ingress(
             )
             if (
                 protocol != "tcp"
-                or from_port != 2049
-                or to_port != 2049
+                or from_port != port
+                or to_port != port
                 or not group_source
                 or has_ip_source
                 or rule.get("self") is True
             ):
                 _deny(
                     findings,
-                    "efs_nfs_ingress_unsupported",
+                    f"{finding_prefix}_ingress_unsupported",
                     address,
-                    "NFS access must use exactly TCP port 2049 from a security group.",
+                    f"{service_name} access must use exactly TCP port {port} from a security group.",
                 )
+
+
+def _check_elasticache_replication_groups(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Require the bounded, encrypted, AUTH-protected Redis module profile."""
+    changes = {
+        item.get("address"): item.get("change")
+        for item in document.get("resource_changes", [])
+        if isinstance(item, dict)
+    }
+    configured = _configured_resource_references(document)
+    for item in resources:
+        if item.get("type") != "aws_elasticache_replication_group":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        if not isinstance(values, dict):
+            _deny(
+                findings,
+                "redis_settings_invalid",
+                address,
+                "DavDeploy could not verify the required Redis replication-group settings.",
+            )
+            continue
+
+        if not isinstance(values.get("replication_group_id"), str) or not values[
+            "replication_group_id"
+        ].strip():
+            _deny(
+                findings,
+                "redis_identity_invalid",
+                address,
+                "The Redis replication-group identity must be known and non-empty.",
+            )
+        exact_values = {
+            "engine": ("redis", "redis_engine_unsupported"),
+            "engine_version": ("7.1", "redis_engine_version_unsupported"),
+            "node_type": ("cache.t4g.micro", "redis_node_type_unsupported"),
+            "num_cache_clusters": (1, "redis_cluster_size_unsupported"),
+            "port": (6379, "redis_port_unsupported"),
+            "auth_token_update_strategy": ("SET", "redis_auth_strategy_unsupported"),
+            "transit_encryption_mode": ("required", "redis_tls_mode_unsupported"),
+            "automatic_failover_enabled": (False, "redis_failover_shape_unsupported"),
+            "multi_az_enabled": (False, "redis_multi_az_shape_unsupported"),
+        }
+        for key, (expected, code) in exact_values.items():
+            actual = values.get(key)
+            if isinstance(expected, int) and not isinstance(expected, bool):
+                matches = isinstance(actual, int) and not isinstance(actual, bool) and actual == expected
+            else:
+                matches = actual is expected if isinstance(expected, bool) else actual == expected
+            if not matches:
+                _deny(
+                    findings,
+                    code,
+                    address,
+                    "Generated Redis replication groups must use the module's reviewed bounded profile.",
+                )
+
+        if values.get("at_rest_encryption_enabled") is not True:
+            _deny(
+                findings,
+                "redis_at_rest_encryption_required",
+                address,
+                "Generated Redis replication groups must encrypt data at rest.",
+            )
+        if values.get("transit_encryption_enabled") is not True:
+            _deny(
+                findings,
+                "redis_transit_encryption_required",
+                address,
+                "Generated Redis replication groups must require encrypted client connections.",
+            )
+
+        token = values.get("auth_token")
+        if (
+            not isinstance(token, str)
+            or not 16 <= len(token) <= 128
+            or re.fullmatch(r"[A-Za-z0-9!&#$^<>-]{16,128}", token) is None
+        ):
+            _deny(
+                findings,
+                "redis_auth_token_invalid",
+                address,
+                "Generated Redis replication groups must have a valid AUTH token.",
+            )
+
+        change = changes.get(address)
+        after_sensitive = change.get("after_sensitive") if isinstance(change, dict) else None
+        if (
+            not isinstance(after_sensitive, dict)
+            or not _path_contains_unknown(after_sensitive, ("auth_token",))
+        ):
+            _deny(
+                findings,
+                "redis_auth_token_not_sensitive",
+                address,
+                "Redis AUTH token values must remain marked sensitive in the Terraform plan.",
+            )
+
+        if not isinstance(values.get("subnet_group_name"), str) or not values[
+            "subnet_group_name"
+        ].strip():
+            _deny(
+                findings,
+                "redis_network_binding_invalid",
+                address,
+                "Redis replication groups must identify a known subnet group.",
+            )
+        references = configured.get(address, ())
+        security_group_bound = any(
+            resource.get("type") == "aws_security_group"
+            and isinstance(resource.get("address"), str)
+            and _references_resource(references, resource["address"])
+            for resource in resources
+        )
+        subnet_group_bound = any(
+            resource.get("type") == "aws_elasticache_subnet_group"
+            and isinstance(resource.get("address"), str)
+            and _references_resource(references, resource["address"])
+            for resource in resources
+        )
+        if not security_group_bound or not subnet_group_bound:
+            _deny(
+                findings,
+                "redis_network_binding_invalid",
+                address,
+                "Redis replication groups must reference same-plan subnet and security groups.",
+            )
 
 
 def _references_resource(references: tuple[str, ...], resource_address: Any) -> bool:

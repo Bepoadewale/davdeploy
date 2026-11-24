@@ -39,6 +39,7 @@ module "redis" {
   subnet_ids                     = local.subnet_ids
   vpc_id                         = data.aws_vpc.default.id
   application_security_group_ids = [aws_security_group.application.id]
+  auth_token                     = var.redis_auth_token
   tags                           = local.tags
 }
 
