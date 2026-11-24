@@ -44,27 +44,31 @@ between targets and verified facts.
 
 ## Acceptance criteria
 
-- [ ] The four-stage bootstrapped growth plan is preserved as a readable future
+- [x] The four-stage bootstrapped growth plan is preserved as a readable future
   strategy document.
-- [ ] Valuation, ownership, pricing, margin, hiring, and compliance numbers are
+- [x] Valuation, ownership, pricing, margin, hiring, and compliance numbers are
   labeled as targets or assumptions, with relevant arithmetic shown.
-- [ ] The plan distinguishes verified current product capabilities from future
+- [x] The plan distinguishes verified current product capabilities from future
   work and avoids unsupported customer, revenue, or valuation claims.
-- [ ] Sources and comparables are linked, with material differences in funding
+- [x] Sources and comparables are linked, with material differences in funding
   history or transaction status made clear.
-- [ ] Documentation conventions, diff checks, and required PR CI pass before
-  merge.
-- [ ] No AWS, hosted control-plane, product runtime, financial account, or
+- [x] Documentation conventions and diff checks pass locally; required PR CI
+  remains before merge.
+- [x] No AWS, hosted control-plane, product runtime, financial account, or
   pricing configuration is changed.
+- [ ] Final-head PR CI passes before merge.
 
 ## Acceptance status
 
-Ticket-first draft opened before writing the strategy. The document and local
-documentation checks are pending.
+The strategy document is written with all four stages, ARR scenarios,
+ownership assumptions, current DavDeploy limitations, and linked market/company
+references. Documentation conventions and diff checks pass. Final-head PR CI
+is pending.
 
 ## Tests / validation performed
 
-- Ticket-first docs conventions and `git diff --check`: pending.
+- `GITHUB_PR_NUMBER=492 python3 scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
 - Final-head PR CI: pending.
 
 ## Evidence files produced
