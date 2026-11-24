@@ -3215,6 +3215,225 @@ def test_eks_node_group_with_launch_template_that_allows_imdsv1_is_denied():
     assert "instance_metadata_v2_required" in codes(result)
 
 
+def autoscaling_case(
+    *,
+    group_values=None,
+    template_values=None,
+    launch_template_references=None,
+    include_second_template=False,
+):
+    document = plan()
+    template_address = "aws_launch_template.web"
+    second_template_address = "aws_launch_template.worker"
+    group_address = "aws_autoscaling_group.web"
+    template = {
+        "image_id": "ami-0123456789abcdef0",
+        "instance_type": "t3.micro",
+        "instance_market_options": None,
+        "metadata_options": [
+            {"http_endpoint": "enabled", "http_tokens": "required"}
+        ],
+    }
+    template.update(template_values or {})
+    group = {
+        "min_size": 1,
+        "desired_capacity": 1,
+        "max_size": 3,
+        "launch_template": [{"id": "lt-0123456789abcdef0", "version": "1"}],
+        "launch_configuration": None,
+        "mixed_instances_policy": None,
+    }
+    group.update(group_values or {})
+    planned_templates = [resource(template_address, "aws_launch_template", template)]
+    template_changes = [change(template_address, "aws_launch_template")]
+    if include_second_template:
+        planned_templates.append(
+            resource(second_template_address, "aws_launch_template", template)
+        )
+        template_changes.append(change(second_template_address, "aws_launch_template"))
+    document["planned_values"]["root_module"]["resources"].extend(
+        [*planned_templates, resource(group_address, "aws_autoscaling_group", group)]
+    )
+    document["resource_changes"].extend(
+        [*template_changes, change(group_address, "aws_autoscaling_group")]
+    )
+    references = (
+        [f"{template_address}.id", f"{template_address}.latest_version"]
+        + (
+            [f"{second_template_address}.id", f"{second_template_address}.latest_version"]
+            if include_second_template
+            else []
+        )
+        if launch_template_references is None
+        else launch_template_references
+    )
+    configured_template_resources = [
+        {"address": template_address, "expressions": {}}
+    ]
+    if include_second_template:
+        configured_template_resources.append(
+            {"address": second_template_address, "expressions": {}}
+        )
+    document["configuration"]["root_module"] = {
+        "resources": [
+            *configured_template_resources,
+            {
+                "address": group_address,
+                "expressions": {"launch_template": {"references": references}},
+            },
+        ],
+        "module_calls": {},
+    }
+    proposal_resources = [item.model_dump(mode="json") for item in proposal().resources]
+    proposal_resources.append(
+        {
+            "resource_id": "web-template",
+            "resource_type": "aws_launch_template",
+            "name": "web",
+            "arguments": template,
+            "rationale": "Use a bounded, metadata-protected web instance profile.",
+        }
+    )
+    if include_second_template:
+        proposal_resources.append(
+            {
+                "resource_id": "worker-template",
+                "resource_type": "aws_launch_template",
+                "name": "worker",
+                "arguments": template,
+                "rationale": "Provide a second template for the negative binding test.",
+            }
+        )
+    proposal_resources.append(
+        {
+            "resource_id": "web-asg",
+            "resource_type": "aws_autoscaling_group",
+            "name": "web",
+            "arguments": group,
+            "rationale": "Keep web capacity within the reviewed small-instance limit.",
+        }
+    )
+    return document, proposal(proposal_resources)
+
+
+def test_autoscaling_group_accepts_bounded_same_plan_latest_version_template():
+    document, proposal_value = autoscaling_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("autoscaling_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    "group_values",
+    [
+        {"min_size": -1},
+        {"min_size": 2, "desired_capacity": 1},
+        {"max_size": 4},
+        {"desired_capacity": 4, "max_size": 4},
+        {"min_size": None},
+        {"desired_capacity": None},
+        {"max_size": None},
+    ],
+)
+def test_autoscaling_capacity_must_be_known_and_at_most_three(group_values):
+    document, proposal_value = autoscaling_case(group_values=group_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_capacity_out_of_bounds" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "references",
+    [
+        [],
+        ["aws_launch_template.external.id", "aws_launch_template.external.latest_version"],
+        ["aws_launch_template.web.id"],
+        ["aws_launch_template.web.id", "aws_launch_template.web.latest_version", "aws_launch_template.other.id"],
+    ],
+)
+def test_autoscaling_requires_exact_same_plan_launch_template_version(references):
+    document, proposal_value = autoscaling_case(launch_template_references=references)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_launch_template_unverifiable" in codes(result)
+
+
+def test_autoscaling_rejects_multiple_same_plan_launch_templates():
+    document, proposal_value = autoscaling_case(include_second_template=True)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_launch_template_unverifiable" in codes(result)
+
+
+@pytest.mark.parametrize("version", ["$Latest", "$Default"])
+def test_autoscaling_rejects_dynamic_launch_template_versions(version):
+    document, proposal_value = autoscaling_case(
+        group_values={"launch_template": [{"id": "lt-0123456789abcdef0", "version": version}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_launch_template_unverifiable" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("template_values", "expected_code"),
+    [
+        ({"image_id": "unknown"}, "autoscaling_ami_unknown"),
+        ({"instance_type": "t3.small"}, "autoscaling_instance_type_unsupported"),
+        ({"metadata_options": [{"http_endpoint": "enabled", "http_tokens": "optional"}]}, "instance_metadata_v2_required"),
+    ],
+)
+def test_autoscaling_template_requires_known_ami_t3_micro_and_imdsv2(
+    template_values, expected_code
+):
+    document, proposal_value = autoscaling_case(template_values=template_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    "group_values",
+    [
+        {"launch_configuration": "legacy-config"},
+        {"mixed_instances_policy": [{"instances_distribution": {}}]},
+    ],
+)
+def test_autoscaling_rejects_unsupported_launch_shapes(group_values):
+    document, proposal_value = autoscaling_case(group_values=group_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_profile_unsupported" in codes(result)
+
+
+def test_autoscaling_findings_do_not_echo_plan_values():
+    private_value = "ami-private-marker"
+    document, proposal_value = autoscaling_case(
+        template_values={"image_id": private_value, "instance_type": "private-type-marker"}
+    )
+
+    result = evaluate(document, proposal_value)
+    finding_text = json.dumps([finding.__dict__ for finding in result.findings])
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert private_value not in finding_text
+    assert "private-type-marker" not in finding_text
+
+
 def test_configured_resource_lookup_includes_child_modules():
     document = plan(
         configuration={
