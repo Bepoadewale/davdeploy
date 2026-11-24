@@ -62,9 +62,10 @@ only from security groups.
 
 ## Acceptance status
 
-Implementation and local validation are complete. All seven checks passed on
-the implementation head; the final ticket-update head must rerun CI before
-merge. No AWS or hosted control-plane resource has been changed.
+Implementation and local validation are complete. The implementation and
+evidence-update commits each passed all seven required checks. The final
+ticket-evidence commit must pass the required checks before merge. No AWS or
+hosted control-plane resource has been changed.
 
 ## Evidence files produced
 
@@ -90,7 +91,8 @@ merge. No AWS or hosted control-plane resource has been changed.
 - `git diff --check` — passed.
 - Initial implementation head `f1cd1ba` passed all seven required checks in
   [CI run 45340389662](https://github.com/Bepoadewale/davdeploy/actions/runs/45340389662).
-- Final ticket-update head checks are pending.
+- Evidence-update head `60e1bea` passed all seven required checks in
+  [CI run 45341019043](https://github.com/Bepoadewale/davdeploy/actions/runs/45341019043).
 
 ## Boundaries
 
