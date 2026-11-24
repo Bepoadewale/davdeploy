@@ -60,8 +60,8 @@ whose version is explicitly referenced through `latest_version`.
 
 ## Acceptance status
 
-Implementation and local validation are complete. Final-head CI run 45392159883
-passed all seven checks on commit `596c01d`. The source change is not deployed.
+Implementation and local validation are complete. Final-head CI run 45392986693
+passed all seven checks on commit `165a5db`. The source change is not deployed.
 No AWS, Terraform state, or hosted control-plane resource has changed.
 
 ## Tests / validation performed
@@ -74,8 +74,8 @@ No AWS, Terraform state, or hosted control-plane resource has changed.
 - Offline `terraform init -backend=false -input=false -lockfile=readonly` could not install AWS provider v5.100.0 because the provider registry connection failed; `terraform validate` then passed using the existing local provider cache.
 - `GITHUB_PR_NUMBER=483 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- PR CI run 45391202592 passed all seven checks on `999fd06`; final-head run 45392159883 passed all seven on `596c01d` after adding the same-plan multiple-template regression.
-- The full local clean-room demo cycle was not run because its `clean-local` target deletes `.venv` and `.local`, and the current session's deletion boundary protects local files. The final PR's fresh-runner CI remains required.
+- PR CI runs 45391202592, 45392159883, and final-head run 45392986693 passed all seven checks on `999fd06`, `596c01d`, and `165a5db`, respectively.
+- The full local clean-room demo cycle was not run because its `clean-local` target deletes `.venv` and `.local`, and the current session's deletion boundary protects local files. The fresh-runner `local-e2e` and `cloud-contracts` CI jobs passed in run 45392986693.
 
 ## Evidence files produced
 
