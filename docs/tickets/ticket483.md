@@ -55,14 +55,14 @@ whose version is explicitly referenced through `latest_version`.
 - [x] The matrix retains AMI provenance, volume encryption, ongoing instance
   hours, workload health, update/recovery, teardown, and Nova execution gaps.
 - [x] No AWS, remote Terraform state, or hosted control-plane resource changes.
-- [ ] Local verification, docs conventions, `git diff --check`, and all seven
+- [x] Local verification, docs conventions, `git diff --check`, and all seven
   CI checks pass before merge.
 
 ## Acceptance status
 
-Implementation and local policy validation are complete. The final PR head
-still needs seven passing CI checks before this draft can be considered for
-review. No AWS, Terraform state, or hosted control-plane resource has changed.
+Implementation and local validation are complete. Final-head CI run 45392159883
+passed all seven checks on commit `596c01d`. The source change is not deployed.
+No AWS, Terraform state, or hosted control-plane resource has changed.
 
 ## Tests / validation performed
 
@@ -74,7 +74,7 @@ review. No AWS, Terraform state, or hosted control-plane resource has changed.
 - Offline `terraform init -backend=false -input=false -lockfile=readonly` could not install AWS provider v5.100.0 because the provider registry connection failed; `terraform validate` then passed using the existing local provider cache.
 - `GITHUB_PR_NUMBER=483 .venv-pr399/bin/python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- PR CI run 45391202592 passed all seven checks on `999fd06`. The final head adds one test-only regression for two same-plan templates; CI for that final head remains pending.
+- PR CI run 45391202592 passed all seven checks on `999fd06`; final-head run 45392159883 passed all seven on `596c01d` after adding the same-plan multiple-template regression.
 - The full local clean-room demo cycle was not run because its `clean-local` target deletes `.venv` and `.local`, and the current session's deletion boundary protects local files. The final PR's fresh-runner CI remains required.
 
 ## Evidence files produced
