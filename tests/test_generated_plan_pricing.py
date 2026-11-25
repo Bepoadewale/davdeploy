@@ -1194,6 +1194,28 @@ def test_nat_gateway_unmatched_elastic_ip_blocks_approval():
     assert client.calls == []
 
 
+def test_nat_gateway_duplicate_known_eip_ids_block_pricing():
+    document = nat_gateway_plan()
+    duplicate_eip = resource(
+        "aws_eip.duplicate", "aws_eip", {"id": "eipalloc-nat-test", "domain": "vpc"}
+    )
+    document["planned_values"]["root_module"]["resources"].append(duplicate_eip)
+    document["resource_changes"].append(
+        change("aws_eip.duplicate", "aws_eip", duplicate_eip["values"])
+    )
+    client = FakeVpcPriceList()
+
+    result, _ = evaluate(
+        document, catalog_client=client, vpc_usage_assumptions=NAT_USAGE
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "vpc_nat_shape_or_usage_unsupported" in {
+        finding.code for finding in result.findings
+    }
+    assert client.calls == []
+
+
 def test_nat_gateway_unsupported_eip_shape_blocks_pricing():
     client = FakeVpcPriceList()
     result, _ = evaluate(
