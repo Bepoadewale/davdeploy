@@ -3,8 +3,8 @@
 ## Current state
 
 **As of 2026-11-25, backend `main` is
-`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508 documentation reconciliation;
-product code remains at PR #507). The hosted control plane
+`46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509, source-only pricing and
+documentation reconciliation). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -16,18 +16,20 @@ refresh did not access or change the hosted control plane. The older runtime
 health observation above is historical and was not rechecked here.**
 
 PR #506 makes the 26-architecture / 30-root candidate crosswalk machine-
-checkable without enabling runtime dispatch. PR #507 adds source-only,
-trusted-context-bound regional vCPU/memory pricing for the bounded Linux/x86
-Batch Fargate shape and the 60-second per-job minimum. The estimate is
-deliberately incomplete and approval-ineligible until image transfer, logs,
-networking, public IPv4, and other material supporting costs are priced. Its
-final-head checks passed in run
-[45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-Draft PR #509 adds source-only pricing for explicitly configured Batch
-CloudWatch Logs usage; it does not enable dispatch or remove Batch's
-approval-blocking finding because image transfer, networking, public IPv4, and
-other material costs remain unpriced. No hosted resource or customer workload
-was changed or deployed by these PRs.
+checkable without enabling runtime dispatch. PR #507 adds source-only trusted-
+context-bound regional vCPU/memory pricing for the bounded Linux/x86 Batch
+Fargate shape and the 60-second per-job minimum. Merged PR #509 adds source-
+only regional CloudWatch Logs ingestion and retained-storage pricing for
+explicitly configured Batch logs. Its final head passed all seven checks in
+run [45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335);
+merged-main CI passed in run
+[45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
+The Batch estimate remains incomplete and approval-ineligible while image
+storage/transfer, networking, public IPv4, and other material costs remain
+unpriced. Draft PR #511 adds a bounded regional ECR standard-storage line for
+exact planned repositories; transfer, archival, signing, replication, and
+other material costs remain blockers. None of these PRs enables Nova dispatch
+or changes AWS resources or hosted-control-plane infrastructure.
 
 PR #493 merged with all seven CI checks passing in run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).

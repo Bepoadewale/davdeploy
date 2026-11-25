@@ -412,6 +412,41 @@ def test_customer_batch_usage_assumptions_are_revision_bound_and_cleared():
     assert cleared.content_digest == plan_hash(cleared.content)
 
 
+def test_customer_ecr_storage_assumptions_are_revision_bound_and_cleared():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "repositories": {"aws_ecr_repository.images": {
+            "monthly_stored_gb": {"minimum": 1, "maximum": 20},
+        }}
+    }
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"ecr_pricing_usage_assumptions": usage},
+    )
+    assert revised.content["user_constraints"]["ecr_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"][
+        "ecr_pricing_usage_assumptions"
+    ] == usage
+    assert revised.content["revision_diff"]["ecr_pricing_usage_assumptions"] == {
+        "before": None, "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"ecr_pricing_usage_assumptions": None},
+    )
+    assert "ecr_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "ecr_pricing_usage_assumptions" not in cleared.content[
+        "application_analysis"
+    ]["workload_spec"]
+    assert cleared.content["revision_diff"]["ecr_pricing_usage_assumptions"] == {
+        "before": usage, "after": None,
+    }
+    assert cleared.content_digest == plan_hash(cleared.content)
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

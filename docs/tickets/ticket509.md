@@ -70,9 +70,9 @@ unpriced Batch dependency and unsupported logging configuration.
 - [x] Batch estimates remain incomplete and approval-ineligible until image,
   networking, transfer, and every other material cost is priced.
 - [x] Focused tests, generated OpenAPI validation, and documentation
-  conventions pass; all seven required checks passed on implementation head
-  `e0aa6c0` in run `45656472518`. Any final ticket-only update must pass its own
-  current-head CI before merge.
+  conventions pass; all seven required checks passed on final PR head
+  `9b9cea3` in run `45658404335`, and merged-main CI passed in run
+  `45659294372`.
 - [x] No AWS workload, Terraform state/lock, or hosted control-plane resource
   is changed; no customer workload test is claimed.
 
@@ -80,9 +80,10 @@ unpriced Batch dependency and unsupported logging configuration.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [x] All seven CI checks passed on head `e0aa6c0` in
-  [run 45656472518](https://github.com/Bepoadewale/davdeploy/actions/runs/45656472518).
-- [ ] PR reviewed and merged.
+- [x] All seven CI checks passed on final head `9b9cea3` in
+  [run 45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335).
+- [x] PR #509 merged as `46fe152233ac9fcbdba1961d5d02086c30c959fa`; merged-main
+  CI passed in [run 45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
 
 ## Tests / validation performed
 
@@ -96,8 +97,8 @@ unpriced Batch dependency and unsupported logging configuration.
   includes the additive optional Batch log-usage contract.
 - `GITHUB_PR_NUMBER=509 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head PR run `45656472518` passed all seven required checks.
-- Any later ticket-only update must pass its own current-head CI before merge.
+- Final-head PR run `45658404335` and merged-main run `45659294372` passed all
+  seven required checks.
 - No Terraform or cloud mutation was run.
 
 ## Evidence files produced
@@ -113,6 +114,6 @@ AWS audit evidence.
 
 ## Follow-up work
 
-ECR image storage and transfer, VPC/NAT/public IPv4, other material Batch
-dependencies, effective role permissions, runtime/recovery, and Nova-dispatched
-execution remain open.
+ECR image transfer and image-to-job binding, archive retrieval, signing,
+replication, VPC/NAT/public IPv4, other material Batch dependencies, effective
+role permissions, runtime/recovery, and Nova-dispatched execution remain open.

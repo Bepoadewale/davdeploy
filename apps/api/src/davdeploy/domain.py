@@ -417,6 +417,40 @@ class BatchCloudWatchLogPricingUsageAssumptions(BaseModel):
         return self
 
 
+class EcrRepositoryStoragePricingUsageAssumptions(BaseModel):
+    """Customer-declared monthly standard-tier storage for one ECR repository."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_stored_gb: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_storage_bounds(self) -> EcrRepositoryStoragePricingUsageAssumptions:
+        if self.monthly_stored_gb.maximum > 500_000:
+            raise ValueError("monthly ECR storage exceeds the supported bound")
+        return self
+
+
+class EcrPricingUsageAssumptions(BaseModel):
+    """Usage bounds keyed by exact planned private ECR repository address."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    repositories: dict[str, EcrRepositoryStoragePricingUsageAssumptions] = Field(
+        min_length=1, max_length=20
+    )
+
+    @model_validator(mode="after")
+    def validate_repository_addresses(self) -> EcrPricingUsageAssumptions:
+        pattern = re.compile(
+            r"^(?:module\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?\.)*"
+            r"aws_ecr_repository\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?$"
+        )
+        if any(not pattern.fullmatch(address) for address in self.repositories):
+            raise ValueError("ECR usage assumption has an invalid repository address")
+        return self
+
+
 class BatchJobMonthlyPricingUsageAssumptions(BaseModel):
     """Customer-declared monthly job count, duration, and optional log usage."""
 
@@ -470,6 +504,7 @@ class WorkloadSpec(BaseModel):
     dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
     vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
     batch_pricing_usage_assumptions: BatchPricingUsageAssumptions | None = None
+    ecr_pricing_usage_assumptions: EcrPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -899,6 +934,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
     vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
     batch_pricing_usage_assumptions: BatchPricingUsageAssumptions | None = None
+    ecr_pricing_usage_assumptions: EcrPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):
