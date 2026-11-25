@@ -58,14 +58,16 @@ runtime enablement, and verified customer evidence.
 - [x] No AWS, hosted control-plane, remote-state, lock, or local protected
   resource is changed.
 - [x] Documentation conventions and diff checks pass.
-- [ ] All required PR checks pass on the final head.
+- [x] All seven required PR checks passed on source/document commit
+  `173de80f8e863a06c1caa44f438a03d97c206757` (run `45538195845`). The
+  ticket-only follow-up must still pass final-head CI before merge.
 
 ## Acceptance status
 
-The active checklist now distinguishes the source-level plan-only CodeBuild
+The active checklist distinguishes source-level plan-only CodeBuild
 integration from live runtime enablement and a verified authenticated
-customer plan. No runtime state was read or changed in this documentation
-update.
+customer plan. Seven required checks passed for the implementation commit. The
+final PR head will include this evidence update and must pass CI before merge.
 
 ## Tests / validation performed
 
@@ -74,7 +76,8 @@ required.
 
 - `GITHUB_PR_NUMBER=497 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Required PR CI: pending on the final head.
+- Required PR CI run `45538195845` on commit
+  `173de80f8e863a06c1caa44f438a03d97c206757`: all seven checks passed.
 
 ## Evidence files produced
 
