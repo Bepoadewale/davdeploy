@@ -102,7 +102,7 @@ this exact shape only; it does not prove Nova dispatch.
 - [x] Matrix update, full repository validation, and documentation conventions.
 - [ ] Clean-room gate, final-head CI, review, and merge.
 
-Implementation remains uncommitted on the PR branch. The initial six-resource
+Implementation commit `a4c629c` is on the PR branch. The initial six-resource
 create succeeded and the disabled flag was independently verified. A reviewed
 append-only plan retained hosted version 1, added a new version, and replaced
 only the Terraform deployment resource. The enabled revision reached

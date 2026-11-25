@@ -6,7 +6,7 @@ Execution type: Real AWS execution; direct isolated customer-side Terraform test
 
 Customer repository: `Bepoadewale/davdeploy`
 
-Commit: `24c32f4` (implementation commit pushed to draft PR #495; update this field with the final evidence commit before merge)
+Implementation commit: `a4c629c` (the tested source revision for the recorded AWS lifecycle; evidence updates follow in this PR)
 
 AWS account: `654654474502`
 
