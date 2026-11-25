@@ -79,7 +79,7 @@ estimate.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [x] Required GitHub checks passed on final PR head `53056bebf43a9dfdb4d21ee493b84f985604ce9d` in CI run [45559992614](https://github.com/Bepoadewale/davdeploy/actions/runs/45559992614) (all seven checks).
+- [x] All seven GitHub checks passed on PR head `4e545dc753b7ad53434c1daad527d50462bf43c4` in CI run [45560740907](https://github.com/Bepoadewale/davdeploy/actions/runs/45560740907).
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -89,7 +89,7 @@ Validation performed:
 - `uv run --locked --extra dev ruff check apps/api/src/davdeploy/domain.py apps/api/src/davdeploy/service.py apps/api/src/davdeploy/generated_plan_pricing.py tests/test_generated_plan_pricing.py tests/test_infrastructure_plan_lifecycle.py` — passed.
 - `uv run --locked --extra dev pytest tests/test_generated_plan_pricing.py tests/test_infrastructure_plan_lifecycle.py tests/test_sqs_plan_pricing.py tests/test_dynamodb_plan_pricing.py tests/test_generated_plan_review.py -q` — 160 passed.
 - `git diff --check` — passed.
-- GitHub Actions run [45559992614](https://github.com/Bepoadewale/davdeploy/actions/runs/45559992614) passed all seven checks on head `53056bebf43a9dfdb4d21ee493b84f985604ce9d`.
+- GitHub Actions run [45560740907](https://github.com/Bepoadewale/davdeploy/actions/runs/45560740907) passed all seven checks on PR head `4e545dc753b7ad53434c1daad527d50462bf43c4`.
 - Read-only AWS Price List `GetProducts` checks in `us-east-1` returned one matching NAT Gateway hours product ($0.045/hour), NAT processing product ($0.045/GB), in-use public IPv4 product ($0.005/hour), regional transfer product ($0.01/GB), and internet egress product ($0.085/GB). This validates catalog data only; it does not change AWS resources or verify a customer bill.
 - This PR is source-only and must not create a `docs/test/test502.md` AWS workload report.
 
