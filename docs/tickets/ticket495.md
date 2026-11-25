@@ -88,7 +88,18 @@ this exact shape only; it does not prove Nova dispatch.
 
 ## Acceptance status
 
-Ticket-first draft. No implementation or AWS mutation has started.
+- [x] Ticket and draft PR opened before substantive implementation.
+- [x] Module, generated-plan policy, regression tests, Terraform fixture, and
+  redacted lifecycle verifier are implemented locally.
+- [x] Focused policy and lifecycle tests pass (528 tests).
+- [ ] Direct AWS disabled → progressive enabled → reverted lifecycle evidence.
+- [ ] Exact monitored destroy and independent absence check.
+- [ ] Matrix update, full repository validation, clean-room gate, final-head
+  CI, review, and merge.
+
+Implementation is uncommitted on the PR branch. The exact reviewed six-create
+AppConfig plan has been submitted through the run monitor; completion and
+resource IDs are pending reconciliation. PR #495 remains a draft.
 
 ## Tests / validation performed
 
@@ -97,6 +108,20 @@ Ticket-first draft. No implementation or AWS mutation has started.
   `654654474502`; recheck identity immediately before the disposable test.
 - Current AWS AppConfig pricing and AWS/HashiCorp primary references were
   reviewed on 2026-11-25.
+- Read-only AWS caller identity returned account `654654474502`; the exact
+  application and deployment-strategy name prefixes for test ID
+  `20261125-a1b2c3` were absent. The Terraform monitor showed 62 records and
+  zero active operations.
+- `pytest tests/test_generated_plan_policy.py tests/test_appconfig_feature_flag_lifecycle_script.py -q`:
+  528 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  1,783 tests passed; lint, Actions configuration, OpenAPI snapshot, and
+  Compose configuration checks passed.
+- Terraform fixture formatting and validation passed with the pinned lockfile.
+- Ruff lint passed. Formatting check reports pre-existing formatting
+  differences in large existing files; do not mass-format unrelated code.
+- AWS lifecycle work is pending; `docs/test/test495.md` records the exact
+  planned manifest and commands before any apply.
 
 ## Evidence files produced
 

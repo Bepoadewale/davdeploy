@@ -1091,6 +1091,206 @@ def appconfig_environment_case(*, reference="aws_appconfig_application.this.id")
     return document, proposal_value
 
 
+def appconfig_feature_rollout_case():
+    app_address = "aws_appconfig_application.this"
+    env_address = "aws_appconfig_environment.this"
+    profile_address = "aws_appconfig_configuration_profile.this"
+    version_address = "aws_appconfig_hosted_configuration_version.this"
+    strategy_address = "aws_appconfig_deployment_strategy.this"
+    deployment_address = "aws_appconfig_deployment.this"
+    content = json.dumps(
+        {
+            "flags": {"davdeploy_demo": {"name": "davdeploy_demo"}},
+            "values": {"davdeploy_demo": {"enabled": False}},
+            "version": "1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    planned = [
+        (app_address, "aws_appconfig_application", {"id": None, "name": "service-flags"}),
+        (
+            env_address,
+            "aws_appconfig_environment",
+            {"application_id": None, "environment_id": None, "name": "production"},
+        ),
+        (
+            profile_address,
+            "aws_appconfig_configuration_profile",
+            {
+                "application_id": None,
+                "configuration_profile_id": None,
+                "location_uri": "hosted",
+                "name": "service-flags-flags",
+                "type": "AWS.AppConfig.FeatureFlags",
+            },
+        ),
+        (
+            version_address,
+            "aws_appconfig_hosted_configuration_version",
+            {
+                "application_id": None,
+                "configuration_profile_id": None,
+                "content": content,
+                "content_type": "application/json",
+                "version_number": None,
+            },
+        ),
+        (
+            strategy_address,
+            "aws_appconfig_deployment_strategy",
+            {
+                "deployment_duration_in_minutes": 1,
+                "final_bake_time_in_minutes": 1,
+                "growth_factor": 50.0,
+                "growth_type": "LINEAR",
+                "id": None,
+                "name": "service-flags-linear",
+                "replicate_to": "NONE",
+            },
+        ),
+        (
+            deployment_address,
+            "aws_appconfig_deployment",
+            {
+                "application_id": None,
+                "configuration_profile_id": None,
+                "configuration_version": None,
+                "deployment_strategy_id": None,
+                "deployment_number": None,
+                "environment_id": None,
+                "state": None,
+            },
+        ),
+    ]
+    document = plan(
+        resources=[resource(address, kind, values) for address, kind, values in planned]
+        + [resource("terraform_data.account_guard", "terraform_data", {"input": None})],
+        changes=[change(address, kind) for address, kind, _ in planned]
+        + [change("terraform_data.account_guard", "terraform_data")],
+    )
+    references = {
+        app_address: {},
+        env_address: {"application_id": [f"{app_address}.id"]},
+        profile_address: {"application_id": [f"{app_address}.id"]},
+        version_address: {
+            "application_id": [f"{app_address}.id"],
+            "configuration_profile_id": [f"{profile_address}.configuration_profile_id"],
+        },
+        strategy_address: {},
+        deployment_address: {
+            "application_id": [f"{app_address}.id"],
+            "configuration_profile_id": [f"{profile_address}.configuration_profile_id"],
+            "configuration_version": [f"{version_address}.version_number"],
+            "deployment_strategy_id": [f"{strategy_address}.id"],
+            "environment_id": [f"{env_address}.environment_id"],
+        },
+    }
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": address,
+                "expressions": {
+                    field: (
+                        {"references": ref}
+                        if ref
+                        else {"constant_value": next(v for a, k, v in planned if a == address).get(field)}
+                    )
+                    for field, ref in fields.items()
+                },
+            }
+            for address, fields in references.items()
+        ]
+    }
+
+    def output(name):
+        return [{"name": name, "value_type": "string"}]
+
+    def ref(resource_id, output_name):
+        return {
+            "kind": "resource_reference",
+            "resource_id": resource_id,
+            "output_name": output_name,
+            "value_type": "string",
+        }
+
+    proposal_value = proposal(
+        resources=[
+            {
+                "resource_id": "application",
+                "resource_type": "aws_appconfig_application",
+                "name": "this",
+                "arguments": {"name": "service-flags"},
+                "rationale": "Group the application feature flags.",
+                "outputs": output("id"),
+            },
+            {
+                "resource_id": "environment",
+                "resource_type": "aws_appconfig_environment",
+                "name": "this",
+                "arguments": {"application_id": ref("application", "id"), "name": "production"},
+                "rationale": "Deploy flags to the same-plan environment.",
+                "outputs": output("environment_id"),
+            },
+            {
+                "resource_id": "profile",
+                "resource_type": "aws_appconfig_configuration_profile",
+                "name": "this",
+                "arguments": {
+                    "application_id": ref("application", "id"),
+                    "location_uri": "hosted",
+                    "name": "service-flags-flags",
+                    "type": "AWS.AppConfig.FeatureFlags",
+                },
+                "rationale": "Use AppConfig's hosted feature-flag format.",
+                "outputs": output("configuration_profile_id"),
+            },
+            {
+                "resource_id": "version",
+                "resource_type": "aws_appconfig_hosted_configuration_version",
+                "name": "this",
+                "arguments": {
+                    "application_id": ref("application", "id"),
+                    "configuration_profile_id": ref("profile", "configuration_profile_id"),
+                    "content": content,
+                    "content_type": "application/json",
+                },
+                "rationale": "Publish one known boolean feature flag.",
+                "outputs": output("version_number"),
+            },
+            {
+                "resource_id": "strategy",
+                "resource_type": "aws_appconfig_deployment_strategy",
+                "name": "this",
+                "arguments": {
+                    "deployment_duration_in_minutes": 1,
+                    "final_bake_time_in_minutes": 1,
+                    "growth_factor": 50.0,
+                    "growth_type": "LINEAR",
+                    "name": "service-flags-linear",
+                    "replicate_to": "NONE",
+                },
+                "rationale": "Use the bounded linear rollout.",
+                "outputs": output("id"),
+            },
+            {
+                "resource_id": "deployment",
+                "resource_type": "aws_appconfig_deployment",
+                "name": "this",
+                "arguments": {
+                    "application_id": ref("application", "id"),
+                    "configuration_profile_id": ref("profile", "configuration_profile_id"),
+                    "configuration_version": ref("version", "version_number"),
+                    "deployment_strategy_id": ref("strategy", "id"),
+                    "environment_id": ref("environment", "environment_id"),
+                },
+                "rationale": "Deploy the reviewed hosted flag version.",
+            },
+        ]
+    )
+    return document, proposal_value
+
+
 def sns_sqs_case():
     document, base_proposal = sqs_queue_case(True)
     topic_arn = f"arn:aws:sns:{REGION}:{ACCOUNT}:notifications"
@@ -1611,6 +1811,170 @@ def test_appconfig_environment_rejects_unplanned_application_reference():
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "appconfig_environment_application_binding_invalid" in codes(result)
+
+
+def test_appconfig_feature_rollout_binds_profile_version_strategy_and_deployment():
+    document, proposal_value = appconfig_feature_rollout_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("appconfig_") for code in codes(result))
+
+
+def test_appconfig_feature_profile_rejects_unplanned_application():
+    document, proposal_value = appconfig_feature_rollout_case()
+    profile = next(
+        item
+        for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_appconfig_configuration_profile.this"
+    )
+    profile["expressions"]["application_id"]["references"] = [
+        "aws_appconfig_application.unplanned.id"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_profile_application_binding_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "not-json",
+        json.dumps({"flags": {}, "values": {}, "version": "1"}),
+        json.dumps(
+            {
+                "flags": {"first": {"name": "first"}, "second": {"name": "second"}},
+                "values": {
+                    "first": {"enabled": False},
+                    "second": {"enabled": True},
+                },
+                "version": "1",
+            }
+        ),
+        json.dumps(
+            {
+                "flags": {"davdeploy_demo": {"name": "davdeploy_demo"}},
+                "values": {"davdeploy_demo": {"enabled": "true"}},
+                "version": "1",
+            }
+        ),
+        json.dumps(
+            {
+                "flags": {"davdeploy_demo": {"name": "davdeploy_demo"}},
+                "values": {"davdeploy_demo": {"enabled": False}},
+                "version": "2",
+            }
+        ),
+    ],
+)
+def test_appconfig_feature_version_rejects_invalid_flag_content(content):
+    document, proposal_value = appconfig_feature_rollout_case()
+    version = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_appconfig_hosted_configuration_version.this"
+    )
+    version["values"]["content"] = content
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_feature_flag_content_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("growth_factor", 100),
+        ("growth_type", "EXPONENTIAL"),
+        ("deployment_duration_in_minutes", 30),
+        ("final_bake_time_in_minutes", 0),
+        ("replicate_to", "SSM_DOCUMENT"),
+    ],
+)
+def test_appconfig_rollout_strategy_rejects_unsafe_values(field, value):
+    document, proposal_value = appconfig_feature_rollout_case()
+    strategy = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == "aws_appconfig_deployment_strategy.this"
+    )
+    strategy["values"][field] = value
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_rollout_strategy_unsafe" in codes(result)
+
+
+def test_appconfig_deployment_rejects_unplanned_version_reference():
+    document, proposal_value = appconfig_feature_rollout_case()
+    deployment = next(
+        item
+        for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_appconfig_deployment.this"
+    )
+    deployment["expressions"]["configuration_version"]["references"] = [
+        "aws_appconfig_hosted_configuration_version.unplanned.version_number"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_deployment_binding_invalid" in codes(result)
+
+
+def test_appconfig_deployment_rejects_environment_for_another_application():
+    document, proposal_value = appconfig_feature_rollout_case()
+    environment = next(
+        item
+        for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_appconfig_environment.this"
+    )
+    environment["expressions"]["application_id"]["references"] = [
+        "aws_appconfig_application.other.id"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_deployment_target_mismatch" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("kind", "address", "field"),
+    [
+        (
+            "aws_appconfig_configuration_profile",
+            "aws_appconfig_configuration_profile.this",
+            "type",
+        ),
+        (
+            "aws_appconfig_hosted_configuration_version",
+            "aws_appconfig_hosted_configuration_version.this",
+            "content",
+        ),
+        (
+            "aws_appconfig_deployment_strategy",
+            "aws_appconfig_deployment_strategy.this",
+            "growth_factor",
+        ),
+    ],
+)
+def test_appconfig_feature_rollout_denies_unknown_critical_values(kind, address, field):
+    document, proposal_value = appconfig_feature_rollout_case()
+    update = next(
+        item for item in document["resource_changes"] if item["address"] == address
+    )
+    update["change"]["after_unknown"][field] = True
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in codes(result)
 
 
 @pytest.mark.parametrize(
