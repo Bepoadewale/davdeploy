@@ -143,6 +143,26 @@ seven-resource destroy plan is reviewed and awaits approval before apply. PR
   most eight `GetLatestConfiguration` calls and four responses per phase, and
   returns only counts and a boolean flag value; it never returns tokens.
 
+## Current-main synchronization — 2026-11-25
+
+The PR branch was synchronized with backend `main` at
+`b6b663d87c7f31bebd2baf47f4589d8205ec2b3f` in merge commit `13f32b6`.
+The AppConfig policy, lifecycle verifier, and tests remain present. The
+capability-matrix conflict was reconciled to retain current-main status and
+the PR's revision-retention and exact teardown limitations. Focused policy and
+AppConfig tests pass (614 passed); `make verify` passes (1,883 tests, one
+existing Starlette/httpx deprecation warning); Ruff, documentation conventions,
+and `git diff --check` pass. Fresh final-head CI and review are pending; the
+earlier CI result applies only to the prior PR head.
+
+The account inventory still shows the tagged AppConfig application,
+environment, profile, deployment strategy, and `COMPLETE`/`REVERTED` history.
+No AWS resource was changed by this source sync. The reviewed seven-resource
+destroy plan remains unapplied pending explicit approval; no absence-after-
+teardown claim is made. The isolated clean-room run passed through
+`make verify`; its final cleanup step remains pending explicit approval because
+it would remove generated local files and a Compose volume.
+
 ## Evidence files produced
 
 - `docs/tickets/ticket495.md`
