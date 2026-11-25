@@ -305,7 +305,7 @@ class GeneratedPlanPricingEvidence:
                 if raw_batch_usage is None
                 else BatchPricingUsageAssumptions.model_validate(
                     raw_batch_usage
-                ).model_dump(mode="json")
+                ).model_dump(mode="json", exclude_none=True)
             )
             if batch_usage != raw_batch_usage:
                 raise ValueError("non-canonical Batch usage assumptions")
@@ -542,7 +542,7 @@ class TrustedPlanPricingContext:
             try:
                 batch_usage_assumptions = BatchPricingUsageAssumptions.model_validate(
                     raw_batch_usage_assumptions
-                ).model_dump(mode="json")
+                ).model_dump(mode="json", exclude_none=True)
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid Batch pricing usage assumptions") from None
         return cls(
@@ -1463,15 +1463,6 @@ def evaluate_generated_plan_pricing(
             )
         )
 
-    if lambda_log_groups and not lambda_functions and not http_apis:
-        findings.append(
-            PlanPricingFinding(
-                "cloudwatch_log_group_unpriced",
-                lambda_log_groups[0]["address"],
-                "CloudWatch log groups are priced only when bound to an explicitly priced Lambda function.",
-            )
-        )
-
     batch_jobs = [
         item for item in resources if item["type"] == "aws_batch_job_definition"
     ]
@@ -1483,11 +1474,19 @@ def evaluate_generated_plan_pricing(
             "aws_batch_job_definition",
         }
     ]
+    if lambda_log_groups and not lambda_functions and not http_apis and not batch_resources:
+        findings.append(
+            PlanPricingFinding(
+                "cloudwatch_log_group_unpriced",
+                lambda_log_groups[0]["address"],
+                "CloudWatch log groups are priced only when bound to a supported workload.",
+            )
+        )
     batch_usage_document = trusted_context.batch_usage_assumptions
     if batch_resources:
         findings.append(PlanPricingFinding(
             "batch_supporting_costs_unpriced", None,
-            "Batch pricing currently covers Fargate compute only; image transfer, logs, networking, public IPv4, and other linked usage still block approval.",
+            "Batch pricing includes bounded Fargate compute and supported explicit CloudWatch Logs usage; image storage and transfer, networking, public IPv4, and other material linked usage still block approval.",
         ))
         batch_compute = [
             item for item in batch_resources
@@ -1683,6 +1682,112 @@ def evaluate_generated_plan_pricing(
                                     unit_price_low_usd=format(low_unit_price, "f"),
                                     low_cost_quantity=low_quantity,
                                 ))
+                            log_group_name, log_config_error = _batch_awslogs_group_name(
+                                properties, region
+                            )
+                            if log_config_error:
+                                findings.append(PlanPricingFinding(
+                                    "batch_log_configuration_unsupported",
+                                    job["address"],
+                                    "Batch log pricing requires an explicit same-region awslogs group with supported options.",
+                                ))
+                            else:
+                                usage_logs = usage.cloudwatch_logs
+                                if usage_logs is None:
+                                    findings.append(PlanPricingFinding(
+                                        "batch_log_usage_assumptions_missing",
+                                        job["address"],
+                                        "Bounded CloudWatch Logs ingestion and retained-storage assumptions are required.",
+                                    ))
+                                elif usage.monthly_jobs.maximum > 0 and (
+                                    usage_logs.monthly_ingested_gb.maximum == 0
+                                    or usage_logs.monthly_retained_gb_month.maximum == 0
+                                ):
+                                    findings.append(PlanPricingFinding(
+                                        "batch_log_usage_assumptions_unbounded",
+                                        job["address"],
+                                        "Batch jobs require nonzero upper bounds for log ingestion and retained log storage.",
+                                    ))
+                                else:
+                                    named_log_groups = [
+                                        group for group in lambda_log_groups
+                                        if group["values"].get("name") == log_group_name
+                                    ]
+                                    if len(named_log_groups) != 1:
+                                        findings.append(PlanPricingFinding(
+                                            "batch_log_group_mismatch",
+                                            job["address"],
+                                            "The Batch awslogs destination must match exactly one planned CloudWatch log group.",
+                                        ))
+                                    else:
+                                        log_group = named_log_groups[0]
+                                        group_error = _validate_batch_log_group(
+                                            log_group["values"],
+                                            changes.get(log_group["address"]),
+                                            log_group_name,
+                                        )
+                                        if group_error:
+                                            findings.append(PlanPricingFinding(
+                                                group_error[0], log_group["address"], group_error[1]
+                                            ))
+                                        else:
+                                            try:
+                                                if pricing_catalog is None:
+                                                    pricing_catalog = AwsPriceListCatalog()
+                                                log_rates = (
+                                                    (
+                                                        pricing_catalog.cloudwatch_log_ingestion_rate(region),
+                                                        "AWS Batch CloudWatch Logs ingestion",
+                                                        usage_logs.monthly_ingested_gb,
+                                                        "GB",
+                                                    ),
+                                                    (
+                                                        pricing_catalog.cloudwatch_standard_log_storage_rate(region),
+                                                        "AWS Batch CloudWatch Logs storage",
+                                                        usage_logs.monthly_retained_gb_month,
+                                                        "GB-Mo",
+                                                    ),
+                                                )
+                                            except PriceListUnavailableError:
+                                                unavailable = True
+                                                findings.append(PlanPricingFinding(
+                                                    "regional_price_lookup_unavailable",
+                                                    log_group["address"],
+                                                    "DavDeploy could not verify current regional CloudWatch Logs prices.",
+                                                ))
+                                            except PlanPricingError:
+                                                findings.append(PlanPricingFinding(
+                                                    "regional_price_ambiguous",
+                                                    log_group["address"],
+                                                    "DavDeploy could not identify exact regional CloudWatch Logs prices.",
+                                                ))
+                                            else:
+                                                for rate, description, amount, unit in log_rates:
+                                                    low_rate = Decimal(
+                                                        rate.low_unit_price_usd or rate.unit_price_usd
+                                                    )
+                                                    lines.append(PlanCostLine(
+                                                        address=job["address"],
+                                                        resource_type="aws_batch_job_definition",
+                                                        description=description,
+                                                        quantity=amount.minimum,
+                                                        quantity_max=amount.maximum,
+                                                        unit=unit,
+                                                        unit_price_usd=rate.unit_price_usd,
+                                                        monthly_cost_minor=int((
+                                                            low_rate * amount.minimum * 100
+                                                        ).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                                        monthly_cost_max_minor=int((
+                                                            Decimal(rate.unit_price_usd)
+                                                            * amount.maximum * 100
+                                                        ).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                                        catalog_sku=rate.sku,
+                                                        catalog_product_sha256=rate.product_digest,
+                                                        catalog_published_at=rate.published_at,
+                                                        catalog_effective_at=rate.effective_at,
+                                                        unit_price_low_usd=format(low_rate, "f"),
+                                                        low_cost_quantity=amount.minimum,
+                                                    ))
 
     elif batch_usage_document is not None:
         findings.append(PlanPricingFinding(
@@ -3529,11 +3634,72 @@ def _lambda_log_group_name(values: dict[str, Any]) -> str | None:
     return custom_name if isinstance(custom_name, str) and custom_name else None
 
 
+def _batch_awslogs_group_name(
+    properties: dict[str, Any], region: str
+) -> tuple[str | None, str | None]:
+    configuration = properties.get("logConfiguration")
+    if (
+        not isinstance(configuration, dict)
+        or set(configuration) - {"logDriver", "options", "secretOptions"}
+        or configuration.get("logDriver") != "awslogs"
+    ):
+        return None, "driver"
+    if configuration.get("secretOptions") not in (None, []):
+        return None, "secret_options"
+    options = configuration.get("options")
+    if not isinstance(options, dict):
+        return None, "options"
+    supported_options = {
+        "awslogs-group",
+        "awslogs-region",
+        "awslogs-stream-prefix",
+        "awslogs-create-group",
+        "awslogs-multiline-pattern",
+        "awslogs-datetime-format",
+    }
+    group_name = options.get("awslogs-group")
+    stream_prefix = options.get("awslogs-stream-prefix")
+    configured_region = options.get("awslogs-region")
+    create_group = options.get("awslogs-create-group")
+    if (
+        set(options) - supported_options
+        or any(not isinstance(value, str) or not value for value in options.values())
+        or not isinstance(group_name, str)
+        or not group_name
+        or not isinstance(stream_prefix, str)
+        or not stream_prefix
+        or configured_region not in (None, region)
+        or create_group not in (None, "false")
+    ):
+        return None, "unsupported_options"
+    return group_name, None
+
+
 def _validate_lambda_log_group(
     values: dict[str, Any], change: dict[str, Any] | None, expected_name: str
 ) -> tuple[str, str] | None:
+    return _validate_standard_cloudwatch_log_group(
+        values, change, expected_name, code_prefix="lambda_log"
+    )
+
+
+def _validate_batch_log_group(
+    values: dict[str, Any], change: dict[str, Any] | None, expected_name: str
+) -> tuple[str, str] | None:
+    return _validate_standard_cloudwatch_log_group(
+        values, change, expected_name, code_prefix="batch_log"
+    )
+
+
+def _validate_standard_cloudwatch_log_group(
+    values: dict[str, Any],
+    change: dict[str, Any] | None,
+    expected_name: str,
+    *,
+    code_prefix: str,
+) -> tuple[str, str] | None:
     if change is None or not isinstance(change.get("change"), dict):
-        return "lambda_log_group_metadata_missing", "The Lambda log group lacks resource-level retention metadata."
+        return f"{code_prefix}_group_metadata_missing", "The CloudWatch log group lacks resource-level retention metadata."
     change_doc = change["change"]
     after = change_doc.get("after")
     unknown = change_doc.get("after_unknown")
@@ -3545,20 +3711,20 @@ def _validate_lambda_log_group(
         or any(key not in values or key not in after or values[key] != after[key] for key in required)
         or any(_path_contains_unknown(unknown, (key,)) for key in required)
     ):
-        return "lambda_log_group_unknown", "The Lambda log group lacks known retention, class, or encryption values."
+        return f"{code_prefix}_group_unknown", "The CloudWatch log group lacks known retention, class, or encryption values."
     if values.get("name") != expected_name:
-        return "lambda_log_group_mismatch", "The CloudWatch log group does not match the Lambda logging destination."
+        return f"{code_prefix}_group_mismatch", "The CloudWatch log group does not match the workload logging destination."
     retention = values.get("retention_in_days")
     allowed_retention = {
         1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400,
         545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653,
     }
     if isinstance(retention, bool) or retention not in allowed_retention:
-        return "lambda_log_retention_unbounded", "Lambda log retention must be an explicit supported expiration period."
+        return f"{code_prefix}_retention_unbounded", "CloudWatch log retention must be an explicit supported expiration period."
     if values.get("log_group_class") != "STANDARD":
-        return "lambda_log_class_unpriced", "Only Standard CloudWatch log groups are priced in this release."
+        return f"{code_prefix}_class_unpriced", "Only Standard CloudWatch log groups are priced in this release."
     if values.get("kms_key_id") not in (None, ""):
-        return "lambda_log_kms_unpriced", "Customer-managed CloudWatch log encryption keys are not priced."
+        return f"{code_prefix}_kms_unpriced", "Customer-managed CloudWatch log encryption keys are not priced."
     return None
 
 

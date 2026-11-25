@@ -3,7 +3,8 @@
 ## Current state
 
 **As of 2026-11-25, backend `main` is
-`2afd0070cb7991a2eec77c25d1750a6cf4de190c` (PR #507). The hosted control plane
+`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508 documentation reconciliation;
+product code remains at PR #507). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -22,7 +23,11 @@ deliberately incomplete and approval-ineligible until image transfer, logs,
 networking, public IPv4, and other material supporting costs are priced. Its
 final-head checks passed in run
 [45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-No hosted resource or customer workload was changed or deployed by these PRs.
+Draft PR #509 adds source-only pricing for explicitly configured Batch
+CloudWatch Logs usage; it does not enable dispatch or remove Batch's
+approval-blocking finding because image transfer, networking, public IPv4, and
+other material costs remain unpriced. No hosted resource or customer workload
+was changed or deployed by these PRs.
 
 PR #493 merged with all seven CI checks passing in run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).

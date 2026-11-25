@@ -224,6 +224,32 @@ class FakeBatchPriceList:
     def get_products(self, **kwargs):
         self.calls.append(kwargs)
         filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        if kwargs["ServiceCode"] == "AmazonCloudWatch":
+            family = filters["productFamily"]
+            if family == "Data Payload":
+                unit, price, sku = "GB", "0.50", "batch-log-ingestion"
+            elif family == "Storage Snapshot":
+                unit, price, sku = "GB-Mo", "0.03", "batch-log-storage"
+            else:
+                raise AssertionError("unexpected CloudWatch price family")
+            product = {
+                "product": {
+                    "sku": sku,
+                    "productFamily": family,
+                    "attributes": {**filters},
+                },
+                "serviceCode": "AmazonCloudWatch",
+                "publicationDate": "2026-11-13T12:00:00Z",
+                "terms": {"OnDemand": {"offer": {
+                    "sku": sku,
+                    "effectiveDate": "2026-11-01T00:00:00Z",
+                    "priceDimensions": {"dimension": {
+                        "beginRange": "0", "endRange": "Inf", "unit": unit,
+                        "pricePerUnit": {"USD": price},
+                    }},
+                }}},
+            }
+            return {"PriceList": [json.dumps(product)]}
         dimension = "vcpu" if "cputype" in filters else "memory"
         unit = "Hrs"
         price = "0.04048" if dimension == "vcpu" else "0.004445"
@@ -254,6 +280,14 @@ class FakeBatchPriceList:
             }}},
         }
         return {"PriceList": [json.dumps(product)]}
+
+
+class MissingBatchCloudWatchPriceList(FakeBatchPriceList):
+    def get_products(self, **kwargs):
+        if kwargs["ServiceCode"] == "AmazonCloudWatch":
+            self.calls.append(kwargs)
+            return {"PriceList": []}
+        return super().get_products(**kwargs)
 
 
 def ebs_values(**overrides):
@@ -1522,7 +1556,7 @@ def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
     ).pricing_context_sha256
 
 
-def batch_plan(*, runtime_platform=None, ephemeral_storage=None):
+def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=False):
     compute = {
         "type": "MANAGED", "state": "ENABLED", "compute_resources": [{
             "type": "FARGATE", "max_vcpus": 6,
@@ -1540,6 +1574,15 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None):
             {"type": "MEMORY", "value": "512"},
         ],
     }
+    if explicit_logs:
+        properties["logConfiguration"] = {
+            "logDriver": "awslogs",
+            "options": {
+                "awslogs-group": "/aws/batch/jobs",
+                "awslogs-region": REGION,
+                "awslogs-stream-prefix": "batch",
+            },
+        }
     if runtime_platform is not None:
         properties["runtimePlatform"] = runtime_platform
     if ephemeral_storage is not None:
@@ -1548,13 +1591,25 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None):
         "type": "container", "platform_capabilities": ["FARGATE"],
         "container_properties": json.dumps(properties),
     }
+    extra_resources = [
+        resource("aws_batch_compute_environment.jobs", "aws_batch_compute_environment", compute),
+        resource("aws_batch_job_queue.jobs", "aws_batch_job_queue", queue),
+        resource("aws_batch_job_definition.jobs", "aws_batch_job_definition", job),
+    ]
+    if explicit_logs:
+        extra_resources.append(resource(
+            "aws_cloudwatch_log_group.batch",
+            "aws_cloudwatch_log_group",
+            {
+                "name": "/aws/batch/jobs",
+                "retention_in_days": 30,
+                "log_group_class": "STANDARD",
+                "kms_key_id": None,
+            },
+        ))
     return plan(
         resource_type="terraform_data", resource_values={"input": None},
-        extra_resources=(
-            resource("aws_batch_compute_environment.jobs", "aws_batch_compute_environment", compute),
-            resource("aws_batch_job_queue.jobs", "aws_batch_job_queue", queue),
-            resource("aws_batch_job_definition.jobs", "aws_batch_job_definition", job),
-        ),
+        extra_resources=tuple(extra_resources),
     )
 
 
@@ -1563,6 +1618,18 @@ BATCH_USAGE = {
         "aws_batch_job_definition.jobs": {
             "monthly_jobs": {"minimum": 10, "maximum": 20},
             "average_billed_runtime_seconds": {"minimum": 30, "maximum": 120},
+        }
+    }
+}
+
+BATCH_LOG_USAGE = {
+    "jobs": {
+        "aws_batch_job_definition.jobs": {
+            **BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"],
+            "cloudwatch_logs": {
+                "monthly_ingested_gb": {"minimum": 1, "maximum": 4},
+                "monthly_retained_gb_month": {"minimum": 2, "maximum": 8},
+            },
         }
     }
 }
@@ -1610,6 +1677,175 @@ def test_batch_fargate_usage_is_priced_by_bound_job_and_applies_one_minute_floor
     assert len(client.calls) == 2
 
 
+def test_batch_explicit_cloudwatch_logs_are_regionally_priced_and_digest_bound():
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(explicit_logs=True),
+        batch_usage_assumptions=BATCH_LOG_USAGE,
+        catalog_client=client,
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert not result.approval_eligible
+    assert "batch_supporting_costs_unpriced" in {item.code for item in result.findings}
+    log_lines = [line for line in result.lines if "CloudWatch Logs" in line.description]
+    assert {
+        line.description: (
+            line.quantity,
+            line.quantity_max,
+            line.unit,
+            line.monthly_cost_minor,
+            line.monthly_cost_max_minor,
+        )
+        for line in log_lines
+    } == {
+        "AWS Batch CloudWatch Logs ingestion": (1, 4, "GB", 50, 200),
+        "AWS Batch CloudWatch Logs storage": (2, 8, "GB-Mo", 6, 24),
+    }
+    manifest = result.as_manifest_document()
+    assert manifest["batch_usage_assumptions"] == BATCH_LOG_USAGE
+    assert result.safe_summary()["batch_usage_assumptions"] == BATCH_LOG_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+    assert pricing_evidence_document_is_valid(manifest)
+    tampered = json.loads(json.dumps(manifest))
+    tampered["batch_usage_assumptions"]["jobs"][
+        "aws_batch_job_definition.jobs"
+    ]["cloudwatch_logs"]["monthly_ingested_gb"]["maximum"] += 1
+    assert not pricing_evidence_document_is_valid(tampered)
+    assert len(client.calls) == 4
+    assert {call["ServiceCode"] for call in client.calls} == {
+        "AmazonECS", "AmazonCloudWatch",
+    }
+
+
+def test_batch_legacy_usage_and_evidence_remain_canonical_without_log_fields():
+    parsed = BatchPricingUsageAssumptions.model_validate(BATCH_USAGE)
+    assert parsed.model_dump(mode="json", exclude_none=True) == BATCH_USAGE
+    result, _ = evaluate(
+        batch_plan(), batch_usage_assumptions=BATCH_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    manifest = result.as_manifest_document()
+    assert manifest["batch_usage_assumptions"] == BATCH_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+
+
+def test_batch_explicit_logs_require_usage_and_do_not_remove_supporting_cost_blocker():
+    result, client = evaluate(
+        batch_plan(explicit_logs=True),
+        batch_usage_assumptions=BATCH_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert not result.approval_eligible
+    assert "batch_log_usage_assumptions_missing" in {item.code for item in result.findings}
+    assert "batch_supporting_costs_unpriced" in {item.code for item in result.findings}
+    assert len(client.calls) == 2
+
+
+def test_batch_missing_cloudwatch_prices_fail_closed_without_log_lines():
+    result, client = evaluate(
+        batch_plan(explicit_logs=True),
+        batch_usage_assumptions=BATCH_LOG_USAGE,
+        catalog_client=MissingBatchCloudWatchPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert not result.approval_eligible
+    assert "regional_price_ambiguous" in {
+        item.code for item in result.findings
+    }
+    assert not any("CloudWatch Logs" in line.description for line in result.lines)
+    assert [call["ServiceCode"] for call in client.calls].count("AmazonCloudWatch") == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "unknown", "expected"),
+    [
+        ("retention_in_days", None, False, "batch_log_retention_unbounded"),
+        ("log_group_class", "INFREQUENT_ACCESS", False, "batch_log_class_unpriced"),
+        ("kms_key_id", "arn:aws:kms:us-east-1:654654474502:key/example", False, "batch_log_kms_unpriced"),
+        ("retention_in_days", 30, True, "batch_log_group_unknown"),
+    ],
+)
+def test_batch_log_group_requires_bounded_standard_retention(
+    field, value, unknown, expected
+):
+    document = batch_plan(explicit_logs=True)
+    group = next(
+        item for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_cloudwatch_log_group"
+    )
+    group_change = next(
+        item for item in document["resource_changes"]
+        if item["type"] == "aws_cloudwatch_log_group"
+    )
+    group["values"][field] = value
+    group_change["change"]["after"][field] = value
+    if unknown:
+        group_change["change"]["after_unknown"][field] = True
+    result, _ = evaluate(
+        document,
+        batch_usage_assumptions=BATCH_LOG_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert expected in {item.code for item in result.findings}
+    assert not any("CloudWatch Logs" in line.description for line in result.lines)
+
+
+def test_batch_logs_require_the_managed_destination_to_be_in_the_plan():
+    document = batch_plan(explicit_logs=True)
+    document["planned_values"]["root_module"]["resources"] = [
+        item for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] != "aws_cloudwatch_log_group"
+    ]
+    document["resource_changes"] = [
+        item for item in document["resource_changes"]
+        if item["type"] != "aws_cloudwatch_log_group"
+    ]
+    result, _ = evaluate(
+        document,
+        batch_usage_assumptions=BATCH_LOG_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "batch_log_group_mismatch" in {item.code for item in result.findings}
+    assert not any("CloudWatch Logs" in line.description for line in result.lines)
+
+
+@pytest.mark.parametrize(
+    ("update", "expected"),
+    [
+        ({"logDriver": "splunk"}, "batch_log_configuration_unsupported"),
+        ({"awslogs-region": "us-west-2"}, "batch_log_configuration_unsupported"),
+        ({"awslogs-create-group": "true"}, "batch_log_configuration_unsupported"),
+        ({"awslogs-extra": "unsupported"}, "batch_log_configuration_unsupported"),
+    ],
+)
+def test_batch_cloudwatch_log_configuration_fails_closed(update, expected):
+    document = batch_plan(explicit_logs=True)
+    job = next(
+        item for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_batch_job_definition"
+    )
+    job_properties = json.loads(job["values"]["container_properties"])
+    configuration = job_properties["logConfiguration"]
+    if "logDriver" in update:
+        configuration.update(update)
+    else:
+        configuration["options"].update(update)
+    job["values"]["container_properties"] = json.dumps(job_properties)
+    result, client = evaluate(
+        document,
+        batch_usage_assumptions=BATCH_LOG_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert expected in {item.code for item in result.findings}
+    assert not any("CloudWatch Logs" in line.description for line in result.lines)
+    assert all(call["ServiceCode"] == "AmazonECS" for call in client.calls)
+
+
 @pytest.mark.parametrize(
     ("kwargs", "finding"),
     [
@@ -1644,11 +1880,17 @@ def test_batch_plan_without_usage_assumptions_is_unpriced_and_not_approvable():
 
 def test_batch_usage_assumptions_are_bounded_and_exact_address_keyed():
     parsed = BatchPricingUsageAssumptions.model_validate(BATCH_USAGE)
-    assert parsed.model_dump(mode="json") == BATCH_USAGE
+    assert parsed.model_dump(mode="json", exclude_none=True) == BATCH_USAGE
     with pytest.raises(ValueError):
         BatchPricingUsageAssumptions.model_validate({
             "jobs": {"aws_batch_job_queue.jobs": BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"]}
         })
+    over_bound = json.loads(json.dumps(BATCH_LOG_USAGE))
+    over_bound["jobs"]["aws_batch_job_definition.jobs"]["cloudwatch_logs"][
+        "monthly_ingested_gb"
+    ]["maximum"] = 500_001
+    with pytest.raises(ValueError, match="CloudWatch Logs"):
+        BatchPricingUsageAssumptions.model_validate(over_bound)
 
 
 def test_batch_usage_assumptions_are_extracted_from_digest_checked_revision():
@@ -1667,6 +1909,26 @@ def test_batch_usage_assumptions_are_extracted_from_digest_checked_revision():
     assert context.batch_usage_assumptions == BATCH_USAGE
     assert context.pricing_context_sha256 != TrustedPlanPricingContext(
         REGION, "USD", None, revision_sha256
+    ).pricing_context_sha256
+
+
+def test_batch_log_assumptions_are_extracted_from_the_digest_checked_revision():
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"batch_pricing_usage_assumptions": BATCH_LOG_USAGE}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.batch_usage_assumptions == BATCH_LOG_USAGE
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256,
+        batch_usage_assumptions=BATCH_USAGE,
     ).pricing_context_sha256
     with pytest.raises(ValueError):
         BatchPricingUsageAssumptions.model_validate({

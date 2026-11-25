@@ -1,7 +1,8 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`2afd0070cb7991a2eec77c25d1750a6cf4de190c` (PR #507); hosted runtime remains
+`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508 documentation reconciliation;
+product code remains at PR #507); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -16,7 +17,10 @@ machine-checkable; it does not enable Nova dispatch. PR #507 adds source-only
 AWS Batch Fargate Linux/x86 vCPU and memory cost lines with trusted job usage
 assumptions and a 60-second per-job minimum. It deliberately keeps estimates
 incomplete and approval-ineligible while image transfer, logs, networking,
-public IPv4, and other material supporting costs are unpriced. All seven
+public IPv4, and other material supporting costs are unpriced. Draft PR #509
+adds explicit CloudWatch Logs ingestion/storage prices for one bounded Batch
+job and its managed same-region Standard log group, without removing the
+supporting-cost approval blocker. All seven
 final-head checks passed in run
 [45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
 No AWS workload or hosted-control-plane resource changed.
