@@ -12,6 +12,9 @@ Start with the [current-state audit](product/CURRENT_STATE_AUDIT.md), [frontend/
 The [AI infrastructure and operations platform goal](product/AI_INFRASTRUCTURE_PLATFORM_GOAL.md)
 is a queued future goal. The [composed Nova execution handoff](product/COMPOSED_EXECUTION_GOAL.md)
 remains the active engineering priority until its acceptance gates are met.
+The [Nova catalogue-to-root crosswalk contract](product/NOVA_CATALOGUE_ROOT_BINDING.md)
+describes the machine-checked compatibility references in the capability
+evidence matrix; it does not authorize runtime dispatch.
 
 [Future evidence contracts](architecture/future-evidence-contracts.md) describe the fixture-only
 pricing, observed-output and webhook safety checks that stay distinct from live provider enablement.

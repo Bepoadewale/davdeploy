@@ -1,6 +1,6 @@
 # Nova catalogue-to-root crosswalk validation
 
-Status: draft implementation package.
+Status: implemented in draft PR #506; final CI and merge are pending.
 
 The Nova evidence matrix lists 26 architecture modules and 30 Terraform
 implementations. Today, those cross-references are descriptive prose and can
@@ -11,12 +11,28 @@ This package will make the existing crosswalk machine-checkable. It will
 validate catalogue and scenario identifiers against their Python sources,
 verify every listed Terraform root resolves to a checked-in root, and check
 that architecture-to-root and root-to-architecture candidate references agree.
+The 30 implementation IDs are the workload-root registry; four additional
+Terraform module directories are shared or plan-only components and are
+classified below instead of being silently omitted.
 
 These are evidence and compatibility references only. A passing crosswalk
 does not make a root executable, certify a workload, authorize a plan, or
 change Nova's dispatch behavior. Unsupported and ambiguous relationships must
 remain explicitly unassigned or partial; the validator must not infer them
 from matching service names.
+
+## Terraform module directories outside the workload registry
+
+These directories are checked separately because they are consumed as shared
+components or represent plan-only contracts rather than standalone workload
+roots.
+
+| Module path | Reason for exclusion from the 30 workload roots |
+|---|---|
+| `modules/app-runner-plan-contract` | Plan-only typed App Runner contract used by the renderer; it does not create AWS resources. |
+| `modules/iam` | Shared pilot IAM component used by `infrastructure/terraform/pilot`. |
+| `modules/opensearch-serverless-vector` | Reusable vector collection component used by the knowledge-base validation stack, not a standalone workload root. |
+| `modules/rds` | Shared pilot PostgreSQL component; the workload registry separately tracks `modules/aurora-postgres`. |
 
 ## Acceptance
 

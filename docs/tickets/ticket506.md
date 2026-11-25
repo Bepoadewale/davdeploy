@@ -4,7 +4,7 @@ PR: [#506 — test: validate Nova architecture and Terraform crosswalk](https://
 
 Branch: `feat/nova-crosswalk-validation`.
 
-## Goal
+## Problem / goal
 
 Make the candidate architecture-module-to-Terraform-root references in
 `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md` machine-checkable. Detect
@@ -27,7 +27,7 @@ certification.
 - No open PRs were present when this package began. Protected untracked files
   in the primary worktree remain untouched.
 
-## Research and repository references
+## Research / references used
 
 This is an internal consistency package; no cloud or external technology
 adoption is required. The design uses these existing sources:
@@ -39,7 +39,7 @@ adoption is required. The design uses these existing sources:
 - `infrastructure/terraform/modules/*/main.tf`
 - `AGENTS.md` PR, ticket, evidence, and validation requirements
 
-## Work planned
+## Work planned for the PR
 
 1. Expose the architecture module identifiers through a stable read-only
    catalogue function.
@@ -50,33 +50,56 @@ adoption is required. The design uses these existing sources:
 4. Parse candidate architecture/root IDs in both directions and reject unknown
    or asymmetric relationships. Keep `partial` and unassigned relationships
    explicit; do not infer compatibility from service-name overlap.
-5. Reconcile the AppConfig matrix row to PR #495's merged direct lifecycle and
-   verified cleanup evidence. Link this contract and validator from the matrix.
+5. Reconcile the AppConfig matrix row and Nova handoff/status documents to
+   PR #495's merged direct lifecycle and verified cleanup evidence. Link this
+   contract and validator from the matrix and documentation map.
 6. Run focused tests, repository validation, documentation checks, and required
    final-head CI. No cloud workload test is part of this PR.
 
 ## Acceptance criteria
 
-- [ ] Architecture rows exactly match the source architecture catalogue.
-- [ ] Scenario references exactly match `certification_factory` relationships.
-- [ ] All 30 implementation IDs/paths are unique and map to existing Terraform
-  roots; every customer module root appears once.
-- [ ] Candidate relationships agree in both matrix directions; all referenced
+- [x] Architecture rows exactly match the source architecture catalogue.
+- [x] Architecture-row scenario references exactly match
+  `certification_factory` relationships; scenario IDs in root descriptions
+  are validated against that catalogue.
+- [x] All 30 implementation IDs/paths are unique and map to existing workload
+  Terraform roots. Every module directory is accounted for once, with four
+  shared/plan-only components classified separately.
+- [x] Candidate relationships agree in both matrix directions; all referenced
   IDs are known and explicit gaps/partial overlaps remain visible.
-- [ ] Documentation states that this consistency contract does not enable Nova
+- [x] Documentation states that this consistency contract does not enable Nova
   dispatch, cloud execution, or workload certification.
-- [ ] The AppConfig row reports PR #495 merged and its exact cleanup evidence.
-- [ ] Focused tests and required CI pass; no cloud resources are changed.
+- [x] The AppConfig row reports PR #495 merged and its exact cleanup evidence.
+- [x] Focused tests and required local validation pass; no cloud resources are
+  changed.
+- [ ] Final-head CI passes.
 
 ## Acceptance status
 
 - [x] Draft PR opened before substantive implementation; bootstrap document
   committed as `b298f58`.
 - [x] This ticket was created before implementation work.
-- [ ] Crosswalk validator, matrix updates, focused validation, and CI.
+- [x] Crosswalk validator and matrix/handoff updates are implemented.
+- [x] Focused tests and full repository validation pass locally.
+- [ ] Final-head CI.
 - [ ] Review and merge.
 
-## Evidence and boundaries
+## Tests / validation performed
+
+- `PYTHONPATH=apps/api/src /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest tests/test_nova_capability_evidence_registry.py -q` — 3 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 1,907 passed; lint, Actions configuration, OpenAPI snapshot, and Compose checks passed. One existing Starlette/httpx deprecation warning remains.
+- `scripts/check_doc_conventions.py` — passed.
+- `ruff check apps/api/src/davdeploy/module_catalogue.py tests/test_nova_capability_evidence_registry.py` and `git diff --check` passed.
+
+## Evidence files produced
+
+- `docs/product/NOVA_CATALOGUE_ROOT_BINDING.md`
+- `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`
+- `tests/test_nova_capability_evidence_registry.py`
+- `docs/test/test495.md` remains the direct AWS lifecycle evidence source.
+- This ticket and the updated Nova goal handoff/status documents.
+
+## Boundaries
 
 - This PR creates only source-level validation and documentation.
 - No AWS mutation, hosted control-plane action, Terraform plan/apply/destroy,
@@ -86,7 +109,7 @@ adoption is required. The design uses these existing sources:
 - Required evidence is the focused test result, full repository validation,
   documentation convention result, final-head GitHub checks, and this ticket.
 
-## Follow-up
+## Follow-up work
 
 Runtime Nova dispatch-to-root binding remains a separate goal gate. It requires
 its own typed adapter contract, exact-plan authorization, and lifecycle evidence;

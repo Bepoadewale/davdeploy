@@ -14,7 +14,7 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486). PR #502 adds
+`526d4e14aab08ff671b57bee4a1eb3021a748957` (PR #495). PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
@@ -53,20 +53,21 @@ Merged PR #486 as `ee3a407`; its final head `a2c2d29` passed all seven checks in
 and merged-main CI passed all seven in run `45604774427`. Its two direct
 same-account encrypted-root-volume cycles and clean-room full cycle are
 recorded. Approved clean-room files and Compose resources are absent; the
-worktree remains. PR #495 remains a draft; its branch includes current `main`
-through merge commit `2a079df`. All seven checks passed on head `45214f7` in
-[run 45606498702](https://github.com/Bepoadewale/davdeploy/actions/runs/45606498702);
-the refreshed destroy-plan hash is now recorded, so this evidence update needs
-fresh final-head CI.
-Its tagged AppConfig test application, environment, feature-flag profile,
-rollout strategy, and deployment history remain preserved. Read-only account
-checks observed deployments 1 and 2 as `COMPLETE` and `REVERTED`, with the
-environment `Reverted`; no teardown was performed.
+worktree remains. PR #495 merged as
+`526d4e14aab08ff671b57bee4a1eb3021a748957`. Its final
+head `3563ead` passed all seven checks in
+[run 45631497386](https://github.com/Bepoadewale/davdeploy/actions/runs/45631497386).
+The direct AppConfig disabled → progressive enabled → reverted lifecycle is
+recorded in `docs/test/test495.md`. The approved exact seven-delete plan and
+clean-room cleanup completed; independent checks found the test resources and
+local Compose artifacts absent. Terraform state, saved plans, verifier outputs,
+and logs remain retained. The hosted control plane and its state/locks were
+untouched.
 
-The Terraform run monitor has 66 historical records and no active runs. No
-Terraform operation, AWS mutation, or hosted-control-plane access occurred for
-this reconciliation. The hosted backend remains at the previously recorded
-PR #420 release; its earlier HTTP 200 observation was not repeated.
+The Terraform run monitor has no active operations. The only AWS mutation in
+this continuation was the approved, exact PR #495 test teardown. No hosted-
+control-plane access occurred. The hosted backend remains at the previously
+recorded PR #420 release; its earlier HTTP 200 observation was not repeated.
 
 PR #477 passed all seven checks on its final head in CI run
 [45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734).
@@ -351,7 +352,10 @@ customer-role provisioning, cross-account and broader effective-permission
 proof, complete cost and policy coverage, Nova-driven application recovery,
 and the full scenario matrix. The
 [capability evidence matrix](NOVA_CAPABILITY_EVIDENCE_MATRIX.md) retains all 26
-architecture entries and 30 implementation roots. The accepted ECS evidence
+architecture entries and 30 implementation roots. Its candidate relationships
+are cross-checked by the
+[catalogue-to-root contract](NOVA_CATALOGUE_ROOT_BINDING.md), which does not
+enable runtime dispatch. The accepted ECS evidence
 meets the general customer-side lifecycle gate for that ECS shape; it does not
 close other per-entry requirements or prove Nova-originated execution.
 
@@ -380,16 +384,17 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486). The last
+- Backend `main` is `526d4e14aab08ff671b57bee4a1eb3021a748957` (PR #495). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
   bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
   passed all seven checks in run `45552193668`.
 - PR #486 merged as `ee3a407`; final-head and merged-main CI passed. Its
-  clean-room full cycle and approved final cleanup are complete.
-  Draft PR #495's tagged AppConfig rollout resources remain preserved pending exact
-  teardown approval. The run monitor has 66 records and zero active runs.
+  clean-room full cycle and approved final cleanup are complete. PR #495 merged
+  as `526d4e1`; final-head CI passed all seven checks in run `45631497386`.
+  Its exact AppConfig lifecycle and approved teardown are recorded in
+  `docs/test/test495.md`; the run monitor has no active operations.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
   default-off Nova apply worker, credential broker, and customer apply-role
   template. A temporary same-account role test verified ExternalId-based
