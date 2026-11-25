@@ -45,7 +45,7 @@ Add deterministic checks for the repository's bounded `modules/vpc` topology. Un
 
 ## Acceptance status
 
-The source policy, regression coverage, and matrix update are implemented. Local acceptance criteria are met; final-head GitHub CI remains pending.
+The source policy, regression coverage, and matrix update are implemented. Local checks and all seven checks on the implementation commit pass. Final-head GitHub CI after this evidence update remains pending.
 
 ## Tests / validation performed
 
@@ -53,6 +53,7 @@ The source policy, regression coverage, and matrix update are implemented. Local
 - `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py` — passed.
 - `GITHUB_PR_NUMBER=500 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- All seven required checks passed on implementation commit `1de472f1ec819a8a42bcc49f4da0d01f6659d11f` in [CI run 45551603389](https://github.com/Bepoadewale/davdeploy/actions/runs/45551603389). Final-head CI after this ticket evidence update remains required.
 - No Terraform plan/apply/destroy or AWS API operation was run.
 
 
