@@ -44,19 +44,25 @@ benchmark, or forecast for DavDeploy.
   business-model differences from DavDeploy.
 - [x] No unsupported statement is made about Surge AI's valuation, audited
   financials, or DavDeploy's future value.
-- [ ] Documentation conventions and diff checks pass.
-- [ ] Required GitHub CI passes on the final PR head.
+- [x] Documentation conventions and diff checks pass.
+- [x] All seven required GitHub CI checks passed for the strategy change on
+  commit `be5416034522744c61fa93ecadeabba70a05cdff` (run `45538023959`). The
+  ticket-only follow-up commit must still pass final-head CI before merge.
 - [x] No product behavior, company finances, AWS resources, or hosted control
   plane state is changed.
 
 ## Acceptance status
 
-Partially met. The source-backed strategy edit is prepared. Documentation
-validation and final-head CI remain to be recorded.
+The source-backed strategy edit and its documentation checks are complete.
+All seven required checks passed for the strategy change. The final PR head
+will include this evidence update and must pass CI before merge.
 
 ## Tests / validation performed
 
-Not yet run.
+- `GITHUB_PR_NUMBER=496 python3 scripts/check_doc_conventions.py`: passed.
+- `git diff --cached --check`: passed.
+- Required PR CI run `45538023959` on commit
+  `be5416034522744c61fa93ecadeabba70a05cdff`: all seven checks passed.
 
 ## Evidence files produced
 
