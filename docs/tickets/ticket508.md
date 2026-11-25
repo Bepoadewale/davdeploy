@@ -15,7 +15,7 @@ historical. This PR changes no product behavior.
 
 - `main` is `2afd0070cb7991a2eec77c25d1750a6cf4de190c` (squash merge of PR #507).
 - PR #507 final-head CI passed all seven checks in run `45646721435`.
-- PR #507 merged-main CI run `45647722781` is running.
+- PR #507 merged-main CI run `45647722781` passed all seven checks.
 - No pull requests were open at reconciliation; the Terraform monitor has 67
   records and zero active operations.
 - AWS identity is account `654654474502`; no AWS mutation occurred during this
@@ -44,21 +44,21 @@ historical. This PR changes no product behavior.
 
 ## Acceptance criteria
 
-- [ ] Current-status sections point to `main` at `2afd007` and PR #507's merged
+- [x] Current-status sections point to `main` at `2afd007` and PR #507's merged
   state and seven-check final-head CI evidence.
-- [ ] Batch pricing is described as partial compute pricing that stays
+- [x] Batch pricing is described as partial compute pricing that stays
   incomplete/approval-blocked until supporting costs are covered.
-- [ ] The hosted control-plane boundary and absence of Nova-dispatched customer
+- [x] The hosted control-plane boundary and absence of Nova-dispatched customer
   workload evidence remain accurate.
 - [ ] Documentation conventions and `git diff --check` pass; final-head CI
-  passes.
-- [ ] No AWS resources, hosted resources, Terraform state/locks, or protected
+  passes on this final ticket update.
+- [x] No AWS resources, hosted resources, Terraform state/locks, or protected
   local files are changed.
 
 ## Acceptance status
 
-- [ ] Documentation reconciled.
-- [ ] Validation complete.
+- [x] Documentation reconciled.
+- [x] Validation complete.
 - [ ] Final-head CI passed.
 - [ ] PR reviewed and merged.
 
@@ -70,7 +70,11 @@ historical. This PR changes no product behavior.
 
 ## Tests / validation performed
 
-To be completed before the PR is marked ready.
+- `GITHUB_PR_NUMBER=508 python3 scripts/check_doc_conventions.py` passed.
+- `git diff --check` passed.
+- PR #507 merge-to-main run `45647722781` passed all seven checks.
+- Previous PR #508 head `fbf825a` passed all seven checks in run
+  `45648486686`; this ticket update requires a fresh final-head run.
 
 ## Boundaries
 
