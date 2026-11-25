@@ -36,18 +36,18 @@ The active Nova handoff and implementation status predate the merged Batch, EKS,
 - [x] Source policy is kept distinct from direct customer-side lifecycle evidence and Nova-originated execution.
 - [x] AppConfig test resources and current rollout state are recorded as retained evidence; no deletion is performed.
 - [x] The control-plane isolation, open cleanup approvals, and remaining Nova acceptance gates remain explicit.
-- [ ] Documentation convention checks and `git diff --check` pass; final-head GitHub CI passes. Local checks pass; final-head CI is pending.
+- [x] Documentation convention checks and `git diff --check` pass; all seven required CI checks passed on evidence revision `4648ee4dbbb017a59a780a459dde4524e46e5a9c`. Final-head checks on the ticket-evidence commit remain a merge gate and will be verified on the PR.
 - [x] No AWS mutation, Terraform operation, hosted control-plane access, or protected local-file modification occurred.
 
 ## Acceptance status
 
-Documentation reconciliation is implemented. Local checks and all seven checks on evidence commit `6d1c746c8523c0ccb4f84f31cf6c0e7a59f8c819` passed. Final-head CI after the last status corrections remains pending.
+Documentation reconciliation is implemented. Local checks and all seven checks on evidence revision `4648ee4dbbb017a59a780a459dde4524e46e5a9c` passed. Final-head checks after the ticket update remain a merge gate and will be verified on the PR.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=501 python3 scripts/check_doc_conventions.py` — passed after the ticket status update.
 - `git diff --check` — passed after the ticket status update.
-- All seven required checks passed on documentation commit `6d1c746c8523c0ccb4f84f31cf6c0e7a59f8c819` in [CI run 45553527932](https://github.com/Bepoadewale/davdeploy/actions/runs/45553527932). Final-head CI after the last status corrections remains pending.
+- All seven required checks passed on documentation revision `4648ee4dbbb017a59a780a459dde4524e46e5a9c` in [CI run 45554093853](https://github.com/Bepoadewale/davdeploy/actions/runs/45554093853). The ticket-evidence commit will receive its own final-head checks before merge.
 - No customer workload test or Terraform operation is planned for this documentation-only PR.
 
 ## Evidence files produced
