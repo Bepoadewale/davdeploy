@@ -348,6 +348,57 @@ class DynamoDbPricingUsageAssumptions(BaseModel):
         return self
 
 
+class NatGatewayPricingUsageAssumptions(BaseModel):
+    """Monthly billable quantities for one exact planned public NAT gateway."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_available_hours: MonthlyUsageRange
+    monthly_data_processed_gb: MonthlyUsageRange
+    monthly_internet_egress_gb: MonthlyUsageRange
+    monthly_cross_az_payload_gb: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> NatGatewayPricingUsageAssumptions:
+        if self.monthly_available_hours.maximum > 744:
+            raise ValueError("monthly NAT Gateway hours exceed the supported month bound")
+        if any(
+            value.maximum > 500_000
+            for value in (
+                self.monthly_data_processed_gb,
+                self.monthly_internet_egress_gb,
+                self.monthly_cross_az_payload_gb,
+            )
+        ):
+            raise ValueError("monthly NAT Gateway transfer usage exceeds the supported bound")
+        if (
+            self.monthly_internet_egress_gb.minimum > self.monthly_data_processed_gb.minimum
+            or self.monthly_internet_egress_gb.maximum > self.monthly_data_processed_gb.maximum
+            or self.monthly_cross_az_payload_gb.minimum > self.monthly_data_processed_gb.minimum
+            or self.monthly_cross_az_payload_gb.maximum > self.monthly_data_processed_gb.maximum
+        ):
+            raise ValueError("NAT Gateway egress and cross-AZ usage cannot exceed processed data")
+        return self
+
+
+class VpcPricingUsageAssumptions(BaseModel):
+    """Explicit usage bounds keyed by exact public NAT Gateway plan address."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    nat_gateways: dict[str, NatGatewayPricingUsageAssumptions] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_nat_addresses(self) -> VpcPricingUsageAssumptions:
+        pattern = re.compile(
+            r"^(?:module\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?\.)*"
+            r"aws_nat_gateway\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?$"
+        )
+        if any(not pattern.fullmatch(address) for address in self.nat_gateways):
+            raise ValueError("VPC usage assumption has an invalid NAT Gateway address")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -361,6 +412,7 @@ class WorkloadSpec(BaseModel):
     rds_pricing_usage_assumptions: RdsPricingUsageAssumptions | None = None
     serverless_pricing_usage_assumptions: ServerlessPricingUsageAssumptions | None = None
     dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
+    vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -788,6 +840,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     rds_pricing_usage_assumptions: RdsPricingUsageAssumptions | None = None
     serverless_pricing_usage_assumptions: ServerlessPricingUsageAssumptions | None = None
     dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
+    vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):
