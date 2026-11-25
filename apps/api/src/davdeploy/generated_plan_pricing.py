@@ -24,6 +24,7 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from davdeploy.domain import (
+    BatchPricingUsageAssumptions,
     DynamoDbPricingUsageAssumptions,
     RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
@@ -110,6 +111,7 @@ class GeneratedPlanPricingEvidence:
     serverless_usage_assumptions: dict[str, Any] | None
     dynamodb_usage_assumptions: dict[str, Any] | None
     vpc_usage_assumptions: dict[str, Any] | None
+    batch_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -140,12 +142,13 @@ class GeneratedPlanPricingEvidence:
             "serverless_usage_assumptions": self.serverless_usage_assumptions,
             "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "vpc_usage_assumptions": self.vpc_usage_assumptions,
+            "batch_usage_assumptions": self.batch_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 8,
+            "version": 9,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -170,6 +173,7 @@ class GeneratedPlanPricingEvidence:
             "serverless_usage_assumptions": self.serverless_usage_assumptions,
             "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "vpc_usage_assumptions": self.vpc_usage_assumptions,
+            "batch_usage_assumptions": self.batch_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -222,17 +226,19 @@ class GeneratedPlanPricingEvidence:
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
             "usage_assumptions", "sqs_usage_assumptions", "rds_usage_assumptions",
             "serverless_usage_assumptions", "dynamodb_usage_assumptions",
-            "vpc_usage_assumptions",
+            "vpc_usage_assumptions", "batch_usage_assumptions",
             "lines", "transitions", "findings", "evidence_sha256",
         }
         version = document.get("version")
-        version_7_fields = expected_fields - {"vpc_usage_assumptions"}
+        version_8_fields = expected_fields - {"batch_usage_assumptions"}
+        version_7_fields = version_8_fields - {"vpc_usage_assumptions"}
         version_6_fields = version_7_fields - {"dynamodb_usage_assumptions"}
         version_5_fields = version_6_fields - {"serverless_usage_assumptions"}
         version_4_fields = version_5_fields - {"rds_usage_assumptions"}
         legacy_fields = version_4_fields - {"sqs_usage_assumptions"}
         valid_shape = (
-            version == 8 and set(document) == expected_fields
+            version == 9 and set(document) == expected_fields
+            or version == 8 and set(document) == version_8_fields
             or version == 7 and set(document) == version_7_fields
             or version == 6 and set(document) == version_6_fields
             or version == 5 and set(document) == version_5_fields
@@ -293,6 +299,16 @@ class GeneratedPlanPricingEvidence:
             )
             if vpc_usage != raw_vpc_usage:
                 raise ValueError("non-canonical VPC usage assumptions")
+            raw_batch_usage = document.get("batch_usage_assumptions")
+            batch_usage = (
+                None
+                if raw_batch_usage is None
+                else BatchPricingUsageAssumptions.model_validate(
+                    raw_batch_usage
+                ).model_dump(mode="json")
+            )
+            if batch_usage != raw_batch_usage:
+                raise ValueError("non-canonical Batch usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -327,6 +343,7 @@ class GeneratedPlanPricingEvidence:
                 serverless_usage_assumptions=serverless_usage,
                 dynamodb_usage_assumptions=dynamodb_usage,
                 vpc_usage_assumptions=vpc_usage,
+                batch_usage_assumptions=batch_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -334,7 +351,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 8 and result.as_manifest_document() != document:
+        if document.get("version") == 9 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -374,6 +391,7 @@ class TrustedPlanPricingContext:
     serverless_usage_assumptions: dict[str, Any] | None = None
     dynamodb_usage_assumptions: dict[str, Any] | None = None
     vpc_usage_assumptions: dict[str, Any] | None = None
+    batch_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -389,6 +407,7 @@ class TrustedPlanPricingContext:
             self.serverless_usage_assumptions,
             self.dynamodb_usage_assumptions,
             self.vpc_usage_assumptions,
+            self.batch_usage_assumptions,
         )
 
     @classmethod
@@ -443,6 +462,11 @@ class TrustedPlanPricingContext:
         )
         raw_vpc_usage_assumptions = (
             workload_spec.get("vpc_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
+        raw_batch_usage_assumptions = (
+            workload_spec.get("batch_pricing_usage_assumptions")
             if isinstance(workload_spec, dict)
             else None
         )
@@ -512,6 +536,15 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json")
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid VPC pricing usage assumptions") from None
+        if raw_batch_usage_assumptions is None:
+            batch_usage_assumptions = None
+        else:
+            try:
+                batch_usage_assumptions = BatchPricingUsageAssumptions.model_validate(
+                    raw_batch_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid Batch pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -523,6 +556,7 @@ class TrustedPlanPricingContext:
             serverless_usage_assumptions=serverless_usage_assumptions,
             dynamodb_usage_assumptions=dynamodb_usage_assumptions,
             vpc_usage_assumptions=vpc_usage_assumptions,
+            batch_usage_assumptions=batch_usage_assumptions,
         )
 
 
@@ -959,6 +993,82 @@ class AwsPriceListCatalog:
             "GB",
         )
 
+    def fargate_linux_x86_rate(self, region: str, *, dimension: str) -> CatalogRate:
+        """Find the exact Linux/x86 On-Demand Fargate hourly rate for one dimension."""
+        if dimension not in {"vcpu", "memory"}:
+            raise PlanPricingError("Fargate price dimension is unsupported")
+        if not isinstance(region, str) or not re.fullmatch(r"[a-z]{2}(?:-[a-z0-9]+)+-\d", region):
+            raise PlanPricingError("plan region is invalid")
+        rate_key = f"fargate-linux-x86-{dimension}-hourly"
+        cache_key = (region, rate_key)
+        now = self.clock()
+        with self._cache_lock:
+            cached = self._cache.get(cache_key)
+            if cached and cached[0] > now:
+                return cached[1]
+
+        attribute = "cputype" if dimension == "vcpu" else "memorytype"
+        value = "perCPU" if dimension == "vcpu" else "perGB"
+        suffix = (
+            "Fargate-vCPU-Hours:perCPU"
+            if dimension == "vcpu"
+            else "Fargate-GB-Hours"
+        )
+        filters = [
+            {"Type": "TERM_MATCH", "Field": "productFamily", "Value": "Compute"},
+            {"Type": "TERM_MATCH", "Field": "regionCode", "Value": region},
+            {"Type": "TERM_MATCH", "Field": attribute, "Value": value},
+        ]
+        try:
+            response = self.client.get_products(
+                ServiceCode="AmazonECS", Filters=filters, MaxResults=100
+            )
+        except (BotoCoreError, ClientError, OSError, ValueError, TypeError):
+            raise PriceListUnavailableError("AWS regional price lookup is unavailable") from None
+        if not isinstance(response, dict):
+            raise PriceListUnavailableError("AWS regional price response is malformed")
+        if response.get("NextToken"):
+            raise PlanPricingError("AWS regional Fargate price results are truncated")
+        raw_products = response.get("PriceList")
+        if not isinstance(raw_products, list):
+            raise PriceListUnavailableError("AWS regional Fargate price response is malformed")
+        matches: list[tuple[str, dict[str, str]]] = []
+        for raw in raw_products:
+            try:
+                product_doc = json.loads(raw) if isinstance(raw, str) else None
+            except (json.JSONDecodeError, TypeError):
+                raise PlanPricingError("AWS regional Fargate product is malformed") from None
+            product = product_doc.get("product") if isinstance(product_doc, dict) else None
+            attrs = product.get("attributes") if isinstance(product, dict) else None
+            usage_type = attrs.get("usagetype") if isinstance(attrs, dict) else None
+            if (
+                isinstance(product, dict)
+                and isinstance(attrs, dict)
+                and isinstance(product_doc, dict)
+                and
+                product_doc.get("serviceCode") == "AmazonECS"
+                and product.get("productFamily") == "Compute"
+                and attrs.get("regionCode") == region
+                and attrs.get(attribute) == value
+                and isinstance(usage_type, str)
+                and usage_type.endswith(suffix)
+                and "cpuArchitecture" not in attrs
+                and attrs.get("operatingSystem") in (None, "Linux")
+                and attrs.get("tenancy") == "Shared"
+            ):
+                matches.append((raw, attrs))
+        if len(matches) != 1:
+            raise PlanPricingError("AWS regional Fargate price match is missing or ambiguous")
+        expected = {
+            "productFamily": "Compute",
+            "regionCode": region,
+            attribute: value,
+        }
+        rate = _parse_regional_product(matches[0][0], "AmazonECS", expected, "Hrs")
+        with self._cache_lock:
+            self._cache[cache_key] = (now + self.cache_ttl_seconds, rate)
+        return rate
+
     def _regional_rate(
         self,
         service_code: str,
@@ -1028,6 +1138,9 @@ ZERO_DIRECT_CHARGE_RESOURCE_TYPES = frozenset(
         "aws_key_pair",
         "aws_apigatewayv2_route",
         "aws_apigatewayv2_deployment",
+        "aws_batch_compute_environment",
+        "aws_batch_job_queue",
+        "aws_batch_job_definition",
     }
 )
 
@@ -1106,6 +1219,7 @@ def evaluate_generated_plan_pricing(
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -1136,6 +1250,7 @@ def evaluate_generated_plan_pricing(
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -1162,6 +1277,7 @@ def evaluate_generated_plan_pricing(
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -1191,6 +1307,7 @@ def evaluate_generated_plan_pricing(
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -1214,6 +1331,7 @@ def evaluate_generated_plan_pricing(
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -1353,6 +1471,224 @@ def evaluate_generated_plan_pricing(
                 "CloudWatch log groups are priced only when bound to an explicitly priced Lambda function.",
             )
         )
+
+    batch_jobs = [
+        item for item in resources if item["type"] == "aws_batch_job_definition"
+    ]
+    batch_resources = [
+        item for item in resources
+        if item["type"] in {
+            "aws_batch_compute_environment",
+            "aws_batch_job_queue",
+            "aws_batch_job_definition",
+        }
+    ]
+    batch_usage_document = trusted_context.batch_usage_assumptions
+    if batch_resources:
+        findings.append(PlanPricingFinding(
+            "batch_supporting_costs_unpriced", None,
+            "Batch pricing currently covers Fargate compute only; image transfer, logs, networking, public IPv4, and other linked usage still block approval.",
+        ))
+        batch_compute = [
+            item for item in batch_resources
+            if item["type"] == "aws_batch_compute_environment"
+        ]
+        batch_queues = [
+            item for item in batch_resources
+            if item["type"] == "aws_batch_job_queue"
+        ]
+        if len(batch_compute) != 1 or len(batch_queues) != 1 or len(batch_jobs) != 1:
+            findings.append(PlanPricingFinding(
+                "batch_pricing_shape_unsupported", None,
+                "Pricing supports exactly one managed Fargate environment, queue, and job definition.",
+            ))
+        if batch_usage_document is None:
+            findings.append(PlanPricingFinding(
+                "batch_usage_assumptions_missing",
+                batch_jobs[0]["address"] if batch_jobs else None,
+                "Monthly job-count and billed-runtime assumptions are required for Batch pricing.",
+            ))
+        else:
+            try:
+                batch_usage = BatchPricingUsageAssumptions.model_validate(
+                    batch_usage_document
+                )
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "batch_usage_assumptions_invalid",
+                    batch_jobs[0]["address"] if batch_jobs else None,
+                    "Persisted Batch usage assumptions are invalid.",
+                ))
+            else:
+                if set(batch_usage.jobs) != {item["address"] for item in batch_jobs}:
+                    findings.append(PlanPricingFinding(
+                        "batch_usage_resource_mismatch",
+                        batch_jobs[0]["address"] if batch_jobs else None,
+                        "Usage bounds must cover every planned Batch job definition exactly once.",
+                    ))
+                elif (
+                    len(batch_compute) == 1
+                    and len(batch_queues) == 1
+                    and len(batch_jobs) == 1
+                ):
+                    compute_values = batch_compute[0]["values"]
+                    queue_values = batch_queues[0]["values"]
+                    job = batch_jobs[0]
+                    job_values = job["values"]
+                    compute_resources = compute_values.get("compute_resources")
+                    try:
+                        properties = json.loads(job_values.get("container_properties"))
+                    except (json.JSONDecodeError, TypeError, RecursionError):
+                        properties = None
+                    requirements = (
+                        properties.get("resourceRequirements")
+                        if isinstance(properties, dict)
+                        else None
+                    )
+                    requirements_by_type = {}
+                    if isinstance(requirements, list):
+                        for requirement in requirements:
+                            if (
+                                isinstance(requirement, dict)
+                                and isinstance(requirement.get("type"), str)
+                            ):
+                                requirements_by_type[requirement["type"]] = requirement.get("value")
+                    cpu_raw = requirements_by_type.get("VCPU")
+                    memory_raw = requirements_by_type.get("MEMORY")
+                    try:
+                        cpu_decimal = Decimal(cpu_raw)
+                        cpu_millicores = int(cpu_decimal * 1000)
+                        memory_mib = int(memory_raw)
+                    except (InvalidOperation, TypeError, ValueError):
+                        cpu_decimal = None
+                        cpu_millicores = memory_mib = 0
+                    runtime_platform = properties.get("runtimePlatform") if isinstance(properties, dict) else None
+                    runtime_supported = runtime_platform in (
+                        None,
+                        {"operatingSystemFamily": "LINUX", "cpuArchitecture": "X86_64"},
+                    )
+                    supported_pairs = {
+                        "0.25": {512, 1024, 2048},
+                        "0.5": set(range(1024, 4097, 1024)),
+                        "1": set(range(2048, 8193, 1024)),
+                        "2": set(range(4096, 16385, 1024)),
+                    }
+                    cpu_text = format(cpu_decimal, "f") if cpu_decimal is not None else ""
+                    compute_type_valid = (
+                        compute_values.get("type") == "MANAGED"
+                        and compute_values.get("state") == "ENABLED"
+                        and len(compute_resources) == 1
+                        and isinstance(compute_resources[0], dict)
+                        and compute_resources[0].get("type") == "FARGATE"
+                        and isinstance(compute_resources[0].get("max_vcpus"), int)
+                        and not isinstance(compute_resources[0].get("max_vcpus"), bool)
+                        and 1 <= compute_resources[0].get("max_vcpus", 0) <= 6
+                    ) if isinstance(compute_resources, list) else False
+                    queue_valid = (
+                        queue_values.get("state") == "ENABLED"
+                        and isinstance(queue_values.get("compute_environment_order"), list)
+                        and len(queue_values["compute_environment_order"]) == 1
+                        and isinstance(queue_values["compute_environment_order"][0], dict)
+                        and queue_values["compute_environment_order"][0].get("order") == 1
+                    )
+                    job_valid = (
+                        job_values.get("type") == "container"
+                        and job_values.get("platform_capabilities") == ["FARGATE"]
+                        and isinstance(properties, dict)
+                        and isinstance(requirements, list)
+                        and len(requirements) == 2
+                        and set(requirements_by_type) == {"VCPU", "MEMORY"}
+                        and cpu_text in supported_pairs
+                        and memory_mib in supported_pairs.get(cpu_text, set())
+                        and runtime_supported
+                        and "ephemeralStorage" not in properties
+                    )
+                    if not (compute_type_valid and queue_valid and job_valid):
+                        findings.append(PlanPricingFinding(
+                            "batch_pricing_shape_unsupported", job["address"],
+                            "Only the known Linux/x86 Fargate job shape with default ephemeral storage is priced.",
+                        ))
+                    else:
+                        try:
+                            if pricing_catalog is None:
+                                pricing_catalog = AwsPriceListCatalog()
+                            cpu_rate = pricing_catalog.fargate_linux_x86_rate(
+                                region, dimension="vcpu"
+                            )
+                            memory_rate = pricing_catalog.fargate_linux_x86_rate(
+                                region, dimension="memory"
+                            )
+                        except PriceListUnavailableError:
+                            unavailable = True
+                            findings.append(PlanPricingFinding(
+                                "regional_price_lookup_unavailable", job["address"],
+                                "DavDeploy could not verify current regional Fargate prices.",
+                            ))
+                        except PlanPricingError:
+                            findings.append(PlanPricingFinding(
+                                "regional_price_ambiguous", job["address"],
+                                "DavDeploy could not identify exact regional Linux/x86 Fargate prices.",
+                            ))
+                        else:
+                            usage = batch_usage.jobs[job["address"]]
+                            lower_seconds = max(60, usage.average_billed_runtime_seconds.minimum)
+                            upper_seconds = max(60, usage.average_billed_runtime_seconds.maximum)
+                            quantities = (
+                                (
+                                    "AWS Fargate Linux/x86 vCPU",
+                                    cpu_rate,
+                                    cpu_millicores,
+                                    3_600_000,
+                                    "milli-vCPU-seconds",
+                                ),
+                                (
+                                    "AWS Fargate Linux/x86 memory",
+                                    memory_rate,
+                                    memory_mib,
+                                    3_686_400,
+                                    "MiB-seconds",
+                                ),
+                            )
+                            for description, rate, units_per_task, divisor, unit in quantities:
+                                low_quantity = (
+                                    usage.monthly_jobs.minimum * lower_seconds * units_per_task
+                                )
+                                high_quantity = (
+                                    usage.monthly_jobs.maximum * upper_seconds * units_per_task
+                                )
+                                unit_price = Decimal(rate.unit_price_usd) / divisor
+                                low_unit_price = Decimal(rate.low_unit_price_usd or rate.unit_price_usd) / divisor
+                                lines.append(PlanCostLine(
+                                    address=job["address"],
+                                    resource_type="aws_batch_job_definition",
+                                    description=description,
+                                    quantity=low_quantity,
+                                    quantity_max=high_quantity,
+                                    unit=unit,
+                                    unit_price_usd=format(unit_price, "f"),
+                                    monthly_cost_minor=int(
+                                        (low_unit_price * low_quantity * 100).quantize(
+                                            Decimal(1), rounding=ROUND_FLOOR
+                                        )
+                                    ),
+                                    monthly_cost_max_minor=int(
+                                        (unit_price * high_quantity * 100).quantize(
+                                            Decimal(1), rounding=ROUND_CEILING
+                                        )
+                                    ),
+                                    catalog_sku=rate.sku,
+                                    catalog_product_sha256=rate.product_digest,
+                                    catalog_published_at=rate.published_at,
+                                    catalog_effective_at=rate.effective_at,
+                                    unit_price_low_usd=format(low_unit_price, "f"),
+                                    low_cost_quantity=low_quantity,
+                                ))
+
+    elif batch_usage_document is not None:
+        findings.append(PlanPricingFinding(
+            "batch_usage_assumptions_stale", None,
+            "Batch usage assumptions do not match any Batch resources in this plan.",
+        ))
 
     if s3_buckets:
         if trusted_context.usage_assumptions is None:
@@ -2490,6 +2826,7 @@ def evaluate_generated_plan_pricing(
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
         transitions=transitions,
     )
 
@@ -2543,6 +2880,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "serverless_usage_assumptions": document.get("serverless_usage_assumptions"),
         "dynamodb_usage_assumptions": document.get("dynamodb_usage_assumptions"),
         "vpc_usage_assumptions": document.get("vpc_usage_assumptions"),
+        "batch_usage_assumptions": document.get("batch_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -2571,6 +2909,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("serverless_usage_assumptions") != trusted_context.serverless_usage_assumptions
         or document.get("dynamodb_usage_assumptions") != trusted_context.dynamodb_usage_assumptions
         or document.get("vpc_usage_assumptions") != trusted_context.vpc_usage_assumptions
+        or document.get("batch_usage_assumptions") != trusted_context.batch_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -3958,6 +4297,7 @@ def _evidence(
     serverless_usage_assumptions: dict[str, Any] | None = None,
     dynamodb_usage_assumptions: dict[str, Any] | None = None,
     vpc_usage_assumptions: dict[str, Any] | None = None,
+    batch_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -3978,9 +4318,10 @@ def _evidence(
         region, currency, budget, persisted_context_sha256, usage_assumptions,
         sqs_usage_assumptions, rds_usage_assumptions, serverless_usage_assumptions,
         dynamodb_usage_assumptions, vpc_usage_assumptions,
+        batch_usage_assumptions,
     )
     payload = {
-        "version": 8,
+        "version": 9,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -4009,6 +4350,7 @@ def _evidence(
         "serverless_usage_assumptions": serverless_usage_assumptions,
         "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
         "vpc_usage_assumptions": vpc_usage_assumptions,
+        "batch_usage_assumptions": batch_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -4071,6 +4413,7 @@ def _evidence(
         serverless_usage_assumptions=serverless_usage_assumptions,
         dynamodb_usage_assumptions=dynamodb_usage_assumptions,
         vpc_usage_assumptions=vpc_usage_assumptions,
+        batch_usage_assumptions=batch_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -4101,10 +4444,11 @@ def _pricing_context_digest(
     serverless_usage_assumptions: dict[str, Any] | None = None,
     dynamodb_usage_assumptions: dict[str, Any] | None = None,
     vpc_usage_assumptions: dict[str, Any] | None = None,
+    batch_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 7,
+            "version": 8,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
@@ -4115,5 +4459,6 @@ def _pricing_context_digest(
             "serverless_usage_assumptions": serverless_usage_assumptions,
             "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
             "vpc_usage_assumptions": vpc_usage_assumptions,
+            "batch_usage_assumptions": batch_usage_assumptions,
         }
     )

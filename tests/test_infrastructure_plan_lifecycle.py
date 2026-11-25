@@ -370,6 +370,44 @@ def test_customer_vpc_usage_assumptions_are_revision_bound_and_cleared():
     assert cleared.content_digest == plan_hash(cleared.content)
 
 
+def test_customer_batch_usage_assumptions_are_revision_bound_and_cleared():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "jobs": {"aws_batch_job_definition.jobs": {
+            "monthly_jobs": {"minimum": 10, "maximum": 100},
+            "average_billed_runtime_seconds": {"minimum": 60, "maximum": 900},
+        }}
+    }
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"batch_pricing_usage_assumptions": usage},
+    )
+    assert revised.revision_number == 2
+    assert revised.content["user_constraints"]["batch_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"][
+        "batch_pricing_usage_assumptions"
+    ] == usage
+    assert revised.content["revision_diff"]["batch_pricing_usage_assumptions"] == {
+        "before": None, "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"batch_pricing_usage_assumptions": None},
+    )
+    assert cleared.revision_number == 3
+    assert "batch_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "batch_pricing_usage_assumptions" not in cleared.content[
+        "application_analysis"
+    ]["workload_spec"]
+    assert cleared.content["revision_diff"]["batch_pricing_usage_assumptions"] == {
+        "before": usage, "after": None,
+    }
+    assert cleared.content_digest == plan_hash(cleared.content)
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

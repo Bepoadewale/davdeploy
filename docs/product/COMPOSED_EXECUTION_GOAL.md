@@ -14,7 +14,11 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`526d4e14aab08ff671b57bee4a1eb3021a748957` (PR #495). PR #502 adds
+`4a14cd2f70d6e964c9aaf28e6f906e48bd04ae8e` (PR #506). PR #506 makes the
+26-architecture / 30-root crosswalk machine-checkable without enabling runtime
+dispatch. Draft PR #507 adds trusted usage assumptions and regional Fargate
+compute pricing for the bounded Batch job shape; it is source-only and does
+not make other Batch costs complete or approval-eligible. PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
@@ -384,9 +388,15 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `526d4e14aab08ff671b57bee4a1eb3021a748957` (PR #495). The last
+- Backend `main` is `4a14cd2f70d6e964c9aaf28e6f906e48bd04ae8e` (PR #506). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
+- Draft PR #507 adds exact-address Batch usage assumptions, current regional
+  Linux/x86 Fargate vCPU/memory rates, the per-job 60-second minimum, and
+  integrity-bound price evidence. It remains unmerged and source-only. ECR,
+  logging, networking, data transfer, and other material support costs remain
+  separate blockers. No AWS resource, Terraform state/lock, hosted runtime, or
+  control-plane resource was changed.
 - Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
   bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
   passed all seven checks in run `45552193668`.
