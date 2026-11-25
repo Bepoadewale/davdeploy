@@ -420,4 +420,3 @@ repository evidence:
 | Authorized accounts, regions, budgets, quotas, retained resources | Verify under current approval boundaries |
 | First dependency-ready PR and ticket | Select only after the audit; preserve PR-only workflow |
 | Active work, blockers, next action | Update this ledger after each merged package |
-
