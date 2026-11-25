@@ -212,6 +212,20 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     "aws_route53_zone": (("name",), ("vpc",), ("force_destroy",)),
     "aws_appconfig_application": (("name",),),
     "aws_appconfig_environment": (("name",),),
+    "aws_appconfig_configuration_profile": (
+        ("name",),
+        ("location_uri",),
+        ("type",),
+    ),
+    "aws_appconfig_hosted_configuration_version": (("content",), ("content_type",)),
+    "aws_appconfig_deployment_strategy": (
+        ("name",),
+        ("deployment_duration_in_minutes",),
+        ("final_bake_time_in_minutes",),
+        ("growth_factor",),
+        ("growth_type",),
+        ("replicate_to",),
+    ),
     "aws_opensearch_domain": (
         ("engine_version",),
         ("cluster_config", "instance_type"),
@@ -5750,6 +5764,40 @@ def _check_appconfig_bindings(
     resources: tuple[dict[str, Any], ...],
     findings: list[PlanPolicyFinding],
 ) -> None:
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        _deny(
+            findings,
+            "appconfig_resource_changes_unknown",
+            None,
+            "AppConfig version changes must be known before review.",
+        )
+        return
+    deleted_application_ids = {
+        change.get("before", {}).get("id")
+        for item in changes
+        if isinstance(item, dict)
+        and item.get("type") == "aws_appconfig_application"
+        and isinstance((change := item.get("change")), dict)
+        and "delete" in change.get("actions", [])
+        and isinstance(change.get("before"), dict)
+        and isinstance(change.get("before", {}).get("id"), str)
+    }
+    for item in changes:
+        if not isinstance(item, dict) or item.get("type") != "aws_appconfig_hosted_configuration_version":
+            continue
+        change = item.get("change")
+        actions = change.get("actions") if isinstance(change, dict) else None
+        before = change.get("before") if isinstance(change, dict) else None
+        application_id = before.get("application_id") if isinstance(before, dict) else None
+        if isinstance(actions, list) and "delete" in actions and application_id not in deleted_application_ids:
+            _deny(
+                findings,
+                "appconfig_hosted_version_delete_forbidden",
+                item.get("address"),
+                "Do not delete a hosted AppConfig version while its application remains; publish a new revision instead.",
+            )
+
     applications = [
         item for item in resources if item.get("type") == "aws_appconfig_application"
     ]
@@ -5811,6 +5859,273 @@ def _check_appconfig_bindings(
                 address,
                 "Each AppConfig environment must bind to exactly one same-plan application.",
             )
+
+    profiles = [
+        item
+        for item in resources
+        if item.get("type") == "aws_appconfig_configuration_profile"
+    ]
+    hosted_versions = [
+        item
+        for item in resources
+        if item.get("type") == "aws_appconfig_hosted_configuration_version"
+    ]
+    strategies = [
+        item
+        for item in resources
+        if item.get("type") == "aws_appconfig_deployment_strategy"
+    ]
+    deployments = [
+        item for item in resources if item.get("type") == "aws_appconfig_deployment"
+    ]
+
+    def matches(
+        references: tuple[str, ...],
+        candidates: list[dict[str, Any]],
+        identity_field: str,
+        planned_identity: Any,
+    ) -> list[dict[str, Any]]:
+        result = []
+        for candidate in candidates:
+            candidate_address = candidate.get("address")
+            candidate_values = candidate.get("values")
+            candidate_identity = (
+                candidate_values.get(identity_field)
+                if isinstance(candidate_values, dict)
+                else None
+            )
+            if _references_resource(references, candidate_address) or (
+                isinstance(candidate_identity, str)
+                and planned_identity == candidate_identity
+            ):
+                result.append(candidate)
+        return result
+
+    profile_applications: dict[str, dict[str, Any]] = {}
+    for profile in profiles:
+        address = profile.get("address")
+        values = profile.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "appconfig_profile_configuration_unknown",
+                address,
+                "The AppConfig profile must have known type, hosted source, and application identity.",
+            )
+            continue
+        if (
+            not isinstance(values.get("name"), str)
+            or not values["name"].strip()
+            or values.get("type") != "AWS.AppConfig.FeatureFlags"
+            or values.get("location_uri") != "hosted"
+        ):
+            _deny(
+                findings,
+                "appconfig_feature_profile_invalid",
+                address,
+                "Feature flags must use a named hosted AWS.AppConfig.FeatureFlags profile.",
+            )
+
+        references = configured_references.get(address, ())
+        matches_for_profile = matches(
+            references, applications, "id", values.get("application_id")
+        )
+        if len(matches_for_profile) != 1:
+            _deny(
+                findings,
+                "appconfig_profile_application_binding_invalid",
+                address,
+                "Each AppConfig feature profile must bind to exactly one same-plan application.",
+            )
+        elif isinstance(address, str):
+            profile_applications[address] = matches_for_profile[0]
+
+    hosted_bindings: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    for version in hosted_versions:
+        address = version.get("address")
+        values = version.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "appconfig_hosted_version_configuration_unknown",
+                address,
+                "The hosted feature-flag version must have known content and profile bindings.",
+            )
+            continue
+
+        if values.get("content_type") != "application/json":
+            _deny(
+                findings,
+                "appconfig_feature_content_type_invalid",
+                address,
+                "The hosted feature-flag version must use application/json content.",
+            )
+        content = values.get("content")
+        flag_content = None
+        if isinstance(content, str) and len(content) <= 4096:
+            try:
+                flag_content = json.loads(content)
+            except (json.JSONDecodeError, RecursionError):
+                flag_content = None
+        if not _valid_appconfig_feature_flag_content(flag_content):
+            _deny(
+                findings,
+                "appconfig_feature_flag_content_invalid",
+                address,
+                "Hosted feature-flag content must define one known boolean flag without extra fields.",
+            )
+
+        references = configured_references.get(address, ())
+        app_matches = matches(
+            references, applications, "id", values.get("application_id")
+        )
+        profile_matches = matches(
+            references,
+            profiles,
+            "configuration_profile_id",
+            values.get("configuration_profile_id"),
+        )
+        if len(app_matches) != 1 or len(profile_matches) != 1:
+            _deny(
+                findings,
+                "appconfig_hosted_version_binding_invalid",
+                address,
+                "Each hosted version must bind to exactly one same-plan application and feature profile.",
+            )
+        else:
+            profile_address = profile_matches[0].get("address")
+            if profile_applications.get(profile_address) is not app_matches[0]:
+                _deny(
+                    findings,
+                    "appconfig_hosted_version_application_mismatch",
+                    address,
+                    "The hosted version application must match its profile application.",
+                )
+            elif isinstance(address, str) and isinstance(profile_address, str):
+                hosted_bindings[address] = (app_matches[0], profile_matches[0])
+
+    for strategy in strategies:
+        address = strategy.get("address")
+        values = strategy.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "appconfig_strategy_configuration_unknown",
+                address,
+                "The AppConfig rollout strategy must have known bounded settings.",
+            )
+            continue
+        growth_factor = values.get("growth_factor")
+        if (
+            not isinstance(values.get("name"), str)
+            or not values["name"].strip()
+            or isinstance(growth_factor, bool)
+            or not isinstance(growth_factor, (int, float))
+            or growth_factor != 50
+            or values.get("deployment_duration_in_minutes") != 1
+            or values.get("final_bake_time_in_minutes") != 1
+            or values.get("growth_type") != "LINEAR"
+            or values.get("replicate_to") != "NONE"
+        ):
+            _deny(
+                findings,
+                "appconfig_rollout_strategy_unsafe",
+                address,
+                "AppConfig rollout must use the reviewed 50% linear, one-minute, non-replicated strategy.",
+            )
+
+    for deployment in deployments:
+        address = deployment.get("address")
+        values = deployment.get("values")
+        if not isinstance(address, str) or not isinstance(values, dict):
+            _deny(
+                findings,
+                "appconfig_deployment_configuration_unknown",
+                address,
+                "The AppConfig deployment must have known same-plan targets.",
+            )
+            continue
+        references = configured_references.get(address, ())
+        app_matches = matches(
+            references, applications, "id", values.get("application_id")
+        )
+        profile_matches = matches(
+            references,
+            profiles,
+            "configuration_profile_id",
+            values.get("configuration_profile_id"),
+        )
+        environment_matches = matches(
+            references, [item for item in resources if item.get("type") == "aws_appconfig_environment"],
+            "environment_id", values.get("environment_id")
+        )
+        version_matches = matches(
+            references, hosted_versions, "version_number", values.get("configuration_version")
+        )
+        strategy_matches = matches(references, strategies, "id", values.get("deployment_strategy_id"))
+        if not all(
+            len(items) == 1
+            for items in (
+                app_matches,
+                profile_matches,
+                environment_matches,
+                version_matches,
+                strategy_matches,
+            )
+        ):
+            _deny(
+                findings,
+                "appconfig_deployment_binding_invalid",
+                address,
+                "Each deployment must reference one same-plan application, environment, profile, version, and strategy.",
+            )
+            continue
+
+        profile_address = profile_matches[0].get("address")
+        version_address = version_matches[0].get("address")
+        environment_refs = configured_references.get(environment_matches[0].get("address"), ())
+        version_refs = configured_references.get(version_address, ())
+        deployment_app = app_matches[0]
+        if (
+            profile_applications.get(profile_address) is not deployment_app
+            or not _references_resource(environment_refs, deployment_app.get("address"))
+            or not _references_resource(version_refs, deployment_app.get("address"))
+            or not _references_resource(version_refs, profile_address)
+            or hosted_bindings.get(version_address) != (deployment_app, profile_matches[0])
+        ):
+            _deny(
+                findings,
+                "appconfig_deployment_target_mismatch",
+                address,
+                "Deployment targets must all belong to the same planned feature-flag application.",
+            )
+
+
+def _valid_appconfig_feature_flag_content(content: Any) -> bool:
+    if not isinstance(content, dict) or set(content) != {"flags", "values", "version"}:
+        return False
+    if content.get("version") != "1":
+        return False
+    flags = content.get("flags")
+    values = content.get("values")
+    if not isinstance(flags, dict) or not isinstance(values, dict) or len(flags) != 1:
+        return False
+    flag_key, flag = next(iter(flags.items()))
+    if (
+        not isinstance(flag_key, str)
+        or not re.fullmatch(r"[a-z][A-Za-z0-9_-]{0,63}", flag_key)
+        or not isinstance(flag, dict)
+        or set(flag) != {"name"}
+        or flag.get("name") != flag_key
+        or set(values) != {flag_key}
+    ):
+        return False
+    flag_value = values.get(flag_key)
+    return (
+        isinstance(flag_value, dict)
+        and set(flag_value) == {"enabled"}
+        and isinstance(flag_value.get("enabled"), bool)
+    )
 
 
 def _sqs_partition_for_region(region: str) -> str:

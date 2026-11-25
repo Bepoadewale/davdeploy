@@ -14,7 +14,7 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503). PR #502 adds
+`ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486). PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
@@ -48,15 +48,16 @@ cross-AZ transfer. All seven checks passed on final PR head `86b4b89` in CI
 run [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 The PR changes no AWS resource, hosted state, or runtime.
 
-PR #486 remains open and now includes current `main` through merge commit
-`05a6e5c`; all seven checks passed on pre-cleanup-documentation head `227c62a`
-in [run 45589122723](https://github.com/Bepoadewale/davdeploy/actions/runs/45589122723).
-The two direct same-account encrypted-root-volume cycles and clean-room full
-cycle are recorded. The approved final cleanup removed and verified absence of
-the generated files and Compose resources; the worktree remains. This
-documentation update requires fresh final-head CI. PR #495 remains a draft at head
-`8a3c23828e619c04a50a9fe6144f389b4924adb1`; all seven checks passed in
-[run 45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+Merged PR #486 as `ee3a407`; its final head `a2c2d29` passed all seven checks in
+[run 45603699112](https://github.com/Bepoadewale/davdeploy/actions/runs/45603699112),
+and merged-main CI passed all seven in run `45604774427`. Its two direct
+same-account encrypted-root-volume cycles and clean-room full cycle are
+recorded. Approved clean-room files and Compose resources are absent; the
+worktree remains. PR #495 remains a draft; its branch includes current `main`
+through merge commit `2a079df`. All seven checks passed on head `45214f7` in
+[run 45606498702](https://github.com/Bepoadewale/davdeploy/actions/runs/45606498702);
+the refreshed destroy-plan hash is now recorded, so this evidence update needs
+fresh final-head CI.
 Its tagged AppConfig test application, environment, feature-flag profile,
 rollout strategy, and deployment history remain preserved. Read-only account
 checks observed deployments 1 and 2 as `COMPLETE` and `REVERTED`, with the
@@ -108,11 +109,11 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open; all seven checks passed on pre-cleanup-documentation head
-`227c62a` in run `45589122723`. Two same-account cycles verified encrypted
-8 GiB gp3 root volumes and teardown. Its clean-room full cycle and approved
-final cleanup completed; generated artifacts and Compose resources are absent.
-The latest documentation update requires fresh final-head CI.
+Merged PR #486 as `ee3a407`; its final head `a2c2d29` passed all seven checks
+in run `45603699112`, and merged-main CI passed in run `45604774427`. Two
+same-account cycles verified encrypted 8 GiB gp3 root volumes and teardown.
+Its clean-room full cycle and approved final cleanup are complete; generated
+artifacts and Compose resources are absent.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
 CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
@@ -379,14 +380,14 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
+- Backend `main` is `ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
   bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
   passed all seven checks in run `45552193668`.
-- PR #486 remains open with its clean-room full cycle and approved final cleanup
-  complete; a documentation-only status update is awaiting fresh final-head CI.
+- PR #486 merged as `ee3a407`; final-head and merged-main CI passed. Its
+  clean-room full cycle and approved final cleanup are complete.
   Draft PR #495's tagged AppConfig rollout resources remain preserved pending exact
   teardown approval. The run monitor has 66 records and zero active runs.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
