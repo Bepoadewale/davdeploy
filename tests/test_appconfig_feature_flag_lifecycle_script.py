@@ -153,6 +153,7 @@ class FakeAppConfigData:
         content = json.dumps({"nova_demo": {"enabled": self.enabled}}).encode()
         return {
             "NextPollConfigurationToken": "do-not-print-next-token",
+            "NextPollIntervalInSeconds": 15,
             "Configuration": io.BytesIO(content),
         }
 
@@ -191,6 +192,8 @@ def test_rollout_verifies_exact_feature_configuration_without_exposing_tokens():
     rendered = json.dumps(result)
     assert result["flag_enabled"] is True
     assert result["deployment_state"] == "COMPLETE"
+    assert result["appconfig_data_get_latest_calls"] == 1
+    assert result["appconfig_data_configurations_received"] == 1
     assert "do-not-print" not in rendered
     # AppConfig Data tokens are intentionally passed back to AWS inside the
     # helper. The test checks they never appear in its returned evidence.

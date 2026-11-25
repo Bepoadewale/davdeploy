@@ -23,11 +23,6 @@ NOT_FOUND_CODES = frozenset(
         "DeploymentNotFoundException",
     }
 )
-TERMINAL_DEPLOYMENT_STATES = frozenset(
-    {"COMPLETE", "ROLLED_BACK", "REVERTED", "FAILED"}
-)
-
-
 def verify_account(sts: Any, expected_account_id: str) -> None:
     actual_account_id = sts.get_caller_identity().get("Account")
     if actual_account_id != expected_account_id:
@@ -133,7 +128,7 @@ def _read_enabled_flag(
     profile_id: str,
     flag_name: str,
     configuration_token: str | None,
-) -> tuple[str, bool | None]:
+) -> tuple[str, bool | None, bool, int]:
     if configuration_token is None:
         session = appconfigdata.start_configuration_session(
             ApplicationIdentifier=application_id,
@@ -151,10 +146,13 @@ def _read_enabled_flag(
     next_token = response.get("NextPollConfigurationToken")
     if not isinstance(next_token, str):
         raise LifecycleCheckError("AppConfig Data next-poll token is missing")
+    next_poll_interval = response.get("NextPollIntervalInSeconds")
+    if isinstance(next_poll_interval, bool) or not isinstance(next_poll_interval, int):
+        raise LifecycleCheckError("AppConfig Data next-poll interval is missing")
     body = response.get("Configuration")
     raw = body.read() if hasattr(body, "read") else body
     if raw in (None, b"", ""):
-        return next_token, None
+        return next_token, None, False, next_poll_interval
     if isinstance(raw, bytes):
         raw = raw.decode("utf-8")
     if not isinstance(raw, str):
@@ -167,7 +165,7 @@ def _read_enabled_flag(
     enabled = flag.get("enabled") if isinstance(flag, dict) else None
     if not isinstance(enabled, bool):
         raise LifecycleCheckError("AppConfig Data did not return the expected boolean flag")
-    return next_token, enabled
+    return next_token, enabled, True, next_poll_interval
 
 
 def verify_flag_rollout(
@@ -221,8 +219,10 @@ def verify_flag_rollout(
     state = initial_state
     token = None
     last_enabled = None
+    get_latest_configuration_calls = 0
+    configurations_received = 0
     while time.monotonic() < deadline:
-        token, observed = _read_enabled_flag(
+        token, observed, received, service_poll_interval = _read_enabled_flag(
             appconfigdata=appconfigdata,
             application_id=application_id,
             environment_id=environment_id,
@@ -230,6 +230,8 @@ def verify_flag_rollout(
             flag_name="nova_demo",
             configuration_token=token,
         )
+        get_latest_configuration_calls += 1
+        configurations_received += int(received)
         if observed is not None:
             last_enabled = observed
         deployment = _deployment(
@@ -255,8 +257,10 @@ def verify_flag_rollout(
                 "progressive_state_observed": initial_state in {"DEPLOYING", "BAKING"},
                 "flag_name": "nova_demo",
                 "flag_enabled": last_enabled,
+                "appconfig_data_get_latest_calls": get_latest_configuration_calls,
+                "appconfig_data_configurations_received": configurations_received,
             }
-        sleep(poll_interval_seconds)
+        sleep(max(poll_interval_seconds, service_poll_interval))
     raise LifecycleCheckError(
         f"AppConfig rollout did not reach the expected state; last deployment state: {state}"
     )
