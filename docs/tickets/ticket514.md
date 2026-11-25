@@ -53,7 +53,7 @@ unmodeled network costs approval-blocking. This is source-only.
 - [x] The endpoint shape and AZ count are derived from known exact plan facts; unknown, stale, ambiguous, or mismatched facts fail closed.
 - [x] Only exact catalog rates and metadata are used; no customer-supplied prices or guessed rate/product selection.
 - [x] S3/DynamoDB gateway endpoints receive no endpoint charge only when their exact supported type is established; other endpoint types fail closed.
-- [x] Any unpriced endpoint/network dependency continues to block pricing completeness and approval; the PR does not enable Batch approval or execution.
+- [x] Any unpriced endpoint/network dependency continues to block pricing completeness and approval; a regression test proves the Batch supporting-cost blocker persists after supported endpoint lines are added.
 - [x] Focused tests, full required local verification, documentation conventions, and diff whitespace checks pass.
 - [ ] All required final-head CI checks pass before merge.
 - [ ] No AWS resources, Terraform state/locks, hosted control-plane resources, protected local files, or customer workloads are changed.
@@ -61,8 +61,8 @@ unmodeled network costs approval-blocking. This is source-only.
 ## Acceptance status
 
 - [x] Implementation complete.
-- [x] Focused validation complete: `tests/test_generated_plan_pricing.py` passed 155 tests.
-- [x] Full local verification complete: `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` passed all 1,955 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose validation. One upstream Starlette deprecation warning was emitted.
+- [x] Focused validation complete: `tests/test_generated_plan_pricing.py` passed 156 tests.
+- [x] Full local verification complete: `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` passed all 1,956 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose validation. One upstream Starlette deprecation warning was emitted.
 - [x] Documentation conventions and `git diff --check` passed.
 - [ ] Final-head CI passed.
 - [ ] PR reviewed and merged.
@@ -71,8 +71,8 @@ unmodeled network costs approval-blocking. This is source-only.
 
 ## Tests / validation performed
 
-- Focused `tests/test_generated_plan_pricing.py`: 155 passed.
-- `make VENV=/Users/adewale/Projects/davdeploy/.venv verify`: 1,955 passed;
+- Focused `tests/test_generated_plan_pricing.py`: 156 passed.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv verify`: 1,956 passed;
   Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. One
   upstream Starlette deprecation warning was emitted.
 - `GITHUB_PR_NUMBER=514 .../python scripts/check_doc_conventions.py` and

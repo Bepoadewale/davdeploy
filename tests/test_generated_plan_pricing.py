@@ -1378,6 +1378,29 @@ def test_interface_vpc_endpoint_pricing_is_bound_to_plan_azs_and_usage():
     )
 
 
+def test_interface_endpoint_pricing_does_not_remove_batch_approval_blocker():
+    document = batch_plan()
+    endpoint_document = interface_vpc_endpoint_plan()
+    document["planned_values"]["root_module"]["resources"].extend(
+        item
+        for item in endpoint_document["planned_values"]["root_module"]["resources"]
+        if item["type"] in {"aws_subnet", "aws_vpc_endpoint"}
+    )
+    document["resource_changes"].extend(
+        item for item in endpoint_document["resource_changes"]
+        if item["type"] in {"aws_subnet", "aws_vpc_endpoint"}
+    )
+    result, _ = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=INTERFACE_ENDPOINT_USAGE,
+    )
+    codes = {item.code for item in result.findings}
+    assert "batch_supporting_costs_unpriced" in codes
+    assert any(line.resource_type == "aws_vpc_endpoint" for line in result.lines)
+    assert result.approval_eligible is False
+
+
 @pytest.mark.parametrize(
     ("document", "usage", "finding"),
     [
