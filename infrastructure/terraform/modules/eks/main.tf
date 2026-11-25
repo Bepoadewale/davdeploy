@@ -57,13 +57,20 @@ resource "aws_iam_role_policy_attachment" "node_ecr" {
 resource "aws_eks_cluster" "this" {
   name     = var.name
   role_arn = aws_iam_role.cluster.arn
-  version  = "1.31"
+  version  = "1.36"
   vpc_config {
     subnet_ids              = var.subnet_ids
     endpoint_public_access  = var.endpoint_public_access
     endpoint_private_access = true
     public_access_cidrs     = var.public_access_cidrs
   }
+  enabled_cluster_log_types = [
+    "api",
+    "audit",
+    "authenticator",
+    "controllerManager",
+    "scheduler",
+  ]
   tags       = var.tags
   depends_on = [aws_iam_role_policy_attachment.cluster]
 }
@@ -76,19 +83,33 @@ resource "aws_iam_openid_connect_provider" "this" {
   url             = aws_eks_cluster.this.identity[0].oidc[0].issuer
   tags            = var.tags
 }
+resource "aws_launch_template" "nodes" {
+  name_prefix = "${var.name}-nodes-"
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+}
 resource "aws_eks_node_group" "system" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "system"
   node_role_arn   = aws_iam_role.nodes.arn
   subnet_ids      = var.subnet_ids
   instance_types  = ["t3.medium"]
+  launch_template {
+    id      = aws_launch_template.nodes.id
+    version = aws_launch_template.nodes.latest_version
+  }
   scaling_config {
     desired_size = 2
     max_size     = 3
     min_size     = 2
   }
-  tags       = var.tags
-  depends_on = [aws_iam_role_policy_attachment.node_worker, aws_iam_role_policy_attachment.node_cni, aws_iam_role_policy_attachment.node_ecr]
+  capacity_type = "ON_DEMAND"
+  tags          = var.tags
+  depends_on    = [aws_iam_role_policy_attachment.node_worker, aws_iam_role_policy_attachment.node_cni, aws_iam_role_policy_attachment.node_ecr]
 }
 output "cluster_name" { value = aws_eks_cluster.this.name }
 output "oidc_issuer" { value = aws_eks_cluster.this.identity[0].oidc[0].issuer }

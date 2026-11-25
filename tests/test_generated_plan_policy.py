@@ -3315,7 +3315,8 @@ def test_eks_node_group_requires_same_plan_launch_template_with_imdsv2():
 
     result = evaluate(document, proposal_value)
 
-    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_supported_shape_incomplete" in codes(result)
     assert "eks_node_metadata_unverifiable" not in codes(result)
     assert "instance_metadata_v2_required" not in codes(result)
 
@@ -3330,6 +3331,7 @@ def test_eks_node_group_without_one_same_plan_template_reference_is_denied(refer
     result = evaluate(document, proposal_value)
 
     assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_supported_shape_incomplete" in codes(result)
     assert "eks_node_metadata_unverifiable" in codes(result)
 
 
@@ -3340,6 +3342,242 @@ def test_eks_node_group_with_launch_template_that_allows_imdsv1_is_denied():
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "instance_metadata_v2_required" in codes(result)
+
+
+def eks_cluster_case(*, cluster_updates=None, node_updates=None, references=None, unknowns=None):
+    document = plan()
+    cluster_address = "aws_eks_cluster.app"
+    node_address = "aws_eks_node_group.system"
+    cluster_role_address = "aws_iam_role.cluster"
+    node_role_address = "aws_iam_role.nodes"
+    template_address = "aws_launch_template.nodes"
+    cluster_role_arn = f"arn:aws:iam::{ACCOUNT}:role/eks-cluster"
+    node_role_arn = f"arn:aws:iam::{ACCOUNT}:role/eks-nodes"
+    subnets = ["subnet-11111111", "subnet-22222222"]
+    cluster_values = {
+        "name": "app-cluster",
+        "role_arn": cluster_role_arn,
+        "version": "1.36",
+        "enabled_cluster_log_types": [
+            "api",
+            "audit",
+            "authenticator",
+            "controllerManager",
+            "scheduler",
+        ],
+        "vpc_config": [
+            {
+                "subnet_ids": subnets,
+                "endpoint_public_access": False,
+                "endpoint_private_access": True,
+                "public_access_cidrs": [],
+            }
+        ],
+    }
+    cluster_values.update(cluster_updates or {})
+    node_values = {
+        "cluster_name": "app-cluster",
+        "node_role_arn": node_role_arn,
+        "subnet_ids": subnets,
+        "instance_types": ["t3.medium"],
+        "capacity_type": "ON_DEMAND",
+        "scaling_config": [{"min_size": 2, "desired_size": 2, "max_size": 3}],
+        "launch_template": [{"id": "lt-0123456789abcdef0", "version": "1"}],
+        "remote_access": [],
+    }
+    node_values.update(node_updates or {})
+    cluster_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "sts:AssumeRole",
+                    "Principal": {"Service": "eks.amazonaws.com"},
+                }
+            ],
+        }
+    )
+    node_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "sts:AssumeRole",
+                    "Principal": {"Service": "ec2.amazonaws.com"},
+                }
+            ],
+        }
+    )
+    template_values = {
+        "name_prefix": "app-nodes-",
+        "metadata_options": [
+            {
+                "http_endpoint": "enabled",
+                "http_tokens": "required",
+                "http_put_response_hop_limit": 1,
+            }
+        ],
+    }
+    planned = [
+        resource(cluster_address, "aws_eks_cluster", cluster_values),
+        resource(node_address, "aws_eks_node_group", node_values),
+        resource(
+            cluster_role_address,
+            "aws_iam_role",
+            {"name": "eks-cluster", "arn": cluster_role_arn, "assume_role_policy": cluster_trust},
+        ),
+        resource(
+            node_role_address,
+            "aws_iam_role",
+            {"name": "eks-nodes", "arn": node_role_arn, "assume_role_policy": node_trust},
+        ),
+        resource(template_address, "aws_launch_template", template_values),
+    ]
+    changes = [
+        change(cluster_address, "aws_eks_cluster", after_unknown=(unknowns or {}).get("cluster", {})),
+        change(node_address, "aws_eks_node_group", after_unknown=(unknowns or {}).get("node", {})),
+        change(cluster_role_address, "aws_iam_role"),
+        change(node_role_address, "aws_iam_role"),
+        change(template_address, "aws_launch_template"),
+    ]
+    document["planned_values"]["root_module"]["resources"].extend(planned)
+    document["resource_changes"].extend(changes)
+    refs = references or {
+        "cluster_role": [f"{cluster_role_address}.arn"],
+        "cluster_name": [f"{cluster_address}.name"],
+        "node_role": [f"{node_role_address}.arn"],
+        "launch_template": [f"{template_address}.id"],
+    }
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": cluster_address, "expressions": {"role_arn": {"references": refs["cluster_role"]}}},
+            {
+                "address": node_address,
+                "expressions": {
+                    "cluster_name": {"references": refs["cluster_name"]},
+                    "node_role_arn": {"references": refs["node_role"]},
+                    "launch_template": {"references": refs["launch_template"]},
+                },
+            },
+            {"address": cluster_role_address, "expressions": {}},
+            {"address": node_role_address, "expressions": {}},
+            {"address": template_address, "expressions": {}},
+        ]
+    }
+    proposal_resources = [
+        {
+            "resource_id": resource_id,
+            "resource_type": resource_type,
+            "name": name,
+            "arguments": values,
+            "rationale": rationale,
+        }
+        for resource_id, resource_type, name, values, rationale in (
+            ("eks-cluster", "aws_eks_cluster", "app", cluster_values, "Private Kubernetes control plane."),
+            ("eks-nodes", "aws_eks_node_group", "system", node_values, "Bounded managed worker nodes."),
+            ("eks-cluster-role", "aws_iam_role", "cluster", {"name": "eks-cluster"}, "EKS control-plane role."),
+            ("eks-node-role", "aws_iam_role", "nodes", {"name": "eks-nodes"}, "EKS worker role."),
+            ("eks-node-template", "aws_launch_template", "nodes", template_values, "Require IMDSv2 on worker nodes."),
+        )
+    ]
+    proposal_resources = proposal().model_dump(mode="json")["resources"] + proposal_resources
+    return document, proposal(proposal_resources)
+
+
+def test_eks_cluster_accepts_private_logged_bounded_supported_shape():
+    document, proposal_value = eks_cluster_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict != PlanPolicyVerdict.DENY
+    assert not any(code.startswith("eks_") for code in codes(result))
+    assert "eks_node_metadata_unverifiable" not in codes(result)
+    assert "instance_metadata_v2_required" not in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("cluster_updates", "expected_code"),
+    [
+        ({"version": "1.31"}, "eks_kubernetes_version_out_of_support_window"),
+        ({"version": "not-a-version"}, "eks_kubernetes_version_out_of_support_window"),
+        ({"enabled_cluster_log_types": ["api"]}, "eks_control_plane_logging_incomplete"),
+        (
+            {"vpc_config": [{"subnet_ids": ["subnet-11111111"], "endpoint_public_access": False, "endpoint_private_access": True, "public_access_cidrs": []}]},
+            "eks_subnet_set_invalid",
+        ),
+        (
+            {"vpc_config": [{"subnet_ids": ["subnet-11111111", "subnet-22222222"], "endpoint_public_access": True, "endpoint_private_access": True, "public_access_cidrs": ["203.0.113.1/32"]}]},
+            "eks_public_endpoint_denied",
+        ),
+    ],
+)
+def test_eks_cluster_rejects_unsupported_control_plane_settings(cluster_updates, expected_code):
+    document, proposal_value = eks_cluster_case(cluster_updates=cluster_updates)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("node_updates", "expected_code"),
+    [
+        ({"scaling_config": [{"min_size": 1, "desired_size": 4, "max_size": 4}]}, "eks_node_scaling_out_of_bounds"),
+        ({"instance_types": ["m7i.large"]}, "eks_node_instance_type_unsupported"),
+        ({"capacity_type": "SPOT"}, "eks_node_capacity_type_unsupported"),
+        ({"remote_access": [{"ec2_ssh_key": "unsafe"}]}, "eks_node_remote_access_denied"),
+        ({"subnet_ids": ["subnet-other"]}, "eks_node_subnet_binding_invalid"),
+    ],
+)
+def test_eks_node_group_rejects_unbounded_or_unsupported_settings(node_updates, expected_code):
+    document, proposal_value = eks_cluster_case(node_updates=node_updates)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("references", "expected_code"),
+    [
+        ({"cluster_name": [], "cluster_role": ["aws_iam_role.external.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_node_cluster_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.other.name"], "cluster_role": ["aws_iam_role.cluster.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_node_cluster_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.app.name"], "cluster_role": ["aws_iam_role.external.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_cluster_role_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.app.name"], "cluster_role": ["aws_iam_role.cluster.arn"], "node_role": ["aws_iam_role.external.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_node_role_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.app.name"], "cluster_role": ["aws_iam_role.cluster.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": []}, "eks_node_launch_template_unbound"),
+    ],
+)
+def test_eks_cluster_requires_same_plan_resource_bindings(references, expected_code):
+    document, proposal_value = eks_cluster_case(references=references)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_eks_cluster_unknown_version_is_denied_without_echoing_values():
+    document, proposal_value = eks_cluster_case(
+        unknowns={"cluster": {"version": True}},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_plan_value_unknown" in codes(result)
+
+
+def test_eks_cluster_findings_do_not_echo_customer_values():
+    document, proposal_value = eks_cluster_case(cluster_updates={"version": "customer-version-marker"})
+
+    result = evaluate(document, proposal_value)
+
+    assert "eks_kubernetes_version_out_of_support_window" in codes(result)
+    assert "customer-version-marker" not in repr(result)
 
 
 def autoscaling_case(
