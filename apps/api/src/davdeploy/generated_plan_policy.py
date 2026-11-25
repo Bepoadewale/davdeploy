@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-25.5"
+POLICY_VERSION = "nova-generated-plan-2026-11-25.6"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -345,6 +345,7 @@ def _evaluate(
     _check_route53_zones(resources, findings)
     _check_appconfig_bindings(document, resources, findings)
     _check_batch_fargate(document, resources, findings, expected_account_id)
+    _check_eks_cluster(document, resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -1877,6 +1878,310 @@ def _check_ebs_volumes(
                 item.get("address"),
                 "EBS volumes must have encryption enabled.",
             )
+
+
+def _check_eks_cluster(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Bound the repository's private EKS cluster and managed node group."""
+    by_type = {
+        kind: [item for item in resources if item.get("type") == kind]
+        for kind in ("aws_eks_cluster", "aws_eks_node_group")
+    }
+    if not any(by_type.values()):
+        return
+    if any(len(items) != 1 for items in by_type.values()):
+        _deny(
+            findings,
+            "eks_supported_shape_incomplete",
+            None,
+            "The supported EKS shape requires exactly one cluster and one managed node group.",
+        )
+        return
+
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        _deny(
+            findings,
+            "eks_change_metadata_invalid",
+            None,
+            "DavDeploy could not verify EKS plan metadata.",
+        )
+        return
+    changes_by_address = {
+        item.get("address"): item.get("change")
+        for item in changes
+        if isinstance(item, dict) and isinstance(item.get("address"), str)
+    }
+
+    def known_values(item: dict[str, Any], paths: tuple[tuple[str, ...], ...]):
+        address = item.get("address")
+        values = item.get("values")
+        change_value = changes_by_address.get(address)
+        unknown = change_value.get("after_unknown") if isinstance(change_value, dict) else None
+        if (
+            not isinstance(address, str)
+            or not isinstance(values, dict)
+            or not isinstance(unknown, dict)
+            or not _valid_unknown_tree(unknown)
+            or any(_path_contains_unknown(unknown, path) for path in paths)
+        ):
+            _deny(
+                findings,
+                "eks_plan_value_unknown",
+                address,
+                "A required EKS safety setting is missing or unknown in this plan.",
+            )
+            return address, None
+        return address, values
+
+    configured = _configured_resources(document)
+
+    def references_for(address: Any, attribute: str) -> list[str] | None:
+        item = configured.get(address) if isinstance(address, str) else None
+        expressions = item.get("expressions") if isinstance(item, dict) else None
+        expression = expressions.get(attribute) if isinstance(expressions, dict) else None
+        pending: list[Any] = [expression]
+        references: list[str] = []
+        visited = 0
+        while pending:
+            visited += 1
+            if visited > 10_000:
+                return None
+            current = pending.pop()
+            if isinstance(current, dict):
+                raw_references = current.get("references")
+                if isinstance(raw_references, list):
+                    references.extend(
+                        value for value in raw_references if isinstance(value, str)
+                    )
+                pending.extend(
+                    value for key, value in current.items() if key != "references"
+                )
+            elif isinstance(current, list):
+                pending.extend(current)
+        return references
+
+    def has_one_same_plan_reference(
+        address: Any, attribute: str, resource_type: str
+    ) -> bool:
+        references = references_for(address, attribute)
+        candidates = [
+            item
+            for item in resources
+            if item.get("type") == resource_type
+            and isinstance(item.get("address"), str)
+            and references
+            and any(
+                _reference_targets_resource(reference, item["address"], resource_type)
+                for reference in references
+            )
+        ]
+        matched_addresses = {item["address"] for item in candidates}
+        every_reference_is_planned = bool(references) and all(
+            any(
+                _reference_targets_resource(reference, item["address"], resource_type)
+                for item in candidates
+            )
+            for reference in references
+        )
+        return len(matched_addresses) == 1 and every_reference_is_planned
+
+    cluster = by_type["aws_eks_cluster"][0]
+    cluster_address, cluster_values = known_values(
+        cluster,
+        (
+            ("name",),
+            ("version",),
+            ("enabled_cluster_log_types",),
+            ("vpc_config", "subnet_ids"),
+            ("vpc_config", "endpoint_public_access"),
+            ("vpc_config", "endpoint_private_access"),
+        ),
+    )
+    cluster_name = None
+    cluster_subnets: list[str] = []
+    if cluster_values is not None:
+        cluster_name = cluster_values.get("name")
+        version = cluster_values.get("version")
+        version_match = re.fullmatch(r"1\.(\d{2})", version) if isinstance(version, str) else None
+        # As of 2026-11-25, Kubernetes 1.36 is a current EKS standard-support
+        # version with a longer runway than the oldest supported minors. Keep
+        # this threshold synchronized with AWS lifecycle data.
+        if version_match is None or int(version_match.group(1)) < 36:
+            _deny(
+                findings,
+                "eks_kubernetes_version_out_of_support_window",
+                cluster_address,
+                "The EKS Kubernetes version is malformed or below the current supported-version floor.",
+            )
+        required_logs = {"api", "audit", "authenticator"}
+        enabled_logs = cluster_values.get("enabled_cluster_log_types")
+        if (
+            not isinstance(enabled_logs, list)
+            or any(not isinstance(value, str) for value in enabled_logs)
+            or not required_logs.issubset(set(enabled_logs))
+            or len(enabled_logs) != len(set(enabled_logs))
+            or not set(enabled_logs).issubset(
+                {"api", "audit", "authenticator", "controllerManager", "scheduler"}
+            )
+        ):
+            _deny(
+                findings,
+                "eks_control_plane_logging_incomplete",
+                cluster_address,
+                "EKS must enable API, audit, and authenticator logs using supported log types.",
+            )
+
+        vpc_config = cluster_values.get("vpc_config")
+        if isinstance(vpc_config, dict):
+            vpc_config = [vpc_config]
+        if not isinstance(vpc_config, list) or len(vpc_config) != 1 or not isinstance(
+            vpc_config[0], dict
+        ):
+            _deny(
+                findings,
+                "eks_vpc_configuration_invalid",
+                cluster_address,
+                "The supported EKS cluster requires one known VPC configuration block.",
+            )
+        else:
+            vpc = vpc_config[0]
+            if vpc.get("endpoint_public_access") is not False or vpc.get(
+                "endpoint_private_access"
+            ) is not True:
+                _deny(
+                    findings,
+                    "eks_public_endpoint_denied",
+                    cluster_address,
+                    "The supported EKS API endpoint must be private-only.",
+                )
+            subnets = vpc.get("subnet_ids")
+            if (
+                not isinstance(subnets, list)
+                or len(subnets) < 2
+                or any(
+                    not isinstance(subnet, str)
+                    or not re.fullmatch(r"subnet-[0-9a-fA-F]+", subnet)
+                    for subnet in subnets
+                )
+                or len(subnets) != len(set(subnets))
+            ):
+                _deny(
+                    findings,
+                    "eks_subnet_set_invalid",
+                    cluster_address,
+                    "EKS requires at least two distinct known subnet IDs in this supported shape.",
+                )
+            else:
+                cluster_subnets = subnets
+
+        if not has_one_same_plan_reference(cluster_address, "role_arn", "aws_iam_role"):
+            _deny(
+                findings,
+                "eks_cluster_role_unbound",
+                cluster_address,
+                "The EKS control plane must reference exactly one IAM role created in this plan.",
+            )
+
+    node_group = by_type["aws_eks_node_group"][0]
+    node_address, node_values = known_values(
+        node_group,
+        (
+            ("cluster_name",),
+            ("node_role_arn",),
+            ("subnet_ids",),
+            ("instance_types",),
+            ("capacity_type",),
+            ("scaling_config", "min_size"),
+            ("scaling_config", "desired_size"),
+            ("scaling_config", "max_size"),
+            ("remote_access",),
+        ),
+    )
+    if node_values is None:
+        return
+    if (
+        not isinstance(cluster_name, str)
+        or node_values.get("cluster_name") != cluster_name
+        or not has_one_same_plan_reference(node_address, "cluster_name", "aws_eks_cluster")
+    ):
+        _deny(
+            findings,
+            "eks_node_cluster_unbound",
+            node_address,
+            "The managed node group must reference the exact cluster created in this plan.",
+        )
+    if not has_one_same_plan_reference(node_address, "node_role_arn", "aws_iam_role"):
+        _deny(
+            findings,
+            "eks_node_role_unbound",
+            node_address,
+            "The managed node group must reference one IAM role created in this plan.",
+        )
+    if not has_one_same_plan_reference(node_address, "launch_template", "aws_launch_template"):
+        _deny(
+            findings,
+            "eks_node_launch_template_unbound",
+            node_address,
+            "The managed node group must reference one launch template created in this plan.",
+        )
+
+    scaling = node_values.get("scaling_config")
+    if isinstance(scaling, dict):
+        scaling = [scaling]
+    if not isinstance(scaling, list) or len(scaling) != 1 or not isinstance(scaling[0], dict):
+        _deny(
+            findings,
+            "eks_node_scaling_invalid",
+            node_address,
+            "The managed node group must use one explicit bounded scaling configuration.",
+        )
+    else:
+        minimum = scaling[0].get("min_size")
+        desired = scaling[0].get("desired_size")
+        maximum = scaling[0].get("max_size")
+        if (
+            any(isinstance(value, bool) or not isinstance(value, int) for value in (minimum, desired, maximum))
+            or not 1 <= minimum <= desired <= maximum <= 3
+        ):
+            _deny(
+                findings,
+                "eks_node_scaling_out_of_bounds",
+                node_address,
+                "EKS node capacity must satisfy 1 <= min <= desired <= max <= 3.",
+            )
+    if node_values.get("instance_types") != ["t3.medium"]:
+        _deny(
+            findings,
+            "eks_node_instance_type_unsupported",
+            node_address,
+            "The current EKS profile supports one t3.medium node instance type.",
+        )
+    if node_values.get("capacity_type") != "ON_DEMAND":
+        _deny(
+            findings,
+            "eks_node_capacity_type_unsupported",
+            node_address,
+            "The current EKS profile supports bounded ON_DEMAND nodes only.",
+        )
+    if node_values.get("remote_access") not in (None, []):
+        _deny(
+            findings,
+            "eks_node_remote_access_denied",
+            node_address,
+            "Managed-node SSH remote access is unsupported by the current EKS profile.",
+        )
+    node_subnets = node_values.get("subnet_ids")
+    if not isinstance(node_subnets, list) or node_subnets != cluster_subnets:
+        _deny(
+            findings,
+            "eks_node_subnet_binding_invalid",
+            node_address,
+            "The managed node group must use the cluster's exact known subnet set.",
+        )
 
 
 def _check_instance_metadata(
