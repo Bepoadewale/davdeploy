@@ -82,14 +82,14 @@ control plane.
 
 Local validation: `uv run --locked --extra dev pytest
 tests/test_generated_plan_policy.py tests/test_generated_plan_review.py -q`
-passed (594 tests), including malformed runtime/architecture input cases that
+passed (596 tests), including malformed runtime/architecture input cases that
 must deny rather than raise a type error. Ruff passed for the policy module and
 its regression tests; `python3 scripts/check_doc_conventions.py` and
 `git diff --check` passed. This package is source-only; do not create
 `docs/test/test503.md` or mutate AWS. All seven checks passed on earlier
 final-head commit `3a5dd2b` in
-[CI run 45565279893](https://github.com/Bepoadewale/davdeploy/actions/runs/45565279893);
-the hardened final head awaits CI. PR review and merge are pending.
+[CI run 45565279893](https://github.com/Bepoadewale/davdeploy/actions/runs/45565279893).
+The hardened final PR head awaits CI. PR review and merge are pending.
 
 ## Evidence files produced
 

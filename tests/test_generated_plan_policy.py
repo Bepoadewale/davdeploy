@@ -1314,10 +1314,12 @@ def test_lambda_function_accepts_bounded_zip_shape_and_reviews_external_role():
     ("values", "finding"),
     [
         ({"runtime": "python3.10"}, "lambda_runtime_unsupported"),
+        ({"runtime": {"invalid": "shape"}}, "lambda_runtime_unsupported"),
         ({"package_type": "Image", "image_uri": "example.invalid/image"}, "lambda_package_type_unsupported"),
         ({"source_code_hash": "not-a-sha256"}, "lambda_source_hash_invalid"),
         ({"role": "arn:aws:iam::111122223333:role/external"}, "lambda_execution_role_scope_invalid"),
         ({"architectures": ["riscv64"]}, "lambda_architecture_unsupported"),
+        ({"architectures": [{"invalid": "shape"}]}, "lambda_architecture_unsupported"),
         ({"memory_size": 10_241}, "lambda_memory_out_of_bounds"),
         ({"timeout": 901}, "lambda_timeout_out_of_bounds"),
         ({"ephemeral_storage": [{"size": 1024}]}, "lambda_ephemeral_storage_unsupported"),
