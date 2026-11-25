@@ -21,8 +21,8 @@ deployment; they were not repeated for this source reconciliation.
 Draft PR #502 adds source-only, assumption-bound NAT Gateway pricing to the
 generated-plan evaluator. Focused pricing and revision-lifecycle tests pass
 locally, and all seven checks passed in CI run
-[45560740907](https://github.com/Bepoadewale/davdeploy/actions/runs/45560740907)
-on PR head `4e545dc`. It remains draft/unmerged and changes neither the hosted
+[45561355561](https://github.com/Bepoadewale/davdeploy/actions/runs/45561355561)
+on PR head `4acd7d9`. It remains draft/unmerged and changes neither the hosted
 runtime nor AWS resources.
 
 PR #486 remains open at `bb374e8ec06d613a963f1768e71b91175a416898`, with all
