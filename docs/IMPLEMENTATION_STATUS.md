@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`f0bc3b2d7effb59993b507f26d82c427a962619b` (PR #502); hosted runtime remains
+`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -14,11 +14,11 @@ HTTP 200. This is deployed control-plane evidence only.
 Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
 final-head checks in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-Open PR #503 adds source-only generated Lambda function bounds. Refreshed head
-`fac74e4` passed all seven checks in run
-[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045),
-and automated review completed with no findings. Neither package changes AWS
-resources or hosted runtime.
+Merged PR #503 adds source-only generated Lambda function bounds. Final PR head
+`08ace0b` passed all seven checks in run
+[45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631),
+and automated review completed with no findings on code head `fac74e4`. Neither
+package changes AWS resources or hosted runtime.
 
 Merged PRs #498–#500 add source-only AWS Batch Fargate, EKS, and VPC
 generated-plan bounds. PR #500's final head passed all seven checks in
