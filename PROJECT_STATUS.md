@@ -118,22 +118,16 @@ the local Terraform state is retained and empty. No Nova dispatch or guest
 application health is claimed. The merge added no AWS or control-plane
 resources.
 
-PR #486 remains open and unmerged at synchronized head
-`3d7fe8b89adb6fd6407afe989336a1d756e02d99`. All seven checks passed in run
-[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
-Two isolated direct same-account cycles verified encrypted 8 GiB gp3 root
-volumes, healthy ASG/EC2 checks, and teardown with independent absence checks.
-The branch includes current `main` through PR #494. Final clean-room cleanup of
-`.venv`, `.local`, Compose volume, and network remains pending explicit
-approval; the project containers are stopped and all remaining artifacts are
-preserved.
+PR #486 merged as `ee3a407`; final-head and merged-main CI passed. Its two
+isolated same-account encrypted-root-volume cycles and clean-room full cycle
+are recorded, and its approved cleanup is complete.
 
-Draft PR #495 adds feature-flag profile and rollout policy. Its direct AppConfig
-test observed a disabled baseline, `BAKING`→`COMPLETE` enabled deployment, and
-`REVERTED` rollback; all seven checks passed in run
-[45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
-The exact teardown plan awaits approval, so the test application remains. No
-Nova dispatch or customer certification is claimed.
+PR #495 merged as `526d4e1`. Its final head `3563ead` passed all seven checks
+in run [45631497386](https://github.com/Bepoadewale/davdeploy/actions/runs/45631497386).
+The direct AppConfig disabled → progressive enabled → reverted lifecycle is
+recorded; the approved exact teardown and clean-room cleanup completed, and
+independent checks found the test resources absent. No Nova dispatch or broad
+customer certification is claimed. The hosted control plane was untouched.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

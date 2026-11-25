@@ -36,16 +36,13 @@ It changes neither the hosted runtime nor AWS resources.
 Merged PR #486 as commit `ee3a407`; its final head `a2c2d29` passed all seven
 checks in run `45603699112`, and merged-main CI passed all seven in
 `45604774427`. Its two isolated Auto Scaling cycles and clean-room full cycle
-passed; approved clean-room artifacts are absent. Draft PR #495 remains open;
-its branch now includes current `main` through merge commit `2a079df`. All seven
-checks passed on head `45214f7` in run `45606498702`; a refreshed destroy-plan
-hash is now recorded and this evidence update needs fresh final-head CI. Its
-tagged AppConfig test application, environment, feature-flag
-profile, rollout strategy, and deployment history are preserved; the
-environment is `Reverted` and deployments are `COMPLETE` then `REVERTED`. No
-AWS cleanup was performed. The Terraform run monitor has 66
-historical records and no active runs. The hosted control plane and its state
-and locks were not accessed or changed.
+passed; approved clean-room artifacts are absent. PR #495 merged as `526d4e1`.
+Its final head `3563ead` passed all seven checks in run `45631497386`. The
+direct AppConfig disabled → progressive enabled → reverted lifecycle and
+approved exact cleanup are recorded in `docs/test/test495.md`; independent
+checks confirmed the test resources absent. The local Terraform state, saved
+plans, verifier outputs, and run logs remain retained. The hosted control plane
+and its state and locks were not accessed or changed.
 
 PR #493's final-head CI run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)

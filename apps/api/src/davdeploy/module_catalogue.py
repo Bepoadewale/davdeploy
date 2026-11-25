@@ -241,6 +241,12 @@ _MODULES: tuple[ModuleDefinition, ...] = (
 
 _BY_ID = {module.identifier: module for module in _MODULES}
 
+
+def known_modules() -> frozenset[str]:
+    """Return the stable identifiers in the architecture module catalogue."""
+
+    return frozenset(_BY_ID)
+
 _PROFILE_MODULE = {
     "aws-s3-cloudfront-static": "aws-static-web",
     "aws-lambda-api": "aws-serverless-api",

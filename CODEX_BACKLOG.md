@@ -67,13 +67,15 @@ delegation, records, failover, or DNS costs. No hosted zone was created. See
 `docs/tickets/ticket470.md`.
 
 PR #471 binds each planned AppConfig environment to exactly one same-plan
-application. Draft PR #495 adds the feature profile, typed flag content,
-bounded deployment strategy, and revision-retention policy, with direct
-same-account rollout and rollback evidence. All seven final-head checks pass
-in run [45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
-The exact seven-resource teardown plan is reviewed but awaits approval; the test
-AppConfig application remains present. No Nova dispatch or customer
-certification is claimed. See PR [#495](https://github.com/Bepoadewale/davdeploy/pull/495).
+application. PR #495 merged as `526d4e1`, adding the feature profile, typed
+flag content, bounded rollout strategy, and revision-retention policy. Its
+direct same-account rollout and rollback evidence is in
+[`test495.md`](docs/test/test495.md); the approved seven-resource teardown and
+clean-room cleanup are complete, with independent absence checks. Final-head
+CI passed all seven checks in run
+[45631497386](https://github.com/Bepoadewale/davdeploy/actions/runs/45631497386).
+No Nova dispatch or broad customer certification is claimed. See PR
+[#495](https://github.com/Bepoadewale/davdeploy/pull/495).
 
 PR #473 adds source-only DynamoDB plan checks for known table/partition-key
 identity, on-demand billing, server-side encryption, deletion protection, and
