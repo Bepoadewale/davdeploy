@@ -6,8 +6,8 @@ Branch: `docs/nova-pr512-status-513`
 ## Problem / goal
 
 PR #512 merged source-only Batch Fargate public IPv4 pricing, but the Nova goal
-handoff, capability matrix, implementation status, backlog, and ticket #512
-still describe it as draft or leave its final status incomplete. Reconcile the
+handoff, capability matrix, implementation status, project status, backlog,
+and ticket #512 still describe it as draft or leave its final status incomplete. Reconcile the
 records with the verified GitHub merge and CI evidence. Do not imply that this
 source change was deployed or that any Nova customer workload was executed.
 
@@ -30,11 +30,12 @@ source change was deployed or that any Nova customer workload was executed.
 - `docs/tickets/ticket512.md`,
   `docs/product/COMPOSED_EXECUTION_GOAL.md`,
   `docs/product/NOVA_CAPABILITY_EVIDENCE_MATRIX.md`, and
-  `docs/IMPLEMENTATION_STATUS.md`.
+  `docs/IMPLEMENTATION_STATUS.md`, `PROJECT_STATUS.md`, and `CODEX_BACKLOG.md`.
 
 ## Work planned for the PR
 
-1. Update source baseline and package state to merged PR #512.
+1. Update source baseline and package state to merged PR #512 in the status
+   docs, backlog, and goal handoff.
 2. Record exact final-head and merged-main CI evidence.
 3. Mark ticket #512 merged and accurately describe its separate public IPv4
    address-duration and maximum-attempt assumptions.
@@ -45,27 +46,31 @@ source change was deployed or that any Nova customer workload was executed.
 
 ## Acceptance criteria
 
-- [ ] Every current status document names PR #512 as merged at `ef94983` and
+- [x] Every current status document names PR #512 as merged at `ef94983` and
   cites final-head and merged-main CI evidence.
-- [ ] Ticket #512 records merged status while retaining its tested limits and
+- [x] Ticket #512 records merged status while retaining its tested limits and
   the lack of customer workload evidence.
-- [ ] No document implies that PR #512 was deployed, enables Batch approval,
+- [x] No document implies that PR #512 was deployed, enables Batch approval,
   or proves Nova-dispatched customer execution.
 - [ ] Documentation conventions, full required local verification, and all
   seven final-head CI checks pass.
-- [ ] No AWS, Terraform state/locks, hosted control-plane resources, or local
+- [x] No AWS, Terraform state/locks, hosted control-plane resources, or local
   protected files are changed.
 
 ## Acceptance status
 
-- [ ] Documentation reconciliation complete.
-- [ ] Local validation and documentation conventions pass.
+- [x] Documentation reconciliation complete.
+- [x] Local validation and documentation conventions pass.
 - [ ] Final-head CI passed.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
 
-Pending; this package is documentation-only and has no customer workload test.
+`make VENV=/Users/adewale/Projects/davdeploy/.venv verify` — 1,944 passed;
+Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose checks passed.
+One upstream Starlette deprecation warning was emitted. `GITHUB_PR_NUMBER=513
+python3 scripts/check_doc_conventions.py` and `git diff --check` passed. No
+customer workload test was performed.
 
 ## Evidence files produced
 
