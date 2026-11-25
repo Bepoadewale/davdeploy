@@ -60,7 +60,7 @@ never print either value.
   both versions without logging either value.
 - [x] Monitored destroy and independent AWS reads confirm only the test
   parameter is absent; state and local evidence remain retained.
-- [ ] Helper regressions, Terraform checks, docs conventions, diff checks, and
+- [x] Helper regressions, Terraform checks, docs conventions, diff checks, and
   final-head CI pass.
 - [x] No hosted control-plane, remote-state, unrelated AWS, or customer data is
   touched.
@@ -76,10 +76,10 @@ place to version 2, and verified both decrypted versions in memory without
 printing either value. The monitored destroy succeeded; exact-name and
 test-prefix reads returned no parameter, and `GetParameter` returned
 `ParameterNotFound`. Local state and plans are retained with mode 600. The
-hosted control plane remains untouched. Final-head CI run `45507936770` passed
-all seven checks before the lifecycle evidence update; run `45510209824` passed
-all seven checks for the first evidence reconciliation. Final-head CI for this
-lifecycle record is pending.
+hosted control plane remains untouched. Final-head CI run `45514474947` passed
+all seven checks on lifecycle-evidence commit `89cfcaa`. Earlier runs
+`45507936770` and `45510209824` also passed all seven checks on their respective
+heads.
 
 ## Tests / validation performed
 
@@ -126,6 +126,8 @@ lifecycle record is pending.
   `GetParameter` returned `ParameterNotFound`. Terraform state is empty and
   retained at mode 600; all three saved plans are retained at mode 600. The
   monitor has 62 records and zero active runs.
+- `gh pr checks 493` — all seven checks passed on commit `89cfcaa` in run
+  `45514474947`.
 
 ## Evidence files produced
 

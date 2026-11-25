@@ -74,8 +74,8 @@ claimed.
 - Terraform run logs are retained under
   `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/`;
   the three exact run log names are recorded in `docs/tickets/ticket493.md`.
-- Prior evidence-only PR CI run `45510209824` passed all seven checks. Final-head
-  CI for this lifecycle record is pending.
+- Lifecycle-evidence commit `89cfcaa` passed all seven required PR checks in
+  run `45514474947`.
 
 ## Commands executed
 
