@@ -44,6 +44,17 @@ merged-main checks passed in run
 Batch/ECR estimates remain incomplete and approval-ineligible while network
 paths, NAT/endpoints, egress, and other material costs remain unpriced. PRs
 #507 and #509–#512 changed no AWS workloads or hosted runtime.
+Draft PR #514 adds source-only regional price lines for same-region ECR API,
+ECR Docker, and CloudWatch Logs interface endpoint hours and processed data,
+bound to trusted monthly usage and known same-plan subnet IDs/AZs. Exact
+S3/DynamoDB gateway endpoints have no endpoint charge; other interface service
+names, endpoint variants, and unmodeled network costs remain blockers. Focused
+pricing tests pass (156 tests), full local verification passes (1,956 tests),
+and all seven checks passed on final PR head `4112269` in run
+[45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719).
+The ticket/handoff status update is documentation-only; current-head checks
+remain the merge gate. No AWS resource, Terraform state/lock, hosted control
+plane, or customer workload was changed.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run

@@ -1083,6 +1083,24 @@
         "title": "IntentRequest",
         "type": "object"
       },
+      "InterfaceVpcEndpointPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Monthly billable usage for one exact planned interface endpoint.",
+        "properties": {
+          "monthly_billed_hours_per_az": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_data_processed_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_billed_hours_per_az",
+          "monthly_data_processed_gb"
+        ],
+        "title": "InterfaceVpcEndpointPricingUsageAssumptions",
+        "type": "object"
+      },
       "InvitationRequest": {
         "properties": {
           "email": {
@@ -1652,21 +1670,32 @@
       },
       "VpcPricingUsageAssumptions": {
         "additionalProperties": false,
-        "description": "Explicit usage bounds keyed by exact public NAT Gateway plan address.",
+        "description": "Explicit usage bounds keyed by exact planned VPC resource address.",
         "properties": {
+          "interface_endpoints": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/InterfaceVpcEndpointPricingUsageAssumptions"
+                },
+                "maxProperties": 20,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interface Endpoints"
+          },
           "nat_gateways": {
             "additionalProperties": {
               "$ref": "#/components/schemas/NatGatewayPricingUsageAssumptions"
             },
             "maxProperties": 10,
-            "minProperties": 1,
             "title": "Nat Gateways",
             "type": "object"
           }
         },
-        "required": [
-          "nat_gateways"
-        ],
         "title": "VpcPricingUsageAssumptions",
         "type": "object"
       }
