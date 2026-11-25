@@ -86,10 +86,11 @@ passed (596 tests), including malformed runtime/architecture input cases that
 must deny rather than raise a type error. Ruff passed for the policy module and
 its regression tests; `python3 scripts/check_doc_conventions.py` and
 `git diff --check` passed. This package is source-only; do not create
-`docs/test/test503.md` or mutate AWS. All seven checks passed on earlier
-final-head commit `3a5dd2b` in
-[CI run 45565279893](https://github.com/Bepoadewale/davdeploy/actions/runs/45565279893).
-The hardened final PR head awaits CI. PR review and merge are pending.
+`docs/test/test503.md` or mutate AWS. All seven checks passed on implementation
+commit `5924d07` in
+[CI run 45568122045](https://github.com/Bepoadewale/davdeploy/actions/runs/45568122045).
+The subsequent ticket-only evidence update is covered by its own required CI
+run. PR review and merge are pending.
 
 ## Evidence files produced
 
