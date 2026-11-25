@@ -89,7 +89,11 @@ network-path and supporting costs approval-blocking. This is source-only.
   costs remain approval-blocking; Batch approval is not enabled by this change.
 - [x] Focused tests, full required local verification, documentation
   conventions, and diff whitespace checks pass.
-- [ ] All seven checks pass on the ticket-updated final head before merge.
+- [x] All seven required checks passed on implementation head `225013f` in run
+  [45678825533](https://github.com/Bepoadewale/davdeploy/actions/runs/45678825533),
+  then passed again on ticket-updated head `0bbb69a` in run
+  [45679637571](https://github.com/Bepoadewale/davdeploy/actions/runs/45679637571).
+  GitHub's current PR check set remains the final merge gate.
 - [x] No AWS/customer workload, Terraform state/lock, hosted control plane, or
   feature gate is changed; no Nova customer workload is claimed.
 
@@ -98,9 +102,8 @@ network-path and supporting costs approval-blocking. This is source-only.
 - [x] Implementation complete.
 - [x] Focused validation complete: 11 selected tests passed; 133 deselected.
 - [x] Full local verification complete: `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` passed with 1,944 tests; Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose checks passed.
-- [x] All seven checks passed on implementation head `225013f` in run
-  [45678825533](https://github.com/Bepoadewale/davdeploy/actions/runs/45678825533).
-- [ ] Ticket-only final-head CI rerun passed.
+- [x] All seven required checks passed on implementation head `225013f` and
+  ticket-updated head `0bbb69a` (runs `45678825533` and `45679637571`).
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -117,10 +120,12 @@ network-path and supporting costs approval-blocking. This is source-only.
   passed. One upstream Starlette deprecation warning was emitted.
 - `GITHUB_PR_NUMBER=512 python3 scripts/check_doc_conventions.py` and
   `git diff --check` — passed.
-- All seven required checks passed on implementation head `225013f` in run
-  [45678825533](https://github.com/Bepoadewale/davdeploy/actions/runs/45678825533).
-  The ticket update requires one final-head rerun before merge.
-- Final ticket-updated head CI and review — pending.
+- All seven checks passed on implementation head `225013f` and ticket-updated
+  head `0bbb69a` in runs
+  [45678825533](https://github.com/Bepoadewale/davdeploy/actions/runs/45678825533)
+  and [45679637571](https://github.com/Bepoadewale/davdeploy/actions/runs/45679637571).
+- The current PR check set is the final merge gate; PR review and merge remain
+  pending.
 
 ## Evidence files produced
 
