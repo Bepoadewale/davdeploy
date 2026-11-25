@@ -1,9 +1,11 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493), 2026-11-25. PR #492
-records the bootstrapped growth strategy as roadmap-only; it changes no
-product behavior or AWS resources. Merged PR #493's final-head CI run
+`b57c1c4811f6a581892a17548fa4728c8ea4a9cc` (PR #497), 2026-11-25. Merged PRs
+#492 and #496 record the bootstrapped growth strategy as roadmap-only; they
+change no product behavior or AWS resources. Merged PR #497 corrects the
+source-level Nova plan-only status; it also changes no runtime or AWS state.
+Merged PR #493's final-head CI run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)
 passed all seven checks. Its exact synthetic Parameter Store lifecycle created
 and updated version 1 to version 2, verified both values in memory without
@@ -19,10 +21,9 @@ The hosted control plane was not accessed or changed for this reconciliation.
 
 PR #485 is merged and records direct same-account Auto Scaling scale/health/
 teardown evidence for its bounded shape. PR #486 remains open at head
-`f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its encrypted root-volume tests
-passed, but it is behind current `main`, has a dirty merge state, and its final
-clean-room cleanup is pending approval. Its generated local artifacts remain
-preserved. PR #487 is merged and
+`f56ae4cd198871412366152f979d98a8755f93c5`; its encrypted root-volume tests
+passed and final clean-room cleanup remains pending approval. Its generated
+local artifacts remain preserved. PR #487 is merged and
 records exact-module DynamoDB point-in-time recovery and teardown. PR #489 is
 merged with final-head CI run [45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
 and merged-main run [45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
@@ -30,7 +31,9 @@ passing all seven checks. It records exact-module Lambda v1 invocation,
 in-place v2 update, teardown, and independent absence verification. A read-only AWS check found no matching
 DynamoDB test table, Auto Scaling group, EC2 instance, or Lambda test resources.
 These tests count only for the tested shapes and do not establish Nova
-dispatch. Terraform monitor: 62 records, no active operations.
+dispatch. Draft PR #495 records a direct AppConfig rollout/rollback test; its
+application and exact teardown plan remain pending explicit cleanup approval.
+The Terraform monitor has 66 records and no active operations.
 
 PR #473 merged with seven checks passing in CI run
 [45284594649](https://github.com/Bepoadewale/davdeploy/actions/runs/45284594649).
@@ -303,6 +306,7 @@ design does not mean that a rate is currently available.
 | Scope and plan | Trusted account and region guard; declared-resource inventory; malformed/non-applyable plans; destructive changes and sensitive changes require review. | Resource ownership for every AWS type, quota availability, or workload suitability. |
 | S3 | Requires all four public-access-block flags for planned buckets; denies public ACLs and public bucket policies; merged PRs #434–#436 require same-plan TLS-deny policies, explicit default encryption, and `BucketOwnerEnforced` ownership controls. | This does not validate every bucket use pattern, KMS key authorization, object-level upload enforcement, existing object encryption, or retention. Unknown-value checks cover listed S3 policy-critical fields only. |
 | SQS | PR #441 requires known SQS-managed encryption. Merged PR #445 adds 0–43,200 second visibility bounds, 60 second–14 day retention, one-to-one redrive pairs with `maxReceiveCount` 5–10, exact `byQueue` allow policy, and six-times-Lambda-timeout-plus-batch-window checks. A same-plan Lambda consumer needs inline `ReceiveMessage`, `DeleteMessage`, and `GetQueueAttributes` on the exact source ARN. Merged PR #446 fixes source-after-DLQ ordering. PR #447 records Lambda retries/DLQ delivery; merged PR #448 records direct duplicate suppression, code update, managed redrive, recovered processing, and verified teardown. | Policy remains source-only, not hosted. Direct SQS/Lambda tests do not prove Nova dispatch. Managed-policy contents, module-output bindings, KMS encryption, non-Lambda consumers, producer authorization, full effective permissions, and complete retry/DLQ cost usage remain unproven. |
+| AWS Batch | Open PR #498 proposes one managed Fargate compute environment capped at 6 vCPUs, one queue bound to that same-plan environment, and one digest-pinned container job capped at 2 vCPUs, 3 attempts, and a 3,600-second timeout. It rejects unsupported CPU/memory pairs, privileged containers, cross-account/wildcard role ARNs, and secret-like or reserved plaintext environment variables; public-IP use triggers review. | Source-only and not deployed. It does not prove effective role permissions, submission-time overrides, full cost, non-Fargate compute, retry filters, or Nova dispatch. |
 | IAM | Denies broad wildcard privileges, wildcard trust, unknown policy attachments, and application `AdministratorAccess`. | Complete least-privilege analysis across service-specific policies, resource-based policies, permission boundaries, and all generated trust relationships. |
 | Network | Reviews public security-group and network-ACL web/general ingress; denies all-protocol and listed sensitive-port exposure; unknown ACL ingress sources fail closed. Merged PRs #477/#481 require EFS NFS/2049 ingress to use exact TCP from a security-group source, with #481 binding the rule target to a group attached to a same-plan mount target. Merged PR #479 requires Redis/6379 exact TCP security-group ingress bound to the replication group. Globally routable source ranges are recognized. | ACL association and rule-precedence reachability, complete VPC topology, egress, endpoint policy, DNS, TLS, VPN, multi-region, or service-to-service reachability review. |
 | Databases and unknowns | Denies public RDS/Redshift, requires encryption for the listed relational types, and checks unknown critical fields for the bounded resource/path list. | Backup restore evidence, workload data integrity, every database product, every retention setting, or unknown values on unlisted types. |
@@ -383,7 +387,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-bedrock-knowledge-base` | `modules/bedrock-knowledge-base` | `aws-ai-retrieval` / `ai-rag` | Shared S3/IAM/network checks; no ingestion-role/index/data-access policy suite | [`test262.md`](../test/test262.md): ingestion and real retrieval |
 | `aws-sagemaker-endpoint` | `modules/sagemaker-endpoint` | `aws-managed-ml`; possible CPU/GPU overlap / `machine-learning` | Shared IAM/S3/network checks only; no model artifact, endpoint exposure, quota, or inference cost policy | [`test261.md`](../test/test261.md): real endpoint inference and teardown |
 | `aws-kinesis-stream` | `modules/kinesis-stream` | `aws-stream-processing` / `async-data` | PR #475 bounds plans to one provisioned shard, 24-hour retention, KMS encryption, and the AWS-managed Kinesis key. The policy does not cover consumers, producer authorization, checkpoints/replay, or complete regional costs. | [`test258.md`](../test/test258.md): one record accepted; no consumer processing |
-| `aws-batch-compute` | `modules/batch-compute` | `aws-jobs-events`, `aws-data-analytics` / `saas-backend`, `async-data` | Shared IAM/network checks only; no queue/job role, retry, capacity, or budget policy suite | [`test252.md`](../test/test252.md): controlled disposable Batch job; merged PR #458 [`test458.md`](../test/test458.md): first-attempt failure, automatic retry, success, and exact teardown |
+| `aws-batch-compute` | `modules/batch-compute` | `aws-jobs-events`, `aws-data-analytics` / `saas-backend`, `async-data` | Open PR #498 proposes a bounded managed Fargate compute environment, one same-plan queue, digest-pinned container, supported CPU/memory pairs, retries, runtime, same-account role ARNs, and plaintext/reserved environment checks; public-IP use requires review. This remains source-only. | [`test252.md`](../test/test252.md): controlled disposable Batch job; merged PR #458 [`test458.md`](../test/test458.md): first-attempt failure, automatic retry, success, and exact teardown. These direct tests do not prove the new policy or Nova dispatch. |
 | `aws-eks-cluster` | `modules/eks` | `aws-kubernetes-platform`, `aws-gpu-inference` / `kubernetes` | Deployed PR #404 checks managed-node metadata only when the plan binds one in-plan launch template with IMDSv2 required. It does not cover Kubernetes/RBAC, cluster endpoint, quota policy, or customer-plan behavior. | [`test255.md`](../test/test255.md): workload service probe through EKS |
 | `aws-ec2-autoscaling` | `modules/ec2-autoscaling` | `aws-virtual-machine-service`, possible GPU compute / no scenario for VM/GPU | Merged PR #483 adds source-only policy for `0 <= min <= desired <= max <= 3`, one same-plan launch template with a fixed `latest_version`, known AMI ID, `t3.micro`, and IMDSv2. Open PR #486 proposes encrypted root-volume plan checks; AMI provenance, scoped instance role, guest health, update/recovery, complete price, and Nova dispatch remain unproven. | [`test244.md`](../test/test244.md): zero-capacity ASG reached service-valid state; merged PR #485 [`test485.md`](../test/test485.md): direct isolated `t3.micro` capacity 1→2→1, EC2 checks, and teardown; PR #486 [`test486.md`](../test/test486.md): encrypted root-volume create/health/teardown cycles. Both test EC2 records are terminated. |
 | `aws-vpc-private-network` | `modules/vpc` | `aws-private-connectivity` / `hybrid-network` | Security-group ingress checks only; no VPC topology, egress, endpoint, route, or NAT policy | [`test244.md`](../test/test244.md) VPC for EKS; [`test263.md`](../test/test263.md) includes routed topology |
