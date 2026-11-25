@@ -68,7 +68,9 @@ direct-test-versus-Nova-dispatch boundaries explicit.
 - [x] The 26 architecture entries and 30 Terraform roots remain intact.
 - [x] PR #486's cleanup hold and protected artifacts remain explicit.
 - [x] Documentation conventions, matrix integrity, and diff checks pass.
-- [ ] Final-head CI passes before merge.
+- [x] Final-head CI passed all seven checks on commit `cd21a10` in run
+  `45518418997`; the ticket update below will also receive a fresh final-head
+  CI run before merge.
 - [x] No AWS, hosted control-plane, remote-state, lock, customer, or protected
   local resource is changed.
 
@@ -76,8 +78,9 @@ direct-test-versus-Nova-dispatch boundaries explicit.
 
 Canonical source, hosted-release, direct-test, and lifecycle status has been
 reconciled through PR #493. `ticket493.md` now reflects the completed apply and
-destroy and the actual merge. Local documentation checks are complete; final
-PR #494 CI must pass before merge.
+destroy and the actual merge. Local documentation checks and all seven checks
+on commit `cd21a10` passed; this ticket-only evidence update requires one final
+CI run before merge.
 
 ## Tests / validation performed
 
@@ -89,6 +92,8 @@ PR #494 CI must pass before merge.
 - `git diff --cached --check`: passed.
 - `GITHUB_PR_NUMBER=494 python3 scripts/check_doc_conventions.py`: passed.
 - Capability matrix count: 26 architecture entries and 30 Terraform roots.
+- `gh pr checks 494 --watch --interval 120`: all seven checks passed in run
+  `45518418997` on commit `cd21a10062367bd00bbb4375f22e3d6d6072234e`.
 - Initial CI run `45516630624` failed the docs-conventions job because the
   new ticket file was not yet committed in the PR diff. The ticket is now
   staged with the full documentation update; final-head CI is pending.
