@@ -7,13 +7,21 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-25
 
+The next major engineering goal is registered in the
+[AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
+It is queued only: this handoff and its existing Nova acceptance gates remain
+the active priority and are not reduced or replaced. Start the queued goal only
+after this handoff records genuine completion with its required evidence.
+
 The source baseline for this reconciliation is backend `main` at
-`e7b697127691f8454e1f468a562338e6276957b4` (PR #501). Open draft PR #502
-adds assumption-bound NAT/network pricing and passed all seven final-head
-checks in run [45562393129](https://github.com/Bepoadewale/davdeploy/actions/runs/45562393129).
-Open draft PR #503 adds source-only bounded Lambda function policy; local
-regression tests pass and its final-head checks are pending. Neither PR is
-merged or deployed. The last
+`f0bc3b2d7effb59993b507f26d82c427a962619b` (PR #502). PR #502 adds
+assumption-bound NAT/network pricing and is merged after all seven checks
+passed on head `86b4b89` in run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+It is source-only and changes no AWS resources or hosted runtime. PR #503 adds
+source-only bounded Lambda function policy; its prior head passed all seven
+checks and automated review, and its branch refresh against this main is in
+progress. Checks on the refreshed head are pending. The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -30,6 +38,12 @@ NAT gateway, and Elastic IP bindings. Their final-head checks pass. These
 packages do not change AWS workloads or the hosted runtime. PR #500's final
 head passed all seven checks in
 [run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
+
+Merged PR #502 adds source-only monthly pricing for bounded public NAT Gateway
+hours, data processing, associated public IPv4, declared internet egress, and
+cross-AZ transfer. All seven checks passed on final PR head `86b4b89` in CI
+run [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+The PR changes no AWS resource, hosted state, or runtime.
 
 PR #486 remains open at head
 `bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in

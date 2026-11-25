@@ -810,6 +810,16 @@
               }
             ]
           },
+          "vpc_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VpcPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workload_type": {
             "anyOf": [
               {
@@ -1032,6 +1042,32 @@
           "maximum"
         ],
         "title": "MonthlyUsageRange",
+        "type": "object"
+      },
+      "NatGatewayPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Monthly billable quantities for one exact planned public NAT gateway.",
+        "properties": {
+          "monthly_available_hours": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_cross_az_payload_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_data_processed_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_available_hours",
+          "monthly_data_processed_gb",
+          "monthly_internet_egress_gb",
+          "monthly_cross_az_payload_gb"
+        ],
+        "title": "NatGatewayPricingUsageAssumptions",
         "type": "object"
       },
       "OnboardingRequest": {
@@ -1469,6 +1505,26 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VpcPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Explicit usage bounds keyed by exact public NAT Gateway plan address.",
+        "properties": {
+          "nat_gateways": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NatGatewayPricingUsageAssumptions"
+            },
+            "maxProperties": 10,
+            "minProperties": 1,
+            "title": "Nat Gateways",
+            "type": "object"
+          }
+        },
+        "required": [
+          "nat_gateways"
+        ],
+        "title": "VpcPricingUsageAssumptions",
         "type": "object"
       }
     }

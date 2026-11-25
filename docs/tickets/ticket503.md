@@ -14,7 +14,10 @@ control plane.
 
 ## Current repo state
 
-- Backend `main` is `e7b697127691f8454e1f468a562338e6276957b4` (PR #501).
+- Backend `main` was `e7b697127691f8454e1f468a562338e6276957b4` (PR #501)
+  when this package began. PR #502 has since merged as
+  `f0bc3b2d7effb59993b507f26d82c427a962619b`; this branch is being refreshed
+  against that main before final validation.
 - `modules/lambda-service` supplies a ZIP file, role ARN, handler, and runtime;
   it defaults to Python 3.12 and a 30-second timeout. The pricing evaluator
   already limits Lambda pricing to ZIP packages, one architecture, 128–10,240
@@ -75,7 +78,7 @@ control plane.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [ ] Required GitHub checks passed on the current final PR head.
+- [ ] Required GitHub checks passed on the refreshed final PR head.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -91,7 +94,8 @@ commit `5924d07` in
 [CI run 45568122045](https://github.com/Bepoadewale/davdeploy/actions/runs/45568122045).
 Automated review findings for mixed IAM trust principals and unknown KMS keys
 were fixed with regression coverage. The hardened final PR head awaits CI and
-review refresh; merge remains pending.
+review refresh against the main branch that now includes PR #502; merge remains
+pending.
 
 ## Evidence files produced
 

@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from botocore.exceptions import ClientError
-from davdeploy.domain import RdsPricingUsageAssumptions
+from davdeploy.domain import RdsPricingUsageAssumptions, VpcPricingUsageAssumptions
 from davdeploy.generated_plan_pricing import (
     AwsPriceListCatalog,
     GeneratedPlanPricingEvidence,
@@ -341,6 +341,48 @@ class FakePriceList:
         return {"PriceList": products, "NextToken": self.next_token}
 
 
+class FakeVpcPriceList:
+    def __init__(self):
+        self.calls = []
+
+    def get_products(self, **kwargs):
+        self.calls.append(kwargs)
+        filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        service = kwargs["ServiceCode"]
+        if service == "AmazonEC2" and filters.get("groupDescription") == "Hourly charge for NAT Gateways":
+            family, unit, price, sku = "NAT Gateway", "Hrs", "0.045", "nat-hours"
+        elif service == "AmazonEC2" and "per GB data processed by NatGateways" in filters.get("groupDescription", ""):
+            family, unit, price, sku = "NAT Gateway", "GB", "0.045", "nat-bytes"
+        elif service == "AmazonVPC":
+            family, unit, price, sku = None, "Hrs", "0.005", "public-ipv4"
+        elif service == "AWSDataTransfer" and filters.get("transferType") == "IntraRegion":
+            family, unit, price, sku = "Data Transfer", "GB", "0.01", "regional-transfer"
+        elif service == "AWSDataTransfer":
+            family, unit, price, sku = "Data Transfer", "GB", "0.09", "internet-egress"
+        else:
+            raise AssertionError(f"unexpected VPC pricing query: {service} {filters}")
+        attributes = {key: value for key, value in filters.items() if key != "productFamily"}
+        product = {
+            "product": {"sku": sku, "productFamily": family, "attributes": attributes},
+            "serviceCode": service,
+            "publicationDate": "2026-11-13T12:00:00Z",
+            "terms": {"OnDemand": {"offer": {
+                "sku": sku,
+                "effectiveDate": "2026-11-01T00:00:00Z",
+                "priceDimensions": {"dimension": {
+                    "beginRange": "0", "endRange": "Inf", "unit": unit,
+                    "pricePerUnit": {"USD": price},
+                }},
+            }}},
+        }
+        return {"PriceList": [json.dumps(product)]}
+
+
+class MissingVpcPriceList:
+    def get_products(self, **kwargs):
+        return {"PriceList": []}
+
+
 class FakeS3PriceList:
     def __init__(self):
         self.calls = []
@@ -410,6 +452,7 @@ def evaluate(
     rds_usage_assumptions=None,
     serverless_usage_assumptions=None,
     dynamodb_usage_assumptions=None,
+    vpc_usage_assumptions=None,
     catalog_client=None,
 ):
     client = catalog_client or client or FakePriceList()
@@ -426,6 +469,7 @@ def evaluate(
                 rds_usage_assumptions=rds_usage_assumptions,
                 serverless_usage_assumptions=serverless_usage_assumptions,
                 dynamodb_usage_assumptions=dynamodb_usage_assumptions,
+                vpc_usage_assumptions=vpc_usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -488,6 +532,7 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     legacy.pop("rds_usage_assumptions")
     legacy.pop("serverless_usage_assumptions")
     legacy.pop("dynamodb_usage_assumptions")
+    legacy.pop("vpc_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -884,7 +929,6 @@ def test_price_api_error_is_unavailable_and_never_uses_fixture_price():
     [
         ("aws_s3_bucket", {"bucket": "has-variable-storage-and-requests"}),
         ("aws_instance", {"instance_type": "t4g.small", "ami": "ami-x"}),
-        ("aws_internet_gateway", {"vpc_id": "vpc-123"}),
         ("aws_ebs_volume", ebs_values(type="gp2")),
         ("aws_ebs_volume", ebs_values(iops=6000)),
         ("aws_ebs_volume", ebs_values(throughput=250)),
@@ -1057,6 +1101,381 @@ def test_s3_without_usage_assumptions_remains_incomplete_and_skips_catalog():
     assert client.calls == []
 
 
+def nat_gateway_plan(*, connectivity_type="public", extra_resources=()):
+    nat = {
+        "connectivity_type": connectivity_type,
+        "allocation_id": "eipalloc-nat-test",
+        "secondary_allocation_ids": [],
+    }
+    eip = {"id": "eipalloc-nat-test", "domain": "vpc"}
+    return plan(
+        resource_type="terraform_data",
+        resource_values={"input": None},
+        extra_resources=(
+            resource("aws_eip.nat", "aws_eip", eip),
+            resource("aws_nat_gateway.nat", "aws_nat_gateway", nat),
+            *extra_resources,
+        ),
+    )
+
+
+NAT_USAGE = {
+    "nat_gateways": {
+        "aws_nat_gateway.nat": {
+            "monthly_available_hours": {"minimum": 720, "maximum": 720},
+            "monthly_data_processed_gb": {"minimum": 100, "maximum": 100},
+            "monthly_internet_egress_gb": {"minimum": 25, "maximum": 25},
+            "monthly_cross_az_payload_gb": {"minimum": 10, "maximum": 10},
+        }
+    }
+}
+
+
+def test_nat_gateway_pricing_covers_hours_processing_ipv4_egress_and_cross_az():
+    client = FakeVpcPriceList()
+    result, _ = evaluate(
+        nat_gateway_plan(), catalog_client=client, vpc_usage_assumptions=NAT_USAGE
+    )
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.monthly_low_minor == 4_195
+    assert result.monthly_high_minor == 4_295
+    assert result.approval_eligible is True
+    assert len(result.lines) == 5
+    assert len([line for line in result.lines if "public IPv4" in line.description]) == 1
+    cross_az = next(line for line in result.lines if "Cross-AZ" in line.description)
+    assert cross_az.quantity == cross_az.quantity_max == 20
+    assert cross_az.unit_price_usd == "0.01"
+    assert all(line.catalog_product_sha256 for line in result.lines)
+    manifest = result.as_manifest_document()
+    assert manifest["version"] == 8
+    assert manifest["vpc_usage_assumptions"] == NAT_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+    assert pricing_evidence_is_approval_eligible(
+        manifest,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256,
+            vpc_usage_assumptions=NAT_USAGE,
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+def test_complete_vpc_topology_prices_nat_and_treats_internet_gateway_as_zero_direct_charge():
+    topology = (
+        resource("aws_vpc.main", "aws_vpc", {"id": "vpc-main"}),
+        resource("aws_internet_gateway.main", "aws_internet_gateway", {"vpc_id": "vpc-main"}),
+        resource("aws_subnet.public", "aws_subnet", {"id": "subnet-public", "vpc_id": "vpc-main"}),
+        resource("aws_subnet.private", "aws_subnet", {"id": "subnet-private", "vpc_id": "vpc-main"}),
+        resource("aws_route_table.public", "aws_route_table", {"vpc_id": "vpc-main"}),
+        resource("aws_route_table.private", "aws_route_table", {"vpc_id": "vpc-main"}),
+        resource("aws_route_table_association.public", "aws_route_table_association", {"subnet_id": "subnet-public"}),
+        resource("aws_route_table_association.private", "aws_route_table_association", {"subnet_id": "subnet-private"}),
+        resource("aws_route.public_default", "aws_route", {"route_table_id": "rtb-public"}),
+        resource("aws_route.private_default", "aws_route", {"route_table_id": "rtb-private"}),
+    )
+    result, _ = evaluate(
+        nat_gateway_plan(extra_resources=topology),
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=NAT_USAGE,
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+    assert not any(finding.code == "resource_pricing_unavailable" for finding in result.findings)
+
+
+def test_nat_gateway_without_usage_assumptions_blocks_before_price_lookup():
+    client = FakeVpcPriceList()
+    result, _ = evaluate(nat_gateway_plan(), catalog_client=client)
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert {finding.code for finding in result.findings} == {"vpc_usage_assumptions_missing"}
+    assert client.calls == []
+
+
+def test_nat_gateway_missing_regional_price_blocks_approval():
+    result, _ = evaluate(
+        nat_gateway_plan(),
+        catalog_client=MissingVpcPriceList(),
+        vpc_usage_assumptions=NAT_USAGE,
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert "regional_price_ambiguous" in {finding.code for finding in result.findings}
+
+
+def test_nat_gateway_unmatched_elastic_ip_blocks_approval():
+    document = nat_gateway_plan()
+    extra_eip = resource("aws_eip.unrelated", "aws_eip", {"id": "eipalloc-unrelated", "domain": "vpc"})
+    document["planned_values"]["root_module"]["resources"].append(extra_eip)
+    document["resource_changes"].append(change(
+        "aws_eip.unrelated", "aws_eip", extra_eip["values"]
+    ))
+    client = FakeVpcPriceList()
+    result, _ = evaluate(document, catalog_client=client, vpc_usage_assumptions=NAT_USAGE)
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "vpc_unbound_public_ipv4" in {finding.code for finding in result.findings}
+    assert client.calls == []
+
+
+def test_nat_gateway_duplicate_known_eip_ids_block_pricing():
+    document = nat_gateway_plan()
+    duplicate_eip = resource(
+        "aws_eip.duplicate", "aws_eip", {"id": "eipalloc-nat-test", "domain": "vpc"}
+    )
+    document["planned_values"]["root_module"]["resources"].append(duplicate_eip)
+    document["resource_changes"].append(
+        change("aws_eip.duplicate", "aws_eip", duplicate_eip["values"])
+    )
+    client = FakeVpcPriceList()
+
+    result, _ = evaluate(
+        document, catalog_client=client, vpc_usage_assumptions=NAT_USAGE
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "vpc_nat_shape_or_usage_unsupported" in {
+        finding.code for finding in result.findings
+    }
+    assert client.calls == []
+
+
+def test_nat_gateway_unsupported_eip_shape_blocks_pricing():
+    client = FakeVpcPriceList()
+    result, _ = evaluate(
+        nat_gateway_plan(connectivity_type="private"),
+        catalog_client=client,
+        vpc_usage_assumptions=NAT_USAGE,
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert "vpc_nat_shape_or_usage_unsupported" in {finding.code for finding in result.findings}
+    assert client.calls == []
+
+
+def test_nat_gateway_unknown_allocation_is_bound_by_configuration_reference():
+    document = nat_gateway_plan()
+    eip_values = document["planned_values"]["root_module"]["resources"][1]["values"]
+    eip_values["id"] = None
+    eip_change = next(item for item in document["resource_changes"] if item["type"] == "aws_eip")
+    eip_change["change"]["after"]["id"] = None
+    eip_change["change"]["after_unknown"]["id"] = True
+    nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
+    nat_values["allocation_id"] = None
+    nat_change = next(item for item in document["resource_changes"] if item["type"] == "aws_nat_gateway")
+    nat_change["change"]["after"]["allocation_id"] = None
+    nat_change["change"]["after_unknown"]["allocation_id"] = True
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": "aws_eip.nat", "expressions": {}},
+            {"address": "aws_nat_gateway.nat", "expressions": {
+                "allocation_id": {
+                    "references": ["aws_eip.nat.id", "aws_eip.nat"]
+                },
+            }},
+        ],
+        "module_calls": {},
+    }
+    result, _ = evaluate(
+        document, catalog_client=FakeVpcPriceList(), vpc_usage_assumptions=NAT_USAGE
+    )
+    assert result.status == PlanPricingStatus.COMPLETE
+
+
+def test_nat_gateway_module_relative_reference_binds_unknown_nat_and_eip_ids():
+    document = nat_gateway_plan()
+    module_eip_address = "module.network.aws_eip.nat"
+    module_nat_address = "module.network.aws_nat_gateway.nat"
+    eip_values = document["planned_values"]["root_module"]["resources"][1]["values"]
+    eip_values["id"] = None
+    nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
+    nat_values["allocation_id"] = None
+    for item in document["planned_values"]["root_module"]["resources"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = module_eip_address
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = module_nat_address
+    for item in document["resource_changes"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = module_eip_address
+            item["change"]["after"]["id"] = None
+            item["change"]["after_unknown"]["id"] = True
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = module_nat_address
+            item["change"]["after"]["allocation_id"] = None
+            item["change"]["after_unknown"]["allocation_id"] = True
+    document["configuration"]["root_module"] = {
+        "resources": [],
+        "module_calls": {
+            "network": {
+                "module": {
+                    "resources": [
+                        {"address": "aws_eip.nat", "expressions": {}},
+                        {
+                            "address": "aws_nat_gateway.nat",
+                            "expressions": {
+                                "allocation_id": {
+                                    "references": ["aws_eip.nat.id", "aws_eip.nat"]
+                                }
+                            },
+                        },
+                    ],
+                    "module_calls": {},
+                }
+            }
+        },
+    }
+    module_usage = {
+        "nat_gateways": {
+            module_nat_address: NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"]
+        }
+    }
+
+    result, _ = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=module_usage,
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+
+
+def test_nat_gateway_count_instance_resolves_its_configuration_reference():
+    document = nat_gateway_plan()
+    indexed_eip = "aws_eip.nat[0]"
+    indexed_nat = "aws_nat_gateway.nat[0]"
+    eip_values = document["planned_values"]["root_module"]["resources"][1]["values"]
+    eip_values["id"] = None
+    nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
+    nat_values["allocation_id"] = None
+    for item in document["planned_values"]["root_module"]["resources"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = indexed_eip
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = indexed_nat
+    for item in document["resource_changes"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = indexed_eip
+            item["change"]["after"]["id"] = None
+            item["change"]["after_unknown"]["id"] = True
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = indexed_nat
+            item["change"]["after"]["allocation_id"] = None
+            item["change"]["after_unknown"]["allocation_id"] = True
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": "aws_eip.nat", "expressions": {}},
+            {
+                "address": "aws_nat_gateway.nat",
+                "expressions": {
+                    "allocation_id": {
+                        "references": ["aws_eip.nat.id", "aws_eip.nat"]
+                    }
+                },
+            },
+        ],
+        "module_calls": {},
+    }
+    indexed_usage = {
+        "nat_gateways": {
+            indexed_nat: NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"]
+        }
+    }
+
+    result, _ = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=indexed_usage,
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+
+
+def test_nat_gateway_unknown_secondary_allocations_block_pricing():
+    document = nat_gateway_plan()
+    nat_change = next(
+        item for item in document["resource_changes"]
+        if item["type"] == "aws_nat_gateway"
+    )
+    nat_change["change"]["after_unknown"]["secondary_allocation_ids"] = True
+    client = FakeVpcPriceList()
+
+    result, _ = evaluate(
+        document, catalog_client=client, vpc_usage_assumptions=NAT_USAGE
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "vpc_nat_shape_or_usage_unsupported" in {
+        finding.code for finding in result.findings
+    }
+    assert client.calls == []
+
+
+def test_nat_gateway_unknown_allocation_with_wrong_reference_blocks_pricing():
+    document = nat_gateway_plan()
+    nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
+    nat_values["allocation_id"] = None
+    nat_change = next(item for item in document["resource_changes"] if item["type"] == "aws_nat_gateway")
+    nat_change["change"]["after"]["allocation_id"] = None
+    nat_change["change"]["after_unknown"]["allocation_id"] = True
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": "aws_eip.nat", "expressions": {}},
+            {"address": "aws_nat_gateway.nat", "expressions": {
+                "allocation_id": {"references": ["aws_eip.other.id"]},
+            }},
+        ],
+        "module_calls": {},
+    }
+    client = FakeVpcPriceList()
+    result, _ = evaluate(document, catalog_client=client, vpc_usage_assumptions=NAT_USAGE)
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "vpc_nat_shape_or_usage_unsupported" in {finding.code for finding in result.findings}
+    assert client.calls == []
+
+
+def test_vpc_usage_assumptions_are_bounded_and_keyed_by_exact_nat_address():
+    with pytest.raises(ValueError, match="NAT Gateway hours"):
+        VpcPricingUsageAssumptions.model_validate({"nat_gateways": {
+            "aws_nat_gateway.nat": {
+                **NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"],
+                "monthly_available_hours": {"minimum": 0, "maximum": 745},
+            }
+        }})
+    with pytest.raises(ValueError, match="invalid NAT Gateway address"):
+        VpcPricingUsageAssumptions.model_validate({"nat_gateways": {
+            "aws_nat_gateway.extra.bad": NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"]
+        }})
+    with pytest.raises(ValueError):
+        VpcPricingUsageAssumptions.model_validate({"nat_gateways": {
+            "aws_nat_gateway.nat": {
+                **NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"],
+                "unit_price_usd": "0.0001",
+            }
+        }})
+
+
+def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"vpc_pricing_usage_assumptions": NAT_USAGE}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.vpc_usage_assumptions == NAT_USAGE
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256
+    ).pricing_context_sha256
+
+
 def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assumptions = {
         "monthly_storage_gb": {"minimum": 10, "maximum": 20},
@@ -1075,7 +1494,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 7
+    assert manifest["version"] == 8
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,

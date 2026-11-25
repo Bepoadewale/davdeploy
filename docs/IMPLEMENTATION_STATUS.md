@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`e7b697127691f8454e1f468a562338e6276957b4` (PR #501); hosted runtime remains
+`f0bc3b2d7effb59993b507f26d82c427a962619b` (PR #502); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -11,12 +11,13 @@ found all six `davdeploy-*` Lambda packages on code hash
 `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
 HTTP 200. This is deployed control-plane evidence only.
 
-Open draft PR #502 adds assumption-bound NAT/network pricing and passed all
-seven final-head checks in run
-[45562393129](https://github.com/Bepoadewale/davdeploy/actions/runs/45562393129).
-Open draft PR #503 adds source-only generated Lambda function bounds; focused
-local policy tests pass and final-head GitHub checks are pending. Neither PR is
-merged or deployed, and neither changes AWS resources or hosted runtime.
+Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
+final-head checks in run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+Open PR #503 adds source-only generated Lambda function bounds; its prior head
+passed all seven checks and automated review. Checks after refreshing its branch
+against current main are pending. Neither package changes AWS resources or
+hosted runtime.
 
 Merged PRs #498–#500 add source-only AWS Batch Fargate, EKS, and VPC
 generated-plan bounds. PR #500's final head passed all seven checks in
@@ -24,6 +25,12 @@ generated-plan bounds. PR #500's final head passed all seven checks in
 These changes do not alter the hosted runtime or AWS workloads. The last
 recorded hosted release and health observation above remain the PR #420
 deployment; they were not repeated for this source reconciliation.
+
+Merged PR #502 adds source-only, assumption-bound NAT Gateway pricing to the
+generated-plan evaluator. Focused pricing and revision-lifecycle tests pass
+locally, and all seven checks passed on final PR head `86b4b89` in CI run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+It changes neither the hosted runtime nor AWS resources.
 
 PR #486 remains open at `bb374e8ec06d613a963f1768e71b91175a416898`, with all
 seven checks passing in run `45545915711`; clean-room generated artifact,
