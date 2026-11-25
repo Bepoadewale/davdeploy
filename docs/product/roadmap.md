@@ -1,5 +1,11 @@
 # Product Roadmap
 
+The active infrastructure execution priority is the [Nova-led composed AWS
+goal](COMPOSED_EXECUTION_GOAL.md). The [AI infrastructure and operations
+platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md) is registered as the next
+major goal, queued until Nova's acceptance criteria are genuinely met. This
+roadmap entry does not authorize early implementation or cloud execution.
+
 1. **Automatic infrastructure programme:** composed capability/module plans → natural-language understanding → universal and specialist module families → live operations → commercial launch. See the [nine-PR programme](automatic-infrastructure-program.md).
 2. **V1 foundation:** local intent → plan → policy → approval → bounded execution → observation → destruction.
 2. **BYOC execution:** scoped AWS role assumption, live inventory and pricing, profile-specific Terraform rendering, GitHub App, desired-state publication and GitOps observation.
