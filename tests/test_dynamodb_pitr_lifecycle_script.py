@@ -176,4 +176,3 @@ def test_cleanup_retries_delete_while_tags_are_updating(monkeypatch):
     assert fake.deleted == "test-restored"
     assert sleeps == [2, 4]
     assert fake.table is None
-

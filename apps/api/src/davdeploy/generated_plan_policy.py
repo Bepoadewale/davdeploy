@@ -181,12 +181,12 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
     ),
     "aws_rds_cluster_instance": (("publicly_accessible",),),
     "aws_redshift_cluster": (("publicly_accessible",), ("encrypted",)),
-    "aws_ebs_volume": (("encrypted",),),
-    "aws_instance": (
+    "aws_launch_template": (
         ("metadata_options", "http_endpoint"),
         ("metadata_options", "http_tokens"),
     ),
-    "aws_launch_template": (
+    "aws_ebs_volume": (("encrypted",),),
+    "aws_instance": (
         ("metadata_options", "http_endpoint"),
         ("metadata_options", "http_tokens"),
     ),
@@ -837,6 +837,60 @@ def _planned_resources(document: dict[str, Any]) -> tuple[dict[str, Any], ...]:
         for resource in resources
         if isinstance(resource, dict) and resource.get("mode", "managed") == "managed"
     )
+
+
+def _planned_data_resources(document: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    inventories = []
+    prior_state = document.get("prior_state")
+    prior_values = prior_state.get("values") if isinstance(prior_state, dict) else None
+    prior_root = prior_values.get("root_module") if isinstance(prior_values, dict) else None
+    if isinstance(prior_root, dict):
+        inventories.append(prior_root)
+    planned_values = document.get("planned_values")
+    planned_root = (
+        planned_values.get("root_module") if isinstance(planned_values, dict) else None
+    )
+    if isinstance(planned_root, dict):
+        inventories.append(planned_root)
+    resources_by_address: dict[str, dict[str, Any]] = {}
+    for root in inventories:
+        modules = [root]
+        while modules:
+            module = modules.pop()
+            module_resources = module.get("resources", [])
+            children = module.get("child_modules", [])
+            if (
+                not isinstance(module_resources, list)
+                or any(not isinstance(item, dict) for item in module_resources)
+                or not isinstance(children, list)
+                or any(not isinstance(item, dict) for item in children)
+            ):
+                raise GeneratedPlanPolicyError("planned data-source inventory is malformed")
+            for item in module_resources:
+                if item.get("mode") != "data":
+                    continue
+                address = item.get("address")
+                if isinstance(address, str):
+                    resources_by_address[address] = item
+            modules.extend(children)
+            if len(resources_by_address) > 2_000:
+                raise GeneratedPlanPolicyError("planned data-source inventory exceeds its limit")
+    return tuple(resources_by_address.values())
+
+
+def _expression_references(expression: Any) -> tuple[str, ...]:
+    references: list[str] = []
+    pending = [expression]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            refs = value.get("references")
+            if isinstance(refs, list):
+                references.extend(item for item in refs if isinstance(item, str))
+            pending.extend(child for key, child in value.items() if key != "references")
+        elif isinstance(value, list):
+            pending.extend(value)
+    return tuple(references)
 
 
 def _check_proposal_inventory(
@@ -2840,6 +2894,26 @@ def _check_autoscaling_groups(
         if item.get("type") == "aws_launch_template"
         and isinstance(item.get("address"), str)
     }
+    ami_sources = {
+        item.get("address"): item
+        for item in _planned_data_resources(document)
+        if item.get("type") == "aws_ami" and isinstance(item.get("address"), str)
+    }
+    ami_changes = {
+        item.get("address"): item
+        for item in document.get("resource_changes", [])
+        if isinstance(item, dict)
+        and item.get("mode") == "data"
+        and item.get("type") == "aws_ami"
+        and isinstance(item.get("address"), str)
+    }
+    template_changes = {
+        item.get("address"): item
+        for item in document.get("resource_changes", [])
+        if isinstance(item, dict)
+        and item.get("type") == "aws_launch_template"
+        and isinstance(item.get("address"), str)
+    }
     configured = _configured_resources(document)
     for group in resources:
         if group.get("type") != "aws_autoscaling_group":
@@ -2944,8 +3018,152 @@ def _check_autoscaling_groups(
             )
 
         template = templates[next(iter(template_addresses))]
+        template_change = template_changes.get(template.get("address"))
+        template_change_values = (
+            template_change.get("change") if isinstance(template_change, dict) else None
+        )
+        after_unknown = (
+            template_change_values.get("after_unknown")
+            if isinstance(template_change_values, dict)
+            else None
+        )
+        root_unknown_paths = (
+            ("block_device_mappings", "device_name"),
+            ("block_device_mappings", "ebs", "delete_on_termination"),
+            ("block_device_mappings", "ebs", "encrypted"),
+            ("block_device_mappings", "ebs", "volume_size"),
+            ("block_device_mappings", "ebs", "volume_type"),
+        )
+        if not isinstance(after_unknown, dict) or not _valid_unknown_tree(after_unknown):
+            _deny(
+                findings,
+                "autoscaling_root_volume_unverifiable",
+                template.get("address"),
+                "The Auto Scaling root EBS settings could not be verified from the plan.",
+            )
+        elif any(_path_contains_unknown(after_unknown, path) for path in root_unknown_paths):
+            _deny(
+                findings,
+                "autoscaling_root_volume_unverifiable",
+                template.get("address"),
+                "The Auto Scaling root EBS settings must be known in the plan.",
+            )
         template_values = template.get("values")
         template_values = template_values if isinstance(template_values, dict) else {}
+        mappings = template_values.get("block_device_mappings")
+        mapping = mappings[0] if isinstance(mappings, list) and len(mappings) == 1 else None
+        ebs_mappings = mapping.get("ebs") if isinstance(mapping, dict) else None
+        ebs = ebs_mappings[0] if isinstance(ebs_mappings, list) and len(ebs_mappings) == 1 else None
+        template_configuration = configured.get(template.get("address"))
+        template_expressions = (
+            template_configuration.get("expressions")
+            if isinstance(template_configuration, dict)
+            else None
+        )
+        image_references = _expression_references(
+            template_expressions.get("image_id")
+            if isinstance(template_expressions, dict)
+            else None
+        )
+        mapping_expressions = (
+            template_expressions.get("block_device_mappings")
+            if isinstance(template_expressions, dict)
+            else None
+        )
+        mapping_expression = (
+            mapping_expressions[0]
+            if isinstance(mapping_expressions, list) and len(mapping_expressions) == 1
+            else None
+        )
+        device_expression = (
+            mapping_expression.get("device_name")
+            if isinstance(mapping_expression, dict)
+            else None
+        )
+        device_references = _expression_references(device_expression)
+        root_device_is_bound = False
+        for ami_address, ami_source in ami_sources.items():
+            ami_values = ami_source.get("values")
+            ami_change = ami_changes.get(ami_address)
+            ami_change_values = ami_change.get("change") if isinstance(ami_change, dict) else None
+            ami_after_unknown = (
+                ami_change_values.get("after_unknown")
+                if isinstance(ami_change_values, dict)
+                else {} if ami_change is None else None
+            )
+            if (
+                not isinstance(ami_values, dict)
+                or not isinstance(ami_values.get("id"), str)
+                or not isinstance(ami_values.get("root_device_name"), str)
+                or not isinstance(ami_after_unknown, dict)
+                or not _valid_unknown_tree(ami_after_unknown)
+                or _path_contains_unknown(ami_after_unknown, ("id",))
+                or _path_contains_unknown(ami_after_unknown, ("root_device_name",))
+            ):
+                continue
+            image_is_bound = any(
+                _reference_targets_resource(reference, ami_address, "aws_ami")
+                and reference.endswith(".id")
+                for reference in image_references
+            )
+            device_is_bound = any(
+                _reference_targets_resource(reference, ami_address, "aws_ami")
+                and reference.endswith(".root_device_name")
+                for reference in device_references
+            )
+            if (
+                image_is_bound
+                and device_is_bound
+                and ami_values.get("id") == template_values.get("image_id")
+                and ami_values.get("root_device_name")
+                == (mapping.get("device_name") if isinstance(mapping, dict) else None)
+            ):
+                root_device_is_bound = True
+                break
+        if not root_device_is_bound:
+            _deny(
+                findings,
+                "autoscaling_root_device_unverifiable",
+                template.get("address"),
+                "The launch-template image and root device must be bound to the same verified AMI metadata.",
+            )
+        if (
+            not isinstance(mapping, dict)
+            or not isinstance(mapping.get("device_name"), str)
+            or not isinstance(ebs, dict)
+        ):
+            _deny(
+                findings,
+                "autoscaling_root_volume_unverifiable",
+                template.get("address"),
+                "The Auto Scaling launch template must define one known root EBS mapping.",
+            )
+        else:
+            root_settings = (
+                ebs.get("encrypted"),
+                ebs.get("delete_on_termination"),
+                ebs.get("volume_type"),
+                ebs.get("volume_size"),
+            )
+            if any(value is None for value in root_settings):
+                _deny(
+                    findings,
+                    "autoscaling_root_volume_unverifiable",
+                    template.get("address"),
+                    "The Auto Scaling root EBS encryption, retention, and size settings must be known.",
+                )
+            elif (
+                ebs.get("encrypted") != "true"
+                or ebs.get("delete_on_termination") != "true"
+                or ebs.get("volume_type") != "gp3"
+                or ebs.get("volume_size") != 8
+            ):
+                _deny(
+                    findings,
+                    "autoscaling_root_volume_unsafe",
+                    template.get("address"),
+                    "The Auto Scaling root EBS volume must be encrypted gp3, 8 GiB, and deleted with its instance.",
+                )
         image_id = template_values.get("image_id")
         if not isinstance(image_id, str) or not re.fullmatch(r"ami-[0-9a-fA-F]{8,17}", image_id):
             _deny(
