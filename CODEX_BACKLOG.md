@@ -13,9 +13,9 @@ final-head CI passed all seven checks in
 [run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
 PR #509 adds source-only, trusted-usage-bound CloudWatch Logs ingestion/storage
 prices for explicitly configured Batch `awslogs`; its final-head and merged-main
-CI passed. Draft PR #510 adds bounded ECR standard-storage pricing for exact
+CI passed. Draft PR #511 adds bounded ECR standard-storage pricing for exact
 planned repositories while leaving material ECR transfer and companion costs
-approval-blocking. One PR, #510, is open. The Terraform run monitor has 67
+approval-blocking. One PR, #511, is open. The Terraform run monitor has 67
 records and zero active operations. AWS identity was rechecked as account
 `654654474502`; this documentation and pricing work made no AWS or
 hosted-control-plane change.

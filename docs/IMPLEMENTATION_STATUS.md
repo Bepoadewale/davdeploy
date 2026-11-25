@@ -22,7 +22,7 @@ checks in run
 [45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335),
 and merged-main CI passed in run
 [45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
-Draft PR #510 adds a bounded standard-storage price for each explicitly
+Draft PR #511 adds a bounded standard-storage price for each explicitly
 addressed private ECR repository. ECR transfer, archival, signing, replication,
 networking, public IPv4, and other material costs still block approval. No AWS
 workload or hosted-control-plane resource changed.

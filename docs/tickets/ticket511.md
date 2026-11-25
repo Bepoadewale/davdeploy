@@ -1,8 +1,8 @@
-# ticket510
+# ticket511
 
-Status: implementation in progress in draft PR #510.
+Status: implementation in progress in draft PR #511.
 
-PR: [#510 — feat: price bounded private ECR standard storage](https://github.com/Bepoadewale/davdeploy/pull/510) (draft)
+PR: [#511 — feat: price bounded private ECR standard storage](https://github.com/Bepoadewale/davdeploy/pull/511) (draft)
 Branch: `feat/ecr-storage-pricing-510`
 
 ## Problem / goal
@@ -98,20 +98,19 @@ List. This extends Nova planning evidence only; it does not enable execution.
   deployed pricing evidence.
 - `make verify`: 1,933 tests, Ruff, Actions configuration, OpenAPI snapshot,
   and Docker Compose validation passed.
-- `GITHUB_PR_NUMBER=510 python3 scripts/check_doc_conventions.py`: pending
-  rerun after ticket format correction.
+- `GITHUB_PR_NUMBER=511 python3 scripts/check_doc_conventions.py`: passed.
 - Final-head PR CI, review, and merge remain pending.
 
 ## Evidence files produced
 
-No `docs/test/test510.md` is expected because this package performs no customer
+No `docs/test/test511.md` is expected because this package performs no customer
 workload test or cloud lifecycle.
 
 ## Boundaries
 
 Source and test evidence only. No regional usage or price was presented as
 customer billing evidence, and no ECR repository was created or changed. No
-`docs/test/test510.md` is expected because this package performs no customer
+`docs/test/test511.md` is expected because this package performs no customer
 workload test or cloud lifecycle.
 
 The ECR price model is partial and is not a bill forecast or spending cap.

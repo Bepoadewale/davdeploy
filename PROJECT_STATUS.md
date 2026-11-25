@@ -26,7 +26,7 @@ merged-main CI passed in run
 [45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
 The Batch estimate remains incomplete and approval-ineligible while image
 storage/transfer, networking, public IPv4, and other material costs remain
-unpriced. Draft PR #510 adds a bounded regional ECR standard-storage line for
+unpriced. Draft PR #511 adds a bounded regional ECR standard-storage line for
 exact planned repositories; transfer, archival, signing, replication, and
 other material costs remain blockers. None of these PRs enables Nova dispatch
 or changes AWS resources or hosted-control-plane infrastructure.
