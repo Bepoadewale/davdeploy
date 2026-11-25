@@ -26,6 +26,8 @@ from davdeploy.generated_plan_pricing import (
 )
 
 REGION = "us-east-1"
+ECR_ACCOUNT_ID = "123456789012"
+ECR_REPOSITORY_NAME = "davdeploy-test-images"
 CAPTURED_AT = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 PERSISTED_CONTEXT_SHA256 = "a" * 64
 
@@ -1589,7 +1591,10 @@ def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
     ).pricing_context_sha256
 
 
-def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=False):
+def batch_plan(
+    *, runtime_platform=None, ephemeral_storage=None, explicit_logs=False,
+    private_ecr=False, image_uri=None, ecr_registry_id=ECR_ACCOUNT_ID,
+):
     compute = {
         "type": "MANAGED", "state": "ENABLED", "compute_resources": [{
             "type": "FARGATE", "max_vcpus": 6,
@@ -1601,7 +1606,11 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=F
         }],
     }
     properties = {
-        "image": "public.ecr.aws/library/busybox@sha256:" + "a" * 64,
+        "image": image_uri or (
+            f"{ECR_ACCOUNT_ID}.dkr.ecr.{REGION}.amazonaws.com/{ECR_REPOSITORY_NAME}@sha256:"
+            + "a" * 64 if private_ecr
+            else "public.ecr.aws/library/busybox@sha256:" + "a" * 64
+        ),
         "resourceRequirements": [
             {"type": "VCPU", "value": "0.25"},
             {"type": "MEMORY", "value": "512"},
@@ -1629,6 +1638,18 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=F
         resource("aws_batch_job_queue.jobs", "aws_batch_job_queue", queue),
         resource("aws_batch_job_definition.jobs", "aws_batch_job_definition", job),
     ]
+    if private_ecr:
+        extra_resources.append(resource(
+            "aws_ecr_repository.images",
+            "aws_ecr_repository",
+            {
+                "name": ECR_REPOSITORY_NAME,
+                "registry_id": ecr_registry_id,
+                "image_tag_mutability": "IMMUTABLE",
+                "force_delete": False,
+                "encryption_configuration": [{"encryption_type": "AES256", "kms_key": None}],
+            },
+        ))
     if explicit_logs:
         extra_resources.append(resource(
             "aws_cloudwatch_log_group.batch",
@@ -1648,7 +1669,8 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=F
 
 def ecr_plan(**overrides):
     values = {
-        "name": "davdeploy-test-images",
+        "name": ECR_REPOSITORY_NAME,
+        "registry_id": ECR_ACCOUNT_ID,
         "image_tag_mutability": "IMMUTABLE",
         "force_delete": False,
         "encryption_configuration": [{"encryption_type": "AES256", "kms_key": None}],
@@ -1826,6 +1848,65 @@ def test_ecr_standard_storage_uses_exact_address_regional_price_and_bound_usage(
         ],
         "MaxResults": 100,
     }]
+
+
+def test_batch_private_ecr_image_must_bind_to_same_plan_account_region_and_priced_repository():
+    valid_usage = {
+        "jobs": BATCH_USAGE["jobs"],
+    }
+    result, _ = evaluate(
+        batch_plan(private_ecr=True),
+        batch_usage_assumptions=valid_usage,
+        ecr_usage_assumptions=ECR_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    codes = {item.code for item in result.findings}
+    assert "batch_image_repository_unbound" not in codes
+    assert "batch_image_storage_unpriced" not in codes
+    assert "ecr_supporting_costs_unpriced" in codes
+    assert "batch_supporting_costs_unpriced" in codes
+    assert any(line.description == "Amazon ECR standard image storage" for line in result.lines)
+    assert not result.approval_eligible
+
+    wrong_registry, _ = evaluate(
+        batch_plan(private_ecr=True, ecr_registry_id="999999999999"),
+        batch_usage_assumptions=valid_usage,
+        ecr_usage_assumptions=ECR_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert "batch_image_repository_unbound" in {
+        item.code for item in wrong_registry.findings
+    }
+
+    cross_region_uri = (
+        f"{ECR_ACCOUNT_ID}.dkr.ecr.us-west-2.amazonaws.com/{ECR_REPOSITORY_NAME}"
+        "@sha256:" + "a" * 64
+    )
+    cross_region, _ = evaluate(
+        batch_plan(private_ecr=True, image_uri=cross_region_uri),
+        batch_usage_assumptions=valid_usage,
+        ecr_usage_assumptions=ECR_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert "batch_image_region_mismatch" in {
+        item.code for item in cross_region.findings
+    }
+
+    unpinned, _ = evaluate(
+        batch_plan(
+            private_ecr=True,
+            image_uri=(
+                f"{ECR_ACCOUNT_ID}.dkr.ecr.{REGION}.amazonaws.com/"
+                f"{ECR_REPOSITORY_NAME}:latest"
+            ),
+        ),
+        batch_usage_assumptions=valid_usage,
+        ecr_usage_assumptions=ECR_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert "batch_image_ecr_reference_invalid" in {
+        item.code for item in unpinned.findings
+    }
 
 
 def test_v9_pricing_manifest_remains_readable_and_normalizes_to_current_shape():
