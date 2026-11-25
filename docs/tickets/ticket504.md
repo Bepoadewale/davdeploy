@@ -79,20 +79,21 @@ current implementation. Prefer official vendor/project documentation.
 - [x] No Nova criterion is weakened and no new-goal implementation or cloud
   mutation occurs in this PR.
 - [x] Documentation conventions and diff checks pass.
-- [ ] Required PR checks pass on the final head.
+- [x] Required PR checks pass on the current final head.
 
 ## Acceptance status
 
 - [x] Goal document complete.
 - [x] Documentation links and queue ordering complete.
-- [ ] Required CI checks pass on the final PR head.
+- [x] Required CI checks pass on the final PR head.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
 
 `GITHUB_PR_NUMBER=504 python3 scripts/check_doc_conventions.py` passed.
-`git diff --check` passed. No executable behavior changes are in scope. Required
-GitHub checks are pending on the final PR head.
+`git diff --check` passed. No executable behavior changes are in scope. All
+seven required checks passed on final-head commit `8ee91feb` in
+[CI run 45566249082](https://github.com/Bepoadewale/davdeploy/actions/runs/45566249082).
 
 ## Evidence files produced
 
