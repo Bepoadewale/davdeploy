@@ -14,10 +14,11 @@ HTTP 200. This is deployed control-plane evidence only.
 Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
 final-head checks in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-Open PR #503 adds source-only generated Lambda function bounds; its prior head
-passed all seven checks and automated review. Checks after refreshing its branch
-against current main are pending. Neither package changes AWS resources or
-hosted runtime.
+Open PR #503 adds source-only generated Lambda function bounds. Refreshed head
+`fac74e4` passed all seven checks in run
+[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045),
+and automated review completed with no findings. Neither package changes AWS
+resources or hosted runtime.
 
 Merged PRs #498–#500 add source-only AWS Batch Fargate, EKS, and VPC
 generated-plan bounds. PR #500's final head passed all seven checks in

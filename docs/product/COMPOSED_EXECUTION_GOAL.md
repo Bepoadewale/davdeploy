@@ -19,9 +19,11 @@ assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 It is source-only and changes no AWS resources or hosted runtime. PR #503 adds
-source-only bounded Lambda function policy; its prior head passed all seven
-checks and automated review, and its branch refresh against this main is in
-progress. Checks on the refreshed head are pending. The last
+source-only bounded Lambda function policy; refreshed head
+`fac74e40625bd97ef3afe3219b03b7cd4d7369a9` passed all seven checks in run
+[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045),
+and automated review completed with no findings. It remains open, unmerged,
+and source-only. The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)

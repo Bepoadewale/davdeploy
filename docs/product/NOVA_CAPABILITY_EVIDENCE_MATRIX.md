@@ -5,16 +5,18 @@ Status snapshot: backend `main` at
 #502 adds source-only assumption-bound NAT/network pricing; all seven checks
 passed on final PR head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-Open PR #503 adds source-only Lambda function plan bounds. Its prior head passed
-all seven checks and automated review; checks on its refreshed branch are
-pending. Neither package changes hosted runtime or AWS resources. Merged PRs
+Open PR #503 adds source-only Lambda function plan bounds. Refreshed head
+`fac74e4` passed all seven checks in run
+[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045);
+automated review found no issues. Neither package changes hosted runtime or AWS
+resources. Merged PRs
 #492 and #496 record the bootstrapped growth strategy as roadmap-only; they
 change no product behavior or AWS resources. Merged PR #497 corrects the
 source-level Nova plan-only status; merged PRs #498 and #499 add source-only
 Batch and EKS generated-plan bounds, merged PR #500 adds bounded VPC topology
 and egress review, and merged PR #501 reconciles the evidence snapshot. Draft
-PR #502 adds assumption-bound NAT and network pricing in source; it is merged
-and all seven checks passed on final PR head `86b4b89` in run
+Merged PR #502 adds assumption-bound NAT and network pricing in source; all
+seven checks passed on final PR head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 These PRs do not change the hosted runtime or AWS state.
 PR #500 final-head CI passed all seven checks in
