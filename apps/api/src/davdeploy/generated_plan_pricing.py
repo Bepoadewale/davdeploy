@@ -301,7 +301,7 @@ class GeneratedPlanPricingEvidence:
                 None
                 if raw_vpc_usage is None
                 else VpcPricingUsageAssumptions.model_validate(raw_vpc_usage).model_dump(
-                    mode="json"
+                    mode="json", exclude_none=True
                 )
             )
             if vpc_usage != raw_vpc_usage:
@@ -562,7 +562,7 @@ class TrustedPlanPricingContext:
             try:
                 vpc_usage_assumptions = VpcPricingUsageAssumptions.model_validate(
                     raw_vpc_usage_assumptions
-                ).model_dump(mode="json")
+                ).model_dump(mode="json", exclude_none=True)
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid VPC pricing usage assumptions") from None
         if raw_batch_usage_assumptions is None:
@@ -1033,6 +1033,38 @@ class AwsPriceListCatalog:
             "Hrs",
         )
 
+    def interface_vpc_endpoint_hourly_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonVPC",
+            region,
+            "interface-vpc-endpoint-hours",
+            [
+                ("productFamily", "VpcEndpoint"),
+                ("endpointType", "PrivateLink"),
+                ("group", "VPCE:VpcEndpoint"),
+                ("groupDescription", "Hourly charge for VPC Endpoints"),
+                ("operation", "VpcEndpoint"),
+                ("regionCode", region),
+            ],
+            "Hrs",
+        )
+
+    def interface_vpc_endpoint_data_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonVPC",
+            region,
+            "interface-vpc-endpoint-data",
+            [
+                ("productFamily", "VpcEndpoint"),
+                ("endpointType", "PrivateLink"),
+                ("group", "VPCE:VpcEndpoint"),
+                ("groupDescription", "Charge for per GB data processed by VPC Endpoints"),
+                ("operation", "VpcEndpoint"),
+                ("regionCode", region),
+            ],
+            "GB",
+        )
+
     def regional_data_transfer_rate(self, region: str) -> CatalogRate:
         return self._regional_rate(
             "AWSDataTransfer", region, "regional-data-transfer",
@@ -1406,6 +1438,8 @@ def evaluate_generated_plan_pricing(
     dynamodb_tables: list[dict[str, Any]] = []
     nat_gateways: list[dict[str, Any]] = []
     elastic_ips: list[dict[str, Any]] = []
+    interface_vpc_endpoints: list[dict[str, Any]] = []
+    planned_subnets: list[dict[str, Any]] = []
     lambda_functions: list[dict[str, Any]] = []
     http_apis: list[dict[str, Any]] = []
     lambda_log_groups: list[dict[str, Any]] = []
@@ -1420,6 +1454,28 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_eip":
             elastic_ips.append(resource)
+            continue
+        if resource_type == "aws_vpc_endpoint":
+            endpoint_type = values.get("vpc_endpoint_type")
+            service_name = values.get("service_name")
+            route_table_ids = values.get("route_table_ids")
+            if (
+                endpoint_type == "Gateway"
+                and service_name in {
+                    f"com.amazonaws.{region}.s3",
+                    f"com.amazonaws.{region}.dynamodb",
+                }
+                and isinstance(route_table_ids, list)
+                and route_table_ids
+                and all(isinstance(item, str) and item for item in route_table_ids)
+                and len(set(route_table_ids)) == len(route_table_ids)
+            ):
+                # AWS does not charge for S3 and DynamoDB gateway endpoints.
+                continue
+            interface_vpc_endpoints.append(resource)
+            continue
+        if resource_type == "aws_subnet":
+            planned_subnets.append(resource)
             continue
         if resource_type in ZERO_DIRECT_CHARGE_RESOURCE_TYPES:
             continue
@@ -3180,10 +3236,153 @@ def evaluate_generated_plan_pricing(
                     "Persisted VPC usage assumptions are invalid for pricing.",
                 ))
     elif vpc_usage_document is not None:
-        findings.append(PlanPricingFinding(
-            "vpc_usage_assumptions_stale", None,
-            "VPC usage assumptions do not match any NAT Gateway in this plan.",
-        ))
+        try:
+            vpc_usage = VpcPricingUsageAssumptions.model_validate(vpc_usage_document)
+        except (TypeError, ValueError):
+            findings.append(PlanPricingFinding(
+                "vpc_usage_assumptions_invalid", None,
+                "Persisted VPC usage assumptions are invalid for pricing.",
+            ))
+        else:
+            if vpc_usage.nat_gateways:
+                findings.append(PlanPricingFinding(
+                    "vpc_usage_assumptions_stale", None,
+                    "NAT Gateway usage assumptions do not match any NAT Gateway in this plan.",
+                ))
+    vpc_endpoint_usage = None
+    if interface_vpc_endpoints:
+        endpoint_address = interface_vpc_endpoints[0]["address"]
+        if vpc_usage_document is None:
+            findings.append(PlanPricingFinding(
+                "vpc_endpoint_usage_assumptions_missing", endpoint_address,
+                "Monthly provisioned hours and processed-data bounds are required for each interface endpoint.",
+            ))
+        else:
+            try:
+                vpc_endpoint_usage = VpcPricingUsageAssumptions.model_validate(
+                    vpc_usage_document
+                )
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "vpc_usage_assumptions_invalid", endpoint_address,
+                    "Persisted VPC pricing usage assumptions are invalid.",
+                ))
+            else:
+                endpoint_usages = vpc_endpoint_usage.interface_endpoints or {}
+                endpoints_by_address = {
+                    item["address"]: item for item in interface_vpc_endpoints
+                }
+                if set(endpoint_usages) != set(endpoints_by_address):
+                    findings.append(PlanPricingFinding(
+                        "vpc_endpoint_usage_assumptions_stale", endpoint_address,
+                        "Interface endpoint usage bounds must match every exact endpoint address in the plan.",
+                    ))
+                else:
+                    for address, endpoint in endpoints_by_address.items():
+                        values = endpoint["values"]
+                        service_name = values.get("service_name")
+                        subnet_ids = values.get("subnet_ids")
+                        az_count = _interface_endpoint_az_count(
+                            subnet_ids, planned_subnets, region
+                        )
+                        if (
+                            values.get("vpc_endpoint_type") != "Interface"
+                            or not _supported_interface_endpoint_service(
+                                service_name, region
+                            )
+                            or az_count is None
+                        ):
+                            findings.append(PlanPricingFinding(
+                                "vpc_endpoint_shape_unsupported", address,
+                                "Only ECR API, ECR Docker, or CloudWatch Logs same-region interface endpoints with known, same-plan subnet IDs in distinct Availability Zones are priced.",
+                            ))
+                            continue
+                        try:
+                            if pricing_catalog is None:
+                                pricing_catalog = AwsPriceListCatalog()
+                            hourly_rate = pricing_catalog.interface_vpc_endpoint_hourly_rate(
+                                region
+                            )
+                            data_rate = pricing_catalog.interface_vpc_endpoint_data_rate(
+                                region
+                            )
+                        except PriceListUnavailableError:
+                            unavailable = True
+                            findings.append(PlanPricingFinding(
+                                "regional_price_lookup_unavailable", address,
+                                "DavDeploy could not verify current regional interface endpoint prices.",
+                            ))
+                            continue
+                        except PlanPricingError:
+                            findings.append(PlanPricingFinding(
+                                "regional_price_ambiguous", address,
+                                "DavDeploy could not identify exact regional interface endpoint prices.",
+                            ))
+                            continue
+                        usage = endpoint_usages[address]
+                        for description, quantity, rate in (
+                            (
+                                "Amazon VPC interface endpoint provisioned hours",
+                                usage.monthly_billed_hours_per_az.minimum * az_count,
+                                hourly_rate,
+                            ),
+                            (
+                                "Amazon VPC interface endpoint data processed",
+                                usage.monthly_data_processed_gb.minimum,
+                                data_rate,
+                            ),
+                        ):
+                            quantity_max = (
+                                usage.monthly_billed_hours_per_az.maximum * az_count
+                                if "provisioned hours" in description
+                                else usage.monthly_data_processed_gb.maximum
+                            )
+                            unit_price = Decimal(rate.unit_price_usd)
+                            low_unit_price = Decimal(
+                                rate.low_unit_price_usd or rate.unit_price_usd
+                            )
+                            lines.append(PlanCostLine(
+                                address=address,
+                                resource_type="aws_vpc_endpoint",
+                                description=description,
+                                quantity=quantity,
+                                quantity_max=quantity_max,
+                                unit=rate.unit,
+                                unit_price_usd=rate.unit_price_usd,
+                                monthly_cost_minor=int(
+                                    (low_unit_price * quantity * 100).quantize(
+                                        Decimal(1), rounding=ROUND_FLOOR
+                                    )
+                                ),
+                                monthly_cost_max_minor=int(
+                                    (unit_price * quantity_max * 100).quantize(
+                                        Decimal(1), rounding=ROUND_CEILING
+                                    )
+                                ),
+                                catalog_sku=rate.sku,
+                                catalog_product_sha256=rate.product_digest,
+                                catalog_published_at=rate.published_at,
+                                catalog_effective_at=rate.effective_at,
+                                unit_price_low_usd=format(low_unit_price, "f"),
+                                low_cost_quantity=quantity,
+                            ))
+    else:
+        if vpc_usage_document is not None:
+            try:
+                vpc_endpoint_usage = VpcPricingUsageAssumptions.model_validate(
+                    vpc_usage_document
+                )
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "vpc_usage_assumptions_invalid", None,
+                    "Persisted VPC pricing usage assumptions are invalid.",
+                ))
+            else:
+                if vpc_endpoint_usage.interface_endpoints:
+                    findings.append(PlanPricingFinding(
+                        "vpc_endpoint_usage_assumptions_stale", None,
+                        "Interface endpoint usage assumptions do not match any interface endpoint in this plan.",
+                    ))
     if elastic_ips and not nat_gateways:
         findings.append(PlanPricingFinding(
             "resource_pricing_unavailable", elastic_ips[0]["address"],
@@ -4550,6 +4749,51 @@ def _changes_by_address(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
             raise PlanPricingError("resource change address is malformed or duplicated")
         result[address] = item
     return result
+
+
+def _interface_endpoint_az_count(
+    subnet_ids: Any,
+    planned_subnets: list[dict[str, Any]],
+    region: str,
+) -> int | None:
+    """Count AZs only when every endpoint subnet ID and AZ is known in-plan."""
+    if (
+        not isinstance(subnet_ids, list)
+        or not 1 <= len(subnet_ids) <= 6
+        or any(not isinstance(subnet_id, str) or not subnet_id for subnet_id in subnet_ids)
+        or len(set(subnet_ids)) != len(subnet_ids)
+    ):
+        return None
+    subnets_by_id: dict[str, list[dict[str, Any]]] = {}
+    for subnet in planned_subnets:
+        values = subnet["values"]
+        subnet_id = values.get("id")
+        if isinstance(subnet_id, str) and subnet_id:
+            subnets_by_id.setdefault(subnet_id, []).append(subnet)
+    az_names: set[str] = set()
+    for subnet_id in subnet_ids:
+        matches = subnets_by_id.get(subnet_id, [])
+        if len(matches) != 1:
+            return None
+        az = matches[0]["values"].get("availability_zone")
+        if (
+            not isinstance(az, str)
+            or re.fullmatch(re.escape(region) + r"[a-z]", az) is None
+            or az in az_names
+        ):
+            return None
+        az_names.add(az)
+    return len(az_names)
+
+
+def _supported_interface_endpoint_service(service_name: Any, region: str) -> bool:
+    if not isinstance(service_name, str):
+        return False
+    return service_name in {
+        f"com.amazonaws.{region}.ecr.api",
+        f"com.amazonaws.{region}.ecr.dkr",
+        f"com.amazonaws.{region}.logs",
+    }
 
 
 def _configured_attribute_references(

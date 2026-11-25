@@ -486,7 +486,14 @@ class FakeVpcPriceList:
         elif service == "AmazonEC2" and "per GB data processed by NatGateways" in filters.get("groupDescription", ""):
             family, unit, price, sku = "NAT Gateway", "GB", "0.045", "nat-bytes"
         elif service == "AmazonVPC":
-            family, unit, price, sku = None, "Hrs", "0.005", "public-ipv4"
+            if filters.get("group") == "VPCE:VpcEndpoint":
+                family = "VpcEndpoint"
+                if filters.get("groupDescription") == "Hourly charge for VPC Endpoints":
+                    unit, price, sku = "Hrs", "0.01", "endpoint-hours"
+                else:
+                    unit, price, sku = "GB", "0.01", "endpoint-data"
+            else:
+                family, unit, price, sku = None, "Hrs", "0.005", "public-ipv4"
         elif service == "AWSDataTransfer" and filters.get("transferType") == "IntraRegion":
             family, unit, price, sku = "Data Transfer", "GB", "0.01", "regional-transfer"
         elif service == "AWSDataTransfer":
@@ -1298,6 +1305,179 @@ def test_nat_gateway_pricing_covers_hours_processing_ipv4_egress_and_cross_az():
     )
 
 
+def interface_vpc_endpoint_plan(
+    *, endpoint_type="Interface", subnet_ids=None,
+    service_name="com.amazonaws.us-east-1.ecr.api",
+):
+    subnet_ids = subnet_ids or ["subnet-a", "subnet-b"]
+    return plan(
+        resource_type="terraform_data",
+        resource_values={"input": None},
+        extra_resources=(
+            resource("aws_subnet.private_a", "aws_subnet", {
+                "id": "subnet-a", "availability_zone": "us-east-1a",
+            }),
+            resource("aws_subnet.private_b", "aws_subnet", {
+                "id": "subnet-b", "availability_zone": "us-east-1b",
+            }),
+            resource("aws_vpc_endpoint.ecr", "aws_vpc_endpoint", {
+                "vpc_endpoint_type": endpoint_type,
+                "service_name": service_name,
+                "subnet_ids": subnet_ids,
+            }),
+        ),
+    )
+
+
+INTERFACE_ENDPOINT_USAGE = {
+    "nat_gateways": {},
+    "interface_endpoints": {
+        "aws_vpc_endpoint.ecr": {
+            "monthly_billed_hours_per_az": {"minimum": 720, "maximum": 744},
+            "monthly_data_processed_gb": {"minimum": 10, "maximum": 20},
+        }
+    },
+}
+
+
+def test_interface_vpc_endpoint_pricing_is_bound_to_plan_azs_and_usage():
+    client = FakeVpcPriceList()
+    result, _ = evaluate(
+        interface_vpc_endpoint_plan(),
+        catalog_client=client,
+        vpc_usage_assumptions=INTERFACE_ENDPOINT_USAGE,
+    )
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+    assert result.monthly_low_minor == 1_450
+    assert result.monthly_high_minor == 1_508
+    hours, data = result.lines
+    assert hours.address == data.address == "aws_vpc_endpoint.ecr"
+    assert hours.quantity == 1_440
+    assert hours.quantity_max == 1_488
+    assert hours.unit == "Hrs"
+    assert data.quantity == 10
+    assert data.quantity_max == 20
+    assert data.unit == "GB"
+    assert {call["ServiceCode"] for call in client.calls} == {"AmazonVPC"}
+    assert all(
+        line.catalog_sku in {"endpoint-hours", "endpoint-data"}
+        and line.catalog_product_sha256
+        for line in result.lines
+    )
+    manifest = result.as_manifest_document()
+    assert manifest["vpc_usage_assumptions"] == INTERFACE_ENDPOINT_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+    assert pricing_evidence_is_approval_eligible(
+        manifest,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256,
+            vpc_usage_assumptions=INTERFACE_ENDPOINT_USAGE,
+        ),
+        now=CAPTURED_AT,
+    )
+
+
+@pytest.mark.parametrize(
+    ("document", "usage", "finding"),
+    [
+        (
+            interface_vpc_endpoint_plan(),
+            {
+                "nat_gateways": {},
+                "interface_endpoints": {
+                    "aws_vpc_endpoint.other": {
+                        "monthly_billed_hours_per_az": {"minimum": 720, "maximum": 744},
+                        "monthly_data_processed_gb": {"minimum": 10, "maximum": 20},
+                    }
+                },
+            },
+            "vpc_endpoint_usage_assumptions_stale",
+        ),
+        (
+            interface_vpc_endpoint_plan(subnet_ids=["subnet-a", "subnet-missing"]),
+            INTERFACE_ENDPOINT_USAGE,
+            "vpc_endpoint_shape_unsupported",
+        ),
+        (
+            interface_vpc_endpoint_plan(subnet_ids=["subnet-a", "subnet-a"]),
+            INTERFACE_ENDPOINT_USAGE,
+            "vpc_endpoint_shape_unsupported",
+        ),
+        (
+            interface_vpc_endpoint_plan(endpoint_type="Gateway"),
+            INTERFACE_ENDPOINT_USAGE,
+            "vpc_endpoint_shape_unsupported",
+        ),
+        (
+            interface_vpc_endpoint_plan(service_name="com.amazonaws.us-east-1.ec2"),
+            INTERFACE_ENDPOINT_USAGE,
+            "vpc_endpoint_shape_unsupported",
+        ),
+    ],
+)
+def test_unsupported_or_mismatched_interface_endpoint_evidence_blocks_approval(
+    document, usage, finding
+):
+    result, _ = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=usage,
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert finding in {item.code for item in result.findings}
+
+
+def test_interface_endpoint_catalog_miss_blocks_pricing():
+    result, _ = evaluate(
+        interface_vpc_endpoint_plan(),
+        catalog_client=MissingVpcPriceList(),
+        vpc_usage_assumptions=INTERFACE_ENDPOINT_USAGE,
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert "regional_price_ambiguous" in {item.code for item in result.findings}
+
+
+def test_interface_endpoint_subnets_in_duplicate_azs_block_pricing():
+    document = interface_vpc_endpoint_plan()
+    subnets = document["planned_values"]["root_module"]["resources"]
+    second_subnet = next(item for item in subnets if item["address"] == "aws_subnet.private_b")
+    second_subnet["values"]["availability_zone"] = "us-east-1a"
+    result, client = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=INTERFACE_ENDPOINT_USAGE,
+    )
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.approval_eligible is False
+    assert "vpc_endpoint_shape_unsupported" in {item.code for item in result.findings}
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("service", ["s3", "dynamodb"])
+def test_supported_gateway_endpoint_has_no_endpoint_charge(service):
+    document = plan(
+        resource_type="terraform_data",
+        resource_values={"input": None},
+        extra_resources=(resource(
+            "aws_vpc_endpoint.gateway",
+            "aws_vpc_endpoint",
+            {
+                "vpc_endpoint_type": "Gateway",
+                "service_name": f"com.amazonaws.{REGION}.{service}",
+                "route_table_ids": ["rtb-known"],
+            },
+        ),),
+    )
+    result, client = evaluate(document, catalog_client=FakeVpcPriceList())
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+    assert result.lines == ()
+    assert client.calls == []
+
+
 def test_complete_vpc_topology_prices_nat_and_treats_internet_gateway_as_zero_direct_charge():
     topology = (
         resource("aws_vpc.main", "aws_vpc", {"id": "vpc-main"}),
@@ -1593,6 +1773,33 @@ def test_vpc_usage_assumptions_are_bounded_and_keyed_by_exact_nat_address():
                 "unit_price_usd": "0.0001",
             }
         }})
+    with pytest.raises(ValueError, match="interface endpoint hours"):
+        VpcPricingUsageAssumptions.model_validate({
+            "interface_endpoints": {
+                "aws_vpc_endpoint.endpoint": {
+                    "monthly_billed_hours_per_az": {"minimum": 0, "maximum": 745},
+                    "monthly_data_processed_gb": {"minimum": 0, "maximum": 10},
+                }
+            }
+        })
+    with pytest.raises(ValueError, match="must include one provisioned hour"):
+        VpcPricingUsageAssumptions.model_validate({
+            "interface_endpoints": {
+                "aws_vpc_endpoint.endpoint": {
+                    "monthly_billed_hours_per_az": {"minimum": 0, "maximum": 0},
+                    "monthly_data_processed_gb": {"minimum": 0, "maximum": 10},
+                }
+            }
+        })
+    with pytest.raises(ValueError, match="invalid interface endpoint address"):
+        VpcPricingUsageAssumptions.model_validate({
+            "interface_endpoints": {
+                "aws_vpc_endpoint.bad.name": {
+                    "monthly_billed_hours_per_az": {"minimum": 1, "maximum": 10},
+                    "monthly_data_processed_gb": {"minimum": 0, "maximum": 10},
+                }
+            }
+        })
 
 
 def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
@@ -1609,6 +1816,27 @@ def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
         revision, expected_sha256=revision_sha256
     )
     assert context.vpc_usage_assumptions == NAT_USAGE
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256
+    ).pricing_context_sha256
+
+
+def test_interface_endpoint_usage_assumptions_are_extracted_from_revision():
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {
+                "vpc_pricing_usage_assumptions": INTERFACE_ENDPOINT_USAGE,
+            }
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.vpc_usage_assumptions == INTERFACE_ENDPOINT_USAGE
     assert context.pricing_context_sha256 != TrustedPlanPricingContext(
         REGION, "USD", None, revision_sha256
     ).pricing_context_sha256

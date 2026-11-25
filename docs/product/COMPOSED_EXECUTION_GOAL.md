@@ -44,6 +44,14 @@ merged-main checks passed in run
 Batch/ECR estimates remain incomplete and approval-ineligible while network
 paths, NAT/endpoints, egress, and other material costs remain unpriced. PRs
 #507 and #509–#512 changed no AWS workloads or hosted runtime.
+Draft PR #514 adds source-only regional price lines for same-region ECR API,
+ECR Docker, and CloudWatch Logs interface endpoint hours and processed data,
+bound to trusted monthly usage and known same-plan subnet IDs/AZs. Exact
+S3/DynamoDB gateway endpoints have no endpoint charge; other interface service
+names, endpoint variants, and unmodeled network costs remain blockers. Focused pricing
+tests currently pass (153 tests); final review, full verification, and CI are
+pending. No AWS resource, Terraform state/lock, hosted control plane, or
+customer workload was changed.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run

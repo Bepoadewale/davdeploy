@@ -381,21 +381,57 @@ class NatGatewayPricingUsageAssumptions(BaseModel):
         return self
 
 
-class VpcPricingUsageAssumptions(BaseModel):
-    """Explicit usage bounds keyed by exact public NAT Gateway plan address."""
+class InterfaceVpcEndpointPricingUsageAssumptions(BaseModel):
+    """Monthly billable usage for one exact planned interface endpoint."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    nat_gateways: dict[str, NatGatewayPricingUsageAssumptions] = Field(min_length=1, max_length=10)
+    # AWS bills each partial endpoint-hour as a full hour; callers provide
+    # already-rounded billed hours for this endpoint in each selected AZ.
+    monthly_billed_hours_per_az: MonthlyUsageRange
+    monthly_data_processed_gb: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> InterfaceVpcEndpointPricingUsageAssumptions:
+        if self.monthly_billed_hours_per_az.maximum > 744:
+            raise ValueError("monthly interface endpoint hours exceed the supported month bound")
+        if self.monthly_billed_hours_per_az.minimum < 1:
+            raise ValueError("monthly interface endpoint billed hours must include one provisioned hour")
+        if self.monthly_data_processed_gb.maximum > 500_000:
+            raise ValueError("monthly interface endpoint data exceeds the supported bound")
+        return self
+
+
+class VpcPricingUsageAssumptions(BaseModel):
+    """Explicit usage bounds keyed by exact planned VPC resource address."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    nat_gateways: dict[str, NatGatewayPricingUsageAssumptions] = Field(
+        default_factory=dict, max_length=10
+    )
+    interface_endpoints: dict[str, InterfaceVpcEndpointPricingUsageAssumptions] | None = Field(
+        default=None, max_length=20
+    )
 
     @model_validator(mode="after")
     def validate_nat_addresses(self) -> VpcPricingUsageAssumptions:
-        pattern = re.compile(
+        nat_pattern = re.compile(
             r"^(?:module\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?\.)*"
             r"aws_nat_gateway\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?$"
         )
-        if any(not pattern.fullmatch(address) for address in self.nat_gateways):
+        endpoint_pattern = re.compile(
+            r"^(?:module\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?\.)*"
+            r"aws_vpc_endpoint\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?$"
+        )
+        if any(not nat_pattern.fullmatch(address) for address in self.nat_gateways):
             raise ValueError("VPC usage assumption has an invalid NAT Gateway address")
+        if self.interface_endpoints is not None and any(
+            not endpoint_pattern.fullmatch(address) for address in self.interface_endpoints
+        ):
+            raise ValueError("VPC usage assumption has an invalid interface endpoint address")
+        if not self.nat_gateways and not self.interface_endpoints:
+            raise ValueError("VPC pricing usage assumptions must cover a planned resource")
         return self
 
 
