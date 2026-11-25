@@ -8,7 +8,12 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-25
 
 The source baseline for this reconciliation is backend `main` at
-`f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
+`e7b697127691f8454e1f468a562338e6276957b4` (PR #501). Open draft PR #502
+adds assumption-bound NAT/network pricing and passed all seven final-head
+checks in run [45562393129](https://github.com/Bepoadewale/davdeploy/actions/runs/45562393129).
+Open draft PR #503 adds source-only bounded Lambda function policy; local
+regression tests pass and its final-head checks are pending. Neither PR is
+merged or deployed. The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)

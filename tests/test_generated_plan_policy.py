@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 
 import pytest
@@ -159,6 +160,38 @@ def resource(address, kind, values):
     if kind.startswith("aws_"):
         values = {**values, "tags": {**ownership_scope().tags(), **values.get("tags", {})}}
     return {"address": address, "mode": "managed", "type": kind, "values": values}
+
+
+def lambda_function_values(
+    function_name="sample-function",
+    role="arn:aws:iam::654654474502:role/sample-function",
+    **overrides,
+):
+    values = {
+        "function_name": function_name,
+        "role": role,
+        "filename": "./artifact.zip",
+        "handler": "index.handler",
+        "runtime": "python3.12",
+        "package_type": "Zip",
+        "source_code_hash": base64.b64encode(b"s" * 32).decode("ascii"),
+        "architectures": ["x86_64"],
+        "memory_size": 128,
+        "timeout": 30,
+        "ephemeral_storage": [{"size": 512}],
+        "snap_start": [{"apply_on": "None"}],
+        "vpc_config": [],
+        "reserved_concurrent_executions": -1,
+        "environment": [],
+        "layers": [],
+        "tracing_config": [{"mode": "PassThrough"}],
+        "dead_letter_config": [],
+        "file_system_config": [],
+        "code_signing_config_arn": None,
+        "kms_key_arn": None,
+    }
+    values.update(overrides)
+    return values
 
 
 def change(address, kind, actions=("create",), **metadata):
@@ -1206,6 +1239,162 @@ def ecr_repository_case(*, values=None, after_unknown=None):
         ]
     )
     return document, proposal_value
+
+
+def lambda_function_case(*, values=None, after_unknown=None, role_in_plan=False, role_trust=None):
+    address = "aws_lambda_function.function"
+    role_arn = (values or {}).get(
+        "role", "arn:aws:iam::654654474502:role/sample-function"
+    )
+    function_values = lambda_function_values(**(values or {}))
+    function_resource = resource(address, "aws_lambda_function", function_values)
+    resources = [function_resource, resource("terraform_data.account_guard", "terraform_data", {"input": None})]
+    changes = [
+        change(
+            address,
+            "aws_lambda_function",
+            after=function_resource["values"],
+            after_unknown=after_unknown or {},
+        ),
+        change("terraform_data.account_guard", "terraform_data"),
+    ]
+    proposal_resources = [
+        {
+            "resource_id": "function",
+            "resource_type": "aws_lambda_function",
+            "name": "function",
+            "arguments": {"function_name": function_values["function_name"]},
+            "rationale": "Run the bounded ZIP application function.",
+        }
+    ]
+    if role_in_plan:
+        trust = role_trust or {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "lambda.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                }
+            ],
+        }
+        role_address = "aws_iam_role.lambda_execution"
+        role_values = {
+            "name": "sample-function",
+            "arn": role_arn,
+            "assume_role_policy": json.dumps(trust),
+        }
+        role_resource = resource(role_address, "aws_iam_role", role_values)
+        resources.append(role_resource)
+        changes.append(change(role_address, "aws_iam_role", after=role_resource["values"]))
+        proposal_resources.append(
+            {
+                "resource_id": "lambda-role",
+                "resource_type": "aws_iam_role",
+                "name": "lambda_execution",
+                "arguments": {"name": "sample-function"},
+                "rationale": "Give the function a dedicated Lambda execution role.",
+            }
+        )
+    document = plan(resources=resources, changes=changes)
+    return document, proposal(proposal_resources)
+
+
+def test_lambda_function_accepts_bounded_zip_shape_and_reviews_external_role():
+    document, proposal_value = lambda_function_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert not any(item.severity == "deny" and item.code.startswith("lambda_") for item in result.findings)
+    assert "lambda_execution_role_permissions_unverified" in {item.code for item in result.findings}
+
+
+@pytest.mark.parametrize(
+    ("values", "finding"),
+    [
+        ({"runtime": "python3.10"}, "lambda_runtime_unsupported"),
+        ({"package_type": "Image", "image_uri": "example.invalid/image"}, "lambda_package_type_unsupported"),
+        ({"source_code_hash": "not-a-sha256"}, "lambda_source_hash_invalid"),
+        ({"role": "arn:aws:iam::111122223333:role/external"}, "lambda_execution_role_scope_invalid"),
+        ({"architectures": ["riscv64"]}, "lambda_architecture_unsupported"),
+        ({"memory_size": 10_241}, "lambda_memory_out_of_bounds"),
+        ({"timeout": 901}, "lambda_timeout_out_of_bounds"),
+        ({"ephemeral_storage": [{"size": 1024}]}, "lambda_ephemeral_storage_unsupported"),
+        ({"vpc_config": [{"subnet_ids": ["subnet-1"], "security_group_ids": ["sg-1"]}]}, "lambda_vpc_attachment_unsupported"),
+        ({"layers": ["arn:aws:lambda:us-east-1:654654474502:layer:unverified:1"]}, "lambda_layers_unsupported"),
+        ({"reserved_concurrent_executions": 5}, "lambda_reserved_concurrency_unsupported"),
+        ({"tracing_config": [{"mode": "Active"}]}, "lambda_tracing_unsupported"),
+        ({"dead_letter_config": [{"target_arn": "arn:aws:sqs:us-east-1:654654474502:dlq"}]}, "lambda_dead_letter_config_unsupported"),
+        ({"file_system_config": [{"arn": "arn:aws:elasticfilesystem:us-east-1:654654474502:access-point/fsap-1"}]}, "lambda_file_system_config_unsupported"),
+        ({"code_signing_config_arn": "arn:aws:lambda:us-east-1:654654474502:code-signing-config:csc-1"}, "lambda_code_signing_unsupported"),
+    ],
+)
+def test_lambda_function_denies_unpriced_or_unsupported_shapes(values, finding):
+    document, proposal_value = lambda_function_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert finding in {item.code for item in result.findings}
+
+
+@pytest.mark.parametrize("path", ["runtime", "role", "source_code_hash", "timeout"])
+def test_lambda_function_denies_unknown_safety_critical_settings(path):
+    document, proposal_value = lambda_function_case(after_unknown={path: True})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in {item.code for item in result.findings}
+
+
+@pytest.mark.parametrize("environment_key", ["DB_PASSWORD", "API_KEY", "CLIENT_SECRET", "AUTH_TOKEN"])
+def test_lambda_environment_rejects_secret_like_names_without_echoing_values(environment_key):
+    secret_marker = "must-not-appear-in-policy-output"
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {environment_key: secret_marker}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+    rendered = json.dumps([item.__dict__ for item in result.findings])
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_environment_secret_key_denied" in {item.code for item in result.findings}
+    assert secret_marker not in rendered
+
+
+def test_lambda_environment_rejects_values_over_aws_aggregate_size_limit():
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {"VALUE": "x" * 4092}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_environment_too_large" in {item.code for item in result.findings}
+
+
+def test_lambda_same_plan_execution_role_requires_exact_lambda_service_trust():
+    document, proposal_value = lambda_function_case(role_in_plan=True)
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "lambda_execution_role_permissions_unverified" not in {item.code for item in result.findings}
+
+    invalid_trust = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "states.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+    document, proposal_value = lambda_function_case(role_in_plan=True, role_trust=invalid_trust)
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_execution_role_trust_invalid" in {item.code for item in result.findings}
 
 
 def kms_key_case(*, values=None, after_unknown=None):
@@ -2609,11 +2798,9 @@ def sqs_lambda_consumer_case(
         resource(
             function_address,
             "aws_lambda_function",
-            {
-                "function_name": "queue-consumer",
-                "role": role_arn,
-                "timeout": timeout,
-            },
+            lambda_function_values(
+                function_name="queue-consumer", role=role_arn, timeout=timeout
+            ),
         ),
         resource(
             mapping_address,
@@ -2634,9 +2821,12 @@ def sqs_lambda_consumer_case(
             if unknown_timeout and item["type"] == "aws_lambda_function"
             else {}
         )
-        document["resource_changes"].append(
-            change(item["address"], item["type"], **metadata)
-        )
+        if item["type"] == "aws_lambda_function":
+            document["resource_changes"].append(
+                change(item["address"], item["type"], after=item["values"], **metadata)
+            )
+        else:
+            document["resource_changes"].append(change(item["address"], item["type"], **metadata))
 
     document["configuration"]["root_module"] = {
         "resources": [
@@ -7265,6 +7455,7 @@ def step_functions_lambda_case():
     root_resources = document["planned_values"]["root_module"]["resources"]
     worker_arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:workflow-worker"
     role_arn = f"arn:aws:iam::{ACCOUNT}:role/workflow"
+    lambda_role_arn = f"arn:aws:iam::{ACCOUNT}:role/lambda-execution"
     role_trust = json.dumps(
         {
             "Version": "2012-10-17",
@@ -7279,6 +7470,18 @@ def step_functions_lambda_case():
                         },
                         "StringEquals": {"aws:SourceAccount": ACCOUNT},
                     },
+                }
+            ],
+        }
+    )
+    lambda_role_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "lambda.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
                 }
             ],
         }
@@ -7313,6 +7516,15 @@ def step_functions_lambda_case():
             },
         ),
         resource(
+            "aws_iam_role.lambda_execution",
+            "aws_iam_role",
+            {
+                "name": "lambda-execution",
+                "arn": lambda_role_arn,
+                "assume_role_policy": lambda_role_trust,
+            },
+        ),
+        resource(
             "aws_iam_role_policy.workflow",
             "aws_iam_role_policy",
             {
@@ -7324,11 +7536,9 @@ def step_functions_lambda_case():
         resource(
             "aws_lambda_function.workflow",
             "aws_lambda_function",
-            {
-                "function_name": "workflow-worker",
-                "arn": worker_arn,
-                "timeout": 10,
-            },
+            lambda_function_values(
+                function_name="workflow-worker", role=lambda_role_arn, timeout=10, arn=worker_arn
+            ),
         ),
         resource(
             "aws_sfn_state_machine.workflow",
@@ -7344,7 +7554,12 @@ def step_functions_lambda_case():
     ]
     for item in additions:
         root_resources.append(item)
-        document["resource_changes"].append(change(item["address"], item["type"]))
+        if item["type"] == "aws_lambda_function":
+            document["resource_changes"].append(
+                change(item["address"], item["type"], after=item["values"])
+            )
+        else:
+            document["resource_changes"].append(change(item["address"], item["type"]))
     document["configuration"]["root_module"] = {
         "resources": [
             {
@@ -7376,6 +7591,13 @@ def step_functions_lambda_case():
                 "name": "workflow",
                 "arguments": {"role": "workflow"},
                 "rationale": "Limit workflow access to its planned Lambda task.",
+            },
+            {
+                "resource_id": "lambda-execution-role",
+                "resource_type": "aws_iam_role",
+                "name": "lambda_execution",
+                "arguments": {"name": "lambda-execution"},
+                "rationale": "Give the Lambda worker its own execution identity.",
             },
             {
                 "resource_id": "workflow-worker",

@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500); hosted runtime remains
+`e7b697127691f8454e1f468a562338e6276957b4` (PR #501); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -10,6 +10,13 @@ Both workflow jobs succeeded, including database migrations. Read-only checks
 found all six `davdeploy-*` Lambda packages on code hash
 `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
 HTTP 200. This is deployed control-plane evidence only.
+
+Open draft PR #502 adds assumption-bound NAT/network pricing and passed all
+seven final-head checks in run
+[45562393129](https://github.com/Bepoadewale/davdeploy/actions/runs/45562393129).
+Open draft PR #503 adds source-only generated Lambda function bounds; focused
+local policy tests pass and final-head GitHub checks are pending. Neither PR is
+merged or deployed, and neither changes AWS resources or hosted runtime.
 
 Merged PRs #498–#500 add source-only AWS Batch Fargate, EKS, and VPC
 generated-plan bounds. PR #500's final head passed all seven checks in

@@ -53,35 +53,39 @@ control plane.
 
 ## Acceptance criteria
 
-- [ ] A bounded ZIP Lambda plan with a known source hash and same-account role
+- [x] A bounded ZIP Lambda plan with a known source hash and same-account role
   has no Lambda-specific deny findings.
-- [ ] Missing/unknown runtime, identity, hash, architecture, memory, timeout,
+- [x] Missing/unknown runtime, identity, hash, architecture, memory, timeout,
   or role scope is denied.
-- [ ] Image packages, VPC attachment, custom ephemeral storage, layers,
+- [x] Image packages, VPC attachment, custom ephemeral storage, layers,
   SnapStart, custom concurrency, filesystem, and unpriced event/dead-letter
   settings fail closed.
-- [ ] Same-plan role trust must name only the Lambda service; external role
+- [x] Same-plan role trust must name only the Lambda service; external role
   permissions are visibly marked for review without exposing policy values.
-- [ ] Secret-like environment keys and environment maps over 4 KB are denied
+- [x] Secret-like environment keys and environment maps over 4 KB are denied
   without including values in findings.
-- [ ] Existing SQS consumer and Step Functions Lambda policy tests continue to
+- [x] Existing SQS consumer and Step Functions Lambda policy tests continue to
   pass.
-- [ ] Capability documentation states exact boundaries and does not claim
+- [x] Capability documentation states exact boundaries and does not claim
   hosted execution, customer deployment, or Nova dispatch.
-- [ ] No AWS resource, remote state, or hosted control-plane state/runtime is
+- [x] No AWS resource, remote state, or hosted control-plane state/runtime is
   changed.
 
 ## Acceptance status
 
-- [ ] Implementation complete.
-- [ ] Focused validation complete.
+- [x] Implementation complete.
+- [x] Focused validation complete.
 - [ ] Required GitHub checks passed on the final PR head.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
 
-Validation will be recorded here after implementation. This package is source-only;
-do not create `docs/test/test503.md` or mutate AWS.
+Local validation: `uv run --locked --extra dev pytest
+tests/test_generated_plan_policy.py tests/test_generated_plan_review.py -q`
+passed (594 tests); Ruff passed for the policy module and its regression tests;
+`python3 scripts/check_doc_conventions.py` and `git diff --check` passed. This
+package is source-only; do not create `docs/test/test503.md` or mutate AWS.
+Final-head GitHub checks and review are pending.
 
 ## Evidence files produced
 
