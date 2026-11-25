@@ -152,6 +152,7 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("dead_letter_config",),
         ("file_system_config",),
         ("code_signing_config_arn",),
+        ("kms_key_arn",),
     ),
     "aws_lambda_permission": (
         ("action",),
@@ -6468,6 +6469,7 @@ def _check_lambda_functions(
         "dead_letter_config",
         "file_system_config",
         "code_signing_config_arn",
+        "kms_key_arn",
     )
     for item in resources:
         if item.get("type") != "aws_lambda_function":
@@ -6783,6 +6785,7 @@ def _lambda_execution_role_trust_is_exact(policy: dict[str, Any]) -> bool:
         {action.lower() for action in _string_list(statement.get("Action"))}
         == {"sts:assumerole"}
         and isinstance(statement.get("Principal"), dict)
+        and set(statement["Principal"]) == {"Service"}
         and set(_string_list(statement["Principal"].get("Service")))
         == {"lambda.amazonaws.com"}
         and not statement.get("Condition")

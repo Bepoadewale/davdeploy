@@ -75,22 +75,23 @@ control plane.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [x] Required GitHub checks passed on the current final PR head.
+- [ ] Required GitHub checks passed on the current final PR head.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
 
 Local validation: `uv run --locked --extra dev pytest
 tests/test_generated_plan_policy.py tests/test_generated_plan_review.py -q`
-passed (596 tests), including malformed runtime/architecture input cases that
-must deny rather than raise a type error. Ruff passed for the policy module and
+passed (597 tests), including malformed runtime/architecture input cases and
+unknown Lambda KMS key handling. Ruff passed for the policy module and
 its regression tests; `python3 scripts/check_doc_conventions.py` and
 `git diff --check` passed. This package is source-only; do not create
 `docs/test/test503.md` or mutate AWS. All seven checks passed on implementation
 commit `5924d07` in
 [CI run 45568122045](https://github.com/Bepoadewale/davdeploy/actions/runs/45568122045).
-The subsequent ticket-only evidence update is covered by its own required CI
-run. PR review and merge are pending.
+Automated review findings for mixed IAM trust principals and unknown KMS keys
+were fixed with regression coverage. The hardened final PR head awaits CI and
+review refresh; merge remains pending.
 
 ## Evidence files produced
 

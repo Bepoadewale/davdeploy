@@ -1341,7 +1341,9 @@ def test_lambda_function_denies_unpriced_or_unsupported_shapes(values, finding):
     assert finding in {item.code for item in result.findings}
 
 
-@pytest.mark.parametrize("path", ["runtime", "role", "source_code_hash", "timeout"])
+@pytest.mark.parametrize(
+    "path", ["runtime", "role", "source_code_hash", "timeout", "kms_key_arn"]
+)
 def test_lambda_function_denies_unknown_safety_critical_settings(path):
     document, proposal_value = lambda_function_case(after_unknown={path: True})
 
@@ -1394,6 +1396,26 @@ def test_lambda_same_plan_execution_role_requires_exact_lambda_service_trust():
         ],
     }
     document, proposal_value = lambda_function_case(role_in_plan=True, role_trust=invalid_trust)
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_execution_role_trust_invalid" in {item.code for item in result.findings}
+
+    mixed_principal = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "lambda.amazonaws.com",
+                    "AWS": "arn:aws:iam::654654474502:root",
+                },
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+    document, proposal_value = lambda_function_case(
+        role_in_plan=True, role_trust=mixed_principal
+    )
     result = evaluate(document, proposal_value)
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "lambda_execution_role_trust_invalid" in {item.code for item in result.findings}
