@@ -83,8 +83,10 @@ this exact shape only; it does not prove Nova dispatch.
 - [x] The estimate uses bounded request/response counts and records the
   current price source; no claim of an actual bill or hard cap is made.
 - [x] Focused tests, `make verify`, Terraform validation, and documentation
-  conventions pass. The clean-room gate, final-head CI, and review remain.
-- [ ] No hosted control-plane, remote-state, lock, unrelated AWS, or customer
+  conventions pass.
+- [ ] Fresh final-head CI after the latest evidence update, clean-room final
+  cleanup, monitored AWS destroy/absence check, review, and merge remain.
+- [x] No hosted control-plane, remote-state, lock, unrelated AWS, or customer
   data is accessed or changed. No Nova dispatch or customer workload
   certification is claimed.
 
@@ -93,7 +95,7 @@ this exact shape only; it does not prove Nova dispatch.
 - [x] Ticket and draft PR opened before substantive implementation.
 - [x] Module, generated-plan policy, regression tests, Terraform fixture, and
   redacted lifecycle verifier are implemented locally.
-- [x] Focused policy and lifecycle tests pass (533 tests after append-only
+- [x] Focused policy and lifecycle tests pass (614 tests after append-only
   version-retention and exact application-teardown regressions).
 - [x] Direct AWS disabled → progressive enabled → reverted lifecycle evidence
   is verified for deployment 2; the failed progressive verifier observed
@@ -101,7 +103,8 @@ this exact shape only; it does not prove Nova dispatch.
   rollback read confirmed `REVERTED` and disabled.
 - [ ] Exact monitored destroy and independent absence check.
 - [x] Matrix update, full repository validation, and documentation conventions.
-- [ ] Clean-room final cleanup, final-head CI, review, and merge.
+- [ ] Clean-room final cleanup, monitored AWS destroy/absence check, review,
+  and merge. Final-head CI passed on `bf97e53` in run `45617778367`.
 
 Implementation commit `a4c629c` is on the PR branch. The initial six-resource
 create succeeded and the disabled flag was independently verified. A reviewed
