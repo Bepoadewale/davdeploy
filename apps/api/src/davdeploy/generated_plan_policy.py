@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-24.6"
+POLICY_VERSION = "nova-generated-plan-2026-11-25.6"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -344,6 +344,7 @@ def _evaluate(
     _check_acm_certificates(resources, findings)
     _check_route53_zones(resources, findings)
     _check_appconfig_bindings(document, resources, findings)
+    _check_batch_fargate(document, resources, findings, expected_account_id)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -2638,6 +2639,517 @@ def _check_kinesis_streams(
                 "kinesis_stream_mode_unsupported",
                 address,
                 "Generated Kinesis streams must use provisioned capacity mode.",
+            )
+
+
+def _check_batch_fargate(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+) -> None:
+    """Allow one bounded Batch Fargate environment, queue, and container job."""
+    resource_types = {
+        "aws_batch_compute_environment",
+        "aws_batch_job_queue",
+        "aws_batch_job_definition",
+    }
+    selected = [item for item in resources if item.get("type") in resource_types]
+    if not selected:
+        return
+
+    by_type = {
+        kind: [item for item in selected if item.get("type") == kind]
+        for kind in resource_types
+    }
+    if any(len(items) != 1 for items in by_type.values()):
+        _deny(
+            findings,
+            "batch_supported_shape_incomplete",
+            None,
+            "The supported Batch shape requires exactly one compute environment, job queue, "
+            "and job definition.",
+        )
+        return
+
+    def same_account_role_arn(value: Any) -> bool:
+        if not _aws_arn_matches(value, "iam", "", expected_account_id, "role/"):
+            return False
+        resource_name = value.split(":", maxsplit=5)[5][len("role/") :]
+        return bool(resource_name) and not any(character in resource_name for character in "*?")
+
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        _deny(
+            findings,
+            "batch_change_metadata_invalid",
+            None,
+            "DavDeploy could not verify AWS Batch plan metadata.",
+        )
+        return
+    changes_by_address = {
+        item.get("address"): item.get("change")
+        for item in changes
+        if isinstance(item, dict) and isinstance(item.get("address"), str)
+    }
+
+    def values_for(item: dict[str, Any], required_paths: tuple[tuple[str, ...], ...]):
+        address = item.get("address")
+        values = item.get("values")
+        change_value = changes_by_address.get(address)
+        unknown = (
+            change_value.get("after_unknown")
+            if isinstance(change_value, dict)
+            else None
+        )
+        if (
+            not isinstance(address, str)
+            or not isinstance(values, dict)
+            or not isinstance(unknown, dict)
+            or not _valid_unknown_tree(unknown)
+        ):
+            _deny(
+                findings,
+                "batch_plan_values_unknown",
+                address,
+                "DavDeploy could not verify a required AWS Batch plan value.",
+            )
+            return address, None
+        if any(_path_contains_unknown(unknown, path) for path in required_paths):
+            _deny(
+                findings,
+                "batch_plan_values_unknown",
+                address,
+                "A required AWS Batch setting is unknown in this plan.",
+            )
+            return address, None
+        return address, values
+
+    compute_environment = by_type["aws_batch_compute_environment"][0]
+    environment_address, environment_values = values_for(
+        compute_environment,
+        (
+            ("type",),
+            ("state",),
+            ("service_role",),
+            ("compute_resources", "type"),
+            ("compute_resources", "max_vcpus"),
+            ("compute_resources", "subnets"),
+            ("compute_resources", "security_group_ids"),
+        ),
+    )
+    environment_arn = None
+    if environment_values is not None:
+        if (
+            environment_values.get("type") != "MANAGED"
+            or environment_values.get("state") != "ENABLED"
+        ):
+            _deny(
+                findings,
+                "batch_compute_environment_unsupported",
+                environment_address,
+                "Generated Batch compute environments must be enabled and managed.",
+            )
+        compute_resources = environment_values.get("compute_resources")
+        if isinstance(compute_resources, dict):
+            compute_resources = [compute_resources]
+        if (
+            not isinstance(compute_resources, list)
+            or len(compute_resources) != 1
+            or not isinstance(compute_resources[0], dict)
+        ):
+            _deny(
+                findings,
+                "batch_compute_resources_unsupported",
+                environment_address,
+                "Generated Batch environments must contain one known Fargate capacity block.",
+            )
+        else:
+            capacity = compute_resources[0]
+            max_vcpus = capacity.get("max_vcpus")
+            if capacity.get("type") != "FARGATE":
+                _deny(
+                    findings,
+                    "batch_compute_type_unsupported",
+                    environment_address,
+                    "The current Batch policy supports Fargate compute environments only.",
+                )
+            if (
+                isinstance(max_vcpus, bool)
+                or not isinstance(max_vcpus, int)
+                or not 1 <= max_vcpus <= 6
+            ):
+                _deny(
+                    findings,
+                    "batch_capacity_limit_exceeded",
+                    environment_address,
+                    "Generated Batch Fargate capacity is limited to six vCPUs per environment.",
+                )
+            for name in ("subnets", "security_group_ids"):
+                identifiers = capacity.get(name)
+                if not isinstance(identifiers, list) or not identifiers or any(
+                    not isinstance(value, str) or not value.strip() for value in identifiers
+                ):
+                    _deny(
+                        findings,
+                        "batch_network_configuration_invalid",
+                        environment_address,
+                        "Batch Fargate compute requires known subnet and security-group "
+                        "references.",
+                    )
+        service_role = environment_values.get("service_role")
+        if not same_account_role_arn(service_role):
+            _deny(
+                findings,
+                "batch_service_role_scope_invalid",
+                environment_address,
+                "The Batch service role must be a known IAM role in the approved account.",
+            )
+        environment_arn = environment_values.get("arn")
+
+    queue = by_type["aws_batch_job_queue"][0]
+    queue_address, queue_values = values_for(
+        queue,
+        (("state",), ("priority",), ("compute_environment_order", "order")),
+    )
+    if queue_values is not None:
+        if queue_values.get("state") != "ENABLED":
+            _deny(
+                findings,
+                "batch_job_queue_state_unsupported",
+                queue_address,
+                "The supported Batch job queue must be enabled.",
+            )
+        priority = queue_values.get("priority")
+        if isinstance(priority, bool) or not isinstance(priority, int) or not 0 <= priority <= 100:
+            _deny(
+                findings,
+                "batch_job_queue_priority_invalid",
+                queue_address,
+                "Generated Batch job queues are limited to priority values from 0 through 100.",
+            )
+        order = queue_values.get("compute_environment_order")
+        if (
+            not isinstance(order, list)
+            or len(order) != 1
+            or not isinstance(order[0], dict)
+            or order[0].get("order") != 1
+        ):
+            _deny(
+                findings,
+                "batch_job_queue_order_invalid",
+                queue_address,
+                "The supported Batch queue must use one compute environment at order 1.",
+            )
+        configured = _configured_resources(document)
+        queue_configuration = configured.get(queue_address)
+        expressions = (
+            queue_configuration.get("expressions")
+            if isinstance(queue_configuration, dict)
+            else None
+        )
+        queue_expression = (
+            expressions.get("compute_environment_order")
+            if isinstance(expressions, dict)
+            else None
+        )
+        pending_expressions = [queue_expression]
+        references: list[str] = []
+        expression_nodes = 0
+        while pending_expressions:
+            expression_nodes += 1
+            if expression_nodes > 10_000:
+                _deny(
+                    findings,
+                    "batch_configuration_too_large",
+                    queue_address,
+                    "The Batch queue reference configuration exceeds the policy inspection limit.",
+                )
+                break
+            expression = pending_expressions.pop()
+            if isinstance(expression, dict):
+                raw_references = expression.get("references")
+                if isinstance(raw_references, list):
+                    references.extend(
+                        reference
+                        for reference in raw_references
+                        if isinstance(reference, str)
+                    )
+                pending_expressions.extend(
+                    child
+                    for key, child in expression.items()
+                    if key != "references"
+                )
+            elif isinstance(expression, list):
+                pending_expressions.extend(expression)
+        candidate_environments = [
+            item
+            for item in by_type["aws_batch_compute_environment"]
+            if any(
+                _reference_targets_resource(
+                    reference,
+                    item.get("address", ""),
+                    "aws_batch_compute_environment",
+                )
+                for reference in references
+            )
+        ]
+        if len(candidate_environments) != 1:
+            _deny(
+                findings,
+                "batch_job_queue_compute_environment_unbound",
+                queue_address,
+                "The Batch queue must reference exactly one compute environment created in "
+                "this plan.",
+            )
+        elif (
+            environment_arn
+            and order
+            and order[0].get("compute_environment") not in (None, environment_arn)
+        ):
+            _deny(
+                findings,
+                "batch_job_queue_compute_environment_mismatch",
+                queue_address,
+                "The Batch queue target must match its same-plan compute environment.",
+            )
+
+    job = by_type["aws_batch_job_definition"][0]
+    job_address, job_values = values_for(
+        job,
+        (
+            ("type",),
+            ("platform_capabilities",),
+            ("container_properties",),
+            ("retry_strategy",),
+            ("timeout",),
+        ),
+    )
+    if job_values is None:
+        return
+    if (
+        job_values.get("type") != "container"
+        or job_values.get("platform_capabilities") != ["FARGATE"]
+    ):
+        _deny(
+            findings,
+            "batch_job_definition_unsupported",
+            job_address,
+            "The supported Batch job definition is a single-container Fargate job.",
+        )
+        return
+    raw_properties = job_values.get("container_properties")
+    try:
+        properties = json.loads(raw_properties) if isinstance(raw_properties, str) else None
+    except (json.JSONDecodeError, RecursionError):
+        properties = None
+    if not isinstance(properties, dict):
+        _deny(
+            findings,
+            "batch_container_properties_invalid",
+            job_address,
+            "The Fargate container properties must be a known JSON object.",
+        )
+        return
+
+    image = properties.get("image")
+    if not isinstance(image, str) or not re.search(r"@sha256:[a-f0-9]{64}$", image):
+        _deny(
+            findings,
+            "batch_image_digest_required",
+            job_address,
+            "Batch job images must be pinned to a SHA-256 digest.",
+        )
+    privileged = properties.get("privileged")
+    if privileged is not None and privileged is not False:
+        _deny(
+            findings,
+            "batch_privileged_container_denied",
+            job_address,
+            "Privileged containers are unsupported for generated Batch Fargate jobs.",
+        )
+
+    requirements = properties.get("resourceRequirements")
+    requirements_by_type = {}
+    if isinstance(requirements, list):
+        for item in requirements:
+            if isinstance(item, dict) and isinstance(item.get("type"), str):
+                if item["type"] in requirements_by_type:
+                    requirements_by_type[item["type"]] = None
+                else:
+                    requirements_by_type[item["type"]] = item.get("value")
+    if (
+        not isinstance(requirements, list)
+        or len(requirements) != 2
+        or set(requirements_by_type) != {"VCPU", "MEMORY"}
+    ):
+        _deny(
+            findings,
+            "batch_job_resource_requirements_unsupported",
+            job_address,
+            "Fargate jobs must declare exactly one CPU and one memory resource requirement.",
+        )
+    cpu = requirements_by_type.get("VCPU")
+    memory = requirements_by_type.get("MEMORY")
+    supported_memory = {
+        "0.25": {512, 1024, 2048},
+        "0.5": set(range(1024, 4097, 1024)),
+        "1": set(range(2048, 8193, 1024)),
+        "2": set(range(4096, 16385, 1024)),
+    }
+    memory_mib = int(memory) if isinstance(memory, str) and memory.isdecimal() else None
+    if cpu not in supported_memory or memory_mib not in supported_memory.get(cpu, set()):
+        _deny(
+            findings,
+            "batch_job_resource_requirements_unsupported",
+            job_address,
+            "Batch Fargate jobs must use a supported CPU/memory pair and no more than two vCPUs.",
+        )
+
+    execution_role = properties.get("executionRoleArn")
+    job_role = properties.get("jobRoleArn")
+    if not same_account_role_arn(execution_role):
+        _deny(
+            findings,
+            "batch_execution_role_scope_invalid",
+            job_address,
+            "Fargate jobs require a known execution role in the approved account.",
+        )
+    if job_role is not None and not same_account_role_arn(job_role):
+        _deny(
+            findings,
+            "batch_job_role_scope_invalid",
+            job_address,
+            "A Batch application role must be a known IAM role in the approved account.",
+        )
+
+    planned_role_arns = {
+        role_values.get("arn")
+        for role in resources
+        if role.get("type") == "aws_iam_role"
+        and isinstance((role_values := role.get("values")), dict)
+        and isinstance(role_values.get("arn"), str)
+    }
+    role_scopes = (
+        (
+            environment_values.get("service_role") if environment_values else None,
+            environment_address,
+        ),
+        (execution_role, job_address),
+        (job_role, job_address),
+    )
+    for role_arn, role_address in role_scopes:
+        if role_arn is not None and role_arn not in planned_role_arns:
+            _review(
+                findings,
+                "batch_role_permissions_unverified",
+                role_address,
+                "A Batch role is in the approved account, but its effective trust and "
+                "permissions are outside this plan.",
+            )
+
+    retry = job_values.get("retry_strategy")
+    if not isinstance(retry, list) or len(retry) != 1 or not isinstance(retry[0], dict):
+        _deny(
+            findings,
+            "batch_retry_strategy_invalid",
+            job_address,
+            "Batch jobs require one explicit bounded retry strategy.",
+        )
+    else:
+        attempts = retry[0].get("attempts")
+        if isinstance(attempts, bool) or not isinstance(attempts, int) or not 1 <= attempts <= 3:
+            _deny(
+                findings,
+                "batch_retry_attempts_invalid",
+                job_address,
+                "Generated Batch jobs are limited to one through three attempts.",
+            )
+        evaluate_on_exit = retry[0].get("evaluate_on_exit", [])
+        if evaluate_on_exit not in (None, []):
+            _deny(
+                findings,
+                "batch_retry_filters_unsupported",
+                job_address,
+                "Custom Batch retry filters require a separately reviewed policy.",
+            )
+
+    timeout = job_values.get("timeout")
+    if not isinstance(timeout, list) or len(timeout) != 1 or not isinstance(timeout[0], dict):
+        _deny(
+            findings,
+            "batch_timeout_required",
+            job_address,
+            "Batch jobs require one explicit per-attempt timeout.",
+        )
+    else:
+        seconds = timeout[0].get("attempt_duration_seconds")
+        if isinstance(seconds, bool) or not isinstance(seconds, int) or not 60 <= seconds <= 3600:
+            _deny(
+                findings,
+                "batch_timeout_out_of_bounds",
+                job_address,
+                "Generated Batch jobs are limited to a 60–3,600 second attempt timeout.",
+            )
+
+    environment = properties.get("environment", [])
+    if not isinstance(environment, list):
+        _deny(
+            findings,
+            "batch_environment_invalid",
+            job_address,
+            "Batch job environment variables must be a known list.",
+        )
+    else:
+        for item in environment:
+            if (
+                not isinstance(item, dict)
+                or not isinstance(item.get("name"), str)
+                or not isinstance(item.get("value"), str)
+            ):
+                _deny(
+                    findings,
+                    "batch_environment_invalid",
+                    job_address,
+                    "Batch environment entries must have known names and values.",
+                )
+                continue
+            if re.search(r"(?i)(secret|password|token|credential|api.?key)", item["name"]):
+                _deny(
+                    findings,
+                    "batch_plaintext_secret_environment_denied",
+                    job_address,
+                    "Secret-like values must not be placed in Batch plaintext environment "
+                    "variables.",
+                )
+            if item["name"].upper().startswith("AWS_BATCH"):
+                _deny(
+                    findings,
+                    "batch_reserved_environment_name_denied",
+                    job_address,
+                    "AWS_BATCH-prefixed environment names are reserved by the Batch service.",
+                )
+
+    network = properties.get("networkConfiguration")
+    if network is not None:
+        public_ip = network.get("assignPublicIp") if isinstance(network, dict) else None
+        if (
+            not isinstance(network, dict)
+            or not isinstance(public_ip, str)
+            or public_ip not in {"ENABLED", "DISABLED"}
+        ):
+            _deny(
+                findings,
+                "batch_public_ip_setting_invalid",
+                job_address,
+                "Batch public-IP assignment must be an explicit ENABLED or DISABLED value.",
+            )
+        elif public_ip == "ENABLED":
+            _review(
+                findings,
+                "batch_public_ip_enabled_review",
+                job_address,
+                "This Fargate job receives a public IP; review network exposure and egress cost.",
             )
 
 

@@ -463,6 +463,133 @@ def kinesis_case(*, values=None, after_unknown=None):
     return document, proposal_value
 
 
+def batch_fargate_case(
+    *,
+    compute_values=None,
+    queue_values=None,
+    job_values=None,
+    queue_references=None,
+    unknowns=None,
+):
+    compute_address = "aws_batch_compute_environment.jobs"
+    queue_address = "aws_batch_job_queue.jobs"
+    job_address = "aws_batch_job_definition.jobs"
+    compute_arn = f"arn:aws:batch:{REGION}:{ACCOUNT}:compute-environment/jobs"
+    role_arn = f"arn:aws:iam::{ACCOUNT}:role/batch-execution"
+    compute = {
+        "arn": compute_arn,
+        "type": "MANAGED",
+        "state": "ENABLED",
+        "service_role": f"arn:aws:iam::{ACCOUNT}:role/AWSServiceRoleForBatch",
+        "compute_resources": [
+            {
+                "type": "FARGATE",
+                "max_vcpus": 6,
+                "subnets": ["subnet-private"],
+                "security_group_ids": ["sg-batch"],
+            }
+        ],
+    }
+    compute.update(compute_values or {})
+    queue = {
+        "state": "ENABLED",
+        "priority": 1,
+        "compute_environment_order": [
+            {"order": 1, "compute_environment": compute_arn}
+        ],
+    }
+    queue.update(queue_values or {})
+    properties = {
+        "image": "public.ecr.aws/library/busybox@sha256:" + "a" * 64,
+        "executionRoleArn": role_arn,
+        "networkConfiguration": {"assignPublicIp": "DISABLED"},
+        "resourceRequirements": [
+            {"type": "VCPU", "value": "0.25"},
+            {"type": "MEMORY", "value": "512"},
+        ],
+    }
+    job = {
+        "type": "container",
+        "platform_capabilities": ["FARGATE"],
+        "container_properties": json.dumps(properties),
+        "retry_strategy": [{"attempts": 2}],
+        "timeout": [{"attempt_duration_seconds": 600}],
+    }
+    job.update(job_values or {})
+
+    document = plan()
+    guard = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "terraform_data"
+    )
+    resources = [
+        guard,
+        resource(compute_address, "aws_batch_compute_environment", compute),
+        resource(queue_address, "aws_batch_job_queue", queue),
+        resource(job_address, "aws_batch_job_definition", job),
+    ]
+    document["planned_values"]["root_module"]["resources"] = resources
+    unknowns = unknowns or {}
+    document["resource_changes"] = [
+        change("terraform_data.account_guard", "terraform_data"),
+        change(
+            compute_address,
+            "aws_batch_compute_environment",
+            after_unknown=unknowns.get("aws_batch_compute_environment", {}),
+        ),
+        change(
+            queue_address,
+            "aws_batch_job_queue",
+            after_unknown=unknowns.get("aws_batch_job_queue", {}),
+        ),
+        change(
+            job_address,
+            "aws_batch_job_definition",
+            after_unknown=unknowns.get("aws_batch_job_definition", {}),
+        ),
+    ]
+    references = queue_references if queue_references is not None else [f"{compute_address}.arn"]
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": queue_address,
+                "expressions": {
+                    "compute_environment_order": [
+                        {"compute_environment": {"references": references}}
+                    ]
+                },
+            }
+        ]
+    }
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "batch-compute",
+                "resource_type": "aws_batch_compute_environment",
+                "name": "jobs",
+                "arguments": {},
+                "rationale": "Run bounded asynchronous Fargate work.",
+            },
+            {
+                "resource_id": "batch-queue",
+                "resource_type": "aws_batch_job_queue",
+                "name": "jobs",
+                "arguments": {},
+                "rationale": "Route jobs to the same-plan Fargate capacity.",
+            },
+            {
+                "resource_id": "batch-job",
+                "resource_type": "aws_batch_job_definition",
+                "name": "jobs",
+                "arguments": {},
+                "rationale": "Run one digest-pinned bounded container job.",
+            },
+        ]
+    )
+    return document, proposal_value
+
+
 def efs_case(*, values=None, after_unknown=None, ingress_values=None, ingress_unknown=None):
     file_system_values = {
         "encrypted": True,
@@ -6321,6 +6448,237 @@ def test_kinesis_policy_findings_do_not_echo_plan_values():
 
     assert "kinesis_key_unsupported" in codes(result)
     assert "sensitive-customer-key-marker" not in repr(result)
+
+
+def _batch_container_properties(document):
+    job = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_batch_job_definition"
+    )
+    return job["values"]["container_properties"]
+
+
+def _set_batch_container_properties(document, **updates):
+    job = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_batch_job_definition"
+    )
+    properties = json.loads(job["values"]["container_properties"])
+    properties.update(updates)
+    job["values"]["container_properties"] = json.dumps(properties)
+
+
+def test_batch_fargate_supported_shape_is_eligible_for_human_review():
+    document, proposal_value = batch_fargate_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert set(codes(result)) == {"batch_role_permissions_unverified"}
+
+
+@pytest.mark.parametrize(
+    ("compute_values", "expected_code"),
+    [
+        ({"type": "UNMANAGED"}, "batch_compute_environment_unsupported"),
+        (
+            {
+                "compute_resources": [
+                    {
+                        "type": "EC2",
+                        "max_vcpus": 6,
+                        "subnets": ["subnet-private"],
+                        "security_group_ids": ["sg-batch"],
+                    }
+                ]
+            },
+            "batch_compute_type_unsupported",
+        ),
+        (
+            {
+                "compute_resources": [
+                    {
+                        "type": "FARGATE",
+                        "max_vcpus": 7,
+                        "subnets": ["subnet-private"],
+                        "security_group_ids": ["sg-batch"],
+                    }
+                ]
+            },
+            "batch_capacity_limit_exceeded",
+        ),
+    ],
+)
+def test_batch_compute_environment_requires_managed_bounded_fargate(
+    compute_values, expected_code
+):
+    document, proposal_value = batch_fargate_case(compute_values=compute_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_batch_queue_must_bind_one_same_plan_compute_environment():
+    document, proposal_value = batch_fargate_case(queue_references=[])
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_job_queue_compute_environment_unbound" in codes(result)
+
+
+def test_batch_queue_accepts_unknown_environment_arn_with_exact_same_plan_reference():
+    document, proposal_value = batch_fargate_case(
+        queue_values={
+            "compute_environment_order": [
+                {"order": 1, "compute_environment": None}
+            ]
+        },
+        unknowns={
+            "aws_batch_job_queue": {
+                "compute_environment_order": [{"compute_environment": True}]
+            }
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "batch_job_queue_compute_environment_unbound" not in codes(result)
+    assert "batch_role_permissions_unverified" in codes(result)
+
+
+def test_batch_queue_rejects_multiple_compute_environment_bindings():
+    document, proposal_value = batch_fargate_case(
+        queue_values={
+            "compute_environment_order": [
+                {"order": 1, "compute_environment": "first"},
+                {"order": 2, "compute_environment": "second"},
+            ]
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_job_queue_order_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("job_values", "property_updates", "expected_code"),
+    [
+        ({"type": "multinode"}, {}, "batch_job_definition_unsupported"),
+        ({"platform_capabilities": ["EC2"]}, {}, "batch_job_definition_unsupported"),
+        (
+            {},
+            {"image": "public.ecr.aws/library/busybox:latest"},
+            "batch_image_digest_required",
+        ),
+        ({}, {"privileged": True}, "batch_privileged_container_denied"),
+        (
+            {},
+            {
+                "resourceRequirements": [
+                    {"type": "VCPU", "value": "0.25"},
+                    {"type": "MEMORY", "value": "4096"},
+                ]
+            },
+            "batch_job_resource_requirements_unsupported",
+        ),
+        (
+            {},
+            {"executionRoleArn": "arn:aws:iam::111111111111:role/execution"},
+            "batch_execution_role_scope_invalid",
+        ),
+    ],
+)
+def test_batch_job_definition_rejects_unsafe_or_unpinned_settings(
+    job_values, property_updates, expected_code
+):
+    document, proposal_value = batch_fargate_case(job_values=job_values)
+    _set_batch_container_properties(document, **property_updates)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("job_values", "expected_code"),
+    [
+        ({"retry_strategy": [{"attempts": 4}]}, "batch_retry_attempts_invalid"),
+        ({"retry_strategy": []}, "batch_retry_strategy_invalid"),
+        ({"timeout": [{"attempt_duration_seconds": 3601}]}, "batch_timeout_out_of_bounds"),
+        ({"timeout": []}, "batch_timeout_required"),
+    ],
+)
+def test_batch_job_definition_requires_bounded_retries_and_timeout(job_values, expected_code):
+    document, proposal_value = batch_fargate_case(job_values=job_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_batch_job_rejects_plaintext_secret_environment_names():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        environment=[{"name": "API_TOKEN", "value": "sensitive-value-marker"}],
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_plaintext_secret_environment_denied" in codes(result)
+    assert "sensitive-value-marker" not in repr(result)
+
+
+def test_batch_job_rejects_batch_reserved_environment_names():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        environment=[{"name": "AWS_BATCH_JOB_ATTEMPT", "value": "override"}],
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_reserved_environment_name_denied" in codes(result)
+
+
+def test_batch_public_ip_assignment_is_a_review_finding():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        networkConfiguration={"assignPublicIp": "ENABLED"},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "batch_public_ip_enabled_review" in codes(result)
+
+
+def test_batch_unknown_capacity_is_denied_without_echoing_values():
+    document, proposal_value = batch_fargate_case(
+        unknowns={
+            "aws_batch_compute_environment": {
+                "compute_resources": [{"max_vcpus": True}]
+            }
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_plan_values_unknown" in codes(result)
 
 
 def test_efs_safe_module_shape_and_security_group_nfs_ingress_pass():

@@ -14,7 +14,7 @@ the hosted control plane.
 
 ## Current repo state
 
-- Backend `main` is `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (merged PR #491).
+- Backend `main` is `9680e6ff0d7637b9dc56948c3154126ef052afd4` (merged PR #498), which adds source-only AWS Batch bounds. The PR #486 branch now includes this mainline; the sync changes no AWS or hosted control-plane state.
 - PR #483's generated-plan policy checks ASG capacity, launch-template
   binding, instance type, AMI-ID shape, and IMDSv2. This PR adds verified AMI
   root-device binding and bounded encrypted root EBS settings.
@@ -99,15 +99,20 @@ merging current `main` through PR #493 and reconciling the status docs, head
 `9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven checks in run
 `45531340170`. The documentation-reconciliation head
 `3d7fe8b89adb6fd6407afe989336a1d756e02d99` then passed all seven checks in
-run `45532421344`. The root-device review finding is addressed in code; the
-clean-room review finding remains open until final cleanup is approved and
-recorded. Project containers are stopped; generated files, volume, and network
-remain preserved. No hosted control-plane resource or state was touched.
+run `45532421344`. The root-device review finding is addressed in code; the clean-room review finding remains open until final cleanup is approved and recorded. Project containers are stopped; generated files, volume, and network remain preserved. This branch now includes main through PR #498. The focused generated-plan policy suite passes (544 tests); Ruff, documentation conventions, and `git diff --check` pass locally. CI for the synchronized head is pending. No hosted control-plane resource or state was touched.
 
 ## Tests / validation performed
 
+- `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest -p
+  no:cacheprovider tests/test_generated_plan_policy.py -q`: 544 passed after
+  synchronizing with PR #498.
+- `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/ruff check
+  apps/api/src/davdeploy/generated_plan_policy.py
+  tests/test_generated_plan_policy.py`: passed after synchronization.
+- `GITHUB_PR_NUMBER=486 python3 scripts/check_doc_conventions.py` and
+  `git diff --check`: passed after synchronization.
 - `.venv/bin/python -m pytest -q tests/test_generated_plan_policy.py -k
-  autoscaling`: 42 passed, 481 deselected.
+  autoscaling`: 42 passed, 481 deselected (before synchronization).
 - `make verify`: passed (1,752 tests after the AMI-root binding change; one
   existing Starlette/httpx deprecation warning; OpenAPI snapshot and Compose
   configuration passed).
