@@ -75,7 +75,7 @@ control plane.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [ ] Required GitHub checks passed on the final PR head.
+- [x] Required GitHub checks passed on the current final PR head.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -85,7 +85,9 @@ tests/test_generated_plan_policy.py tests/test_generated_plan_review.py -q`
 passed (594 tests); Ruff passed for the policy module and its regression tests;
 `python3 scripts/check_doc_conventions.py` and `git diff --check` passed. This
 package is source-only; do not create `docs/test/test503.md` or mutate AWS.
-Final-head GitHub checks and review are pending.
+All seven required GitHub checks passed on final-head commit `3a5dd2b` in
+[CI run 45565279893](https://github.com/Bepoadewale/davdeploy/actions/runs/45565279893).
+PR review and merge are pending.
 
 ## Evidence files produced
 
