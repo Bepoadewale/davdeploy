@@ -63,9 +63,25 @@ data retention. Resource schema validity alone is not deployment certification.
 
 Reuse current renderers as compatibility paths, schema examples, and regression
 cases during migration. Do not switch off the existing App Runner path until
-parity is demonstrated. Nova-generated output is currently plan-only and is
-not connected to hosted CodeBuild; this ADR records a direction, not a shipped
-capability.
+parity is demonstrated. Nova-generated output remains plan-only and is not a
+certified customer deployment.
+
+### Source implementation status — 2026-11-25
+
+The backend source contains a gated plan-only CodeBuild path. An authenticated
+request is bound to a submitted customer revision; a durable worker generates
+the typed proposal, stages the exact input, and starts only the fixed
+plan-only CodeBuild project. The build uses the scoped customer plan role and
+produces saved-plan evidence; this path does not apply infrastructure. The
+Terraform variable `enable_nova_plan_only_runner` defaults to `false`, and the
+API dispatcher also fails closed unless its runner-ready setting and required
+configuration are present.
+
+This source integration is not evidence that the runtime gate is enabled or
+that a customer has completed the hosted plan journey. No authenticated
+customer Nova request with a recorded hosted plan is evidenced in the current
+handoff. The generic hosted lifecycle, multi-module execution, application
+health/recovery, and the remaining launch gates below are still unproven.
 
 ## Finite coverage map
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 
 import pytest
@@ -9,6 +10,7 @@ from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
     _check_appconfig_bindings,
     _check_rds_final_snapshot_changes,
+    _check_vpc_topology,
     _configured_resources,
     _path_contains_unknown,
     _reference_targets_resource,
@@ -161,6 +163,38 @@ def resource(address, kind, values):
     return {"address": address, "mode": "managed", "type": kind, "values": values}
 
 
+def lambda_function_values(
+    function_name="sample-function",
+    role="arn:aws:iam::654654474502:role/sample-function",
+    **overrides,
+):
+    values = {
+        "function_name": function_name,
+        "role": role,
+        "filename": "./artifact.zip",
+        "handler": "index.handler",
+        "runtime": "python3.12",
+        "package_type": "Zip",
+        "source_code_hash": base64.b64encode(b"s" * 32).decode("ascii"),
+        "architectures": ["x86_64"],
+        "memory_size": 128,
+        "timeout": 30,
+        "ephemeral_storage": [{"size": 512}],
+        "snap_start": [{"apply_on": "None"}],
+        "vpc_config": [],
+        "reserved_concurrent_executions": -1,
+        "environment": [],
+        "layers": [],
+        "tracing_config": [{"mode": "PassThrough"}],
+        "dead_letter_config": [],
+        "file_system_config": [],
+        "code_signing_config_arn": None,
+        "kms_key_arn": None,
+    }
+    values.update(overrides)
+    return values
+
+
 def change(address, kind, actions=("create",), **metadata):
     before = {"tags": ownership_scope().tags()} if any(
         action in actions for action in ("delete", "update", "no-op")
@@ -181,6 +215,252 @@ def change(address, kind, actions=("create",), **metadata):
             **metadata,
         },
     }
+
+
+def vpc_topology_plan():
+    tags = ownership_scope().tags()
+    resources = [
+        resource(
+            "aws_vpc.this",
+            "aws_vpc",
+            {
+                "cidr_block": "10.40.0.0/16",
+                "enable_dns_support": True,
+                "enable_dns_hostnames": True,
+                "assign_generated_ipv6_cidr_block": False,
+            },
+        ),
+        resource(
+            "aws_internet_gateway.this",
+            "aws_internet_gateway",
+            {"vpc_id": None},
+        ),
+        resource(
+            "aws_eip.nat",
+            "aws_eip",
+            {"domain": "vpc", "allocation_id": "eipalloc-test"},
+        ),
+        resource(
+            "aws_nat_gateway.this",
+            "aws_nat_gateway",
+            {"allocation_id": "eipalloc-test", "subnet_id": "subnet-public-0", "connectivity_type": "public"},
+        ),
+        resource(
+            "aws_route_table.public",
+            "aws_route_table",
+            {"vpc_id": None, "route": [{"cidr_block": "0.0.0.0/0", "gateway_id": "igw-test", "nat_gateway_id": None}]},
+        ),
+        resource(
+            "aws_route_table.private",
+            "aws_route_table",
+            {"vpc_id": None, "route": [{"cidr_block": "0.0.0.0/0", "gateway_id": None, "nat_gateway_id": "nat-test"}]},
+        ),
+    ]
+    for index, az in enumerate(("us-east-1a", "us-east-1b")):
+        resources.extend(
+            [
+                resource(
+                    f'aws_subnet.public["{index}"]',
+                    "aws_subnet",
+                    {
+                        "vpc_id": None,
+                        "cidr_block": f"10.40.{128 + index * 16}.0/20",
+                        "availability_zone": az,
+                        "map_public_ip_on_launch": False,
+                        "assign_ipv6_address_on_creation": False,
+                        "tags": {**tags, "kubernetes.io/role/elb": "1"},
+                    },
+                ),
+                resource(
+                    f'aws_subnet.private["{index}"]',
+                    "aws_subnet",
+                    {
+                        "vpc_id": None,
+                        "cidr_block": f"10.40.{index * 16}.0/20",
+                        "availability_zone": az,
+                        "map_public_ip_on_launch": False,
+                        "assign_ipv6_address_on_creation": False,
+                        "tags": {**tags, "kubernetes.io/role/internal-elb": "1"},
+                    },
+                ),
+                resource(
+                    f'aws_route_table_association.public["{index}"]',
+                    "aws_route_table_association",
+                    {"subnet_id": None, "route_table_id": None},
+                ),
+                resource(
+                    f'aws_route_table_association.private["{index}"]',
+                    "aws_route_table_association",
+                    {"subnet_id": None, "route_table_id": None},
+                ),
+            ]
+        )
+    references = {
+        "aws_internet_gateway.this": {"vpc_id": ["aws_vpc.this.id"]},
+        "aws_route_table.public": {
+            "vpc_id": ["aws_vpc.this.id"],
+            "route": ["aws_internet_gateway.this.id"],
+        },
+        "aws_route_table.private": {
+            "vpc_id": ["aws_vpc.this.id"],
+            "route": ["aws_nat_gateway.this.id"],
+        },
+        "aws_nat_gateway.this": {
+            "allocation_id": ["aws_eip.nat.id"],
+            "subnet_id": ["aws_subnet.public"],
+        },
+        "aws_subnet.public": {"vpc_id": ["aws_vpc.this.id"]},
+        "aws_subnet.private": {"vpc_id": ["aws_vpc.this.id"]},
+        "aws_route_table_association.public": {
+            "subnet_id": ["aws_subnet.public"],
+            "route_table_id": ["aws_route_table.public.id"],
+        },
+        "aws_route_table_association.private": {
+            "subnet_id": ["aws_subnet.private"],
+            "route_table_id": ["aws_route_table.private.id"],
+        },
+    }
+    config_resources = []
+    configured_addresses = set()
+    for item in resources:
+        address = item["address"]
+        resource_name = address.split("[", 1)[0]
+        if resource_name in configured_addresses:
+            continue
+        configured_addresses.add(resource_name)
+        resource_expressions = references.get(resource_name, references.get(address, {}))
+        config_resources.append(
+            {
+                "address": resource_name,
+                "expressions": {
+                    key: {"references": value}
+                    for key, value in resource_expressions.items()
+                },
+            }
+        )
+    return resources, {"configuration": {"root_module": {"resources": config_resources}}}
+
+
+def vpc_findings(resources, configuration):
+    findings = []
+    _check_vpc_topology({**configuration, "resource_changes": []}, tuple(resources), findings)
+    return findings
+
+
+def test_vpc_plan_accepts_module_topology_and_reviews_nat_cost():
+    resources, configuration = vpc_topology_plan()
+
+    findings = vpc_findings(resources, configuration)
+
+    assert [(item.code, item.severity) for item in findings] == [
+        ("vpc_nat_egress_cost_review", "review")
+    ]
+
+
+def test_vpc_plan_binds_module_resources_from_relative_configuration_references():
+    resources, configuration = vpc_topology_plan()
+    for item in resources:
+        item["address"] = f"module.network.{item['address']}"
+    for item in configuration["configuration"]["root_module"]["resources"]:
+        item["address"] = f"module.network.{item['address']}"
+
+    findings = vpc_findings(resources, configuration)
+
+    assert [(item.code, item.severity) for item in findings] == [
+        ("vpc_nat_egress_cost_review", "review")
+    ]
+
+
+def test_vpc_plan_rejects_public_ipv4_auto_assignment():
+    resources, configuration = vpc_topology_plan()
+    subnet = next(item for item in resources if item["type"] == "aws_subnet")
+    subnet["values"]["map_public_ip_on_launch"] = True
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_subnet_configuration_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_unknown_dns_and_ipv6_configuration():
+    resources, configuration = vpc_topology_plan()
+    vpc = next(item for item in resources if item["type"] == "aws_vpc")
+    vpc["values"]["enable_dns_support"] = None
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_configuration_unsupported" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_unbound_public_default_route():
+    resources, configuration = vpc_topology_plan()
+    route_table = next(
+        item
+        for item in resources
+        if item["type"] == "aws_route_table" and item["address"].endswith("public")
+    )
+    route_table["values"]["route"][0]["gateway_id"] = None
+    config_resource = next(
+        item
+        for item in configuration["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_route_table.public"
+    )
+    config_resource["expressions"]["route"]["references"] = ["aws_nat_gateway.this.id"]
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_public_private_route_tables_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_overlapping_subnet_cidr():
+    resources, configuration = vpc_topology_plan()
+    public_subnet = next(
+        item for item in resources if item["address"] == 'aws_subnet.public["0"]'
+    )
+    private_subnet = next(
+        item for item in resources if item["address"] == 'aws_subnet.private["0"]'
+    )
+    public_subnet["values"]["cidr_block"] = private_subnet["values"]["cidr_block"]
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_subnet_cidr_overlap" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_association_to_wrong_subnet_key():
+    resources, configuration = vpc_topology_plan()
+    configured = next(
+        item
+        for item in configuration["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_route_table_association.public"
+    )
+    configured["expressions"]["subnet_id"]["references"] = ['aws_subnet.public["1"].id']
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_route_association_binding_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_separate_route_resource():
+    resources, configuration = vpc_topology_plan()
+    resources.append(resource("aws_route.extra", "aws_route", {"destination_cidr_block": "0.0.0.0/0"}))
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_route_resource_unsupported" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_ipv6_route():
+    resources, configuration = vpc_topology_plan()
+    route_table = next(
+        item
+        for item in resources
+        if item["type"] == "aws_route_table" and item["address"].endswith("public")
+    )
+    route_table["values"]["route"][0]["ipv6_cidr_block"] = "::/0"
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_route_shape_unsupported" in {item.code for item in findings}
 
 
 def plan(resources=None, changes=None, **overrides):
@@ -459,6 +739,133 @@ def kinesis_case(*, values=None, after_unknown=None):
                 "arguments": {"name": "app-events", "shard_count": 1},
                 "rationale": "Accept bounded event records for asynchronous processing.",
             }
+        ]
+    )
+    return document, proposal_value
+
+
+def batch_fargate_case(
+    *,
+    compute_values=None,
+    queue_values=None,
+    job_values=None,
+    queue_references=None,
+    unknowns=None,
+):
+    compute_address = "aws_batch_compute_environment.jobs"
+    queue_address = "aws_batch_job_queue.jobs"
+    job_address = "aws_batch_job_definition.jobs"
+    compute_arn = f"arn:aws:batch:{REGION}:{ACCOUNT}:compute-environment/jobs"
+    role_arn = f"arn:aws:iam::{ACCOUNT}:role/batch-execution"
+    compute = {
+        "arn": compute_arn,
+        "type": "MANAGED",
+        "state": "ENABLED",
+        "service_role": f"arn:aws:iam::{ACCOUNT}:role/AWSServiceRoleForBatch",
+        "compute_resources": [
+            {
+                "type": "FARGATE",
+                "max_vcpus": 6,
+                "subnets": ["subnet-private"],
+                "security_group_ids": ["sg-batch"],
+            }
+        ],
+    }
+    compute.update(compute_values or {})
+    queue = {
+        "state": "ENABLED",
+        "priority": 1,
+        "compute_environment_order": [
+            {"order": 1, "compute_environment": compute_arn}
+        ],
+    }
+    queue.update(queue_values or {})
+    properties = {
+        "image": "public.ecr.aws/library/busybox@sha256:" + "a" * 64,
+        "executionRoleArn": role_arn,
+        "networkConfiguration": {"assignPublicIp": "DISABLED"},
+        "resourceRequirements": [
+            {"type": "VCPU", "value": "0.25"},
+            {"type": "MEMORY", "value": "512"},
+        ],
+    }
+    job = {
+        "type": "container",
+        "platform_capabilities": ["FARGATE"],
+        "container_properties": json.dumps(properties),
+        "retry_strategy": [{"attempts": 2}],
+        "timeout": [{"attempt_duration_seconds": 600}],
+    }
+    job.update(job_values or {})
+
+    document = plan()
+    guard = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "terraform_data"
+    )
+    resources = [
+        guard,
+        resource(compute_address, "aws_batch_compute_environment", compute),
+        resource(queue_address, "aws_batch_job_queue", queue),
+        resource(job_address, "aws_batch_job_definition", job),
+    ]
+    document["planned_values"]["root_module"]["resources"] = resources
+    unknowns = unknowns or {}
+    document["resource_changes"] = [
+        change("terraform_data.account_guard", "terraform_data"),
+        change(
+            compute_address,
+            "aws_batch_compute_environment",
+            after_unknown=unknowns.get("aws_batch_compute_environment", {}),
+        ),
+        change(
+            queue_address,
+            "aws_batch_job_queue",
+            after_unknown=unknowns.get("aws_batch_job_queue", {}),
+        ),
+        change(
+            job_address,
+            "aws_batch_job_definition",
+            after_unknown=unknowns.get("aws_batch_job_definition", {}),
+        ),
+    ]
+    references = queue_references if queue_references is not None else [f"{compute_address}.arn"]
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {
+                "address": queue_address,
+                "expressions": {
+                    "compute_environment_order": [
+                        {"compute_environment": {"references": references}}
+                    ]
+                },
+            }
+        ]
+    }
+    proposal_value = proposal(
+        [
+            {
+                "resource_id": "batch-compute",
+                "resource_type": "aws_batch_compute_environment",
+                "name": "jobs",
+                "arguments": {},
+                "rationale": "Run bounded asynchronous Fargate work.",
+            },
+            {
+                "resource_id": "batch-queue",
+                "resource_type": "aws_batch_job_queue",
+                "name": "jobs",
+                "arguments": {},
+                "rationale": "Route jobs to the same-plan Fargate capacity.",
+            },
+            {
+                "resource_id": "batch-job",
+                "resource_type": "aws_batch_job_definition",
+                "name": "jobs",
+                "arguments": {},
+                "rationale": "Run one digest-pinned bounded container job.",
+            },
         ]
     )
     return document, proposal_value
@@ -833,6 +1240,223 @@ def ecr_repository_case(*, values=None, after_unknown=None):
         ]
     )
     return document, proposal_value
+
+
+def lambda_function_case(*, values=None, after_unknown=None, role_in_plan=False, role_trust=None):
+    address = "aws_lambda_function.function"
+    role_arn = (values or {}).get(
+        "role", "arn:aws:iam::654654474502:role/sample-function"
+    )
+    function_values = lambda_function_values(**(values or {}))
+    function_resource = resource(address, "aws_lambda_function", function_values)
+    resources = [function_resource, resource("terraform_data.account_guard", "terraform_data", {"input": None})]
+    changes = [
+        change(
+            address,
+            "aws_lambda_function",
+            after=function_resource["values"],
+            after_unknown=after_unknown or {},
+        ),
+        change("terraform_data.account_guard", "terraform_data"),
+    ]
+    proposal_resources = [
+        {
+            "resource_id": "function",
+            "resource_type": "aws_lambda_function",
+            "name": "function",
+            "arguments": {"function_name": function_values["function_name"]},
+            "rationale": "Run the bounded ZIP application function.",
+        }
+    ]
+    if role_in_plan:
+        trust = role_trust or {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "lambda.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                }
+            ],
+        }
+        role_address = "aws_iam_role.lambda_execution"
+        role_values = {
+            "name": "sample-function",
+            "arn": role_arn,
+            "assume_role_policy": json.dumps(trust),
+        }
+        role_resource = resource(role_address, "aws_iam_role", role_values)
+        resources.append(role_resource)
+        changes.append(change(role_address, "aws_iam_role", after=role_resource["values"]))
+        proposal_resources.append(
+            {
+                "resource_id": "lambda-role",
+                "resource_type": "aws_iam_role",
+                "name": "lambda_execution",
+                "arguments": {"name": "sample-function"},
+                "rationale": "Give the function a dedicated Lambda execution role.",
+            }
+        )
+    document = plan(resources=resources, changes=changes)
+    return document, proposal(proposal_resources)
+
+
+def test_lambda_function_accepts_bounded_zip_shape_and_reviews_external_role():
+    document, proposal_value = lambda_function_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert not any(item.severity == "deny" and item.code.startswith("lambda_") for item in result.findings)
+    assert "lambda_execution_role_permissions_unverified" in {item.code for item in result.findings}
+
+
+@pytest.mark.parametrize(
+    ("values", "finding"),
+    [
+        ({"runtime": "python3.10"}, "lambda_runtime_unsupported"),
+        ({"runtime": {"invalid": "shape"}}, "lambda_runtime_unsupported"),
+        ({"package_type": "Image", "image_uri": "example.invalid/image"}, "lambda_package_type_unsupported"),
+        ({"source_code_hash": "not-a-sha256"}, "lambda_source_hash_invalid"),
+        ({"role": "arn:aws:iam::111122223333:role/external"}, "lambda_execution_role_scope_invalid"),
+        ({"architectures": ["riscv64"]}, "lambda_architecture_unsupported"),
+        ({"architectures": [{"invalid": "shape"}]}, "lambda_architecture_unsupported"),
+        ({"memory_size": 10_241}, "lambda_memory_out_of_bounds"),
+        ({"timeout": 901}, "lambda_timeout_out_of_bounds"),
+        ({"ephemeral_storage": [{"size": 1024}]}, "lambda_ephemeral_storage_unsupported"),
+        ({"vpc_config": [{"subnet_ids": ["subnet-1"], "security_group_ids": ["sg-1"]}]}, "lambda_vpc_attachment_unsupported"),
+        ({"layers": ["arn:aws:lambda:us-east-1:654654474502:layer:unverified:1"]}, "lambda_layers_unsupported"),
+        ({"reserved_concurrent_executions": 5}, "lambda_reserved_concurrency_unsupported"),
+        ({"tracing_config": [{"mode": "Active"}]}, "lambda_tracing_unsupported"),
+        ({"dead_letter_config": [{"target_arn": "arn:aws:sqs:us-east-1:654654474502:dlq"}]}, "lambda_dead_letter_config_unsupported"),
+        ({"file_system_config": [{"arn": "arn:aws:elasticfilesystem:us-east-1:654654474502:access-point/fsap-1"}]}, "lambda_file_system_config_unsupported"),
+        ({"code_signing_config_arn": "arn:aws:lambda:us-east-1:654654474502:code-signing-config:csc-1"}, "lambda_code_signing_unsupported"),
+    ],
+)
+def test_lambda_function_denies_unpriced_or_unsupported_shapes(values, finding):
+    document, proposal_value = lambda_function_case(values=values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert finding in {item.code for item in result.findings}
+
+
+@pytest.mark.parametrize(
+    "path", ["runtime", "role", "source_code_hash", "timeout", "kms_key_arn"]
+)
+def test_lambda_function_denies_unknown_safety_critical_settings(path):
+    document, proposal_value = lambda_function_case(after_unknown={path: True})
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "policy_critical_value_unknown" in {item.code for item in result.findings}
+
+
+@pytest.mark.parametrize("environment_key", ["DB_PASSWORD", "API_KEY", "CLIENT_SECRET", "AUTH_TOKEN"])
+def test_lambda_environment_rejects_secret_like_names_without_echoing_values(environment_key):
+    secret_marker = "must-not-appear-in-policy-output"
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {environment_key: secret_marker}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+    rendered = json.dumps([item.__dict__ for item in result.findings])
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_environment_secret_key_denied" in {item.code for item in result.findings}
+    assert secret_marker not in rendered
+
+
+def test_lambda_environment_accepts_scoped_managed_secret_arn():
+    secret_arn = (
+        "arn:aws:secretsmanager:us-east-1:654654474502:secret:rds-managed-AbCdEf"
+    )
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {"DATABASE_SECRET_ARN": secret_arn}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "lambda_environment_secret_key_denied" not in {
+        item.code for item in result.findings
+    }
+
+
+@pytest.mark.parametrize(
+    "secret_arn",
+    [
+        "plain-text-secret",
+        "arn:aws:secretsmanager:us-east-1:111122223333:secret:outside-account",
+        "arn:aws:secretsmanager:eu-west-1:654654474502:secret:outside-region",
+    ],
+)
+def test_lambda_environment_denies_unscoped_secret_arn_references(secret_arn):
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {"DATABASE_SECRET_ARN": secret_arn}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_environment_secret_key_denied" in {
+        item.code for item in result.findings
+    }
+
+
+def test_lambda_environment_rejects_values_over_aws_aggregate_size_limit():
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {"VALUE": "x" * 4092}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_environment_too_large" in {item.code for item in result.findings}
+
+
+def test_lambda_same_plan_execution_role_requires_exact_lambda_service_trust():
+    document, proposal_value = lambda_function_case(role_in_plan=True)
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert "lambda_execution_role_permissions_unverified" not in {item.code for item in result.findings}
+
+    invalid_trust = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "states.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+    document, proposal_value = lambda_function_case(role_in_plan=True, role_trust=invalid_trust)
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_execution_role_trust_invalid" in {item.code for item in result.findings}
+
+    mixed_principal = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {
+                    "Service": "lambda.amazonaws.com",
+                    "AWS": "arn:aws:iam::654654474502:root",
+                },
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+    document, proposal_value = lambda_function_case(
+        role_in_plan=True, role_trust=mixed_principal
+    )
+    result = evaluate(document, proposal_value)
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_execution_role_trust_invalid" in {item.code for item in result.findings}
 
 
 def kms_key_case(*, values=None, after_unknown=None):
@@ -2693,11 +3317,9 @@ def sqs_lambda_consumer_case(
         resource(
             function_address,
             "aws_lambda_function",
-            {
-                "function_name": "queue-consumer",
-                "role": role_arn,
-                "timeout": timeout,
-            },
+            lambda_function_values(
+                function_name="queue-consumer", role=role_arn, timeout=timeout
+            ),
         ),
         resource(
             mapping_address,
@@ -2718,9 +3340,12 @@ def sqs_lambda_consumer_case(
             if unknown_timeout and item["type"] == "aws_lambda_function"
             else {}
         )
-        document["resource_changes"].append(
-            change(item["address"], item["type"], **metadata)
-        )
+        if item["type"] == "aws_lambda_function":
+            document["resource_changes"].append(
+                change(item["address"], item["type"], after=item["values"], **metadata)
+            )
+        else:
+            document["resource_changes"].append(change(item["address"], item["type"], **metadata))
 
     document["configuration"]["root_module"] = {
         "resources": [
@@ -3646,7 +4271,8 @@ def test_eks_node_group_requires_same_plan_launch_template_with_imdsv2():
 
     result = evaluate(document, proposal_value)
 
-    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_supported_shape_incomplete" in codes(result)
     assert "eks_node_metadata_unverifiable" not in codes(result)
     assert "instance_metadata_v2_required" not in codes(result)
 
@@ -3661,6 +4287,7 @@ def test_eks_node_group_without_one_same_plan_template_reference_is_denied(refer
     result = evaluate(document, proposal_value)
 
     assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_supported_shape_incomplete" in codes(result)
     assert "eks_node_metadata_unverifiable" in codes(result)
 
 
@@ -3671,6 +4298,242 @@ def test_eks_node_group_with_launch_template_that_allows_imdsv1_is_denied():
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "instance_metadata_v2_required" in codes(result)
+
+
+def eks_cluster_case(*, cluster_updates=None, node_updates=None, references=None, unknowns=None):
+    document = plan()
+    cluster_address = "aws_eks_cluster.app"
+    node_address = "aws_eks_node_group.system"
+    cluster_role_address = "aws_iam_role.cluster"
+    node_role_address = "aws_iam_role.nodes"
+    template_address = "aws_launch_template.nodes"
+    cluster_role_arn = f"arn:aws:iam::{ACCOUNT}:role/eks-cluster"
+    node_role_arn = f"arn:aws:iam::{ACCOUNT}:role/eks-nodes"
+    subnets = ["subnet-11111111", "subnet-22222222"]
+    cluster_values = {
+        "name": "app-cluster",
+        "role_arn": cluster_role_arn,
+        "version": "1.36",
+        "enabled_cluster_log_types": [
+            "api",
+            "audit",
+            "authenticator",
+            "controllerManager",
+            "scheduler",
+        ],
+        "vpc_config": [
+            {
+                "subnet_ids": subnets,
+                "endpoint_public_access": False,
+                "endpoint_private_access": True,
+                "public_access_cidrs": [],
+            }
+        ],
+    }
+    cluster_values.update(cluster_updates or {})
+    node_values = {
+        "cluster_name": "app-cluster",
+        "node_role_arn": node_role_arn,
+        "subnet_ids": subnets,
+        "instance_types": ["t3.medium"],
+        "capacity_type": "ON_DEMAND",
+        "scaling_config": [{"min_size": 2, "desired_size": 2, "max_size": 3}],
+        "launch_template": [{"id": "lt-0123456789abcdef0", "version": "1"}],
+        "remote_access": [],
+    }
+    node_values.update(node_updates or {})
+    cluster_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "sts:AssumeRole",
+                    "Principal": {"Service": "eks.amazonaws.com"},
+                }
+            ],
+        }
+    )
+    node_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "sts:AssumeRole",
+                    "Principal": {"Service": "ec2.amazonaws.com"},
+                }
+            ],
+        }
+    )
+    template_values = {
+        "name_prefix": "app-nodes-",
+        "metadata_options": [
+            {
+                "http_endpoint": "enabled",
+                "http_tokens": "required",
+                "http_put_response_hop_limit": 1,
+            }
+        ],
+    }
+    planned = [
+        resource(cluster_address, "aws_eks_cluster", cluster_values),
+        resource(node_address, "aws_eks_node_group", node_values),
+        resource(
+            cluster_role_address,
+            "aws_iam_role",
+            {"name": "eks-cluster", "arn": cluster_role_arn, "assume_role_policy": cluster_trust},
+        ),
+        resource(
+            node_role_address,
+            "aws_iam_role",
+            {"name": "eks-nodes", "arn": node_role_arn, "assume_role_policy": node_trust},
+        ),
+        resource(template_address, "aws_launch_template", template_values),
+    ]
+    changes = [
+        change(cluster_address, "aws_eks_cluster", after_unknown=(unknowns or {}).get("cluster", {})),
+        change(node_address, "aws_eks_node_group", after_unknown=(unknowns or {}).get("node", {})),
+        change(cluster_role_address, "aws_iam_role"),
+        change(node_role_address, "aws_iam_role"),
+        change(template_address, "aws_launch_template"),
+    ]
+    document["planned_values"]["root_module"]["resources"].extend(planned)
+    document["resource_changes"].extend(changes)
+    refs = references or {
+        "cluster_role": [f"{cluster_role_address}.arn"],
+        "cluster_name": [f"{cluster_address}.name"],
+        "node_role": [f"{node_role_address}.arn"],
+        "launch_template": [f"{template_address}.id"],
+    }
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": cluster_address, "expressions": {"role_arn": {"references": refs["cluster_role"]}}},
+            {
+                "address": node_address,
+                "expressions": {
+                    "cluster_name": {"references": refs["cluster_name"]},
+                    "node_role_arn": {"references": refs["node_role"]},
+                    "launch_template": {"references": refs["launch_template"]},
+                },
+            },
+            {"address": cluster_role_address, "expressions": {}},
+            {"address": node_role_address, "expressions": {}},
+            {"address": template_address, "expressions": {}},
+        ]
+    }
+    proposal_resources = [
+        {
+            "resource_id": resource_id,
+            "resource_type": resource_type,
+            "name": name,
+            "arguments": values,
+            "rationale": rationale,
+        }
+        for resource_id, resource_type, name, values, rationale in (
+            ("eks-cluster", "aws_eks_cluster", "app", cluster_values, "Private Kubernetes control plane."),
+            ("eks-nodes", "aws_eks_node_group", "system", node_values, "Bounded managed worker nodes."),
+            ("eks-cluster-role", "aws_iam_role", "cluster", {"name": "eks-cluster"}, "EKS control-plane role."),
+            ("eks-node-role", "aws_iam_role", "nodes", {"name": "eks-nodes"}, "EKS worker role."),
+            ("eks-node-template", "aws_launch_template", "nodes", template_values, "Require IMDSv2 on worker nodes."),
+        )
+    ]
+    proposal_resources = proposal().model_dump(mode="json")["resources"] + proposal_resources
+    return document, proposal(proposal_resources)
+
+
+def test_eks_cluster_accepts_private_logged_bounded_supported_shape():
+    document, proposal_value = eks_cluster_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict != PlanPolicyVerdict.DENY
+    assert not any(code.startswith("eks_") for code in codes(result))
+    assert "eks_node_metadata_unverifiable" not in codes(result)
+    assert "instance_metadata_v2_required" not in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("cluster_updates", "expected_code"),
+    [
+        ({"version": "1.31"}, "eks_kubernetes_version_out_of_support_window"),
+        ({"version": "not-a-version"}, "eks_kubernetes_version_out_of_support_window"),
+        ({"enabled_cluster_log_types": ["api"]}, "eks_control_plane_logging_incomplete"),
+        (
+            {"vpc_config": [{"subnet_ids": ["subnet-11111111"], "endpoint_public_access": False, "endpoint_private_access": True, "public_access_cidrs": []}]},
+            "eks_subnet_set_invalid",
+        ),
+        (
+            {"vpc_config": [{"subnet_ids": ["subnet-11111111", "subnet-22222222"], "endpoint_public_access": True, "endpoint_private_access": True, "public_access_cidrs": ["203.0.113.1/32"]}]},
+            "eks_public_endpoint_denied",
+        ),
+    ],
+)
+def test_eks_cluster_rejects_unsupported_control_plane_settings(cluster_updates, expected_code):
+    document, proposal_value = eks_cluster_case(cluster_updates=cluster_updates)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("node_updates", "expected_code"),
+    [
+        ({"scaling_config": [{"min_size": 1, "desired_size": 4, "max_size": 4}]}, "eks_node_scaling_out_of_bounds"),
+        ({"instance_types": ["m7i.large"]}, "eks_node_instance_type_unsupported"),
+        ({"capacity_type": "SPOT"}, "eks_node_capacity_type_unsupported"),
+        ({"remote_access": [{"ec2_ssh_key": "unsafe"}]}, "eks_node_remote_access_denied"),
+        ({"subnet_ids": ["subnet-other"]}, "eks_node_subnet_binding_invalid"),
+    ],
+)
+def test_eks_node_group_rejects_unbounded_or_unsupported_settings(node_updates, expected_code):
+    document, proposal_value = eks_cluster_case(node_updates=node_updates)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("references", "expected_code"),
+    [
+        ({"cluster_name": [], "cluster_role": ["aws_iam_role.external.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_node_cluster_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.other.name"], "cluster_role": ["aws_iam_role.cluster.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_node_cluster_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.app.name"], "cluster_role": ["aws_iam_role.external.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_cluster_role_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.app.name"], "cluster_role": ["aws_iam_role.cluster.arn"], "node_role": ["aws_iam_role.external.arn"], "launch_template": ["aws_launch_template.nodes.id"]}, "eks_node_role_unbound"),
+        ({"cluster_name": ["aws_eks_cluster.app.name"], "cluster_role": ["aws_iam_role.cluster.arn"], "node_role": ["aws_iam_role.nodes.arn"], "launch_template": []}, "eks_node_launch_template_unbound"),
+    ],
+)
+def test_eks_cluster_requires_same_plan_resource_bindings(references, expected_code):
+    document, proposal_value = eks_cluster_case(references=references)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_eks_cluster_unknown_version_is_denied_without_echoing_values():
+    document, proposal_value = eks_cluster_case(
+        unknowns={"cluster": {"version": True}},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "eks_plan_value_unknown" in codes(result)
+
+
+def test_eks_cluster_findings_do_not_echo_customer_values():
+    document, proposal_value = eks_cluster_case(cluster_updates={"version": "customer-version-marker"})
+
+    result = evaluate(document, proposal_value)
+
+    assert "eks_kubernetes_version_out_of_support_window" in codes(result)
+    assert "customer-version-marker" not in repr(result)
 
 
 def autoscaling_case(
@@ -6524,6 +7387,237 @@ def test_kinesis_policy_findings_do_not_echo_plan_values():
     assert "sensitive-customer-key-marker" not in repr(result)
 
 
+def _batch_container_properties(document):
+    job = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_batch_job_definition"
+    )
+    return job["values"]["container_properties"]
+
+
+def _set_batch_container_properties(document, **updates):
+    job = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_batch_job_definition"
+    )
+    properties = json.loads(job["values"]["container_properties"])
+    properties.update(updates)
+    job["values"]["container_properties"] = json.dumps(properties)
+
+
+def test_batch_fargate_supported_shape_is_eligible_for_human_review():
+    document, proposal_value = batch_fargate_case()
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert set(codes(result)) == {"batch_role_permissions_unverified"}
+
+
+@pytest.mark.parametrize(
+    ("compute_values", "expected_code"),
+    [
+        ({"type": "UNMANAGED"}, "batch_compute_environment_unsupported"),
+        (
+            {
+                "compute_resources": [
+                    {
+                        "type": "EC2",
+                        "max_vcpus": 6,
+                        "subnets": ["subnet-private"],
+                        "security_group_ids": ["sg-batch"],
+                    }
+                ]
+            },
+            "batch_compute_type_unsupported",
+        ),
+        (
+            {
+                "compute_resources": [
+                    {
+                        "type": "FARGATE",
+                        "max_vcpus": 7,
+                        "subnets": ["subnet-private"],
+                        "security_group_ids": ["sg-batch"],
+                    }
+                ]
+            },
+            "batch_capacity_limit_exceeded",
+        ),
+    ],
+)
+def test_batch_compute_environment_requires_managed_bounded_fargate(
+    compute_values, expected_code
+):
+    document, proposal_value = batch_fargate_case(compute_values=compute_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_batch_queue_must_bind_one_same_plan_compute_environment():
+    document, proposal_value = batch_fargate_case(queue_references=[])
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_job_queue_compute_environment_unbound" in codes(result)
+
+
+def test_batch_queue_accepts_unknown_environment_arn_with_exact_same_plan_reference():
+    document, proposal_value = batch_fargate_case(
+        queue_values={
+            "compute_environment_order": [
+                {"order": 1, "compute_environment": None}
+            ]
+        },
+        unknowns={
+            "aws_batch_job_queue": {
+                "compute_environment_order": [{"compute_environment": True}]
+            }
+        },
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "batch_job_queue_compute_environment_unbound" not in codes(result)
+    assert "batch_role_permissions_unverified" in codes(result)
+
+
+def test_batch_queue_rejects_multiple_compute_environment_bindings():
+    document, proposal_value = batch_fargate_case(
+        queue_values={
+            "compute_environment_order": [
+                {"order": 1, "compute_environment": "first"},
+                {"order": 2, "compute_environment": "second"},
+            ]
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_job_queue_order_invalid" in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("job_values", "property_updates", "expected_code"),
+    [
+        ({"type": "multinode"}, {}, "batch_job_definition_unsupported"),
+        ({"platform_capabilities": ["EC2"]}, {}, "batch_job_definition_unsupported"),
+        (
+            {},
+            {"image": "public.ecr.aws/library/busybox:latest"},
+            "batch_image_digest_required",
+        ),
+        ({}, {"privileged": True}, "batch_privileged_container_denied"),
+        (
+            {},
+            {
+                "resourceRequirements": [
+                    {"type": "VCPU", "value": "0.25"},
+                    {"type": "MEMORY", "value": "4096"},
+                ]
+            },
+            "batch_job_resource_requirements_unsupported",
+        ),
+        (
+            {},
+            {"executionRoleArn": "arn:aws:iam::111111111111:role/execution"},
+            "batch_execution_role_scope_invalid",
+        ),
+    ],
+)
+def test_batch_job_definition_rejects_unsafe_or_unpinned_settings(
+    job_values, property_updates, expected_code
+):
+    document, proposal_value = batch_fargate_case(job_values=job_values)
+    _set_batch_container_properties(document, **property_updates)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    ("job_values", "expected_code"),
+    [
+        ({"retry_strategy": [{"attempts": 4}]}, "batch_retry_attempts_invalid"),
+        ({"retry_strategy": []}, "batch_retry_strategy_invalid"),
+        ({"timeout": [{"attempt_duration_seconds": 3601}]}, "batch_timeout_out_of_bounds"),
+        ({"timeout": []}, "batch_timeout_required"),
+    ],
+)
+def test_batch_job_definition_requires_bounded_retries_and_timeout(job_values, expected_code):
+    document, proposal_value = batch_fargate_case(job_values=job_values)
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert expected_code in codes(result)
+
+
+def test_batch_job_rejects_plaintext_secret_environment_names():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        environment=[{"name": "API_TOKEN", "value": "sensitive-value-marker"}],
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_plaintext_secret_environment_denied" in codes(result)
+    assert "sensitive-value-marker" not in repr(result)
+
+
+def test_batch_job_rejects_batch_reserved_environment_names():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        environment=[{"name": "AWS_BATCH_JOB_ATTEMPT", "value": "override"}],
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_reserved_environment_name_denied" in codes(result)
+
+
+def test_batch_public_ip_assignment_is_a_review_finding():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        networkConfiguration={"assignPublicIp": "ENABLED"},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "batch_public_ip_enabled_review" in codes(result)
+
+
+def test_batch_unknown_capacity_is_denied_without_echoing_values():
+    document, proposal_value = batch_fargate_case(
+        unknowns={
+            "aws_batch_compute_environment": {
+                "compute_resources": [{"max_vcpus": True}]
+            }
+        }
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "batch_plan_values_unknown" in codes(result)
+
+
 def test_efs_safe_module_shape_and_security_group_nfs_ingress_pass():
     document, proposal_value = efs_case()
 
@@ -6880,6 +7974,7 @@ def step_functions_lambda_case():
     root_resources = document["planned_values"]["root_module"]["resources"]
     worker_arn = f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:workflow-worker"
     role_arn = f"arn:aws:iam::{ACCOUNT}:role/workflow"
+    lambda_role_arn = f"arn:aws:iam::{ACCOUNT}:role/lambda-execution"
     role_trust = json.dumps(
         {
             "Version": "2012-10-17",
@@ -6894,6 +7989,18 @@ def step_functions_lambda_case():
                         },
                         "StringEquals": {"aws:SourceAccount": ACCOUNT},
                     },
+                }
+            ],
+        }
+    )
+    lambda_role_trust = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "lambda.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
                 }
             ],
         }
@@ -6928,6 +8035,15 @@ def step_functions_lambda_case():
             },
         ),
         resource(
+            "aws_iam_role.lambda_execution",
+            "aws_iam_role",
+            {
+                "name": "lambda-execution",
+                "arn": lambda_role_arn,
+                "assume_role_policy": lambda_role_trust,
+            },
+        ),
+        resource(
             "aws_iam_role_policy.workflow",
             "aws_iam_role_policy",
             {
@@ -6939,11 +8055,9 @@ def step_functions_lambda_case():
         resource(
             "aws_lambda_function.workflow",
             "aws_lambda_function",
-            {
-                "function_name": "workflow-worker",
-                "arn": worker_arn,
-                "timeout": 10,
-            },
+            lambda_function_values(
+                function_name="workflow-worker", role=lambda_role_arn, timeout=10, arn=worker_arn
+            ),
         ),
         resource(
             "aws_sfn_state_machine.workflow",
@@ -6959,7 +8073,12 @@ def step_functions_lambda_case():
     ]
     for item in additions:
         root_resources.append(item)
-        document["resource_changes"].append(change(item["address"], item["type"]))
+        if item["type"] == "aws_lambda_function":
+            document["resource_changes"].append(
+                change(item["address"], item["type"], after=item["values"])
+            )
+        else:
+            document["resource_changes"].append(change(item["address"], item["type"]))
     document["configuration"]["root_module"] = {
         "resources": [
             {
@@ -6991,6 +8110,13 @@ def step_functions_lambda_case():
                 "name": "workflow",
                 "arguments": {"role": "workflow"},
                 "rationale": "Limit workflow access to its planned Lambda task.",
+            },
+            {
+                "resource_id": "lambda-execution-role",
+                "resource_type": "aws_iam_role",
+                "name": "lambda_execution",
+                "arguments": {"name": "lambda-execution"},
+                "rationale": "Give the Lambda worker its own execution identity.",
             },
             {
                 "resource_id": "workflow-worker",
