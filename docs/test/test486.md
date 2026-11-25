@@ -117,8 +117,12 @@ committed. After synchronizing with PR #493, head
 [45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
 The documentation-reconciliation head
 `3d7fe8b89adb6fd6407afe989336a1d756e02d99` then passed all seven checks in
-run `45532421344`. The completed local clean-room containers have been stopped; its generated
-files, Compose volume, and network remain pending explicit cleanup approval.
+run `45532421344`. After explicit approval on 2026-11-25, `make clean-local`
+completed in the isolated worktree. Its `.venv`, `.local`, project containers,
+Compose volume `davdeploy-pr486-cleanroom-20261124_davdeploy-postgres`, and
+network `davdeploy-pr486-cleanroom-20261124_default` were removed and verified
+absent. The worktree is retained. No AWS resources or control-plane state were
+changed by this cleanup.
 The run log is
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-20261124.log`.
 AWS keeps the terminated instance history record; it is not active.

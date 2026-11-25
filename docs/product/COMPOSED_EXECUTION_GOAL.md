@@ -49,12 +49,12 @@ run [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164
 The PR changes no AWS resource, hosted state, or runtime.
 
 PR #486 remains open and now includes current `main` through merge commit
-`05a6e5c`; all seven checks passed on its prior head in
-[run 45545915711](https://github.com/Bepoadewale/davdeploy/actions/runs/45545915711),
-so final-head CI is pending. Its two direct same-account encrypted-root-volume
-cycles are recorded. The clean-room run passed through `make verify`; final
-artifact/volume/network cleanup remains pending explicit approval, and those
-artifacts remain preserved. PR #495 remains a draft at head
+`05a6e5c`; all seven checks passed on pre-cleanup-documentation head `227c62a`
+in [run 45589122723](https://github.com/Bepoadewale/davdeploy/actions/runs/45589122723).
+The two direct same-account encrypted-root-volume cycles and clean-room full
+cycle are recorded. The approved final cleanup removed and verified absence of
+the generated files and Compose resources; the worktree remains. This
+documentation update requires fresh final-head CI. PR #495 remains a draft at head
 `8a3c23828e619c04a50a9fe6144f389b4924adb1`; all seven checks passed in
 [run 45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
 Its tagged AppConfig test application, environment, feature-flag profile,
@@ -108,11 +108,11 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at head `bb374e8ec06d613a963f1768e71b91175a416898`; all
-seven checks passed in run `45545915711`. Two same-account cycles verified
-encrypted 8 GiB gp3 root volumes and teardown. Its final clean-room cleanup
-remains pending explicit approval to remove generated artifacts and Compose
-volumes in that specific worktree; those artifacts are preserved.
+PR #486 remains open; all seven checks passed on pre-cleanup-documentation head
+`227c62a` in run `45589122723`. Two same-account cycles verified encrypted
+8 GiB gp3 root volumes and teardown. Its clean-room full cycle and approved
+final cleanup completed; generated artifacts and Compose resources are absent.
+The latest documentation update requires fresh final-head CI.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
 CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
@@ -385,8 +385,9 @@ execution strategy. Dated release details below remain historical records.
 - Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
   bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
   passed all seven checks in run `45552193668`.
-- PR #486 remains open with clean-room cleanup pending explicit approval. Draft
-  PR #495's tagged AppConfig rollout resources remain preserved pending exact
+- PR #486 remains open with its clean-room full cycle and approved final cleanup
+  complete; a documentation-only status update is awaiting fresh final-head CI.
+  Draft PR #495's tagged AppConfig rollout resources remain preserved pending exact
   teardown approval. The run monitor has 66 records and zero active runs.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
   default-off Nova apply worker, credential broker, and customer apply-role

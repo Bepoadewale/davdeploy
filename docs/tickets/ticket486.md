@@ -65,9 +65,9 @@ the hosted control plane.
 - [x] Evidence keeps AMI provenance, instance-role scope, guest health,
   update/recovery, full pricing, remote Nova state, and Nova dispatch as
   separate open gates.
-- [ ] The required clean-room validation has completed its final clean step;
-  the targeted generated artifacts remain preserved pending explicit approval
-  for deletion.
+- [x] The required clean-room validation completed its final clean step after
+  explicit approval; the isolated generated artifacts and Compose resources
+  were removed and independently verified absent.
 - [x] Docs conventions, focused/full verification, Terraform formatting and
   validation, `git diff --check`, and all required CI checks pass on the final
   synchronized code/status head before merge.
@@ -89,17 +89,17 @@ selected AMI's root device, and required the clean-room gate for Terraform
 behavior. The implementation now queries `aws_ami` metadata and binds the
 image ID and root mapping to that source. Two fresh isolated AWS cycles passed
 and were destroyed with independent absence checks. Regression tests cover
-planned AMI metadata taking precedence over stale prior state. The clean-room
-cycle passed at base `d6c8585`; the updated policy and regression
-test from this PR were then synchronized into the isolated worktree, where all
-demos and full verification passed again (1,752 tests). Final cleanup of its
-generated artifacts is pending explicit approval. Earlier synchronized heads `4623530`, `76f5629`, and `d20a599` passed all
-seven checks in runs `45502916393`, `45503868241`, and `45504483123`. After
-merging current `main` through PR #493 and reconciling the status docs, head
-`9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven checks in run
-`45531340170`. The documentation-reconciliation head
-`3d7fe8b89adb6fd6407afe989336a1d756e02d99` then passed all seven checks in
-run `45532421344`. The root-device review finding is addressed in code; the clean-room review finding remains open until final cleanup is approved and recorded. Project containers are stopped; generated files, volume, and network remain preserved. This branch now includes main through PR #498. The focused generated-plan policy suite passes (544 tests); Ruff, documentation conventions, and `git diff --check` pass locally. CI passed on synchronized implementation head `2a8a602` in [run 45545293211](https://github.com/Bepoadewale/davdeploy/actions/runs/45545293211); the updated ticket head is being checked separately. No hosted control-plane resource or state was touched.
+planned AMI metadata taking precedence over stale prior state. The isolated
+clean-room cycle passed all demos and `make verify` (1,752 tests); after
+explicit approval, its final `make clean-local` completed and the approved
+generated artifacts were verified absent. Both prior review findings are
+addressed. The branch now includes current `main` (`b6b663d`) through merge
+commit `05a6e5c`. All seven checks passed on pre-cleanup documentation head
+`227c62a` in CI run `45589122723`; new documentation updates require fresh
+final-head checks. The current policy suite passes 604 tests, and Ruff,
+documentation conventions, and `git diff --check` pass locally. No hosted
+control-plane resource or AWS resource was changed by synchronization or
+cleanup.
 
 ## Tests / validation performed
 
@@ -156,9 +156,9 @@ run `45532421344`. The root-device review finding is addressed in code; the clea
   no prior artifacts or project containers/volumes. `make bootstrap-local`,
   smoke, API contract, local customer-plan E2E, fixture seeding, simple/complex/
   degraded/Day-2 demos, policy-failure/readiness-failure demos, trace check,
-  and `make verify` all passed (1,752 tests). Final `make clean-local` is
-  waiting on explicit approval to remove only this worktree's generated
-  `.venv`, `.local`, and Compose volumes.
+  and `make verify` all passed (1,752 tests). After explicit approval,
+  `make clean-local` completed. The `.venv`, `.local`, project containers,
+  Compose volume, and network are absent; the isolated worktree remains.
 
 ## Evidence files produced
 
@@ -188,8 +188,7 @@ review are required after this synchronization.
 
 The isolated clean-room run completed bootstrap, smoke, simple/complex and
 degraded/Day-2 demos, policy/readiness failure checks, trace checks, and
-`make verify` (1,752 tests). Its required final `make clean-local` has not run:
-the generated `.venv`, `.local`, Compose volume, and network remain preserved
-until explicit deletion approval. The clean-room acceptance gate is therefore
-still open. No AWS workload or hosted control-plane resource was changed by
-this source synchronization.
+`make verify` (1,752 tests). After explicit approval, `make clean-local`
+completed; the generated `.venv`, `.local`, project containers, Compose volume,
+and network are absent. The worktree itself remains. No AWS workload or hosted
+control-plane resource was changed by this source synchronization or cleanup.
