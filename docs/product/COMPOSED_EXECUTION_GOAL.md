@@ -54,9 +54,10 @@ and merged-main CI passed all seven in run `45604774427`. Its two direct
 same-account encrypted-root-volume cycles and clean-room full cycle are
 recorded. Approved clean-room files and Compose resources are absent; the
 worktree remains. PR #495 remains a draft; its branch includes current `main`
-through merge commit `2a079df`. All seven checks passed on prior head `599fc03`
-in [run 45604183781](https://github.com/Bepoadewale/davdeploy/actions/runs/45604183781);
-fresh final-head CI is pending.
+through merge commit `2a079df`. All seven checks passed on head `45214f7` in
+[run 45606498702](https://github.com/Bepoadewale/davdeploy/actions/runs/45606498702);
+the refreshed destroy-plan hash is now recorded, so this evidence update needs
+fresh final-head CI.
 Its tagged AppConfig test application, environment, feature-flag profile,
 rollout strategy, and deployment history remain preserved. Read-only account
 checks observed deployments 1 and 2 as `COMPLETE` and `REVERTED`, with the

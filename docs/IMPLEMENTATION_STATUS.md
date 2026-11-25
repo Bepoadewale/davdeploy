@@ -38,8 +38,9 @@ checks in run `45603699112`, and merged-main CI passed all seven in
 `45604774427`. Its two isolated Auto Scaling cycles and clean-room full cycle
 passed; approved clean-room artifacts are absent. Draft PR #495 remains open;
 its branch now includes current `main` through merge commit `2a079df`. All seven
-checks passed on prior head `599fc03` in run `45604183781`; fresh final-head CI
-is pending. Its tagged AppConfig test application, environment, feature-flag
+checks passed on head `45214f7` in run `45606498702`; a refreshed destroy-plan
+hash is now recorded and this evidence update needs fresh final-head CI. Its
+tagged AppConfig test application, environment, feature-flag
 profile, rollout strategy, and deployment history are preserved; the
 environment is `Reverted` and deployments are `COMPLETE` then `REVERTED`. No
 AWS cleanup was performed. The Terraform run monitor has 66

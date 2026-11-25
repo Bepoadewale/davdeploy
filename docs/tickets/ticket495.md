@@ -155,15 +155,19 @@ capability-matrix conflict was reconciled to retain current-main status and
 the PR's revision-retention and exact teardown limitations. Focused policy and
 AppConfig tests pass (614 passed); `make verify` passes (1,904 tests, one
 existing Starlette/httpx deprecation warning); Ruff, documentation conventions,
-and `git diff --check` pass. All seven checks passed on prior head `599fc03`
-in run `45604183781`; fresh final-head CI and review are pending after the
-second main synchronization.
+and `git diff --check` pass. All seven checks passed on head `45214f7` in run
+`45606498702`; this evidence update requires fresh final-head CI. No unresolved
+review threads were present at that head.
 
 The account inventory still shows the tagged AppConfig application,
 environment, profile, deployment strategy, and `COMPLETE`/`REVERTED` history.
-No AWS resource was changed by this source sync. The reviewed seven-resource
-destroy plan remains unapplied pending explicit approval; no absence-after-
-teardown claim is made. The isolated clean-room run passed through
+No AWS resource was changed by this source sync. The refreshed destroy plan is
+`/tmp/davdeploy-appconfig-rollout-495-20261125-a1b2c3/exact-destroy-current.tfplan`
+(SHA-256 `324180ee8c840ed77a4d794af14046888b3effba76d9c4603263d2c655fb2323`):
+exactly seven deletes, zero creates, updates, or replacements. It targets only
+the tagged test application, its environment/profile/strategy, hosted versions
+1 and 2, and deployment 2. It remains unapplied pending explicit approval; no
+absence-after-teardown claim is made. The isolated clean-room run passed through
 `make verify`; its final cleanup step remains pending explicit approval because
 it would remove generated local files and a Compose volume.
 

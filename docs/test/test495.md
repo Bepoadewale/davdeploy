@@ -194,15 +194,21 @@ container was changed. The retry used dedicated host ports 48080, 48090,
 owner approval for cleanup. The protected main-worktree `.venv-pr399/` was
 restored to its original editable repository path and was not deleted.
 
-The exact saved destroy plan is
-`/tmp/davdeploy-appconfig-rollout-495-20261125-a1b2c3/exact-destroy.tfplan`;
-it proposes zero additions, zero changes, and seven destroys, all for this
-test ID: the application, environment, profile, strategy, both hosted versions,
-and deployment 2. Applying the plan will remove the tagged test application
-and its resources, including AWS-retained deployment history. The plan is
-reviewed but not applied pending owner approval for this exact deletion.
-After approval, apply only this plan through the repository monitor, then run
-the exact-ID absence helper for deployments 1 and 2 and independent AWS reads.
+The refreshed saved destroy plan is
+`/tmp/davdeploy-appconfig-rollout-495-20261125-a1b2c3/exact-destroy-current.tfplan`
+(SHA-256 `324180ee8c840ed77a4d794af14046888b3effba76d9c4603263d2c655fb2323`).
+It contains zero additions, zero updates, zero replacements, and seven destroys
+for this test ID: the application, environment, profile, strategy, both hosted
+versions, and deployment 2. Applying it removes the tagged test application
+and its resources. AWS documents that deleting the application deletes its
+subresources, including hosted versions and environments. The provider's
+deployment-resource delete is a no-op; AWS documentation does not establish
+whether deployment history remains accessible after the application and
+environment are removed. This report and the retained local evidence preserve
+the observed deployment details. The plan is not applied pending owner
+approval. After approval, apply only this hash-verified plan through the
+repository monitor, then run the exact-ID absence helper for deployments 1 and
+2 and independent AWS reads.
 
 ## Resources created
 
