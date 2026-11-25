@@ -65,8 +65,9 @@ control plane.
   settings fail closed.
 - [x] Same-plan role trust must name only the Lambda service; external role
   permissions are visibly marked for review without exposing policy values.
-- [x] Secret-like environment keys and environment maps over 4 KB are denied
-  without including values in findings.
+- [x] Secret-like environment variables are denied without including values in
+  findings. The `_SECRET_ARN` exception requires a Secrets Manager ARN scoped to
+  the expected AWS account and region; unscoped values remain denied.
 - [x] Existing SQS consumer and Step Functions Lambda policy tests continue to
   pass.
 - [x] Capability documentation states exact boundaries and does not claim
@@ -85,8 +86,9 @@ control plane.
 
 Local validation: `uv run --locked --extra dev pytest
 tests/test_generated_plan_policy.py tests/test_generated_plan_review.py -q`
-passed (597 tests), including malformed runtime/architecture input cases and
-unknown Lambda KMS key handling. Ruff passed for the policy module and
+passed (601 tests), including malformed runtime/architecture input cases,
+unknown Lambda KMS key handling, and scoped managed-secret ARN environment
+values. Ruff passed for the policy module and
 its regression tests; `python3 scripts/check_doc_conventions.py` and
 `git diff --check` passed. This package is source-only; do not create
 `docs/test/test503.md` or mutate AWS. All seven checks passed on implementation

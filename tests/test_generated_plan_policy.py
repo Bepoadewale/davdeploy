@@ -1368,6 +1368,43 @@ def test_lambda_environment_rejects_secret_like_names_without_echoing_values(env
     assert secret_marker not in rendered
 
 
+def test_lambda_environment_accepts_scoped_managed_secret_arn():
+    secret_arn = (
+        "arn:aws:secretsmanager:us-east-1:654654474502:secret:rds-managed-AbCdEf"
+    )
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {"DATABASE_SECRET_ARN": secret_arn}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "lambda_environment_secret_key_denied" not in {
+        item.code for item in result.findings
+    }
+
+
+@pytest.mark.parametrize(
+    "secret_arn",
+    [
+        "plain-text-secret",
+        "arn:aws:secretsmanager:us-east-1:111122223333:secret:outside-account",
+        "arn:aws:secretsmanager:eu-west-1:654654474502:secret:outside-region",
+    ],
+)
+def test_lambda_environment_denies_unscoped_secret_arn_references(secret_arn):
+    document, proposal_value = lambda_function_case(
+        values={"environment": [{"variables": {"DATABASE_SECRET_ARN": secret_arn}}]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "lambda_environment_secret_key_denied" in {
+        item.code for item in result.findings
+    }
+
+
 def test_lambda_environment_rejects_values_over_aws_aggregate_size_limit():
     document, proposal_value = lambda_function_case(
         values={"environment": [{"variables": {"VALUE": "x" * 4092}}]}

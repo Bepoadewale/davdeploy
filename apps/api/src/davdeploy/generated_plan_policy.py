@@ -427,7 +427,9 @@ def _evaluate(
     _check_step_functions_role_scope(
         document, resources, findings, expected_account_id, expected_region
     )
-    _check_lambda_functions(document, resources, findings, expected_account_id)
+    _check_lambda_functions(
+        document, resources, findings, expected_account_id, expected_region
+    )
     _check_lambda_permissions(resources, findings)
     _check_api_gateway_routes(document, resources, proposal, findings)
     _check_iam(resources, findings, expected_account_id)
@@ -6434,6 +6436,7 @@ def _check_lambda_functions(
     resources: tuple[dict[str, Any], ...],
     findings: list[PlanPolicyFinding],
     expected_account_id: str,
+    expected_region: str,
 ) -> None:
     """Bound the ZIP Lambda configuration priced by the generated-plan evaluator."""
     changes = document.get("resource_changes", [])
@@ -6754,7 +6757,13 @@ def _check_lambda_functions(
                 address,
                 "Lambda environment variables exceed AWS's aggregate 4 KB limit.",
             )
-        elif any(_lambda_environment_key_is_secret_like(key) for key in variables):
+        elif any(
+            _lambda_environment_key_is_secret_like(key)
+            and not _lambda_environment_secret_arn_is_scoped(
+                key, value, expected_account_id, expected_region
+            )
+            for key, value in variables.items()
+        ):
             _deny(
                 findings,
                 "lambda_environment_secret_key_denied",
@@ -6771,6 +6780,24 @@ def _lambda_environment_key_is_secret_like(key: str) -> bool:
         marker in token.upper()
         for token in tokens
         for marker in LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS
+    )
+
+
+def _lambda_environment_secret_arn_is_scoped(
+    key: str, value: Any, expected_account_id: str, expected_region: str
+) -> bool:
+    if not key.endswith("_SECRET_ARN"):
+        return False
+    parts = value.split(":", maxsplit=5) if isinstance(value, str) else []
+    return (
+        len(parts) == 6
+        and parts[0] == "arn"
+        and parts[1] == "aws"
+        and parts[2] == "secretsmanager"
+        and parts[3] == expected_region
+        and parts[4] == expected_account_id
+        and parts[5].startswith("secret:")
+        and len(parts[5]) > len("secret:")
     )
 
 
