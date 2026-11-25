@@ -399,13 +399,32 @@ class VpcPricingUsageAssumptions(BaseModel):
         return self
 
 
+class BatchCloudWatchLogPricingUsageAssumptions(BaseModel):
+    """Customer-declared CloudWatch Logs usage for one Batch job definition."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_ingested_gb: MonthlyUsageRange
+    monthly_retained_gb_month: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_log_bounds(self) -> BatchCloudWatchLogPricingUsageAssumptions:
+        if (
+            self.monthly_ingested_gb.maximum > 500_000
+            or self.monthly_retained_gb_month.maximum > 500_000
+        ):
+            raise ValueError("monthly Batch CloudWatch Logs usage exceeds the supported bound")
+        return self
+
+
 class BatchJobMonthlyPricingUsageAssumptions(BaseModel):
-    """Customer-declared monthly job count and average billed duration."""
+    """Customer-declared monthly job count, duration, and optional log usage."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     monthly_jobs: MonthlyUsageRange
     average_billed_runtime_seconds: MonthlyUsageRange
+    cloudwatch_logs: BatchCloudWatchLogPricingUsageAssumptions | None = None
 
     @model_validator(mode="after")
     def validate_batch_bounds(self) -> BatchJobMonthlyPricingUsageAssumptions:

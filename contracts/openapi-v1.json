@@ -137,12 +137,40 @@
         "title": "AwsQuickCreateRequest",
         "type": "object"
       },
+      "BatchCloudWatchLogPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Customer-declared CloudWatch Logs usage for one Batch job definition.",
+        "properties": {
+          "monthly_ingested_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_retained_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_ingested_gb",
+          "monthly_retained_gb_month"
+        ],
+        "title": "BatchCloudWatchLogPricingUsageAssumptions",
+        "type": "object"
+      },
       "BatchJobMonthlyPricingUsageAssumptions": {
         "additionalProperties": false,
-        "description": "Customer-declared monthly job count and average billed duration.",
+        "description": "Customer-declared monthly job count, duration, and optional log usage.",
         "properties": {
           "average_billed_runtime_seconds": {
             "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "cloudwatch_logs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchCloudWatchLogPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "monthly_jobs": {
             "$ref": "#/components/schemas/MonthlyUsageRange"

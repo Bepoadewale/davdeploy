@@ -1,6 +1,6 @@
 # ticket507 — Price the bounded AWS Batch Fargate job shape
 
-PR: [#507 — feat: price bounded Batch Fargate plans](https://github.com/Bepoadewale/davdeploy/pull/507) (draft)
+PR: [#507 — feat: price bounded Batch Fargate plans](https://github.com/Bepoadewale/davdeploy/pull/507) (merged as `2afd007`)
 Branch: `feat/batch-fargate-pricing-507`
 
 ## Problem / goal
@@ -80,9 +80,12 @@ AWS resources or the hosted control plane.
 - [x] Implementation complete.
 - [x] Focused validation complete.
 - [x] All seven required checks passed on implementation head `ec97300` in
-  [run 45645636327](https://github.com/Bepoadewale/davdeploy/actions/runs/45645636327);
-  a final-head run follows this ticket reconciliation.
-- [ ] PR reviewed and merged.
+  [run 45645636327](https://github.com/Bepoadewale/davdeploy/actions/runs/45645636327).
+- [x] PR #507 final-head CI passed all seven checks in
+  [run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
+- [x] Merged-main CI passed all seven checks in
+  [run 45647722781](https://github.com/Bepoadewale/davdeploy/actions/runs/45647722781).
+- [x] PR reviewed and merged as `2afd007`.
 
 ## Evidence files produced
 
@@ -99,7 +102,10 @@ AWS resources or the hosted control plane.
 - All seven required PR checks passed on implementation head
   `ec9730025a378f89ecfcaf63dd886493347b2c52` in
   [run 45645636327](https://github.com/Bepoadewale/davdeploy/actions/runs/45645636327).
-  A final-head run follows this ticket reconciliation.
+- All seven required checks passed on the final PR head in
+  [run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
+- All seven checks passed again on merged `main` in
+  [run 45647722781](https://github.com/Bepoadewale/davdeploy/actions/runs/45647722781).
 - `make openapi-update` updated `contracts/openapi-v1.json`; the final OpenAPI
   check confirms it matches the API.
 - `git diff --check` and documentation conventions are recorded before the

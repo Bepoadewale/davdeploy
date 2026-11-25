@@ -1,6 +1,6 @@
 # ticket508 — reconcile Nova handoff after PR #507
 
-PR: [#508 — docs: reconcile Nova status after PR #507](https://github.com/Bepoadewale/davdeploy/pull/508) (draft)
+PR: [#508 — docs: reconcile Nova status after PR #507](https://github.com/Bepoadewale/davdeploy/pull/508) (merged as `29605fa`)
 Branch: `docs/nova-status-after-507-508`
 
 ## Problem / goal
@@ -51,7 +51,7 @@ historical. This PR changes no product behavior.
 - [x] The hosted control-plane boundary and absence of Nova-dispatched customer
   workload evidence remain accurate.
 - [x] Documentation conventions and `git diff --check` pass; final-head CI
-  passed all seven checks on head `758d23f` in run `45650251672`.
+  passed all seven checks on head `78e19f5` in run `45650881950`.
 - [x] No AWS resources, hosted resources, Terraform state/locks, or protected
   local files are changed.
 
@@ -59,8 +59,8 @@ historical. This PR changes no product behavior.
 
 - [x] Documentation reconciled.
 - [x] Validation complete.
-- [x] Final-head CI passed on `758d23f` in run `45650251672`.
-- [ ] PR reviewed and merged.
+- [x] Final-head CI passed on `78e19f5` in run `45650881950`.
+- [x] PR reviewed and merged as `29605fa`.
 
 ## Evidence files produced
 
@@ -76,7 +76,10 @@ historical. This PR changes no product behavior.
 - PR #508 head `da77500` passed all seven checks in run `45648955777`.
 - PR #508 head `fd88e00` passed all seven checks in run `45649598879`.
 - PR #508 head `758d23f` passed all seven checks in run `45650251672`.
-- This final ticket update must pass current-head CI before merge.
+- Final PR head `78e19f5` passed all seven checks in
+  [run 45650881950](https://github.com/Bepoadewale/davdeploy/actions/runs/45650881950).
+- PR #508 merged as `29605fa` at `2026-11-25T16:14:44Z`; no AWS or hosted
+  resource changed.
 
 ## Boundaries
 

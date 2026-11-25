@@ -377,6 +377,10 @@ def test_customer_batch_usage_assumptions_are_revision_bound_and_cleared():
         "jobs": {"aws_batch_job_definition.jobs": {
             "monthly_jobs": {"minimum": 10, "maximum": 100},
             "average_billed_runtime_seconds": {"minimum": 60, "maximum": 900},
+            "cloudwatch_logs": {
+                "monthly_ingested_gb": {"minimum": 1, "maximum": 4},
+                "monthly_retained_gb_month": {"minimum": 2, "maximum": 8},
+            },
         }}
     }
     revised = service.revise_infrastructure_plan_constraints(
