@@ -3,17 +3,19 @@
 ## Nova status snapshot — 2026-11-25
 
 Backend `main` is
-`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508, docs-only atop PR #507).
+`46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509, source-only pricing and
+documentation reconciliation).
 Merged PR #506 validates the architecture-to-Terraform crosswalk but does not
 enable Nova dispatch. PR #507 adds trusted-usage, regional Linux/x86 Fargate
 compute price lines for bounded Batch plans; the estimate remains incomplete
 and approval-ineligible until material supporting costs are priced. Its
 final-head CI passed all seven checks in
 [run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-PR #508 reconciles the current goal status and merged-main CI. Draft PR #509
-adds source-only, trusted-usage-bound CloudWatch Logs ingestion/storage prices
-for explicitly configured Batch `awslogs`; other material image/network costs
-still block approval. One PR, #509, is open. The Terraform run monitor has 67
+PR #509 adds source-only, trusted-usage-bound CloudWatch Logs ingestion/storage
+prices for explicitly configured Batch `awslogs`; its final-head and merged-main
+CI passed. Draft PR #510 adds bounded ECR standard-storage pricing for exact
+planned repositories while leaving material ECR transfer and companion costs
+approval-blocking. One PR, #510, is open. The Terraform run monitor has 67
 records and zero active operations. AWS identity was rechecked as account
 `654654474502`; this documentation and pricing work made no AWS or
 hosted-control-plane change.

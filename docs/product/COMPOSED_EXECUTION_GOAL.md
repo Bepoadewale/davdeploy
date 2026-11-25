@@ -383,7 +383,7 @@ execution strategy. Dated release details below remain historical records.
 | 4. Hosted Lambda/API lifecycle | `in progress` | PR #283 binds renderer dispatch to the persisted certification mode. PR #284 adds typed single-module lifecycle requests, exact prior-run/artifact/saved-plan chaining, apply/destroy confirmations, and an allowlist. PR #285 wires that setting into Terraform. All three are merged and deployed with the gate off. The live hosted lifecycle still needs an authenticated test workspace, pinned compatible source, real HTTP request, destroy and independent cleanup verification. |
 | 5. Genuine module composition | `in progress` | PRs #293–#297 add graph identity, typed references/outputs, exact callback matching and output persistence. PR #298 (merged as `42200c0`) schedules one dependency-ready module at a time. PR #299 (merged as `982bb50`) adds a private S3 renderer, still disabled and without real AWS lifecycle evidence. PR #300 (merged as `afd6736`) resolves a validated S3 bucket output into its Lambda/API consumer and scopes Lambda access to that bucket. PR #301 (`5b067b0`) adds a gated DynamoDB table renderer and PR #302 binds its table name to the Lambda/API renderer. PR #303 (`ea9de3a`) fixes the dispatcher allowlist in source; it must be deployed before the DynamoDB binding can run through hosted CodeBuild. Repeated renderer state isolation, hosted worker restart/reconciliation, and composed data-flow/failure/recovery proof remain. |
 | 6. Renderer families 1–8 | `in progress` | The full ordering and module scope are in `EXECUTION_READINESS_MATRIX.md`: storage/data/queues; web/edge; containers/VM; databases/cache; async; search/analytics/streaming; AI/ML; Kubernetes/networking/failover. PR #299 is the first checked-in private S3 lifecycle renderer, still gated and locally validated only. PR #300 adds narrow S3-to-Lambda input delivery and scoped Lambda permissions. PR #301 adds a gated DynamoDB renderer; PR #302 adds the table-to-API binding. PR #303 fixes the dispatcher input mismatch in merged source but is not deployed. `NovaTerraformGenerator` is connected in source to a gated durable worker and fixed plan-only CodeBuild path; `enable_nova_plan_only_runner` defaults to false, and no authenticated customer plan is evidenced. This source path does not certify renderer families or a composed application. Remaining work includes provider-schema, policy, IAM, cost, saved-plan and lifecycle coverage. |
-| 7. Planning, artifact, pricing and preflight | `in progress` | Planner and constraints exist, but the matrix still has incomplete per-entry pricing and quota/permission evidence. Merged PR #507 prices bounded Batch Fargate CPU/memory only. Draft PR #509 adds regional CloudWatch Logs usage pricing for an explicit Batch log group while keeping approval blocked for other material costs. Bind deployed artifacts to reviewed source and add timestamped region/quota/permission evidence as each entry is extended. |
+| 7. Planning, artifact, pricing and preflight | `in progress` | Planner and constraints exist, but the matrix still has incomplete per-entry pricing and quota/permission evidence. Merged PR #507 prices bounded Batch Fargate CPU/memory; merged PR #509 adds regional CloudWatch Logs ingestion/storage prices for an explicit Batch log group. Draft PR #510 adds bounded regional ECR standard-storage pricing for exact planned private repositories. Batch/ECR approval remains blocked for unpriced image transfer, network, public IPv4, archival, signing, replication, and other material costs. Bind deployed artifacts to reviewed source and add timestamped region/quota/permission evidence as each entry is extended. |
 | 8. Browser, CLI and MCP parity | `not started` | Shared backend APIs exist; frontend execution remains App Runner-specific and deployment capabilities are not fully surfaced consistently. Align all clients with the same server-authorized lifecycle and observed states. |
 | 9. Real application certification harness | `implemented` | A scenario catalogue/runner exists and standalone real AWS workload evidence covers several services. The current runner primarily validates service roots, not composed applications through the hosted runner. Extend it with traffic, update/recovery, cleanup, and machine-readable evidence for all eight scenarios. |
 | 10. Security and operational resilience | `not started` | Add adversarial coverage for tenant boundaries, approvals, artifact tampering, duplicate jobs, concurrency, revoked roles, worker restart, partial failures, quotas, callback authenticity, redaction, alarms and cleanup isolation. |
@@ -392,8 +392,8 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508 documentation
-  reconciliation; product code remains at PR #507). The last
+- Backend `main` is `46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509, source-only
+  pricing and documentation reconciliation). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #507 merged as `2afd007`; final-head CI passed all seven checks in run
@@ -402,12 +402,15 @@ execution strategy. Dated release details below remain historical records.
   incomplete/approval-blocked while ECR, logging, networking, data transfer,
   and other material support costs are unpriced. No AWS resource, Terraform
   state/lock, hosted runtime, or control-plane resource was changed.
-- Draft PR #509 adds regional CloudWatch Logs ingestion and retained-storage
+- Merged PR #509 adds regional CloudWatch Logs ingestion and retained-storage
   pricing for a Batch job with an explicit same-plan, same-region Standard log
-  group, using strict trusted usage ranges. The generic Batch supporting-cost
-  finding remains, so unpriced image transfer, networking, public IPv4, and
-  other material dependencies still block approval. This source-only change
-  does not dispatch Nova or modify AWS resources.
+  group, using strict trusted usage ranges. Its final-head CI passed all seven
+  checks in run `45658404335`, and merged-main CI passed in run `45659294372`.
+  Draft PR #510 adds bounded regional ECR standard-storage pricing for exact
+  planned private repositories. Batch and ECR approval remain blocked for
+  unpriced image transfer, networking, public IPv4, archival, signing,
+  replication, and other material dependencies. These source-only changes do
+  not dispatch Nova or modify AWS resources.
 - Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
   bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
   passed all seven checks in run `45552193668`.
