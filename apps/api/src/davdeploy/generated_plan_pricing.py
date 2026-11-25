@@ -1639,7 +1639,7 @@ def evaluate_generated_plan_pricing(
     if batch_resources:
         findings.append(PlanPricingFinding(
             "batch_supporting_costs_unpriced", None,
-            "Batch pricing includes bounded Fargate compute, supported CloudWatch Logs usage, and storage for a priced same-plan ECR repository; uncovered image storage or transfer, network path charges, public IPv4, and other material linked usage still block approval.",
+            "Batch pricing includes bounded Fargate compute, supported CloudWatch Logs usage, eligible same-plan ECR storage, and explicitly modeled public IPv4 assignment; uncovered image transfer, network path charges, unsupported public IPv4 usage, and other material linked usage still block approval.",
         ))
         for job in batch_jobs:
             try:
@@ -1875,6 +1875,114 @@ def evaluate_generated_plan_pricing(
                                     unit_price_low_usd=format(low_unit_price, "f"),
                                     low_cost_quantity=low_quantity,
                                 ))
+                            network_configuration = properties.get("networkConfiguration")
+                            public_ip_enabled = False
+                            if "networkConfiguration" in properties:
+                                if (
+                                    not isinstance(network_configuration, dict)
+                                    or set(network_configuration) != {"assignPublicIp"}
+                                    or network_configuration.get("assignPublicIp")
+                                    not in {"ENABLED", "DISABLED"}
+                                ):
+                                    findings.append(PlanPricingFinding(
+                                        "batch_public_ip_setting_unsupported",
+                                        job["address"],
+                                        "Batch public IPv4 pricing requires a known ENABLED or DISABLED assignment setting.",
+                                    ))
+                                else:
+                                    public_ip_enabled = (
+                                        network_configuration["assignPublicIp"] == "ENABLED"
+                                    )
+                            if public_ip_enabled:
+                                address_usage = (
+                                    usage.average_public_ipv4_address_seconds_per_attempt
+                                )
+                                if address_usage is None:
+                                    findings.append(PlanPricingFinding(
+                                        "batch_public_ip_usage_assumptions_missing",
+                                        job["address"],
+                                        "Trusted per-attempt public IPv4 address-duration bounds are required.",
+                                    ))
+                                max_attempts = usage.maximum_attempts_per_job
+                                if max_attempts is None:
+                                    findings.append(PlanPricingFinding(
+                                        "batch_public_ip_attempt_bound_missing",
+                                        job["address"],
+                                        "Trusted maximum attempts per submitted job are required for public IPv4 pricing.",
+                                    ))
+                                if max_attempts is not None and address_usage is not None:
+                                    try:
+                                        public_ipv4_rate = (
+                                            pricing_catalog.public_ipv4_in_use_rate(region)
+                                        )
+                                    except PriceListUnavailableError:
+                                        unavailable = True
+                                        findings.append(PlanPricingFinding(
+                                            "regional_price_lookup_unavailable",
+                                            job["address"],
+                                            "DavDeploy could not verify the regional in-use public IPv4 price.",
+                                        ))
+                                    except PlanPricingError:
+                                        findings.append(PlanPricingFinding(
+                                            "regional_price_ambiguous",
+                                            job["address"],
+                                            "DavDeploy could not identify the exact regional in-use public IPv4 price.",
+                                        ))
+                                    else:
+                                        lower_address_seconds = (
+                                            usage.monthly_jobs.minimum
+                                            * max(60, address_usage.minimum)
+                                        )
+                                        upper_address_seconds = (
+                                            usage.monthly_jobs.maximum
+                                            * max_attempts
+                                            * max(60, address_usage.maximum)
+                                        )
+                                        seconds_per_hour = 3600
+                                        low_hourly_rate = Decimal(
+                                            public_ipv4_rate.low_unit_price_usd
+                                            or public_ipv4_rate.unit_price_usd
+                                        )
+                                        hourly_rate = Decimal(
+                                            public_ipv4_rate.unit_price_usd
+                                        )
+                                        lines.append(PlanCostLine(
+                                            address=job["address"],
+                                            resource_type="aws_batch_job_definition",
+                                            description="AWS Batch Fargate in-use public IPv4 addresses",
+                                            quantity=lower_address_seconds,
+                                            quantity_max=upper_address_seconds,
+                                            unit="IPv4-address-seconds",
+                                            unit_price_usd=format(
+                                                hourly_rate / seconds_per_hour, "f"
+                                            ),
+                                            monthly_cost_minor=int((
+                                                low_hourly_rate
+                                                * lower_address_seconds
+                                                / seconds_per_hour
+                                                * 100
+                                            ).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                            monthly_cost_max_minor=int((
+                                                hourly_rate
+                                                * upper_address_seconds
+                                                / seconds_per_hour
+                                                * 100
+                                            ).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                            catalog_sku=public_ipv4_rate.sku,
+                                            catalog_product_sha256=(
+                                                public_ipv4_rate.product_digest
+                                            ),
+                                            catalog_published_at=(
+                                                public_ipv4_rate.published_at
+                                            ),
+                                            catalog_effective_at=(
+                                                public_ipv4_rate.effective_at
+                                            ),
+                                            unit_price_low_usd=format(
+                                                low_hourly_rate / seconds_per_hour, "f"
+                                            ),
+                                            low_cost_quantity=lower_address_seconds,
+                                        ))
                             log_group_name, log_config_error = _batch_awslogs_group_name(
                                 properties, region
                             )

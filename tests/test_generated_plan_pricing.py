@@ -221,8 +221,9 @@ class FakeServerlessPriceList:
 
 
 class FakeBatchPriceList:
-    def __init__(self):
+    def __init__(self, *, public_ipv4_error=None):
         self.calls = []
+        self.public_ipv4_error = public_ipv4_error
 
     def get_products(self, **kwargs):
         self.calls.append(kwargs)
@@ -263,6 +264,28 @@ class FakeBatchPriceList:
                     "attributes": {**filters},
                 },
                 "serviceCode": "AmazonCloudWatch",
+                "publicationDate": "2026-11-13T12:00:00Z",
+                "terms": {"OnDemand": {"offer": {
+                    "sku": sku,
+                    "effectiveDate": "2026-11-01T00:00:00Z",
+                    "priceDimensions": {"dimension": {
+                        "beginRange": "0", "endRange": "Inf", "unit": unit,
+                        "pricePerUnit": {"USD": price},
+                    }},
+                }}},
+            }
+            return {"PriceList": [json.dumps(product)]}
+        if kwargs["ServiceCode"] == "AmazonVPC":
+            if self.public_ipv4_error is not None:
+                raise self.public_ipv4_error
+            sku, unit, price = "public-ipv4", "Hrs", "0.005"
+            product = {
+                "product": {
+                    "sku": sku,
+                    "productFamily": None,
+                    "attributes": {**filters},
+                },
+                "serviceCode": "AmazonVPC",
                 "publicationDate": "2026-11-13T12:00:00Z",
                 "terms": {"OnDemand": {"offer": {
                     "sku": sku,
@@ -1594,6 +1617,7 @@ def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
 def batch_plan(
     *, runtime_platform=None, ephemeral_storage=None, explicit_logs=False,
     private_ecr=False, image_uri=None, ecr_registry_id=ECR_ACCOUNT_ID,
+    assign_public_ip=None,
 ):
     compute = {
         "type": "MANAGED", "state": "ENABLED", "compute_resources": [{
@@ -1625,6 +1649,8 @@ def batch_plan(
                 "awslogs-stream-prefix": "batch",
             },
         }
+    if assign_public_ip is not None:
+        properties["networkConfiguration"] = {"assignPublicIp": assign_public_ip}
     if runtime_platform is not None:
         properties["runtimePlatform"] = runtime_platform
     if ephemeral_storage is not None:
@@ -1692,6 +1718,18 @@ BATCH_USAGE = {
     }
 }
 
+BATCH_PUBLIC_IPV4_USAGE = {
+    "jobs": {
+        "aws_batch_job_definition.jobs": {
+            **BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"],
+            "maximum_attempts_per_job": 2,
+            "average_public_ipv4_address_seconds_per_attempt": {
+                "minimum": 30, "maximum": 120,
+            },
+        },
+    },
+}
+
 ECR_USAGE = {
     "repositories": {
         "aws_ecr_repository.images": {
@@ -1753,6 +1791,166 @@ def test_batch_fargate_usage_is_priced_by_bound_job_and_applies_one_minute_floor
         now=CAPTURED_AT,
     )
     assert len(client.calls) == 2
+
+
+def test_batch_public_ipv4_is_priced_per_attempt_with_per_address_minimum():
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(assign_public_ip="ENABLED"),
+        batch_usage_assumptions=BATCH_PUBLIC_IPV4_USAGE,
+        catalog_client=client,
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert not result.approval_eligible
+    assert "batch_supporting_costs_unpriced" in {item.code for item in result.findings}
+    line = next(
+        item for item in result.lines
+        if item.description == "AWS Batch Fargate in-use public IPv4 addresses"
+    )
+    assert (
+        line.address,
+        line.quantity,
+        line.quantity_max,
+        line.unit,
+        line.unit_price_usd,
+        line.catalog_sku,
+    ) == (
+        "aws_batch_job_definition.jobs",
+        600,
+        4_800,
+        "IPv4-address-seconds",
+        "0.000001388888888888888888888888889",
+        "public-ipv4",
+    )
+    assert line.monthly_cost_minor == 0
+    assert line.monthly_cost_max_minor == 1
+    assert any(call["ServiceCode"] == "AmazonVPC" for call in client.calls)
+    manifest = result.as_manifest_document()
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+    assert pricing_evidence_document_is_valid(manifest)
+
+
+def test_batch_public_ipv4_requires_separate_address_duration_assumptions():
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(assign_public_ip="ENABLED"),
+        batch_usage_assumptions=BATCH_USAGE,
+        catalog_client=client,
+    )
+
+    assert "batch_public_ip_usage_assumptions_missing" in {
+        item.code for item in result.findings
+    }
+    assert not any("public IPv4" in line.description for line in result.lines)
+    assert not any(call["ServiceCode"] == "AmazonVPC" for call in client.calls)
+
+
+@pytest.mark.parametrize(
+    "assign_public_ip", [None, "DISABLED"], ids=["aws-default", "explicit-disabled"]
+)
+def test_batch_disabled_public_ipv4_emits_no_address_cost(assign_public_ip):
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(assign_public_ip=assign_public_ip),
+        batch_usage_assumptions=BATCH_USAGE,
+        catalog_client=client,
+    )
+
+    assert not any("public IPv4" in line.description for line in result.lines)
+    assert not any(call["ServiceCode"] == "AmazonVPC" for call in client.calls)
+
+
+@pytest.mark.parametrize(
+    ("include_network_configuration", "network_configuration"),
+    [
+        (False, None),
+        (True, None),
+        (True, {}),
+        (True, {"assignPublicIp": "UNKNOWN"}),
+        (True, {"assignPublicIp": "ENABLED", "other": True}),
+    ],
+    ids=["omitted-default", "null", "empty", "unknown-value", "unknown-field"],
+)
+def test_batch_malformed_public_ipv4_configuration_fails_closed(
+    include_network_configuration, network_configuration
+):
+    properties = {
+        "image": "public.ecr.aws/library/busybox@sha256:" + "a" * 64,
+        "resourceRequirements": [
+            {"type": "VCPU", "value": "0.25"},
+            {"type": "MEMORY", "value": "512"},
+        ],
+    }
+    if include_network_configuration:
+        properties["networkConfiguration"] = network_configuration
+    document = batch_plan(assign_public_ip=None)
+    job_change = next(
+        item for item in document["resource_changes"]
+        if item["type"] == "aws_batch_job_definition"
+    )
+    job_change["change"]["after"]["container_properties"] = json.dumps(properties)
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        document, batch_usage_assumptions=BATCH_USAGE, catalog_client=client
+    )
+
+    if not include_network_configuration:
+        assert not any(
+            item.code == "batch_public_ip_setting_unsupported"
+            for item in result.findings
+        )
+    else:
+        assert "batch_public_ip_setting_unsupported" in {
+            item.code for item in result.findings
+        }
+    assert not any("public IPv4" in line.description for line in result.lines)
+    assert not any(call["ServiceCode"] == "AmazonVPC" for call in client.calls)
+
+
+def test_batch_public_ipv4_requires_attempt_bound_and_regional_price():
+    with pytest.raises(ValueError):
+        BatchPricingUsageAssumptions.model_validate({"jobs": {
+            "aws_batch_job_definition.jobs": {
+                **BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"],
+                "maximum_attempts_per_job": 11,
+                "average_public_ipv4_address_seconds_per_attempt": {
+                    "minimum": 30, "maximum": 120,
+                },
+            },
+        }})
+
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(assign_public_ip="ENABLED"),
+        batch_usage_assumptions={"jobs": {
+            "aws_batch_job_definition.jobs": {
+                **BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"],
+                "average_public_ipv4_address_seconds_per_attempt": {
+                    "minimum": 30, "maximum": 120,
+                },
+            },
+        }},
+        catalog_client=client,
+    )
+    assert "batch_public_ip_attempt_bound_missing" in {
+        item.code for item in result.findings
+    }
+    assert not any("public IPv4" in line.description for line in result.lines)
+    assert not any(call["ServiceCode"] == "AmazonVPC" for call in client.calls)
+
+    unavailable = FakeBatchPriceList(
+        public_ipv4_error=PriceListUnavailableError("private provider detail")
+    )
+    result, _ = evaluate(
+        batch_plan(assign_public_ip="ENABLED"),
+        batch_usage_assumptions=BATCH_PUBLIC_IPV4_USAGE,
+        catalog_client=unavailable,
+    )
+    assert "regional_price_lookup_unavailable" in {
+        item.code for item in result.findings
+    }
+    assert not any("public IPv4" in line.description for line in result.lines)
 
 
 def test_batch_explicit_cloudwatch_logs_are_regionally_priced_and_digest_bound():

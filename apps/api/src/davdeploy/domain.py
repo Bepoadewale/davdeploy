@@ -452,12 +452,14 @@ class EcrPricingUsageAssumptions(BaseModel):
 
 
 class BatchJobMonthlyPricingUsageAssumptions(BaseModel):
-    """Customer-declared monthly job count, duration, and optional log usage."""
+    """Customer-declared Batch job count, compute, address, and log usage."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     monthly_jobs: MonthlyUsageRange
     average_billed_runtime_seconds: MonthlyUsageRange
+    average_public_ipv4_address_seconds_per_attempt: MonthlyUsageRange | None = None
+    maximum_attempts_per_job: int | None = Field(default=None, ge=1, le=10)
     cloudwatch_logs: BatchCloudWatchLogPricingUsageAssumptions | None = None
 
     @model_validator(mode="after")
@@ -466,6 +468,11 @@ class BatchJobMonthlyPricingUsageAssumptions(BaseModel):
             raise ValueError("monthly Batch job count exceeds the supported bound")
         if self.average_billed_runtime_seconds.maximum > 2_592_000:
             raise ValueError("Batch job runtime exceeds the supported monthly bound")
+        if (
+            self.average_public_ipv4_address_seconds_per_attempt is not None
+            and self.average_public_ipv4_address_seconds_per_attempt.maximum > 2_592_000
+        ):
+            raise ValueError("Batch public IPv4 address duration exceeds the supported bound")
         return self
 
 
