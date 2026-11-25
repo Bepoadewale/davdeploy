@@ -188,27 +188,40 @@ policy failure, readiness failure, trace check, and `make verify`. The
 sequence passed, including 1,788 tests. The first bootstrap attempt hit host
 port 8181, already used by the separate PR #486 clean-room stack; no unrelated
 container was changed. The retry used dedicated host ports 48080, 48090,
-48181, 49090, 43200, and 43000. The isolated containers are stopped. Final
-`make clean-local` was not run: it would delete this worktree's `.venv`,
-`.local`, and Postgres Docker volume. Those generated artifacts remain pending
-owner approval for cleanup. The protected main-worktree `.venv-pr399/` was
-restored to its original editable repository path and was not deleted.
+48181, 49090, 43200, and 43000. With owner approval, `.venv` and `.local`
+were removed, along with exactly the nine stopped containers in Compose project
+`davdeploy-pr495-cleanroom`, its `davdeploy-pr495-cleanroom_davdeploy-postgres`
+volume, and `davdeploy-pr495-cleanroom_default` network. The default
+`make clean-local` invocation did not select that Compose project; the exact
+project was then removed with
+`docker compose -p davdeploy-pr495-cleanroom down -v --remove-orphans`.
+Post-cleanup inventory found none of those containers, the volume, or network,
+and both directories are absent. The protected main-worktree
+`.venv-pr399/` was not deleted.
 
 The refreshed saved destroy plan is
 `/tmp/davdeploy-appconfig-rollout-495-20261125-a1b2c3/exact-destroy-current.tfplan`
 (SHA-256 `324180ee8c840ed77a4d794af14046888b3effba76d9c4603263d2c655fb2323`).
-It contains zero additions, zero updates, zero replacements, and seven destroys
-for this test ID: the application, environment, profile, strategy, both hosted
-versions, and deployment 2. Applying it removes the tagged test application
-and its resources. AWS documents that deleting the application deletes its
-subresources, including hosted versions and environments. The provider's
-deployment-resource delete is a no-op; AWS documentation does not establish
-whether deployment history remains accessible after the application and
-environment are removed. This report and the retained local evidence preserve
-the observed deployment details. The plan is not applied pending owner
-approval. After approval, apply only this hash-verified plan through the
-repository monitor, then run the exact-ID absence helper for deployments 1 and
-2 and independent AWS reads.
+It contained zero additions, zero updates, zero replacements, and seven
+deletes for this test ID: the application, environment, profile, strategy,
+both hosted versions, and deployment 2. With owner approval, the exact saved
+plan was applied through `scripts/terraform_run_monitor.py` using run ID
+`appconfig-ff-495-destroy-approved-20261125`. It ran against the fixture root
+with Terraform PID `36272`, log
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/appconfig-ff-495-destroy-approved-20261125.log`,
+and monitor log
+`/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/appconfig-ff-495-destroy-approved-20261125.monitor.log`.
+The run succeeded with zero additions, zero changes, and seven destroys.
+The local Terraform state and saved destroy plan, both mode 600, were retained;
+the verifier outputs and run logs were also kept as local evidence.
+
+Independent verification used
+`scripts/appconfig_feature_flag_lifecycle.py --phase absent` for exact test ID
+`20261125-a1b2c3`; it reported the application, environment, profile,
+strategy, and deployment history absent. Read-only AWS CLI reads in account
+`654654474502` found no exact-name application or strategy. `terraform state
+list` returned no managed resources. The control plane, remote state, and lock
+resources were not touched.
 
 ## Resources created
 
@@ -221,18 +234,20 @@ profile `3eqb088`, and strategy `ugs3vlo` are exact IDs.
 ## Observed result
 
 Monitored create, initial disabled read, `BAKING` observation, completed
-enabled read, rollback, and reverted disabled read all succeeded. The exact
-destroy plan is ready; applying it and verifying absence remain pending owner
-approval.
+enabled read, rollback, and reverted disabled read all succeeded. The
+approved exact destroy succeeded, and independent AWS and Terraform-state
+checks verified the test resources absent.
 
 ## Teardown
 
-Deployment 2 has been reverted. The seven-destroy plan is reviewed and ready,
-but has not been applied because it deletes the exact test application,
-profile, strategy, both hosted versions, environment, and deployment history.
-After explicit approval, apply it through the Terraform run monitor and run
-exact-ID absence checks for deployments 1 and 2. Preserve the local state,
-plans, verifier outputs, and run logs as evidence.
+Deployment 2 was reverted before cleanup. The approved seven-delete plan was
+applied through the Terraform run monitor. The exact-ID helper verified the
+application, environment, profile, strategy, and deployments 1 and 2 absent;
+independent AWS listing and Terraform state checks also found no test
+resources. The local Terraform state, saved plans, verifier outputs, and run
+logs remain as evidence. The clean-room generated directories, nine stopped
+project containers, volume, and network were removed and their absence
+verified.
 
 ## Final boundary
 

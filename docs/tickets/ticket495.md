@@ -75,7 +75,7 @@ this exact shape only; it does not prove Nova dispatch.
   including append-only version publishing and exact application teardown.
 - [x] Isolated AWS evidence observes disabled → enabled progressive rollout →
   rollback → disabled, using synthetic data and the exact test ID.
-- [ ] Monitored destroy and independent AWS reads confirm exact test resources
+- [x] Monitored destroy and independent AWS reads confirm exact test resources
   absent; local state and plans are retained with mode 600.
 - [x] The 26 architecture entries and 30 implementation roots remain intact;
   the matrix links this exact test and keeps Nova dispatch/hosted execution
@@ -84,8 +84,8 @@ this exact shape only; it does not prove Nova dispatch.
   current price source; no claim of an actual bill or hard cap is made.
 - [x] Focused tests, `make verify`, Terraform validation, and documentation
   conventions pass.
-- [ ] Fresh final-head CI after the latest evidence update, clean-room final
-  cleanup, monitored AWS destroy/absence check, review, and merge remain.
+- [ ] Fresh final-head CI after the cleanup evidence update, review, and merge
+  remain.
 - [x] No hosted control-plane, remote-state, lock, unrelated AWS, or customer
   data is accessed or changed. No Nova dispatch or customer workload
   certification is claimed.
@@ -101,18 +101,19 @@ this exact shape only; it does not prove Nova dispatch.
   is verified for deployment 2; the failed progressive verifier observed
   `BAKING`, a bounded completion read confirmed `COMPLETE` and enabled, and a
   rollback read confirmed `REVERTED` and disabled.
-- [ ] Exact monitored destroy and independent absence check.
+- [x] Exact monitored destroy and independent absence check.
 - [x] Matrix update, full repository validation, and documentation conventions.
-- [ ] Clean-room final cleanup, monitored AWS destroy/absence check, review,
-  and merge. Final-head CI passed on `bf97e53` in run `45617778367`.
+- [x] Clean-room final cleanup and monitored AWS destroy/absence check.
+- [ ] Fresh final-head CI after the cleanup evidence update, review, and merge.
+  Final-head CI previously passed on `a71e663` in run `45619836822`.
 
 Implementation commit `a4c629c` is on the PR branch. The initial six-resource
 create succeeded and the disabled flag was independently verified. A reviewed
 append-only plan retained hosted version 1, added a new version, and replaced
 only the Terraform deployment resource. The enabled revision reached
 `BAKING` and `COMPLETE`; rollback returned the flag to disabled. The exact
-seven-resource destroy plan is reviewed and awaits approval before apply. PR
-#495 remains a draft.
+seven-resource destroy plan was applied after owner approval, and the test
+resources were independently verified absent. PR #495 remains a draft.
 
 ## Tests / validation performed
 
@@ -133,16 +134,17 @@ seven-resource destroy plan is reviewed and awaits approval before apply. PR
   Compose configuration checks passed.
 - Fresh detached worktree `/tmp/davdeploy-cleanroom-pr495` passed bootstrap,
   smoke, API contract, customer-plan end-to-end, seed data, all canonical and
-  failure demos, trace check, and `make verify` with 1,788 tests. Its isolated
-  containers are stopped. `make clean-local` remains pending approval because
-  it deletes the generated `.venv`, `.local`, and Postgres Docker volume.
+  failure demos, trace check, and `make verify` with 1,788 tests. With owner
+  approval, its `.venv`, `.local`, nine stopped project containers, Postgres
+  volume, and Compose network were removed and absence verified.
 - Terraform fixture formatting and validation passed with the pinned lockfile.
 - Ruff lint passed. Formatting check reports pre-existing formatting
   differences in large existing files; do not mass-format unrelated code.
 - Initial AWS create, disabled-value verification, append-only version 2,
   enabled-value observation, rollback, and disabled-value verification
-  succeeded. The exact destroy plan shows seven test resources and remains
-  unapplied pending approval; see `docs/test/test495.md`.
+  succeeded. The exact seven-delete destroy plan later succeeded through the
+  Terraform run monitor; independent absence checks are recorded in
+  `docs/test/test495.md`.
 - AppConfig Data verification honors AWS's next-poll interval, enforces at
   most eight `GetLatestConfiguration` calls and four responses per phase, and
   returns only counts and a boolean flag value; it never returns tokens.
@@ -162,17 +164,37 @@ and `git diff --check` pass. All seven checks passed on head `45214f7` in run
 `45606498702`; this evidence update requires fresh final-head CI. No unresolved
 review threads were present at that head.
 
-The account inventory still shows the tagged AppConfig application,
-environment, profile, deployment strategy, and `COMPLETE`/`REVERTED` history.
-No AWS resource was changed by this source sync. The refreshed destroy plan is
+At the source-sync snapshot, the account inventory showed the tagged AppConfig
+application, environment, profile, deployment strategy, and
+`COMPLETE`/`REVERTED` history. No AWS resource was changed by that source sync.
+The refreshed destroy plan was
 `/tmp/davdeploy-appconfig-rollout-495-20261125-a1b2c3/exact-destroy-current.tfplan`
 (SHA-256 `324180ee8c840ed77a4d794af14046888b3effba76d9c4603263d2c655fb2323`):
 exactly seven deletes, zero creates, updates, or replacements. It targets only
 the tagged test application, its environment/profile/strategy, hosted versions
-1 and 2, and deployment 2. It remains unapplied pending explicit approval; no
-absence-after-teardown claim is made. The isolated clean-room run passed through
-`make verify`; its final cleanup step remains pending explicit approval because
-it would remove generated local files and a Compose volume.
+1 and 2, and deployment 2. It was awaiting approval at that snapshot; no
+absence-after-teardown claim was then made. The clean-room run had passed
+through `make verify`; its final cleanup was awaiting approval at that snapshot.
+
+## Approved cleanup completed — 2026-11-25
+
+The owner approved the exact seven-delete plan and the exact PR #495 clean-room
+artifacts. Immediately before destroy, AWS identity was account
+`654654474502`; the application, environment, profile, strategy, and deployments
+1 (`COMPLETE`) and 2 (`REVERTED`) matched the test. The plan SHA-256 was
+`324180ee8c840ed77a4d794af14046888b3effba76d9c4603263d2c655fb2323`. Monitored
+run `appconfig-ff-495-destroy-approved-20261125` succeeded (Terraform PID
+`36272`, zero adds/changes and seven destroys). The exact-ID lifecycle helper
+reported application, environment, configuration profile, strategy, and
+deployment history absent; independent AWS listings found no exact-name
+application or strategy. Terraform state lists no managed resources, while
+the local state file, saved plans, verifier outputs, and logs remain retained.
+
+The approved local cleanup removed `.venv`, `.local`, all nine stopped
+`davdeploy-pr495-cleanroom` containers, its Postgres volume, and its network.
+Their absence was verified. The protected main-worktree `.venv-pr399/` and
+`--only-show-errors`, plus the hosted control plane, state, and locks, were
+untouched. No SageMaker lineage record was deleted.
 
 ## Evidence files produced
 
@@ -188,8 +210,8 @@ test ID. Confirm AWS identity, the exact manifest, and the reviewed create plan
 before apply. Use local state only. Do not retrieve or print configuration
 tokens or credentials. Do not touch hosted control-plane resources, remote
 state, lock resources, unrelated resources, protected local files, or retained
-SageMaker lineage evidence. Preserve AWS-managed deployment history if the
-service retains it after cleanup, and document it as audit evidence. Direct
+SageMaker lineage evidence. Retain local plans, state, verification outputs,
+and run logs as audit evidence. Direct
 same-account evidence does not prove Nova dispatch, cross-account behavior,
 customer application integration, or full pricing.
 
