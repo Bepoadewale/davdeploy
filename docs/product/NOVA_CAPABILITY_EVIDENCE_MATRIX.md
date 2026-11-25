@@ -1,8 +1,10 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503), 2026-11-25. Merged PR
-#502 adds source-only assumption-bound NAT/network pricing; all seven checks
+`ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486), 2026-11-25. Merged PR
+#486 adds AMI-root-bound encrypted Auto Scaling EBS policy; its final-head and
+merged-main CI both passed. Merged PR #502 adds source-only assumption-bound
+NAT/network pricing; all seven checks
 passed on final PR head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 Merged PR #503 adds source-only Lambda function plan bounds as
@@ -37,13 +39,12 @@ after plan [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/ru
 The hosted control plane was not accessed or changed for this reconciliation.
 
 PR #485 is merged and records direct same-account Auto Scaling scale/health/
-teardown evidence for its bounded shape. PR #486 remains open and now includes
-current `main` through merge commit `05a6e5c`; all seven checks passed on
-pre-cleanup-documentation head `227c62a` in run
-[45589122723](https://github.com/Bepoadewale/davdeploy/actions/runs/45589122723).
-Its encrypted root-volume tests and clean-room full cycle passed; approved
-generated files and Compose resources were removed and verified absent. The
-worktree remains. This documentation update requires fresh final-head CI.
+teardown evidence for its bounded shape. PR #486 merged as `ee3a407`; its final
+head `a2c2d29` passed all seven checks in run
+[45603699112](https://github.com/Bepoadewale/davdeploy/actions/runs/45603699112),
+and merged-main CI passed all seven in run `45604774427`. Its encrypted
+root-volume tests and clean-room full cycle passed; approved generated files
+and Compose resources were removed and verified absent. The worktree remains.
 PR #487 is merged and
 records exact-module DynamoDB point-in-time recovery and teardown. PR #489 is
 merged with final-head CI run [45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
@@ -412,7 +413,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-kinesis-stream` | `modules/kinesis-stream` | `aws-stream-processing` / `async-data` | PR #475 bounds plans to one provisioned shard, 24-hour retention, KMS encryption, and the AWS-managed Kinesis key. The policy does not cover consumers, producer authorization, checkpoints/replay, or complete regional costs. | [`test258.md`](../test/test258.md): one record accepted; no consumer processing |
 | `aws-batch-compute` | `modules/batch-compute` | `aws-jobs-events`, `aws-data-analytics` / `saas-backend`, `async-data` | Merged PR #498 implements source-only bounds for a managed Fargate compute environment, one same-plan queue, digest-pinned container, supported CPU/memory pairs, retries, runtime, same-account role ARNs, and plaintext/reserved environment checks; public-IP use requires review. | [`test252.md`](../test/test252.md): controlled disposable Batch job; merged PR #458 [`test458.md`](../test/test458.md): first-attempt failure, automatic retry, success, and exact teardown. These direct tests do not prove the new policy or Nova dispatch. |
 | `aws-eks-cluster` | `modules/eks` | `aws-kubernetes-platform`, `aws-gpu-inference` / `kubernetes` | Merged PR #499 adds source-only private-endpoint, supported-version, control-plane log, same-plan role/template, and bounded managed-node checks. It does not cover Kubernetes/RBAC, admission, pod identity, quota, or complete cost. | [`test255.md`](../test/test255.md): workload service probe through EKS |
-| `aws-ec2-autoscaling` | `modules/ec2-autoscaling` | `aws-virtual-machine-service`, possible GPU compute / no scenario for VM/GPU | Merged PR #483 adds source-only policy for `0 <= min <= desired <= max <= 3`, one same-plan launch template with a fixed `latest_version`, known AMI ID, `t3.micro`, and IMDSv2. Open PR #486 implements encrypted root-volume checks bound to the selected AMI's root-device metadata; final-head CI passed on head `227c62a` before a documentation update. The full clean-room cycle and approved cleanup completed. AMI provenance, scoped instance role, guest health, update/recovery, complete price, and Nova dispatch remain unproven. | [`test244.md`](../test/test244.md): zero-capacity ASG reached service-valid state; merged PR #485 [`test485.md`](../test/test485.md): direct isolated `t3.micro` capacity 1→2→1, EC2 checks, and teardown; PR #486 [`test486.md`](../test/test486.md): encrypted root-volume create/health/teardown cycles. Both test EC2 records are terminated. |
+| `aws-ec2-autoscaling` | `modules/ec2-autoscaling` | `aws-virtual-machine-service`, possible GPU compute / no scenario for VM/GPU | Merged PR #483 adds source-only policy for `0 <= min <= desired <= max <= 3`, one same-plan launch template with a fixed `latest_version`, known AMI ID, `t3.micro`, and IMDSv2. Merged PR #486 binds encrypted root-volume checks to the selected AMI's root-device metadata; its final-head CI passed all seven checks, and the full clean-room cycle and approved cleanup completed. AMI provenance, scoped instance role, guest health, update/recovery, complete price, and Nova dispatch remain unproven. | [`test244.md`](../test/test244.md): zero-capacity ASG reached service-valid state; merged PR #485 [`test485.md`](../test/test485.md): direct isolated `t3.micro` capacity 1→2→1, EC2 checks, and teardown; PR #486 [`test486.md`](../test/test486.md): encrypted root-volume create/health/teardown cycles. Both test EC2 records are terminated. |
 | `aws-vpc-private-network` | `modules/vpc` | `aws-private-connectivity` / `hybrid-network` | Merged PR #500 adds source-only bounds for one private IPv4 VPC, paired public/private subnets in two or three AZs, explicit associations, one public-to-IGW route, one private-to-NAT route, and a same-plan VPC EIP/NAT binding. Merged PR #502 adds source-only monthly pricing for NAT hours, data processing, one public IPv4 address, declared internet egress, and cross-AZ payload, using regional AWS Price List products; all seven checks passed on final PR head `86b4b89` in CI run #45578164764. It does not establish runtime traffic or a complete bill. VPC endpoints, IPv6, peering, transit gateways, VPN, DNS reachability, ACL precedence, and effective service reachability remain unsupported. | [`test244.md`](../test/test244.md) VPC for EKS; [`test263.md`](../test/test263.md) includes routed topology; no exact-module lifecycle proof is recorded here |
 | `aws-site-to-site-vpn` | `modules/site-to-site-vpn` | `aws-private-connectivity` / `hybrid-network` | Shared network checks only; no peer, tunnel, route propagation, or encryption policy | [`test263.md`](../test/test263.md): encrypted routed traffic; [`test244.md`](../test/test244.md) was lifecycle-only with tunnels down |
 | `aws-multi-region-dns` | `modules/multi-region-dns` | `aws-edge-https`, `aws-backup-recovery` / `multi-region` | No failover health-check/record/region policy | [`test260.md`](../test/test260.md): public DNS failed over between two endpoints; not backup/restore evidence |

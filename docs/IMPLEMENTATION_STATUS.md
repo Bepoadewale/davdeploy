@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503); hosted runtime remains
+`ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -33,17 +33,16 @@ locally, and all seven checks passed on final PR head `86b4b89` in CI run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 It changes neither the hosted runtime nor AWS resources.
 
-PR #486 remains open. Its branch is synchronized with current `main`
-(`b6b663d`) by merge commit `05a6e5c`; all seven checks passed on pre-cleanup-
-documentation head `227c62a` in run `45589122723`. The clean-room full cycle
-and final cleanup are complete; the approved generated artifacts and Compose
-resources are absent. This documentation update needs fresh final-head CI.
-Draft PR #495
-remains open at `8a3c23828e619c04a50a9fe6144f389b4924adb1`, with all seven
-checks passing in run `45530027533`. Its tagged AppConfig test application,
-environment, feature-flag profile, rollout strategy, and deployment history
-are preserved; the environment is `Reverted` and deployments are `COMPLETE`
-then `REVERTED`. No cleanup was performed. The Terraform run monitor has 66
+Merged PR #486 as commit `ee3a407`; its final head `a2c2d29` passed all seven
+checks in run `45603699112`, and merged-main CI passed all seven in
+`45604774427`. Its two isolated Auto Scaling cycles and clean-room full cycle
+passed; approved clean-room artifacts are absent. Draft PR #495 remains open;
+its branch now includes current `main` through merge commit `2a079df`. All seven
+checks passed on prior head `599fc03` in run `45604183781`; fresh final-head CI
+is pending. Its tagged AppConfig test application, environment, feature-flag
+profile, rollout strategy, and deployment history are preserved; the
+environment is `Reverted` and deployments are `COMPLETE` then `REVERTED`. No
+AWS cleanup was performed. The Terraform run monitor has 66
 historical records and no active runs. The hosted control plane and its state
 and locks were not accessed or changed.
 
@@ -154,11 +153,11 @@ are terminated. Local state lists zero resources and is retained. This does
 not prove guest application health, update/recovery, pricing, or Nova dispatch.
 The merge added no AWS resources.
 
-PR #486 remains open and is synchronized with current `main` by merge commit
-`05a6e5c`; all seven checks passed on pre-cleanup-documentation head `227c62a`
-in run `45589122723`. Its encrypted-root-volume cycles and clean-room full
-cycle are complete. The approved final cleanup was verified: generated files,
-project containers, volume, and network are absent, and the worktree remains.
+Merged PR #486 as `ee3a407`; its encrypted-root-volume cycles and clean-room
+full cycle are complete. All seven final-head checks passed in run
+`45603699112`, and merged-main CI passed in run `45604774427`. The approved
+final cleanup was verified: generated files, project containers, volume, and
+network are absent, and the worktree remains.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

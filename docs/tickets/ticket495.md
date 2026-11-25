@@ -20,7 +20,8 @@ this exact shape only; it does not prove Nova dispatch.
 
 ## Current repo state
 
-- Backend `main` is `2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494).
+- At PR creation, backend `main` was
+  `2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494).
 - The `modules/feature-flags` root contains only
   `aws_appconfig_application` and `aws_appconfig_environment`.
 - The generated-plan policy binds each AppConfig environment to one same-plan
@@ -145,15 +146,18 @@ seven-resource destroy plan is reviewed and awaits approval before apply. PR
 
 ## Current-main synchronization — 2026-11-25
 
-The PR branch was synchronized with backend `main` at
-`b6b663d87c7f31bebd2baf47f4589d8205ec2b3f` in merge commit `13f32b6`.
+The PR branch was synchronized first with backend `main` at
+`b6b663d87c7f31bebd2baf47f4589d8205ec2b3f` in merge commit `13f32b6`, then
+with current `main` at `ee3a407dbe5166b66abea38e47c7a20778f01e90` after PR #486
+merged, in merge commit `2a079df`.
 The AppConfig policy, lifecycle verifier, and tests remain present. The
 capability-matrix conflict was reconciled to retain current-main status and
 the PR's revision-retention and exact teardown limitations. Focused policy and
-AppConfig tests pass (614 passed); `make verify` passes (1,883 tests, one
+AppConfig tests pass (614 passed); `make verify` passes (1,904 tests, one
 existing Starlette/httpx deprecation warning); Ruff, documentation conventions,
-and `git diff --check` pass. Fresh final-head CI and review are pending; the
-earlier CI result applies only to the prior PR head.
+and `git diff --check` pass. All seven checks passed on prior head `599fc03`
+in run `45604183781`; fresh final-head CI and review are pending after the
+second main synchronization.
 
 The account inventory still shows the tagged AppConfig application,
 environment, profile, deployment strategy, and `COMPLETE`/`REVERTED` history.
