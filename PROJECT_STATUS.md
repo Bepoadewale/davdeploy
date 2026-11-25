@@ -118,8 +118,8 @@ application health is claimed. The merge added no AWS or control-plane
 resources.
 
 PR #486 remains open and unmerged at synchronized head
-`9a6313a6074c37cdd4b9c0023452dc8710c5b428`. All seven checks passed in run
-[45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
+`3d7fe8b89adb6fd6407afe989336a1d756e02d99`. All seven checks passed in run
+[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
 Two isolated direct same-account cycles verified encrypted 8 GiB gp3 root
 volumes, healthy ASG/EC2 checks, and teardown with independent absence checks.
 The branch includes current `main` through PR #493. Final clean-room cleanup of

@@ -115,7 +115,9 @@ returned zero resources. Local state artifacts are retained and are not
 committed. After synchronizing with PR #493, head
 `9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven PR checks in run
 [45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
-The completed local clean-room containers have been stopped; its generated
+The documentation-reconciliation head
+`3d7fe8b89adb6fd6407afe989336a1d756e02d99` then passed all seven checks in
+run `45532421344`. The completed local clean-room containers have been stopped; its generated
 files, Compose volume, and network remain pending explicit cleanup approval.
 The run log is
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-20261124.log`.

@@ -97,7 +97,9 @@ generated artifacts is pending explicit approval. Earlier synchronized heads `46
 seven checks in runs `45502916393`, `45503868241`, and `45504483123`. After
 merging current `main` through PR #493 and reconciling the status docs, head
 `9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven checks in run
-`45531340170`. The root-device review finding is addressed in code; the
+`45531340170`. The documentation-reconciliation head
+`3d7fe8b89adb6fd6407afe989336a1d756e02d99` then passed all seven checks in
+run `45532421344`. The root-device review finding is addressed in code; the
 clean-room review finding remains open until final cleanup is approved and
 recorded. Project containers are stopped; generated files, volume, and network
 remain preserved. No hosted control-plane resource or state was touched.

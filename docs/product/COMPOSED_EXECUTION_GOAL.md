@@ -60,8 +60,8 @@ Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
 PR #486 remains open at synchronized head
-`9a6313a6074c37cdd4b9c0023452dc8710c5b428`; all seven checks passed in run
-[45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
+`3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
+[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
 It includes current `main` through PR #493. Two same-account cycles verified
 encrypted 8 GiB gp3 root volumes and teardown. Final clean-room cleanup remains
 pending explicit approval; containers are stopped and generated files, volume,
