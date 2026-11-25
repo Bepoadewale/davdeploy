@@ -29,8 +29,10 @@ head passed all seven checks in
 Draft PR #502 adds source-only monthly pricing for bounded public NAT Gateway
 hours, data processing, associated public IPv4, declared internet egress, and
 cross-AZ transfer. Its focused pricing and revision-lifecycle tests pass
-locally; required CI and review remain pending. It changes no AWS resource,
-hosted state, or runtime.
+locally, and all seven checks passed on head `53056be` in CI run
+[45559992614](https://github.com/Bepoadewale/davdeploy/actions/runs/45559992614).
+The PR remains draft/unmerged. It changes no AWS resource, hosted state, or
+runtime.
 
 PR #486 remains open at head
 `bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in
