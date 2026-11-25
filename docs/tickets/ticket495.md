@@ -84,8 +84,9 @@ this exact shape only; it does not prove Nova dispatch.
   current price source; no claim of an actual bill or hard cap is made.
 - [x] Focused tests, `make verify`, Terraform validation, and documentation
   conventions pass.
-- [ ] Fresh final-head CI after the cleanup evidence update, review, and merge
-  remain.
+- [x] Fresh final-head CI after the cleanup evidence update passed all seven
+  checks on `baccb1e` in run `45628939307`.
+- [ ] Review and merge remain.
 - [x] No hosted control-plane, remote-state, lock, unrelated AWS, or customer
   data is accessed or changed. No Nova dispatch or customer workload
   certification is claimed.
@@ -104,8 +105,9 @@ this exact shape only; it does not prove Nova dispatch.
 - [x] Exact monitored destroy and independent absence check.
 - [x] Matrix update, full repository validation, and documentation conventions.
 - [x] Clean-room final cleanup and monitored AWS destroy/absence check.
-- [ ] Fresh final-head CI after the cleanup evidence update, review, and merge.
-  Final-head CI previously passed on `a71e663` in run `45619836822`.
+- [x] Fresh final-head CI after the cleanup evidence update passed all seven
+  checks on `baccb1e` in run `45628939307`.
+- [ ] Final PR review and merge.
 
 Implementation commit `a4c629c` is on the PR branch. The initial six-resource
 create succeeded and the disabled flag was independently verified. A reviewed
