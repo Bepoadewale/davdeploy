@@ -99,7 +99,7 @@ merging current `main` through PR #493 and reconciling the status docs, head
 `9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven checks in run
 `45531340170`. The documentation-reconciliation head
 `3d7fe8b89adb6fd6407afe989336a1d756e02d99` then passed all seven checks in
-run `45532421344`. The root-device review finding is addressed in code; the clean-room review finding remains open until final cleanup is approved and recorded. Project containers are stopped; generated files, volume, and network remain preserved. This branch now includes main through PR #498. The focused generated-plan policy suite passes (544 tests); Ruff, documentation conventions, and `git diff --check` pass locally. CI for the synchronized head is pending. No hosted control-plane resource or state was touched.
+run `45532421344`. The root-device review finding is addressed in code; the clean-room review finding remains open until final cleanup is approved and recorded. Project containers are stopped; generated files, volume, and network remain preserved. This branch now includes main through PR #498. The focused generated-plan policy suite passes (544 tests); Ruff, documentation conventions, and `git diff --check` pass locally. CI passed on synchronized implementation head `2a8a602` in [run 45545293211](https://github.com/Bepoadewale/davdeploy/actions/runs/45545293211); the updated ticket head is being checked separately. No hosted control-plane resource or state was touched.
 
 ## Tests / validation performed
 
