@@ -33,9 +33,10 @@ locally, and all seven checks passed on final PR head `86b4b89` in CI run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 It changes neither the hosted runtime nor AWS resources.
 
-PR #486 remains open at `bb374e8ec06d613a963f1768e71b91175a416898`, with all
-seven checks passing in run `45545915711`; clean-room generated artifact,
-volume, and network cleanup remains pending explicit approval. Draft PR #495
+PR #486 remains open. Its branch is synchronized with current `main`
+(`b6b663d`) by merge commit `05a6e5c`; run `45545915711` passed on the prior
+head, so final-head CI is pending. Clean-room generated artifact, volume, and
+network cleanup remains pending explicit approval. Draft PR #495
 remains open at `8a3c23828e619c04a50a9fe6144f389b4924adb1`, with all seven
 checks passing in run `45530027533`. Its tagged AppConfig test application,
 environment, feature-flag profile, rollout strategy, and deployment history
@@ -151,11 +152,11 @@ are terminated. Local state lists zero resources and is retained. This does
 not prove guest application health, update/recovery, pricing, or Nova dispatch.
 The merge added no AWS resources.
 
-PR #486 remains open at head `bb374e8ec06d613a963f1768e71b91175a416898`;
-all seven checks passed in run `45545915711`. Its encrypted-root-volume
-cycles are complete. Clean-room generated artifact/volume/network cleanup is
-still pending explicit approval, and the exact generated artifacts remain
-preserved.
+PR #486 remains open and is synchronized with current `main` by merge commit
+`05a6e5c`; run `45545915711` passed on its prior head. Its encrypted-root-volume
+cycles are complete. The clean-room run passed through `make verify`, but its
+final cleanup step remains pending explicit approval; generated artifacts,
+volume, and network remain preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

@@ -37,11 +37,13 @@ after plan [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/ru
 The hosted control plane was not accessed or changed for this reconciliation.
 
 PR #485 is merged and records direct same-account Auto Scaling scale/health/
-teardown evidence for its bounded shape. PR #486 remains open at head
-`bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in run
+teardown evidence for its bounded shape. PR #486 remains open and now includes
+current `main` through merge commit `05a6e5c`; all seven checks passed on its
+prior head in run
 [45545915711](https://github.com/Bepoadewale/davdeploy/actions/runs/45545915711).
-Its encrypted root-volume tests passed and final clean-room cleanup remains
-pending approval. Its generated local artifacts remain preserved. PR #487 is merged and
+Its encrypted root-volume tests passed. The clean-room run passed through
+`make verify`, but final cleanup remains pending explicit approval; generated
+artifacts remain preserved. PR #487 is merged and
 records exact-module DynamoDB point-in-time recovery and teardown. PR #489 is
 merged with final-head CI run [45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
 and merged-main run [45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)

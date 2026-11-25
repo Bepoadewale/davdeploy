@@ -175,3 +175,21 @@ run `45532421344`. The root-device review finding is addressed in code; the clea
 Keep AMI provenance, instance-role permissions, workload health, update and
 failure recovery, complete cost, Nova remote-state configuration, and Nova
 dispatch as separate gates.
+
+## Current-main synchronization — 2026-11-25
+
+The PR branch was synchronized with backend `main` at
+`b6b663d87c7f31bebd2baf47f4589d8205ec2b3f` in merge commit `05a6e5c`.
+The AMI root-device binding and its regression tests remain present after the
+merge. Focused Auto Scaling policy tests passed (42 passed, 562 deselected);
+Ruff, documentation conventions, and `git diff --check` passed. Earlier CI
+run `45545915711` covers the previous PR head only; fresh final-head CI and
+review are required after this synchronization.
+
+The isolated clean-room run completed bootstrap, smoke, simple/complex and
+degraded/Day-2 demos, policy/readiness failure checks, trace checks, and
+`make verify` (1,752 tests). Its required final `make clean-local` has not run:
+the generated `.venv`, `.local`, Compose volume, and network remain preserved
+until explicit deletion approval. The clean-room acceptance gate is therefore
+still open. No AWS workload or hosted control-plane resource was changed by
+this source synchronization.

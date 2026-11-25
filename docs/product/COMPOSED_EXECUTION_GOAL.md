@@ -48,12 +48,13 @@ cross-AZ transfer. All seven checks passed on final PR head `86b4b89` in CI
 run [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 The PR changes no AWS resource, hosted state, or runtime.
 
-PR #486 remains open at head
-`bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in
-[run 45545915711](https://github.com/Bepoadewale/davdeploy/actions/runs/45545915711).
-Its two direct same-account encrypted-root-volume cycles are recorded, but
-clean-room artifact/volume/network cleanup is pending explicit approval and
-the generated artifacts remain preserved. PR #495 remains a draft at head
+PR #486 remains open and now includes current `main` through merge commit
+`05a6e5c`; all seven checks passed on its prior head in
+[run 45545915711](https://github.com/Bepoadewale/davdeploy/actions/runs/45545915711),
+so final-head CI is pending. Its two direct same-account encrypted-root-volume
+cycles are recorded. The clean-room run passed through `make verify`; final
+artifact/volume/network cleanup remains pending explicit approval, and those
+artifacts remain preserved. PR #495 remains a draft at head
 `8a3c23828e619c04a50a9fe6144f389b4924adb1`; all seven checks passed in
 [run 45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
 Its tagged AppConfig test application, environment, feature-flag profile,
