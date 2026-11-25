@@ -8,7 +8,7 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-25
 
 The source baseline for this reconciliation is backend `main` at
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
+`f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -17,6 +17,32 @@ after plan
 This reconciliation did not access or change the hosted control plane. The
 recorded health observation belongs to the earlier deployment check and was
 not repeated here.
+
+Merged PR #498 adds source-only bounds for a small AWS Batch Fargate shape;
+merged PR #499 bounds a private-endpoint EKS shape; and merged PR #500 adds
+source-only review of the bounded VPC module's subnet, route, internet gateway,
+NAT gateway, and Elastic IP bindings. Their final-head checks pass. These
+packages do not change AWS workloads or the hosted runtime. PR #500's final
+head passed all seven checks in
+[run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
+
+PR #486 remains open at head
+`bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in
+[run 45545915711](https://github.com/Bepoadewale/davdeploy/actions/runs/45545915711).
+Its two direct same-account encrypted-root-volume cycles are recorded, but
+clean-room artifact/volume/network cleanup is pending explicit approval and
+the generated artifacts remain preserved. PR #495 remains a draft at head
+`8a3c23828e619c04a50a9fe6144f389b4924adb1`; all seven checks passed in
+[run 45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+Its tagged AppConfig test application, environment, feature-flag profile,
+rollout strategy, and deployment history remain preserved. Read-only account
+checks observed deployments 1 and 2 as `COMPLETE` and `REVERTED`, with the
+environment `Reverted`; no teardown was performed.
+
+The Terraform run monitor has 66 historical records and no active runs. No
+Terraform operation, AWS mutation, or hosted-control-plane access occurred for
+this reconciliation. The hosted backend remains at the previously recorded
+PR #420 release; its earlier HTTP 200 observation was not repeated.
 
 PR #477 passed all seven checks on its final head in CI run
 [45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734).
@@ -59,9 +85,8 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its
-seven required checks pass on that head, but it remains behind current `main`
-and GitHub reports a dirty merge state. Two same-account cycles verified
+PR #486 remains open at head `bb374e8ec06d613a963f1768e71b91175a416898`; all
+seven checks passed in run `45545915711`. Two same-account cycles verified
 encrypted 8 GiB gp3 root volumes and teardown. Its final clean-room cleanup
 remains pending explicit approval to remove generated artifacts and Compose
 volumes in that specific worktree; those artifacts are preserved.
@@ -331,9 +356,15 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
+- Backend `main` is `f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
+- Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
+  bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
+  passed all seven checks in run `45552193668`.
+- PR #486 remains open with clean-room cleanup pending explicit approval. Draft
+  PR #495's tagged AppConfig rollout resources remain preserved pending exact
+  teardown approval. The run monitor has 66 records and zero active runs.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
   default-off Nova apply worker, credential broker, and customer apply-role
   template. A temporary same-account role test verified ExternalId-based
