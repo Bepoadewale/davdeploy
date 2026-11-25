@@ -79,7 +79,9 @@ AWS resources or the hosted control plane.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [ ] Required CI passed on final PR head.
+- [x] All seven required checks passed on implementation head `ec97300` in
+  [run 45645636327](https://github.com/Bepoadewale/davdeploy/actions/runs/45645636327);
+  a final-head run follows this ticket reconciliation.
 - [ ] PR reviewed and merged.
 
 ## Evidence files produced
@@ -94,6 +96,10 @@ AWS resources or the hosted control plane.
 - Focused pricing and persisted-revision tests: 130 passed before the explicit
   supporting-cost blocker was added; the final `make verify` run passed 1,914
   tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose checks.
+- All seven required PR checks passed on implementation head
+  `ec9730025a378f89ecfcaf63dd886493347b2c52` in
+  [run 45645636327](https://github.com/Bepoadewale/davdeploy/actions/runs/45645636327).
+  A final-head run follows this ticket reconciliation.
 - `make openapi-update` updated `contracts/openapi-v1.json`; the final OpenAPI
   check confirms it matches the API.
 - `git diff --check` and documentation conventions are recorded before the
