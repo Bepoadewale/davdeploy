@@ -1,7 +1,7 @@
 # ticket503 — Bound generated Lambda function plans
 
-PR: https://github.com/Bepoadewale/davdeploy/pull/503 (open; ready for review)
-Branch: `feat/lambda-service-plan-policy-503`
+PR: https://github.com/Bepoadewale/davdeploy/pull/503 (merged 2026-11-25)
+Branch: `feat/lambda-service-plan-policy-503` (deleted after merge)
 
 ## Problem / goal
 
@@ -15,9 +15,8 @@ control plane.
 ## Current repo state
 
 - Backend `main` was `e7b697127691f8454e1f468a562338e6276957b4` (PR #501)
-  when this package began. PR #502 has since merged as
-  `f0bc3b2d7effb59993b507f26d82c427a962619b`; the PR branch is refreshed
-  against that main at head `fac74e40625bd97ef3afe3219b03b7cd4d7369a9`.
+  when this package began. PR #502 merged as `f0bc3b2`; PR #503 merged as
+  `f58b308376f759e45e63e3d7c79422f84bbdfd40`.
 - `modules/lambda-service` supplies a ZIP file, role ARN, handler, and runtime;
   it defaults to Python 3.12 and a 30-second timeout. The pricing evaluator
   already limits Lambda pricing to ZIP packages, one architecture, 128–10,240
@@ -83,7 +82,7 @@ control plane.
   `fac74e40625bd97ef3afe3219b03b7cd4d7369a9` in run
   [45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045).
 - [x] Automated review completed on the final code head with no findings.
-- [ ] PR reviewed and merged.
+- [x] PR reviewed and merged as `f58b308376f759e45e63e3d7c79422f84bbdfd40`.
 
 ## Tests / validation performed
 
@@ -94,12 +93,12 @@ unknown Lambda KMS key handling, and scoped managed-secret ARN environment
 values. Ruff passed for the policy module and
 its regression tests; `python3 scripts/check_doc_conventions.py` and
 `git diff --check` passed. This package is source-only; do not create
-`docs/test/test503.md` or mutate AWS. All seven checks passed on refreshed code
-head `fac74e40625bd97ef3afe3219b03b7cd4d7369a9` in
-[CI run 45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045).
+`docs/test/test503.md` or mutate AWS. All seven checks passed on final PR head
+`08ace0b3189ea6d6ddc22ac81cc22d03a30ddcc6` in
+[CI run 45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631).
 Automated review findings for mixed IAM trust principals, unknown KMS keys, and
 secret-like environment variables were addressed with regression coverage; the
-latest review completed with no findings. The PR is ready for its merge step.
+latest review completed with no findings. The PR is merged.
 
 ## Evidence files produced
 

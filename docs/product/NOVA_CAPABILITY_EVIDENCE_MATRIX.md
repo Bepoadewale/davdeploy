@@ -1,21 +1,22 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`f0bc3b2d7effb59993b507f26d82c427a962619b` (PR #502), 2026-11-25. Merged PR
+`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503), 2026-11-25. Merged PR
 #502 adds source-only assumption-bound NAT/network pricing; all seven checks
 passed on final PR head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-Open PR #503 adds source-only Lambda function plan bounds. Refreshed head
-`fac74e4` passed all seven checks in run
-[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045);
-automated review found no issues. Neither package changes hosted runtime or AWS
-resources. Merged PRs
+Merged PR #503 adds source-only Lambda function plan bounds as
+`f58b308`; final PR head `08ace0b` passed all seven checks in run
+[45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631),
+and automated review found no issues. Neither package changes hosted runtime or
+AWS resources. Merged PRs
 #492 and #496 record the bootstrapped growth strategy as roadmap-only; they
 change no product behavior or AWS resources. Merged PR #497 corrects the
 source-level Nova plan-only status; merged PRs #498 and #499 add source-only
 Batch and EKS generated-plan bounds, merged PR #500 adds bounded VPC topology
-and egress review, and merged PR #501 reconciles the evidence snapshot. Draft
-Merged PR #502 adds assumption-bound NAT and network pricing in source; all
+and egress review, and merged PR #501 reconciles the evidence snapshot. Merged
+PRs #502 and #503 add assumption-bound NAT pricing and bounded Lambda policy in
+source; all
 seven checks passed on final PR head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
 These PRs do not change the hosted runtime or AWS state.
@@ -390,7 +391,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-s3-private-storage` | `modules/artifacts` | `aws-file-storage`, `aws-static-web`, `aws-ai-retrieval` / `ai-rag`, `web-application` | S3 block-public-access/public ACL checks; merged PRs #434–#436 require same-plan TLS-deny, default encryption, and `BucketOwnerEnforced`. Not a complete private-upload policy | [`test262.md`](../test/test262.md) private source bucket; draft PR #491 [`test491.md`](../test/test491.md) records exact `modules/artifacts` settings, synthetic v1/v2 reads, and monitored teardown; no Nova dispatch |
 | `aws-cloudfront-delivery` | `modules/cloudfront-delivery` | `aws-edge-https`, `aws-static-web` / `multi-region`, `web-application` | Merged PRs #432/#433 deny unknown or cleartext viewer policies and check custom-origin HTTPS/TLS 1.2; standard S3 origins rely on viewer HTTPS. Source-only. No response-header, private-origin-access, or cache-safety policy | [`test253.md`](../test/test253.md) |
 | `aws-api-gateway-http` | `modules/api-gateway-http` | `aws-serverless-api`; generic API building block for payments / `web-application` | Shared network/IAM checks only; no route auth, authorizer, throttling, or WAF rule | [`test268.md`](../test/test268.md) |
-| `aws-lambda-service` | `modules/lambda-service` | `aws-serverless-api`, `aws-ai-retrieval`; generic building block for other APIs / `web-application`, `ai-rag` | Open draft PR #503 adds source-only bounds for the priced ZIP shape: supported runtime, known code hash, same-account role, exact same-plan Lambda trust (or human review for an external role), architecture, memory, timeout, environment size/secret-like keys, and unsupported VPC/layer/concurrency/event settings. It is not merged or deployed. | [`test268.md`](../test/test268.md) exercises Lambda through a separate serverless renderer root; merged PR #489 [`test489.md`](../test/test489.md) records exact-module v1 invoke, in-place v2 code update, teardown, and independent absence verification. No Nova dispatch evidence. |
+| `aws-lambda-service` | `modules/lambda-service` | `aws-serverless-api`, `aws-ai-retrieval`; generic building block for other APIs / `web-application`, `ai-rag` | Merged PR #503 adds source-only bounds for the priced ZIP shape: supported runtime, known code hash, same-account role, exact same-plan Lambda trust (or human review for an external role), architecture, memory, timeout, environment size, scoped same-account/region Secrets Manager ARN environment values, and unsupported VPC/layer/concurrency/event settings. Final PR head `08ace0b` passed all seven checks in run #45582032631; automated review found no issues. It is not deployed. | [`test268.md`](../test/test268.md) exercises Lambda through a separate serverless renderer root; merged PR #489 [`test489.md`](../test/test489.md) records exact-module v1 invoke, in-place v2 code update, teardown, and independent absence verification. No Nova dispatch evidence. |
 | `aws-ecr-image` | `modules/ecr` | `aws-managed-application`, `aws-container-service`, `aws-kubernetes-platform` / `saas-backend`, `kubernetes` | PR #461 adds source checks for immutable image tags, declared scan-on-push, AES256 repository encryption, and `force_delete=false`. AWS now deprecates repository-level scan configuration in favor of registry-level scanning, so this field is configuration intent, not proof scanning is active. No image-provenance or repository-policy scope is enforced. | [`test461.md`](../test/test461.md) records direct same-account creation, setting verification, and teardown of this module's empty repository; [`test239.md`](../test/test239.md) records ECR settings in a combined stack. Neither test pushes/runs an image. | No verified image digest/source provenance, registry-level scan result, scoped pull/run, full application lifecycle, or complete ECR cost |
 | `aws-aurora-postgres` | `modules/aurora-postgres` | `aws-relational-data` / `saas-backend` | RDS public access/encryption and bounded deletion/final-snapshot unknown checks | [`test244.md`](../test/test244.md): Aurora available; no app query or restore |
 | `aws-dynamodb-table` | `modules/dynamodb-table` | `aws-nosql-data` / `saas-backend` | PR #473 requires known table/partition-key identity, `PAY_PER_REQUEST`, server-side encryption, deletion protection, and enabled PITR with a bounded recovery period. This source-only policy does not cover indexes, streams, replicas, consumer permissions, or all usage costs. | [`test244.md`](../test/test244.md): SSE and PITR configuration; merged PR #487 [`test487.md`](../test/test487.md): direct same-account source writes, restore to a captured PITR time, restored-table reads, and isolated teardown. No Nova dispatch. |

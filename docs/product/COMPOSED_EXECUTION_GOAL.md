@@ -14,16 +14,17 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`f0bc3b2d7effb59993b507f26d82c427a962619b` (PR #502). PR #502 adds
+`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503). PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-It is source-only and changes no AWS resources or hosted runtime. PR #503 adds
-source-only bounded Lambda function policy; refreshed head
-`fac74e40625bd97ef3afe3219b03b7cd4d7369a9` passed all seven checks in run
-[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045),
-and automated review completed with no findings. It remains open, unmerged,
-and source-only. The last
+It is source-only and changes no AWS resources or hosted runtime. Merged PR #503
+adds source-only bounded Lambda function policy as commit
+`f58b308376f759e45e63e3d7c79422f84bbdfd40`. Its final PR head `08ace0b` passed
+all seven checks in run
+[45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631);
+automated review completed with no findings on code head `fac74e4`. It changes
+no AWS resources or hosted runtime. The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
