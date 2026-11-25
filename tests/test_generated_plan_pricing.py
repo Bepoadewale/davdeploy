@@ -6,7 +6,11 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from botocore.exceptions import ClientError
-from davdeploy.domain import RdsPricingUsageAssumptions, VpcPricingUsageAssumptions
+from davdeploy.domain import (
+    BatchPricingUsageAssumptions,
+    RdsPricingUsageAssumptions,
+    VpcPricingUsageAssumptions,
+)
 from davdeploy.generated_plan_pricing import (
     AwsPriceListCatalog,
     GeneratedPlanPricingEvidence,
@@ -200,6 +204,45 @@ class FakeServerlessPriceList:
         product = {
             "product": {"sku": sku, "productFamily": family, "attributes": attributes},
             "serviceCode": service,
+            "publicationDate": "2026-11-13T12:00:00Z",
+            "terms": {"OnDemand": {"offer": {
+                "sku": sku,
+                "effectiveDate": "2026-11-01T00:00:00Z",
+                "priceDimensions": {"dimension": {
+                    "beginRange": "0", "endRange": "Inf", "unit": unit,
+                    "pricePerUnit": {"USD": price},
+                }},
+            }}},
+        }
+        return {"PriceList": [json.dumps(product)]}
+
+
+class FakeBatchPriceList:
+    def __init__(self):
+        self.calls = []
+
+    def get_products(self, **kwargs):
+        self.calls.append(kwargs)
+        filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        dimension = "vcpu" if "cputype" in filters else "memory"
+        unit = "Hrs"
+        price = "0.04048" if dimension == "vcpu" else "0.004445"
+        attrs = {
+            "productFamily": "Compute",
+            "regionCode": REGION,
+            "cputype": "perCPU",
+            "memorytype": "perGB",
+            "usagetype": (
+                "USE1-Fargate-vCPU-Hours:perCPU"
+                if dimension == "vcpu"
+                else "USE1-Fargate-GB-Hours"
+            ),
+            "tenancy": "Shared",
+        }
+        sku = f"batch-fargate-{dimension}"
+        product = {
+            "product": {"sku": sku, "productFamily": "Compute", "attributes": attrs},
+            "serviceCode": "AmazonECS",
             "publicationDate": "2026-11-13T12:00:00Z",
             "terms": {"OnDemand": {"offer": {
                 "sku": sku,
@@ -453,6 +496,7 @@ def evaluate(
     serverless_usage_assumptions=None,
     dynamodb_usage_assumptions=None,
     vpc_usage_assumptions=None,
+    batch_usage_assumptions=None,
     catalog_client=None,
 ):
     client = catalog_client or client or FakePriceList()
@@ -470,6 +514,7 @@ def evaluate(
                 serverless_usage_assumptions=serverless_usage_assumptions,
                 dynamodb_usage_assumptions=dynamodb_usage_assumptions,
                 vpc_usage_assumptions=vpc_usage_assumptions,
+                batch_usage_assumptions=batch_usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -533,6 +578,7 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     legacy.pop("serverless_usage_assumptions")
     legacy.pop("dynamodb_usage_assumptions")
     legacy.pop("vpc_usage_assumptions")
+    legacy.pop("batch_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -1147,7 +1193,7 @@ def test_nat_gateway_pricing_covers_hours_processing_ipv4_egress_and_cross_az():
     assert cross_az.unit_price_usd == "0.01"
     assert all(line.catalog_product_sha256 for line in result.lines)
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 8
+    assert manifest["version"] == 9
     assert manifest["vpc_usage_assumptions"] == NAT_USAGE
     assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
     assert pricing_evidence_is_approval_eligible(
@@ -1476,6 +1522,161 @@ def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
     ).pricing_context_sha256
 
 
+def batch_plan(*, runtime_platform=None, ephemeral_storage=None):
+    compute = {
+        "type": "MANAGED", "state": "ENABLED", "compute_resources": [{
+            "type": "FARGATE", "max_vcpus": 6,
+        }],
+    }
+    queue = {
+        "state": "ENABLED", "compute_environment_order": [{
+            "order": 1, "compute_environment": "aws_batch_compute_environment.jobs",
+        }],
+    }
+    properties = {
+        "image": "public.ecr.aws/library/busybox@sha256:" + "a" * 64,
+        "resourceRequirements": [
+            {"type": "VCPU", "value": "0.25"},
+            {"type": "MEMORY", "value": "512"},
+        ],
+    }
+    if runtime_platform is not None:
+        properties["runtimePlatform"] = runtime_platform
+    if ephemeral_storage is not None:
+        properties["ephemeralStorage"] = ephemeral_storage
+    job = {
+        "type": "container", "platform_capabilities": ["FARGATE"],
+        "container_properties": json.dumps(properties),
+    }
+    return plan(
+        resource_type="terraform_data", resource_values={"input": None},
+        extra_resources=(
+            resource("aws_batch_compute_environment.jobs", "aws_batch_compute_environment", compute),
+            resource("aws_batch_job_queue.jobs", "aws_batch_job_queue", queue),
+            resource("aws_batch_job_definition.jobs", "aws_batch_job_definition", job),
+        ),
+    )
+
+
+BATCH_USAGE = {
+    "jobs": {
+        "aws_batch_job_definition.jobs": {
+            "monthly_jobs": {"minimum": 10, "maximum": 20},
+            "average_billed_runtime_seconds": {"minimum": 30, "maximum": 120},
+        }
+    }
+}
+
+
+def test_batch_fargate_usage_is_priced_by_bound_job_and_applies_one_minute_floor():
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(), batch_usage_assumptions=BATCH_USAGE, catalog_client=client
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert result.monthly_low_minor is result.monthly_high_minor is None
+    assert "batch_supporting_costs_unpriced" in {item.code for item in result.findings}
+    assert not result.approval_eligible
+    assert {line.description for line in result.lines} == {
+        "AWS Fargate Linux/x86 vCPU", "AWS Fargate Linux/x86 memory",
+    }
+    assert {
+        line.description: (line.quantity, line.quantity_max)
+        for line in result.lines
+    } == {
+        "AWS Fargate Linux/x86 vCPU": (150_000, 600_000),
+        "AWS Fargate Linux/x86 memory": (307_200, 1_228_800),
+    }
+    assert result.batch_usage_assumptions == BATCH_USAGE
+    manifest = result.as_manifest_document()
+    assert manifest["version"] == 9
+    assert manifest["batch_usage_assumptions"] == BATCH_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+    bound_context = TrustedPlanPricingContext(
+        REGION, "USD", None, PERSISTED_CONTEXT_SHA256,
+        batch_usage_assumptions=BATCH_USAGE,
+    )
+    assert not pricing_evidence_is_approval_eligible(
+        manifest, trusted_context=bound_context, now=CAPTURED_AT
+    )
+    assert not pricing_evidence_is_approval_eligible(
+        manifest,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256
+        ),
+        now=CAPTURED_AT,
+    )
+    assert len(client.calls) == 2
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "finding"),
+    [
+        ({"runtime_platform": {"operatingSystemFamily": "LINUX", "cpuArchitecture": "ARM64"}},
+         "batch_pricing_shape_unsupported"),
+        ({"ephemeral_storage": {"sizeInGiB": 21}}, "batch_pricing_shape_unsupported"),
+    ],
+)
+def test_batch_pricing_fails_closed_for_unpriced_runtime_or_storage(kwargs, finding):
+    result, client = evaluate(
+        batch_plan(**kwargs),
+        batch_usage_assumptions=BATCH_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert finding in {item.code for item in result.findings}
+    assert not result.approval_eligible
+    assert client.calls == []
+
+
+def test_batch_plan_without_usage_assumptions_is_unpriced_and_not_approvable():
+    result, _ = evaluate(batch_plan(), catalog_client=FakeBatchPriceList())
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert {item.code for item in result.findings} == {
+        "batch_usage_assumptions_missing",
+        "batch_supporting_costs_unpriced",
+    }
+    assert not result.approval_eligible
+
+
+def test_batch_usage_assumptions_are_bounded_and_exact_address_keyed():
+    parsed = BatchPricingUsageAssumptions.model_validate(BATCH_USAGE)
+    assert parsed.model_dump(mode="json") == BATCH_USAGE
+    with pytest.raises(ValueError):
+        BatchPricingUsageAssumptions.model_validate({
+            "jobs": {"aws_batch_job_queue.jobs": BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"]}
+        })
+
+
+def test_batch_usage_assumptions_are_extracted_from_digest_checked_revision():
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"batch_pricing_usage_assumptions": BATCH_USAGE}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.batch_usage_assumptions == BATCH_USAGE
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256
+    ).pricing_context_sha256
+    with pytest.raises(ValueError):
+        BatchPricingUsageAssumptions.model_validate({
+            "jobs": {"aws_batch_job_definition.jobs": {
+                "monthly_jobs": {"minimum": 2, "maximum": 1},
+                "average_billed_runtime_seconds": {"minimum": 1, "maximum": 10},
+            }}
+        })
+
+
 def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assumptions = {
         "monthly_storage_gb": {"minimum": 10, "maximum": 20},
@@ -1494,7 +1695,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 8
+    assert manifest["version"] == 9
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,

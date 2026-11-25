@@ -1407,6 +1407,14 @@ class ProductService:
             else:
                 workload["vpc_pricing_usage_assumptions"] = usage_assumptions
                 next_constraints["vpc_pricing_usage_assumptions"] = usage_assumptions
+        if "batch_pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["batch_pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("batch_pricing_usage_assumptions", None)
+                next_constraints.pop("batch_pricing_usage_assumptions", None)
+            else:
+                workload["batch_pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["batch_pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1474,6 +1482,10 @@ class ProductService:
             "vpc_pricing_usage_assumptions": (
                 before_spec.get("vpc_pricing_usage_assumptions"),
                 after_spec.get("vpc_pricing_usage_assumptions"),
+            ),
+            "batch_pricing_usage_assumptions": (
+                before_spec.get("batch_pricing_usage_assumptions"),
+                after_spec.get("batch_pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),
@@ -6083,6 +6095,9 @@ class ProductService:
             if pricing_document_valid
             else None,
             "vpc_usage_assumptions": pricing_document.get("vpc_usage_assumptions")
+            if pricing_document_valid
+            else None,
+            "batch_usage_assumptions": pricing_document.get("batch_usage_assumptions")
             if pricing_document_valid
             else None,
             "lines": pricing_lines,

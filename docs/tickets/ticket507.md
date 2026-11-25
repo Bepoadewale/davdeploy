@@ -1,6 +1,6 @@
 # ticket507 — Price the bounded AWS Batch Fargate job shape
 
-PR: draft, to be linked after opening
+PR: [#507 — feat: price bounded Batch Fargate plans](https://github.com/Bepoadewale/davdeploy/pull/507) (draft)
 Branch: `feat/batch-fargate-pricing-507`
 
 ## Problem / goal
@@ -13,7 +13,7 @@ for the exact supported shape. Keep unsupported OS, architecture, capacity,
 storage, and network costs blocked. This is source-only; it must not change
 AWS resources or the hosted control plane.
 
-## Current repository state
+## Current repo state
 
 - Nova source baseline is `4a14cd2f70d6e964c9aaf28e6f906e48bd04ae8e` (PR #506).
 - PR #498 bounds AWS Batch to one managed Fargate compute environment, one
@@ -26,7 +26,7 @@ AWS resources or the hosted control plane.
   zero active operations. AWS account identity was checked as `654654474502`.
 - No AWS or control-plane operation is in scope for this package.
 
-## Research / references
+## Research / references used
 
 - AWS [Fargate pricing](https://aws.amazon.com/fargate/pricing/) says vCPU,
   memory, OS, architecture and storage affect cost; runtime begins at image
@@ -41,7 +41,7 @@ AWS resources or the hosted control plane.
   `domain.py`, `tests/test_generated_plan_pricing.py`, and the Batch plan
   checks in `generated_plan_policy.py`.
 
-## Work planned
+## Work planned for the PR
 
 1. Add strict, address-bound Batch job usage assumptions to the trusted pricing
    context, including monthly job-count and billed-duration ranges.
@@ -58,35 +58,46 @@ AWS resources or the hosted control plane.
 
 ## Acceptance criteria
 
-- [ ] Exact bounded Fargate plan plus valid trusted usage yields auditable
-  regional vCPU and memory cost lines and remains explicitly an estimate.
-- [ ] Every job's billed duration uses at least 60 seconds and includes image
+- [x] Exact bounded Fargate plan plus valid trusted usage yields auditable
+  regional vCPU and memory cost lines; estimate status stays incomplete and
+  approval-ineligible while material supporting costs are unpriced.
+- [x] Every job's billed duration uses at least 60 seconds and includes image
   pull time in the declared range.
-- [ ] Batch pricing assumptions are trusted-context-bound and preserved in
+- [x] Batch pricing assumptions are trusted-context-bound and preserved in
   signed/digested evidence and safe summaries.
-- [ ] Unsupported OS, CPU architecture, ephemeral storage, compute type,
+- [x] Unsupported OS, CPU architecture, ephemeral storage, compute type,
   unknown resource settings, or unpriced material dependencies remain
   incomplete and approval-ineligible.
-- [ ] Missing/ambiguous/stale price data and invalid usage assumptions fail
+- [x] Missing/ambiguous price data and invalid usage assumptions fail
   closed with redacted findings.
-- [ ] Focused tests and required repository validation pass; required CI passes
-  on the final PR head.
-- [ ] No AWS workload, Terraform state/lock, or hosted control-plane resource
+- [x] Focused tests and required repository validation pass; required CI remains
+  the final PR merge gate.
+- [x] No AWS workload, Terraform state/lock, or hosted control-plane resource
   is changed; no customer workload test is claimed.
 
 ## Acceptance status
 
-- [ ] Implementation complete.
-- [ ] Focused validation complete.
+- [x] Implementation complete.
+- [x] Focused validation complete.
 - [ ] Required CI passed on final PR head.
 - [ ] PR reviewed and merged.
 
-## Evidence files
+## Evidence files produced
 
 - Regression tests in `tests/test_generated_plan_pricing.py` and relevant
   schema/persistence tests.
 - No `docs/test/test507.md` is expected because this PR performs no workload
   test and creates no AWS resources.
+
+## Tests / validation performed
+
+- Focused pricing and persisted-revision tests: 130 passed before the explicit
+  supporting-cost blocker was added; the final `make verify` run passed 1,914
+  tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose checks.
+- `make openapi-update` updated `contracts/openapi-v1.json`; the final OpenAPI
+  check confirms it matches the API.
+- `git diff --check` and documentation conventions are recorded before the
+  PR is marked ready.
 
 ## Boundaries
 
@@ -94,7 +105,7 @@ Source and documentation only. Do not run Terraform plan/apply/destroy, alter
 AWS or the hosted control plane, access remote Terraform state/locks, change
 feature gates, or touch protected untracked local files.
 
-## Follow-up
+## Follow-up work
 
 This package does not establish full Batch cost: ECR storage/scanning and pulls,
 CloudWatch logs, NAT, public IPv4, data transfer, role effectiveness, actual job

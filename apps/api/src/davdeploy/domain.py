@@ -399,6 +399,43 @@ class VpcPricingUsageAssumptions(BaseModel):
         return self
 
 
+class BatchJobMonthlyPricingUsageAssumptions(BaseModel):
+    """Customer-declared monthly job count and average billed duration."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_jobs: MonthlyUsageRange
+    average_billed_runtime_seconds: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_batch_bounds(self) -> BatchJobMonthlyPricingUsageAssumptions:
+        if self.monthly_jobs.maximum > 100_000_000:
+            raise ValueError("monthly Batch job count exceeds the supported bound")
+        if self.average_billed_runtime_seconds.maximum > 2_592_000:
+            raise ValueError("Batch job runtime exceeds the supported monthly bound")
+        return self
+
+
+class BatchPricingUsageAssumptions(BaseModel):
+    """Usage bounds keyed by exact planned AWS Batch job-definition address."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    jobs: dict[str, BatchJobMonthlyPricingUsageAssumptions] = Field(
+        min_length=1, max_length=20
+    )
+
+    @model_validator(mode="after")
+    def validate_job_addresses(self) -> BatchPricingUsageAssumptions:
+        pattern = re.compile(
+            r"^(?:module\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?\.)*"
+            r"aws_batch_job_definition\.[A-Za-z0-9_-]+(?:\[(?:[0-9]+|\"[^\"\n]{1,64}\")\])?$"
+        )
+        if any(not pattern.fullmatch(address) for address in self.jobs):
+            raise ValueError("Batch usage assumption has an invalid job-definition address")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -413,6 +450,7 @@ class WorkloadSpec(BaseModel):
     serverless_pricing_usage_assumptions: ServerlessPricingUsageAssumptions | None = None
     dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
     vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
+    batch_pricing_usage_assumptions: BatchPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -841,6 +879,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     serverless_pricing_usage_assumptions: ServerlessPricingUsageAssumptions | None = None
     dynamodb_pricing_usage_assumptions: DynamoDbPricingUsageAssumptions | None = None
     vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
+    batch_pricing_usage_assumptions: BatchPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):

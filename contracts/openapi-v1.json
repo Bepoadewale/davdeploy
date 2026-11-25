@@ -137,6 +137,44 @@
         "title": "AwsQuickCreateRequest",
         "type": "object"
       },
+      "BatchJobMonthlyPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Customer-declared monthly job count and average billed duration.",
+        "properties": {
+          "average_billed_runtime_seconds": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_jobs": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_jobs",
+          "average_billed_runtime_seconds"
+        ],
+        "title": "BatchJobMonthlyPricingUsageAssumptions",
+        "type": "object"
+      },
+      "BatchPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Usage bounds keyed by exact planned AWS Batch job-definition address.",
+        "properties": {
+          "jobs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/BatchJobMonthlyPricingUsageAssumptions"
+            },
+            "maxProperties": 20,
+            "minProperties": 1,
+            "title": "Jobs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "jobs"
+        ],
+        "title": "BatchPricingUsageAssumptions",
+        "type": "object"
+      },
       "BlogCommentRequest": {
         "properties": {
           "body": {
@@ -690,6 +728,16 @@
               }
             ],
             "title": "Availability Target"
+          },
+          "batch_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "data_classification": {
             "anyOf": [
