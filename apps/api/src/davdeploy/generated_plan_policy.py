@@ -6512,7 +6512,7 @@ def _check_lambda_functions(
             )
 
         runtime = values.get("runtime")
-        if runtime not in LAMBDA_SUPPORTED_RUNTIME_IDS:
+        if not isinstance(runtime, str) or runtime not in LAMBDA_SUPPORTED_RUNTIME_IDS:
             _deny(
                 findings,
                 "lambda_runtime_unsupported",
@@ -6612,6 +6612,7 @@ def _check_lambda_functions(
         if (
             not isinstance(architectures, list)
             or len(architectures) != 1
+            or not isinstance(architectures[0], str)
             or architectures[0] not in {"x86_64", "arm64"}
         ):
             _deny(
