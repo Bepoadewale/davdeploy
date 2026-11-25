@@ -3744,7 +3744,9 @@ def _configured_attribute_references(
             configured_address = (
                 f"{module_prefix}{local_address}" if module_prefix else local_address
             )
-            if configured_address != resource_address:
+            if _without_instance_keys(configured_address) != _without_instance_keys(
+                resource_address
+            ):
                 continue
             expressions = item.get("expressions")
             expression = expressions.get(attribute) if isinstance(expressions, dict) else None
@@ -3765,10 +3767,17 @@ def _configured_attribute_references(
 
 
 def _reference_matches_resource(references: tuple[str, ...], address: str) -> bool:
+    normalized_address = _without_instance_keys(address)
     return any(
-        reference == address or reference.startswith(f"{address}.")
+        _without_instance_keys(reference) == normalized_address
+        or _without_instance_keys(reference).startswith(f"{normalized_address}.")
         for reference in references
     )
+
+
+def _without_instance_keys(address: str) -> str:
+    """Normalize count/for_each instance selectors for config-to-plan matching."""
+    return re.sub(r'\[(?:[0-9]+|"(?:\\.|[^"\\])*")\]', "", address)
 
 
 def _classify_aws_transitions(

@@ -67,6 +67,8 @@ estimate.
   still fail closed.
 - [x] Module-relative NAT allocation references resolve only within the
   containing Terraform module.
+- [x] Count/for_each instance addresses resolve to their configuration
+  references without broadening the exact NAT usage-assumption binding.
 - [x] Terraform's expanded reference list is accepted only when every entry
   identifies the same Elastic IP; unknown secondary allocation IDs fail closed.
 - [x] A complete VPC topology, including its Internet Gateway, remains price
@@ -98,10 +100,10 @@ Validation performed:
 
 - `uv run --locked --extra dev ruff check apps/api/src/davdeploy/domain.py apps/api/src/davdeploy/service.py apps/api/src/davdeploy/generated_plan_pricing.py tests/test_generated_plan_pricing.py tests/test_infrastructure_plan_lifecycle.py` — passed.
 - `uv run --locked --extra dev pytest tests/test_generated_plan_pricing.py tests/test_infrastructure_plan_lifecycle.py tests/test_sqs_plan_pricing.py tests/test_dynamodb_plan_pricing.py tests/test_generated_plan_review.py -q` — 160 passed.
-- `uv run --locked --extra dev pytest tests/test_generated_plan_pricing.py -q` — 108 passed after review fixes; Terraform-expanded and module-relative unknown EIP/NAT bindings, duplicate known IDs, unknown secondary allocations, and complete VPC topology pricing are covered.
+- `uv run --locked --extra dev pytest tests/test_generated_plan_pricing.py -q` — 109 passed after review fixes; Terraform-expanded, module-relative, and count-indexed unknown EIP/NAT bindings, duplicate known IDs, unknown secondary allocations, and complete VPC topology pricing are covered.
 - `uv run --locked --extra dev ruff check apps/api/src/davdeploy/generated_plan_pricing.py tests/test_generated_plan_pricing.py` — passed after the review fix.
 - `git diff --check` — passed.
-- GitHub Actions run [45562393129](https://github.com/Bepoadewale/davdeploy/actions/runs/45562393129) passed all seven checks on pre-review-fix PR head `be00cf04b9879f71b99aa247234cea366994d736`. The current worktree addresses unknown-EIP, module-relative binding, Internet Gateway, expanded-reference, and unknown-secondary-allocation review findings; final-head CI and review refresh are pending.
+- GitHub Actions run [45576263116](https://github.com/Bepoadewale/davdeploy/actions/runs/45576263116) passed all seven checks on PR head `9574c107c90c1ab202b3f92ace43336f7caa9856`. The current worktree additionally addresses count-indexed configuration-reference matching; final-head CI and review refresh are pending.
 - Read-only AWS Price List `GetProducts` checks in `us-east-1` returned one matching NAT Gateway hours product ($0.045/hour), NAT processing product ($0.045/GB), in-use public IPv4 product ($0.005/hour), regional transfer product ($0.01/GB), and internet egress product ($0.085/GB). This validates catalog data only; it does not change AWS resources or verify a customer bill.
 - This PR is source-only and must not create a `docs/test/test502.md` AWS workload report.
 

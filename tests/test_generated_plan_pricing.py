@@ -1341,6 +1341,58 @@ def test_nat_gateway_module_relative_reference_binds_unknown_nat_and_eip_ids():
     assert result.approval_eligible is True
 
 
+def test_nat_gateway_count_instance_resolves_its_configuration_reference():
+    document = nat_gateway_plan()
+    indexed_eip = "aws_eip.nat[0]"
+    indexed_nat = "aws_nat_gateway.nat[0]"
+    eip_values = document["planned_values"]["root_module"]["resources"][1]["values"]
+    eip_values["id"] = None
+    nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
+    nat_values["allocation_id"] = None
+    for item in document["planned_values"]["root_module"]["resources"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = indexed_eip
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = indexed_nat
+    for item in document["resource_changes"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = indexed_eip
+            item["change"]["after"]["id"] = None
+            item["change"]["after_unknown"]["id"] = True
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = indexed_nat
+            item["change"]["after"]["allocation_id"] = None
+            item["change"]["after_unknown"]["allocation_id"] = True
+    document["configuration"]["root_module"] = {
+        "resources": [
+            {"address": "aws_eip.nat", "expressions": {}},
+            {
+                "address": "aws_nat_gateway.nat",
+                "expressions": {
+                    "allocation_id": {
+                        "references": ["aws_eip.nat.id", "aws_eip.nat"]
+                    }
+                },
+            },
+        ],
+        "module_calls": {},
+    }
+    indexed_usage = {
+        "nat_gateways": {
+            indexed_nat: NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"]
+        }
+    }
+
+    result, _ = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=indexed_usage,
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+
+
 def test_nat_gateway_unknown_secondary_allocations_block_pricing():
     document = nat_gateway_plan()
     nat_change = next(
