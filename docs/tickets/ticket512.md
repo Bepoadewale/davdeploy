@@ -9,8 +9,9 @@ The bounded AWS Batch Fargate pricing path already prices compute, explicit
 CloudWatch Logs, and eligible same-plan private ECR storage. Public IPv4
 addresses assigned to Batch Fargate jobs are a separate billable dependency.
 Add a narrow, plan-bound cost line when the exact job definition explicitly
-enables `assignPublicIp`, using trusted monthly job-count and billed-runtime
-bounds and the existing regional Amazon VPC Price List lookup. Keep all other
+enables `assignPublicIp`, using trusted monthly job-count, per-attempt public
+IPv4 address-duration, and maximum attempt-count bounds for submitted jobs,
+plus the existing regional Amazon VPC Price List lookup. Keep all other
 network-path and supporting costs approval-blocking. This is source-only.
 
 ## Current repo state
@@ -30,7 +31,7 @@ network-path and supporting costs approval-blocking. This is source-only.
 - No AWS workload, Terraform operation, hosted control-plane operation, or
   customer execution is in scope.
 
-## Research / references
+## Research / references used
 
 - AWS [VPC pricing](https://aws.amazon.com/vpc/pricing/) prices in-use public
   IPv4 addresses by the second, with a 60-second minimum; the current published
@@ -43,19 +44,24 @@ network-path and supporting costs approval-blocking. This is source-only.
   documents the job-level network configuration.
 - AWS [Batch Fargate compute environments](https://docs.aws.amazon.com/batch/latest/userguide/fargate-compute-environments.html)
   describes subnet/NAT requirements for public-IP assignment.
+- AWS publishes the public-address rate and minimum billing unit, but does not
+  state that the address attachment interval equals Fargate compute-billed
+  runtime. The estimate therefore requires separate trusted per-attempt
+  address-duration bounds instead of reusing the compute runtime range.
 - Existing code and contracts: `domain.py`, `generated_plan_pricing.py`,
   `tests/test_generated_plan_pricing.py`, and tickets #502, #507, #509–#511.
 
-## Work planned
+## Work planned for the PR
 
 1. Treat the exact Batch job definition as the source for public-IP assignment;
    emit no public IPv4 line when the field is absent/default-disabled or
-   explicitly disabled.
+   explicitly disabled. Require trusted per-attempt address-duration bounds
+   and a trusted maximum of 1–10 attempts per submitted job when pricing
+   `ENABLED`; this bound must include submission-time retry overrides.
 2. For explicit `ENABLED`, bind one public IPv4 address to each bounded running
-   Fargate job attempt. Apply the documented 60-second per-address minimum,
-   use trusted job-count and average billed-runtime bounds, and express
-   address-seconds against the regional hourly rate without rounding down the
-   minimum.
+   Fargate job attempt. Apply the documented 60-second per-address minimum and
+   express address-seconds against the regional hourly rate without rounding
+   down the minimum.
 3. Fail closed on malformed or unsupported network configuration and on any
    usage/address mismatch; do not infer subnet topology or a free network path.
 4. Keep NAT, endpoints, transfer, internet egress, image-pull path, and other
@@ -68,34 +74,53 @@ network-path and supporting costs approval-blocking. This is source-only.
 
 ## Acceptance criteria
 
-- [ ] An explicit `ENABLED` planned job definition with valid trusted bounded
-  usage emits one address-bound regional public IPv4 cost line with the AWS
-  per-address 60-second floor applied per job.
-- [ ] Missing/default or explicit `DISABLED` assignment emits no public IPv4
+- [x] An explicit `ENABLED` planned job definition with valid trusted job-count,
+  per-attempt address-duration, and maximum submitted-job attempt bounds emits
+  one address-bound regional public IPv4 cost line. The AWS per-address
+  60-second floor applies per attempt, and the declared maximum attempts bound
+  includes submission-time overrides.
+- [x] Missing/default or explicit `DISABLED` assignment emits no public IPv4
   line; existing plans and evidence remain backward-compatible.
-- [ ] Malformed, ambiguous, unsupported, unbounded, stale, or mismatched
+- [x] Missing, malformed, ambiguous, unsupported, unbounded, stale, or mismatched
   network/usage evidence fails closed without invented pricing.
-- [ ] Rates and source metadata come from the exact regional Price List match;
+- [x] Rates and source metadata come from the exact regional Price List match;
   no rate is hardcoded.
-- [ ] NAT, endpoints, internet egress, image/network path, and other material
+- [x] NAT, endpoints, internet egress, image/network path, and other material
   costs remain approval-blocking; Batch approval is not enabled by this change.
-- [ ] Focused tests, full required verification, documentation conventions, and
-  all seven final-head CI checks pass before merge.
-- [ ] No AWS/customer workload, Terraform state/lock, hosted control plane, or
+- [x] Focused tests, full required local verification, documentation
+  conventions, and diff whitespace checks pass.
+- [ ] All seven final-head CI checks pass before merge.
+- [x] No AWS/customer workload, Terraform state/lock, hosted control plane, or
   feature gate is changed; no Nova customer workload is claimed.
 
 ## Acceptance status
 
-- [ ] Implementation complete.
-- [ ] Focused validation complete.
-- [ ] Full local verification complete.
+- [x] Implementation complete.
+- [x] Focused validation complete: 11 selected tests passed; 133 deselected.
+- [x] Full local verification complete: `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` passed with 1,944 tests; Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose checks passed.
 - [ ] Final-head CI passed.
 - [ ] PR reviewed and merged.
 
-## Evidence files
+## Tests / validation performed
 
-No `docs/test/test512.md` is expected because this package is source-only and
-performs no customer workload test.
+- `/Users/adewale/Projects/davdeploy/.venv/bin/python -m pytest
+  tests/test_generated_plan_pricing.py -k 'batch_public_ipv4 or
+  batch_malformed_public_ipv4 or batch_disabled_public_ipv4 or
+  batch_fargate_usage_is_priced' -q` — 11 passed, 133 deselected.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv openapi-update` — updated
+  the contract for the optional per-attempt address-duration field; full
+  verification confirmed the snapshot matches.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` — 1,944 passed;
+  Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose checks
+  passed. One upstream Starlette deprecation warning was emitted.
+- `GITHUB_PR_NUMBER=512 python3 scripts/check_doc_conventions.py` and
+  `git diff --check` — passed.
+- Final-head CI and review — pending.
+
+## Evidence files produced
+
+No `docs/test/test512.md` was produced because this source-only package did not
+perform a customer workload test.
 
 ## Boundaries
 

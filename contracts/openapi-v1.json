@@ -157,10 +157,20 @@
       },
       "BatchJobMonthlyPricingUsageAssumptions": {
         "additionalProperties": false,
-        "description": "Customer-declared monthly job count, duration, and optional log usage.",
+        "description": "Customer-declared Batch job count, compute, address, and log usage.",
         "properties": {
           "average_billed_runtime_seconds": {
             "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "average_public_ipv4_address_seconds_per_attempt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyUsageRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "cloudwatch_logs": {
             "anyOf": [
@@ -171,6 +181,19 @@
                 "type": "null"
               }
             ]
+          },
+          "maximum_attempts_per_job": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Attempts Per Job"
           },
           "monthly_jobs": {
             "$ref": "#/components/schemas/MonthlyUsageRange"
