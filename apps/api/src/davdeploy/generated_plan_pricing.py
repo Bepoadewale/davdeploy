@@ -1639,7 +1639,7 @@ def evaluate_generated_plan_pricing(
     if batch_resources:
         findings.append(PlanPricingFinding(
             "batch_supporting_costs_unpriced", None,
-            "Batch pricing includes bounded Fargate compute and supported explicit CloudWatch Logs usage; image storage and transfer, networking, public IPv4, and other material linked usage still block approval.",
+            "Batch pricing includes bounded Fargate compute, supported CloudWatch Logs usage, and storage for a priced same-plan ECR repository; uncovered image storage or transfer, network path charges, public IPv4, and other material linked usage still block approval.",
         ))
         for job in batch_jobs:
             try:
@@ -1652,6 +1652,11 @@ def evaluate_generated_plan_pricing(
                 findings.append(PlanPricingFinding(
                     "batch_image_ecr_reference_invalid", job["address"],
                     "A private ECR image reference must use an exact regional registry, repository name, and sha256 digest.",
+                ))
+            elif image_reference is None:
+                findings.append(PlanPricingFinding(
+                    "batch_image_source_unpriced", job["address"],
+                    "Batch image pricing requires a digest-pinned same-region private ECR image linked to one priced same-plan repository.",
                 ))
             elif image_reference is not None:
                 image_account, image_region, image_repository = image_reference

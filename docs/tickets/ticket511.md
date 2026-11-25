@@ -1,8 +1,8 @@
 # ticket511
 
-Status: implementation in progress in draft PR #511.
+Status: merged as `d5d9eebe663a8a1f3f3ff13086e570b63feaf490`.
 
-PR: [#511 — feat: price bounded private ECR standard storage](https://github.com/Bepoadewale/davdeploy/pull/511) (draft)
+PR: [#511 — feat: price bounded private ECR standard storage](https://github.com/Bepoadewale/davdeploy/pull/511) (merged)
 Branch: `feat/ecr-storage-pricing-510`
 
 ## Problem / goal
@@ -15,7 +15,7 @@ List. This extends Nova planning evidence only; it does not enable execution.
 
 ## Current repo state
 
-- Backend `main` is `46fe152233ac9fcbdba1961d5d02086c30c959fa`, merged PR #509.
+- Backend `main` is `d5d9eebe663a8a1f3f3ff13086e570b63feaf490`, merged PR #511.
 - PR #507 adds bounded Batch Fargate compute pricing; merged PR #509 adds
   bounded Batch CloudWatch Logs pricing.
 - Batch and ECR approval remains blocked while material image transfer,
@@ -51,8 +51,10 @@ List. This extends Nova planning evidence only; it does not enable execution.
 - Keep an explicit finding for ECR transfer, archival, signing, replication,
   and other unpriced supporting costs. Any such material cost continues to
   make the estimate incomplete and approval-ineligible.
-- Do not link ECR repository storage to Batch image URIs in this package; an
-  exact image-to-job binding and image transfer model remain follow-up work.
+- Draft PR #510 links a digest-pinned same-region Batch image to exactly one
+  planned, priced ECR repository. It reuses this package's storage line and
+  assumption rather than adding a duplicate charge. NAT and other network
+  path costs remain unpriced.
 
 ## Acceptance criteria
 
@@ -70,9 +72,11 @@ List. This extends Nova planning evidence only; it does not enable execution.
 - [x] Old pricing evidence remains readable; ECR estimates stay incomplete
   while transfer, archive retrieval, signing, replication, and other material
   costs remain unpriced.
-- [ ] Focused tests, complete verification, OpenAPI snapshot checks, and
-  documentation conventions pass; all required PR checks pass on final head.
-- [ ] PR reviewed and merged.
+- [x] Focused tests, complete verification, OpenAPI snapshot checks, and
+  documentation conventions pass; all seven required checks pass on final
+  head `9834b8e` in run [45663754469](https://github.com/Bepoadewale/davdeploy/actions/runs/45663754469).
+- [x] PR merged as `d5d9eebe663a8a1f3f3ff13086e570b63feaf490`; merged-main CI
+  passed all seven checks in run [45664820099](https://github.com/Bepoadewale/davdeploy/actions/runs/45664820099).
 - [x] No AWS workload, Terraform state/lock, or hosted-control-plane resource
   is changed. No customer test or deployment is claimed.
 
@@ -81,7 +85,8 @@ List. This extends Nova planning evidence only; it does not enable execution.
 - [x] Source implementation and focused regression tests are complete.
 - [x] Full local `make verify` passes.
 - [x] Generated OpenAPI snapshot and documentation conventions pass.
-- [ ] Final-head PR CI passes and the PR is reviewed and merged.
+- [x] Final-head PR CI passed all seven checks; PR merged as
+  `d5d9eebe663a8a1f3f3ff13086e570b63feaf490`.
 
 ## Tests / validation performed
 
@@ -99,7 +104,9 @@ List. This extends Nova planning evidence only; it does not enable execution.
 - `make verify`: 1,933 tests, Ruff, Actions configuration, OpenAPI snapshot,
   and Docker Compose validation passed.
 - `GITHUB_PR_NUMBER=511 python3 scripts/check_doc_conventions.py`: passed.
-- Final-head PR CI, review, and merge remain pending.
+- Final-head PR CI passed all seven checks in run `45663754469`; merged-main CI
+  passed in run `45664820099`; PR #511 merged as
+  `d5d9eebe663a8a1f3f3ff13086e570b63feaf490`.
 
 ## Evidence files produced
 
@@ -120,7 +127,8 @@ Nova execution.
 
 ## Follow-up work
 
-Implement exact image-to-job binding and pricing for transfer, archival,
-signing, replication, and other material ECR or Batch costs. Keep Nova apply
-and customer workload execution disabled until their existing authorization
-and lifecycle gates are met.
+PR #510 continues the exact image-to-job binding and reuses this repository
+storage line. Pricing for archive retrieval, signing, replication, network
+path costs, and other material ECR or Batch costs remains incomplete. Keep
+Nova apply and customer workload execution disabled until their existing
+authorization and lifecycle gates are met.

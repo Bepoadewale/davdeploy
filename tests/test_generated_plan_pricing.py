@@ -1865,8 +1865,36 @@ def test_batch_private_ecr_image_must_bind_to_same_plan_account_region_and_price
     assert "batch_image_storage_unpriced" not in codes
     assert "ecr_supporting_costs_unpriced" in codes
     assert "batch_supporting_costs_unpriced" in codes
-    assert any(line.description == "Amazon ECR standard image storage" for line in result.lines)
+    ecr_lines = [
+        line for line in result.lines
+        if line.resource_type == "aws_ecr_repository"
+    ]
+    assert len(ecr_lines) == 1
+    assert ecr_lines[0].description == "Amazon ECR standard image storage"
     assert not result.approval_eligible
+
+    missing_storage, _ = evaluate(
+        batch_plan(private_ecr=True),
+        batch_usage_assumptions=valid_usage,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert "batch_image_storage_unpriced" in {
+        item.code for item in missing_storage.findings
+    }
+    assert not any(
+        line.resource_type == "aws_ecr_repository"
+        for line in missing_storage.lines
+    )
+
+    public_image, _ = evaluate(
+        batch_plan(),
+        batch_usage_assumptions=valid_usage,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert "batch_image_source_unpriced" in {
+        item.code for item in public_image.findings
+    }
+    assert not public_image.approval_eligible
 
     wrong_registry, _ = evaluate(
         batch_plan(private_ecr=True, ecr_registry_id="999999999999"),
@@ -2103,6 +2131,7 @@ def test_batch_plan_without_usage_assumptions_is_unpriced_and_not_approvable():
     assert {item.code for item in result.findings} == {
         "batch_usage_assumptions_missing",
         "batch_supporting_costs_unpriced",
+        "batch_image_source_unpriced",
     }
     assert not result.approval_eligible
 
