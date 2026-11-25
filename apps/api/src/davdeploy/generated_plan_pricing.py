@@ -907,6 +907,19 @@ class AwsPriceListCatalog:
             "GB-Mo",
         )
 
+    def ecr_private_storage_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonECR",
+            region,
+            "ecr-private-repository-storage",
+            [
+                ("productFamily", "EC2 Container Registry"),
+                ("storageType", "S3"),
+                ("regionCode", region),
+            ],
+            "GB-Mo",
+        )
+
     def http_api_request_rate(self, region: str) -> CatalogRate:
         return self._regional_rate(
             "AmazonApiGateway",
@@ -1630,6 +1643,111 @@ def evaluate_generated_plan_pricing(
                             ))
                         else:
                             usage = batch_usage.jobs[job["address"]]
+                            image_url = _batch_private_ecr_image_url(
+                                properties.get("image"), region
+                            )
+                            if image_url is None:
+                                findings.append(PlanPricingFinding(
+                                    "batch_image_cost_unpriced",
+                                    job["address"],
+                                    "Batch image storage is priced only for a digest-pinned same-region private ECR image bound to a planned repository.",
+                                ))
+                            elif usage.ecr_image is None:
+                                findings.append(PlanPricingFinding(
+                                    "batch_image_usage_assumptions_missing",
+                                    job["address"],
+                                    "A bounded monthly storage assumption for the exact Batch image repository is required.",
+                                ))
+                            else:
+                                repositories = [
+                                    item for item in resources
+                                    if item["type"] == "aws_ecr_repository"
+                                    and item["values"].get("repository_url") == image_url
+                                ]
+                                if len(repositories) != 1:
+                                    findings.append(PlanPricingFinding(
+                                        "batch_image_repository_mismatch",
+                                        job["address"],
+                                        "The Batch image must match exactly one known same-plan ECR repository URL.",
+                                    ))
+                                else:
+                                    repository = repositories[0]
+                                    repository_change = changes.get(repository["address"])
+                                    after = (
+                                        repository_change.get("change", {}).get("after")
+                                        if isinstance(repository_change, dict)
+                                        else None
+                                    )
+                                    after_unknown = (
+                                        repository_change.get("change", {}).get("after_unknown")
+                                        if isinstance(repository_change, dict)
+                                        else None
+                                    )
+                                    if (
+                                        not isinstance(after, dict)
+                                        or not isinstance(after_unknown, dict)
+                                        or not _valid_unknown_tree(after_unknown)
+                                        or after.get("repository_url") != image_url
+                                        or repository["values"].get("repository_url") != image_url
+                                        or _path_contains_unknown(after_unknown, ("repository_url",))
+                                    ):
+                                        findings.append(PlanPricingFinding(
+                                            "batch_image_repository_unknown",
+                                            repository["address"],
+                                            "The same-plan ECR repository URL must be known in the reviewed plan.",
+                                        ))
+                                    elif usage.ecr_image.monthly_repository_storage_gb_month.maximum == 0:
+                                        findings.append(PlanPricingFinding(
+                                            "batch_image_usage_assumptions_unbounded",
+                                            repository["address"],
+                                            "A nonzero upper bound for retained ECR repository storage is required.",
+                                        ))
+                                    else:
+                                        try:
+                                            if pricing_catalog is None:
+                                                pricing_catalog = AwsPriceListCatalog()
+                                            image_storage_rate = pricing_catalog.ecr_private_storage_rate(region)
+                                        except PriceListUnavailableError:
+                                            unavailable = True
+                                            findings.append(PlanPricingFinding(
+                                                "regional_price_lookup_unavailable",
+                                                repository["address"],
+                                                "DavDeploy could not verify current regional private ECR storage prices.",
+                                            ))
+                                        except PlanPricingError:
+                                            findings.append(PlanPricingFinding(
+                                                "regional_price_ambiguous",
+                                                repository["address"],
+                                                "DavDeploy could not identify an exact regional private ECR storage price.",
+                                            ))
+                                        else:
+                                            amount = usage.ecr_image.monthly_repository_storage_gb_month
+                                            low_rate = Decimal(
+                                                image_storage_rate.low_unit_price_usd
+                                                or image_storage_rate.unit_price_usd
+                                            )
+                                            lines.append(PlanCostLine(
+                                                address=repository["address"],
+                                                resource_type="aws_ecr_repository",
+                                                description="Amazon ECR private repository storage for the Batch image",
+                                                quantity=amount.minimum,
+                                                quantity_max=amount.maximum,
+                                                unit="GB-Mo",
+                                                unit_price_usd=image_storage_rate.unit_price_usd,
+                                                monthly_cost_minor=int((
+                                                    low_rate * amount.minimum * 100
+                                                ).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                                monthly_cost_max_minor=int((
+                                                    Decimal(image_storage_rate.unit_price_usd)
+                                                    * amount.maximum * 100
+                                                ).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                                catalog_sku=image_storage_rate.sku,
+                                                catalog_product_sha256=image_storage_rate.product_digest,
+                                                catalog_published_at=image_storage_rate.published_at,
+                                                catalog_effective_at=image_storage_rate.effective_at,
+                                                unit_price_low_usd=format(low_rate, "f"),
+                                                low_cost_quantity=amount.minimum,
+                                            ))
                             lower_seconds = max(60, usage.average_billed_runtime_seconds.minimum)
                             upper_seconds = max(60, usage.average_billed_runtime_seconds.maximum)
                             quantities = (
@@ -3673,6 +3791,21 @@ def _batch_awslogs_group_name(
     ):
         return None, "unsupported_options"
     return group_name, None
+
+
+def _batch_private_ecr_image_url(image: Any, region: str) -> str | None:
+    """Accept only a digest-pinned private ECR image in the plan's region."""
+    if not isinstance(image, str):
+        return None
+    match = re.fullmatch(
+        r"(?P<registry>\d{12}\.dkr\.ecr\.(?P<region>[a-z0-9-]+)\.amazonaws\.com)"
+        r"/(?P<repository>[a-z0-9]+(?:[._/-][a-z0-9]+)*)"
+        r"@sha256:[a-f0-9]{64}",
+        image,
+    )
+    if match is None or match.group("region") != region:
+        return None
+    return f"{match.group('registry')}/{match.group('repository')}"
 
 
 def _validate_lambda_log_group(

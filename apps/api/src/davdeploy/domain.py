@@ -417,14 +417,29 @@ class BatchCloudWatchLogPricingUsageAssumptions(BaseModel):
         return self
 
 
+class BatchEcrImagePricingUsageAssumptions(BaseModel):
+    """Customer-declared storage for the exact same-region private ECR repo."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_repository_storage_gb_month: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_image_bounds(self) -> BatchEcrImagePricingUsageAssumptions:
+        if self.monthly_repository_storage_gb_month.maximum > 1_000_000:
+            raise ValueError("monthly ECR repository storage exceeds the supported bound")
+        return self
+
+
 class BatchJobMonthlyPricingUsageAssumptions(BaseModel):
-    """Customer-declared monthly job count, duration, and optional log usage."""
+    """Customer-declared monthly job, log, and image usage bounds."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     monthly_jobs: MonthlyUsageRange
     average_billed_runtime_seconds: MonthlyUsageRange
     cloudwatch_logs: BatchCloudWatchLogPricingUsageAssumptions | None = None
+    ecr_image: BatchEcrImagePricingUsageAssumptions | None = None
 
     @model_validator(mode="after")
     def validate_batch_bounds(self) -> BatchJobMonthlyPricingUsageAssumptions:

@@ -14,15 +14,18 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508 documentation reconciliation;
-the latest product-code change remains PR #507). PR #506 makes the
+`46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509). PR #506 makes the
 26-architecture / 30-root crosswalk machine-checkable without enabling runtime
 dispatch. PR #507 adds trusted usage assumptions and regional Fargate compute
-price lines for the bounded Batch job shape. Its compute-only estimates remain
-incomplete and approval-ineligible until material supporting costs are priced.
-Final-head CI passed all seven checks in
-[run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-The PR added no AWS workload or hosted runtime change. PR #502 adds
+price lines for the bounded Batch job shape. Final-head CI passed all seven
+checks in [run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
+Merged PR #509 adds regional CloudWatch Logs ingestion and retained-storage
+prices for a bounded Batch job with an exact same-plan Standard log group. All
+seven checks passed on final head `9b9cea3` in
+[run 45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335).
+Batch estimates remain incomplete and approval-ineligible while image,
+networking, public IPv4, and other material costs remain unpriced. PRs #507 and
+#509 changed no AWS workloads or hosted runtime. PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
 [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
@@ -41,6 +44,17 @@ after plan
 This reconciliation did not access or change the hosted control plane. The
 recorded health observation belongs to the earlier deployment check and was
 not repeated here.
+
+Draft PR #510 is the next source-only package. It prices declared retained
+storage only when a digest-pinned same-region private ECR image exactly matches
+one known same-plan repository URL. AWS documents same-region ECR-to-Fargate
+image transfer as free; this does not price NAT, VPC endpoint, or other network
+costs. Unsupported image sources remain unpriced, and the general Batch
+supporting-cost blocker remains. Read-only inventory on 2026-11-25 verified
+account `654654474502`, five tagged inactive Batch test definitions, and the
+retained SageMaker test action and context. The Terraform monitor had 67
+terminal records and zero active operations. No AWS workload, Terraform
+state/lock, or hosted control-plane resource was changed.
 
 Merged PR #498 adds source-only bounds for a small AWS Batch Fargate shape;
 merged PR #499 bounds a private-endpoint EKS shape; and merged PR #500 adds

@@ -155,9 +155,23 @@
         "title": "BatchCloudWatchLogPricingUsageAssumptions",
         "type": "object"
       },
+      "BatchEcrImagePricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Customer-declared storage for the exact same-region private ECR repo.",
+        "properties": {
+          "monthly_repository_storage_gb_month": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_repository_storage_gb_month"
+        ],
+        "title": "BatchEcrImagePricingUsageAssumptions",
+        "type": "object"
+      },
       "BatchJobMonthlyPricingUsageAssumptions": {
         "additionalProperties": false,
-        "description": "Customer-declared monthly job count, duration, and optional log usage.",
+        "description": "Customer-declared monthly job, log, and image usage bounds.",
         "properties": {
           "average_billed_runtime_seconds": {
             "$ref": "#/components/schemas/MonthlyUsageRange"
@@ -166,6 +180,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/BatchCloudWatchLogPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ecr_image": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchEcrImagePricingUsageAssumptions"
               },
               {
                 "type": "null"

@@ -1,8 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508 documentation reconciliation;
-product code remains at PR #507); hosted runtime remains
+`46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -15,15 +14,19 @@ HTTP 200. This is deployed control-plane evidence only.
 PR #506 makes the 26-architecture / 30-root candidate crosswalk
 machine-checkable; it does not enable Nova dispatch. PR #507 adds source-only
 AWS Batch Fargate Linux/x86 vCPU and memory cost lines with trusted job usage
-assumptions and a 60-second per-job minimum. It deliberately keeps estimates
-incomplete and approval-ineligible while image transfer, logs, networking,
-public IPv4, and other material supporting costs are unpriced. Draft PR #509
-adds explicit CloudWatch Logs ingestion/storage prices for one bounded Batch
-job and its managed same-region Standard log group, without removing the
-supporting-cost approval blocker. All seven
-final-head checks passed in run
-[45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-No AWS workload or hosted-control-plane resource changed.
+assumptions and a 60-second per-job minimum. Merged PR #509 adds explicit
+CloudWatch Logs ingestion/storage prices for one bounded Batch job and its
+managed same-region Standard log group, without removing the supporting-cost
+approval blocker. All seven checks passed on its final head in run
+[45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335).
+Draft PR #510 adds same-plan private ECR repository storage pricing for a
+digest-pinned same-region Batch image. It does not price image transfer except
+for the documented zero-charge same-region ECR-to-Fargate path; unsupported
+images and remaining network costs continue to block approval. No AWS workload
+or hosted-control-plane resource changed. Read-only inventory on 2026-11-25
+verified account `654654474502`, five tagged inactive Batch test definitions,
+and the retained SageMaker test action and context; the Terraform monitor had
+67 terminal records and no active runs.
 
 Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
 final-head checks in run

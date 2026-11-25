@@ -224,6 +224,24 @@ class FakeBatchPriceList:
     def get_products(self, **kwargs):
         self.calls.append(kwargs)
         filters = {item["Field"]: item["Value"] for item in kwargs["Filters"]}
+        if kwargs["ServiceCode"] == "AmazonECR":
+            family, unit, price, sku = (
+                "EC2 Container Registry", "GB-Mo", "0.10", "batch-ecr-storage"
+            )
+            product = {
+                "product": {"sku": sku, "productFamily": family, "attributes": {**filters}},
+                "serviceCode": "AmazonECR",
+                "publicationDate": "2026-11-13T12:00:00Z",
+                "terms": {"OnDemand": {"offer": {
+                    "sku": sku,
+                    "effectiveDate": "2026-11-01T00:00:00Z",
+                    "priceDimensions": {"dimension": {
+                        "beginRange": "0", "endRange": "Inf", "unit": unit,
+                        "pricePerUnit": {"USD": price},
+                    }},
+                }}},
+            }
+            return {"PriceList": [json.dumps(product)]}
         if kwargs["ServiceCode"] == "AmazonCloudWatch":
             family = filters["productFamily"]
             if family == "Data Payload":
@@ -285,6 +303,14 @@ class FakeBatchPriceList:
 class MissingBatchCloudWatchPriceList(FakeBatchPriceList):
     def get_products(self, **kwargs):
         if kwargs["ServiceCode"] == "AmazonCloudWatch":
+            self.calls.append(kwargs)
+            return {"PriceList": []}
+        return super().get_products(**kwargs)
+
+
+class MissingBatchEcrPriceList(FakeBatchPriceList):
+    def get_products(self, **kwargs):
+        if kwargs["ServiceCode"] == "AmazonECR":
             self.calls.append(kwargs)
             return {"PriceList": []}
         return super().get_products(**kwargs)
@@ -1556,7 +1582,10 @@ def test_vpc_usage_assumptions_are_extracted_from_digest_checked_revision():
     ).pricing_context_sha256
 
 
-def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=False):
+def batch_plan(
+    *, runtime_platform=None, ephemeral_storage=None, explicit_logs=False,
+    private_image=False, image_region=REGION, repository_url_override=None,
+):
     compute = {
         "type": "MANAGED", "state": "ENABLED", "compute_resources": [{
             "type": "FARGATE", "max_vcpus": 6,
@@ -1567,8 +1596,15 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=F
             "order": 1, "compute_environment": "aws_batch_compute_environment.jobs",
         }],
     }
+    private_url = (
+        f"654654474502.dkr.ecr.{image_region}.amazonaws.com/batch"
+    )
     properties = {
-        "image": "public.ecr.aws/library/busybox@sha256:" + "a" * 64,
+        "image": (
+            private_url + "@sha256:" + "a" * 64
+            if private_image
+            else "public.ecr.aws/library/busybox@sha256:" + "a" * 64
+        ),
         "resourceRequirements": [
             {"type": "VCPU", "value": "0.25"},
             {"type": "MEMORY", "value": "512"},
@@ -1607,6 +1643,12 @@ def batch_plan(*, runtime_platform=None, ephemeral_storage=None, explicit_logs=F
                 "kms_key_id": None,
             },
         ))
+    if private_image:
+        extra_resources.append(resource(
+            "aws_ecr_repository.batch",
+            "aws_ecr_repository",
+            {"name": "batch", "repository_url": repository_url_override or private_url},
+        ))
     return plan(
         resource_type="terraform_data", resource_values={"input": None},
         extra_resources=tuple(extra_resources),
@@ -1629,6 +1671,19 @@ BATCH_LOG_USAGE = {
             "cloudwatch_logs": {
                 "monthly_ingested_gb": {"minimum": 1, "maximum": 4},
                 "monthly_retained_gb_month": {"minimum": 2, "maximum": 8},
+            },
+        }
+    }
+}
+
+BATCH_ECR_USAGE = {
+    "jobs": {
+        "aws_batch_job_definition.jobs": {
+            **BATCH_USAGE["jobs"]["aws_batch_job_definition.jobs"],
+            "ecr_image": {
+                "monthly_repository_storage_gb_month": {
+                    "minimum": 2, "maximum": 8,
+                },
             },
         }
     }
@@ -1716,6 +1771,76 @@ def test_batch_explicit_cloudwatch_logs_are_regionally_priced_and_digest_bound()
     assert {call["ServiceCode"] for call in client.calls} == {
         "AmazonECS", "AmazonCloudWatch",
     }
+
+
+def test_batch_private_ecr_image_storage_is_same_plan_and_region_bound():
+    client = FakeBatchPriceList()
+    result, _ = evaluate(
+        batch_plan(private_image=True),
+        batch_usage_assumptions=BATCH_ECR_USAGE,
+        catalog_client=client,
+    )
+
+    ecr_lines = [line for line in result.lines if line.resource_type == "aws_ecr_repository"]
+    assert len(ecr_lines) == 1
+    line = ecr_lines[0]
+    assert (line.quantity, line.quantity_max, line.unit) == (2, 8, "GB-Mo")
+    assert (line.monthly_cost_minor, line.monthly_cost_max_minor) == (20, 80)
+    assert line.description == "Amazon ECR private repository storage for the Batch image"
+    ecr_call = next(call for call in client.calls if call["ServiceCode"] == "AmazonECR")
+    assert {item["Field"]: item["Value"] for item in ecr_call["Filters"]} == {
+        "productFamily": "EC2 Container Registry",
+        "storageType": "S3",
+        "regionCode": REGION,
+    }
+    assert "batch_supporting_costs_unpriced" in {item.code for item in result.findings}
+    assert not result.approval_eligible
+    manifest = result.as_manifest_document()
+    assert manifest["batch_usage_assumptions"] == BATCH_ECR_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+
+
+def test_batch_private_ecr_storage_requires_a_regional_price():
+    result, client = evaluate(
+        batch_plan(private_image=True),
+        batch_usage_assumptions=BATCH_ECR_USAGE,
+        catalog_client=MissingBatchEcrPriceList(),
+    )
+    assert "regional_price_ambiguous" in {item.code for item in result.findings}
+    assert not any(line.resource_type == "aws_ecr_repository" for line in result.lines)
+    assert not result.approval_eligible
+    assert [call["ServiceCode"] for call in client.calls].count("AmazonECR") == 1
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "usage", "expected"),
+    [
+        ({}, BATCH_USAGE, "batch_image_cost_unpriced"),
+        ({"private_image": True}, BATCH_USAGE, "batch_image_usage_assumptions_missing"),
+        (
+            {"private_image": True, "image_region": "us-west-2"},
+            BATCH_ECR_USAGE,
+            "batch_image_cost_unpriced",
+        ),
+        (
+            {"private_image": True, "repository_url_override": "654654474502.dkr.ecr.us-east-1.amazonaws.com/other"},
+            BATCH_ECR_USAGE,
+            "batch_image_repository_mismatch",
+        ),
+    ],
+)
+def test_batch_image_pricing_fails_closed_for_unbound_or_unsupported_images(
+    kwargs, usage, expected
+):
+    client = FakeBatchPriceList()
+    result, client = evaluate(
+        batch_plan(**kwargs), batch_usage_assumptions=usage,
+        catalog_client=client,
+    )
+    assert expected in {item.code for item in result.findings}
+    assert not any(line.resource_type == "aws_ecr_repository" for line in result.lines)
+    assert not result.approval_eligible
+    assert not any(call["ServiceCode"] == "AmazonECR" for call in client.calls)
 
 
 def test_batch_legacy_usage_and_evidence_remain_canonical_without_log_fields():
@@ -1910,6 +2035,22 @@ def test_batch_usage_assumptions_are_extracted_from_digest_checked_revision():
     assert context.pricing_context_sha256 != TrustedPlanPricingContext(
         REGION, "USD", None, revision_sha256
     ).pricing_context_sha256
+
+
+def test_batch_ecr_storage_assumptions_are_bound_to_digest_checked_revision():
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {"batch_pricing_usage_assumptions": BATCH_ECR_USAGE}
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.batch_usage_assumptions == BATCH_ECR_USAGE
 
 
 def test_batch_log_assumptions_are_extracted_from_the_digest_checked_revision():

@@ -22,10 +22,14 @@ costs are unknown or unsupported.
   has an exact-module ECR lifecycle test, but that does not establish image
   size, pull path, or pricing for a Batch plan.
 - The Terraform run monitor has 67 terminal records and zero active runs.
-- AWS credentials are unavailable in this session. No AWS inventory refresh,
-  Terraform operation, workload, or hosted-control-plane access is in scope.
+- AWS account `654654474502` was verified read-only with the
+  `ai-platform-pilot-key` profile on 2026-11-25. The Terraform monitor had 67
+  terminal records and zero active runs. Five tagged Batch test definitions
+  were inactive; the SageMaker test action and context remain as audit
+  evidence. No AWS mutation, Terraform operation, workload, or hosted
+  control-plane access occurred.
 
-## Research / references
+## Research / references used
 
 - [Amazon ECR pricing](https://aws.amazon.com/ecr/pricing/) describes private
   repository storage and transfer charges, same-region transfer to AWS compute,
@@ -38,7 +42,7 @@ costs are unknown or unsupported.
 - Existing generated-plan pricing and Batch usage-assumption contracts,
   manifests, policy findings, and tests.
 
-## Work planned
+## Work planned for the PR
 
 1. Define the smallest defensible ECR image cost shape for the bounded Batch
    plan, with trusted, bounded, customer-context-bound usage assumptions.
@@ -73,11 +77,21 @@ costs are unknown or unsupported.
 
 ## Acceptance status
 
-- [ ] Implementation and focused validation complete.
+- [x] Implementation and focused validation complete.
 - [ ] Final-head GitHub checks pass.
 - [ ] PR reviewed and merged.
 
-## Evidence files
+## Tests / validation performed
+
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` — 1,935 passed;
+  Ruff, Actions-configuration, OpenAPI snapshot, and Docker Compose checks
+  passed.
+- `GITHUB_PR_NUMBER=510 python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- AWS account/inventory and Terraform monitor were checked read-only as recorded
+  above; no Terraform operation, workload, or control-plane call was made.
+
+## Evidence files produced
 
 No `docs/test/test510.md` is expected unless this PR performs a customer
 workload test. This package is intended to remain source-only.
