@@ -1,6 +1,6 @@
 # Nova catalogue-to-root crosswalk validation
 
-Status: implemented in draft PR #506; final CI and merge are pending.
+Status: implementation is in PR #506; merge is pending.
 
 The Nova evidence matrix lists 26 architecture modules and 30 Terraform
 implementations. Today, those cross-references are descriptive prose and can

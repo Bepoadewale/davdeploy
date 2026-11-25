@@ -72,7 +72,8 @@ adoption is required. The design uses these existing sources:
 - [x] The AppConfig row reports PR #495 merged and its exact cleanup evidence.
 - [x] Focused tests and required local validation pass; no cloud resources are
   changed.
-- [ ] Final-head CI passes.
+- [x] Final-head CI passed all seven checks on `ec235ea` in run
+  `45639652857`.
 
 ## Acceptance status
 
@@ -81,7 +82,8 @@ adoption is required. The design uses these existing sources:
 - [x] This ticket was created before implementation work.
 - [x] Crosswalk validator and matrix/handoff updates are implemented.
 - [x] Focused tests and full repository validation pass locally.
-- [ ] Final-head CI.
+- [x] Final-head CI passed all seven checks on `ec235ea` in run
+  `45639652857`.
 - [ ] Review and merge.
 
 ## Tests / validation performed
@@ -90,6 +92,7 @@ adoption is required. The design uses these existing sources:
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 1,907 passed; lint, Actions configuration, OpenAPI snapshot, and Compose checks passed. One existing Starlette/httpx deprecation warning remains.
 - `scripts/check_doc_conventions.py` — passed.
 - `ruff check apps/api/src/davdeploy/module_catalogue.py tests/test_nova_capability_evidence_registry.py` and `git diff --check` passed.
+- Final-head GitHub Actions run `45639652857` — all seven checks passed.
 
 ## Evidence files produced
 
