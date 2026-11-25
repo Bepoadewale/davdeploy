@@ -328,6 +328,48 @@ def test_customer_dynamodb_usage_assumptions_are_revision_bound_and_cleared():
     assert revised.content_digest == plan_hash(revised.content)
 
 
+def test_customer_vpc_usage_assumptions_are_revision_bound_and_cleared():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "nat_gateways": {
+            "aws_nat_gateway.nat": {
+                "monthly_available_hours": {"minimum": 700, "maximum": 744},
+                "monthly_data_processed_gb": {"minimum": 100, "maximum": 300},
+                "monthly_internet_egress_gb": {"minimum": 20, "maximum": 100},
+                "monthly_cross_az_payload_gb": {"minimum": 10, "maximum": 50},
+            }
+        }
+    }
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id, {"vpc_pricing_usage_assumptions": usage}
+    )
+    assert original.revision_number == 1
+    assert revised.revision_number == 2
+    assert revised.content["user_constraints"]["vpc_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"][
+        "vpc_pricing_usage_assumptions"
+    ] == usage
+    assert revised.content["revision_diff"]["vpc_pricing_usage_assumptions"] == {
+        "before": None, "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"vpc_pricing_usage_assumptions": None},
+    )
+    assert cleared.revision_number == 3
+    assert "vpc_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "vpc_pricing_usage_assumptions" not in cleared.content[
+        "application_analysis"
+    ]["workload_spec"]
+    assert cleared.content["revision_diff"]["vpc_pricing_usage_assumptions"] == {
+        "before": usage, "after": None,
+    }
+    assert cleared.content_digest == plan_hash(cleared.content)
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

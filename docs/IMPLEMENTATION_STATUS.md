@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500); hosted runtime remains
+`e7b697127691f8454e1f468a562338e6276957b4` (PR #501); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -17,6 +17,13 @@ generated-plan bounds. PR #500's final head passed all seven checks in
 These changes do not alter the hosted runtime or AWS workloads. The last
 recorded hosted release and health observation above remain the PR #420
 deployment; they were not repeated for this source reconciliation.
+
+Draft PR #502 adds source-only, assumption-bound NAT Gateway pricing to the
+generated-plan evaluator. Focused pricing and revision-lifecycle tests pass
+locally, and all seven checks passed in CI run
+[45561355561](https://github.com/Bepoadewale/davdeploy/actions/runs/45561355561)
+on PR head `4acd7d9`. It remains draft/unmerged and changes neither the hosted
+runtime nor AWS resources.
 
 PR #486 remains open at `bb374e8ec06d613a963f1768e71b91175a416898`, with all
 seven checks passing in run `45545915711`; clean-room generated artifact,

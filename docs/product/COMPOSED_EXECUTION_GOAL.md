@@ -14,7 +14,7 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
+`e7b697127691f8454e1f468a562338e6276957b4` (PR #501). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -31,6 +31,14 @@ NAT gateway, and Elastic IP bindings. Their final-head checks pass. These
 packages do not change AWS workloads or the hosted runtime. PR #500's final
 head passed all seven checks in
 [run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
+
+Draft PR #502 adds source-only monthly pricing for bounded public NAT Gateway
+hours, data processing, associated public IPv4, declared internet egress, and
+cross-AZ transfer. Its focused pricing and revision-lifecycle tests pass
+locally, and all seven checks passed on PR head `4acd7d9` in CI run
+[45561355561](https://github.com/Bepoadewale/davdeploy/actions/runs/45561355561).
+The PR remains draft/unmerged. It changes no AWS resource, hosted state, or
+runtime.
 
 PR #486 remains open at head
 `bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in

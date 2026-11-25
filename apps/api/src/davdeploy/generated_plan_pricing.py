@@ -29,6 +29,7 @@ from davdeploy.domain import (
     S3PricingUsageAssumptions,
     ServerlessPricingUsageAssumptions,
     SqsPricingUsageAssumptions,
+    VpcPricingUsageAssumptions,
 )
 
 
@@ -108,6 +109,7 @@ class GeneratedPlanPricingEvidence:
     rds_usage_assumptions: dict[str, Any] | None
     serverless_usage_assumptions: dict[str, Any] | None
     dynamodb_usage_assumptions: dict[str, Any] | None
+    vpc_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -137,12 +139,13 @@ class GeneratedPlanPricingEvidence:
             "rds_usage_assumptions": self.rds_usage_assumptions,
             "serverless_usage_assumptions": self.serverless_usage_assumptions,
             "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
+            "vpc_usage_assumptions": self.vpc_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 7,
+            "version": 8,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -166,6 +169,7 @@ class GeneratedPlanPricingEvidence:
             "rds_usage_assumptions": self.rds_usage_assumptions,
             "serverless_usage_assumptions": self.serverless_usage_assumptions,
             "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
+            "vpc_usage_assumptions": self.vpc_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -218,15 +222,18 @@ class GeneratedPlanPricingEvidence:
             "pricing_context_sha256", "within_budget", "plan_json_sha256",
             "usage_assumptions", "sqs_usage_assumptions", "rds_usage_assumptions",
             "serverless_usage_assumptions", "dynamodb_usage_assumptions",
+            "vpc_usage_assumptions",
             "lines", "transitions", "findings", "evidence_sha256",
         }
         version = document.get("version")
-        version_6_fields = expected_fields - {"dynamodb_usage_assumptions"}
+        version_7_fields = expected_fields - {"vpc_usage_assumptions"}
+        version_6_fields = version_7_fields - {"dynamodb_usage_assumptions"}
         version_5_fields = version_6_fields - {"serverless_usage_assumptions"}
         version_4_fields = version_5_fields - {"rds_usage_assumptions"}
         legacy_fields = version_4_fields - {"sqs_usage_assumptions"}
         valid_shape = (
-            version == 7 and set(document) == expected_fields
+            version == 8 and set(document) == expected_fields
+            or version == 7 and set(document) == version_7_fields
             or version == 6 and set(document) == version_6_fields
             or version == 5 and set(document) == version_5_fields
             or version == 4 and set(document) == version_4_fields
@@ -276,6 +283,16 @@ class GeneratedPlanPricingEvidence:
             )
             if dynamodb_usage != raw_dynamodb_usage:
                 raise ValueError("non-canonical DynamoDB usage assumptions")
+            raw_vpc_usage = document.get("vpc_usage_assumptions")
+            vpc_usage = (
+                None
+                if raw_vpc_usage is None
+                else VpcPricingUsageAssumptions.model_validate(raw_vpc_usage).model_dump(
+                    mode="json"
+                )
+            )
+            if vpc_usage != raw_vpc_usage:
+                raise ValueError("non-canonical VPC usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -309,6 +326,7 @@ class GeneratedPlanPricingEvidence:
                 rds_usage_assumptions=rds_usage,
                 serverless_usage_assumptions=serverless_usage,
                 dynamodb_usage_assumptions=dynamodb_usage,
+                vpc_usage_assumptions=vpc_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -316,7 +334,7 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 7 and result.as_manifest_document() != document:
+        if document.get("version") == 8 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
         return result
 
@@ -355,6 +373,7 @@ class TrustedPlanPricingContext:
     rds_usage_assumptions: dict[str, Any] | None = None
     serverless_usage_assumptions: dict[str, Any] | None = None
     dynamodb_usage_assumptions: dict[str, Any] | None = None
+    vpc_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -369,6 +388,7 @@ class TrustedPlanPricingContext:
             self.rds_usage_assumptions,
             self.serverless_usage_assumptions,
             self.dynamodb_usage_assumptions,
+            self.vpc_usage_assumptions,
         )
 
     @classmethod
@@ -418,6 +438,11 @@ class TrustedPlanPricingContext:
         )
         raw_dynamodb_usage_assumptions = (
             workload_spec.get("dynamodb_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
+        raw_vpc_usage_assumptions = (
+            workload_spec.get("vpc_pricing_usage_assumptions")
             if isinstance(workload_spec, dict)
             else None
         )
@@ -478,6 +503,15 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json")
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid DynamoDB pricing usage assumptions") from None
+        if raw_vpc_usage_assumptions is None:
+            vpc_usage_assumptions = None
+        else:
+            try:
+                vpc_usage_assumptions = VpcPricingUsageAssumptions.model_validate(
+                    raw_vpc_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid VPC pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -488,6 +522,7 @@ class TrustedPlanPricingContext:
             rds_usage_assumptions=rds_usage_assumptions,
             serverless_usage_assumptions=serverless_usage_assumptions,
             dynamodb_usage_assumptions=dynamodb_usage_assumptions,
+            vpc_usage_assumptions=vpc_usage_assumptions,
         )
 
 
@@ -879,6 +914,51 @@ class AwsPriceListCatalog:
             low_rate_source_url="https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer",
         )
 
+    def nat_gateway_hourly_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonEC2", region, "nat-gateway-hours",
+            [
+                ("productFamily", "NAT Gateway"),
+                ("groupDescription", "Hourly charge for NAT Gateways"),
+                ("regionCode", region),
+            ],
+            "Hrs",
+        )
+
+    def nat_gateway_data_processing_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonEC2", region, "nat-gateway-data-processing",
+            [
+                ("productFamily", "NAT Gateway"),
+                ("groupDescription", "Charge for per GB data processed by NatGateways"),
+                ("regionCode", region),
+            ],
+            "GB",
+        )
+
+    def public_ipv4_in_use_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonVPC", region, "public-ipv4-in-use",
+            [
+                ("group", "VPCPublicIPv4Address"),
+                ("groupDescription", "Hourly charge for In-use Public IPv4 Addresses"),
+                ("regionCode", region),
+            ],
+            "Hrs",
+        )
+
+    def regional_data_transfer_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AWSDataTransfer", region, "regional-data-transfer",
+            [
+                ("productFamily", "Data Transfer"),
+                ("fromRegionCode", region),
+                ("toRegionCode", region),
+                ("transferType", "IntraRegion"),
+            ],
+            "GB",
+        )
+
     def _regional_rate(
         self,
         service_code: str,
@@ -927,6 +1007,7 @@ ZERO_DIRECT_CHARGE_RESOURCE_TYPES = frozenset(
     {
         "terraform_data",
         "aws_vpc",
+        "aws_internet_gateway",
         "aws_subnet",
         "aws_route_table",
         "aws_route",
@@ -1024,6 +1105,7 @@ def evaluate_generated_plan_pricing(
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -1053,6 +1135,7 @@ def evaluate_generated_plan_pricing(
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -1078,6 +1161,7 @@ def evaluate_generated_plan_pricing(
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -1106,6 +1190,7 @@ def evaluate_generated_plan_pricing(
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -1128,6 +1213,7 @@ def evaluate_generated_plan_pricing(
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -1143,6 +1229,8 @@ def evaluate_generated_plan_pricing(
     aurora_clusters: list[dict[str, Any]] = []
     aurora_instances: list[dict[str, Any]] = []
     dynamodb_tables: list[dict[str, Any]] = []
+    nat_gateways: list[dict[str, Any]] = []
+    elastic_ips: list[dict[str, Any]] = []
     lambda_functions: list[dict[str, Any]] = []
     http_apis: list[dict[str, Any]] = []
     lambda_log_groups: list[dict[str, Any]] = []
@@ -1150,6 +1238,12 @@ def evaluate_generated_plan_pricing(
         address = resource["address"]
         resource_type = resource["type"]
         values = resource["values"]
+        if resource_type == "aws_nat_gateway":
+            nat_gateways.append(resource)
+            continue
+        if resource_type == "aws_eip":
+            elastic_ips.append(resource)
+            continue
         if resource_type in ZERO_DIRECT_CHARGE_RESOURCE_TYPES:
             continue
         if resource_type == "aws_s3_bucket":
@@ -2159,6 +2253,201 @@ def evaluate_generated_plan_pricing(
             )
         )
 
+    vpc_usage_document = trusted_context.vpc_usage_assumptions
+    if nat_gateways:
+        if vpc_usage_document is None:
+            findings.append(PlanPricingFinding(
+                "vpc_usage_assumptions_missing", nat_gateways[0]["address"],
+                "NAT hours, processed data, cross-AZ transfer, and internet egress assumptions are required.",
+            ))
+        else:
+            try:
+                vpc_usage = VpcPricingUsageAssumptions.model_validate(vpc_usage_document)
+                nat_by_address = {item["address"]: item for item in nat_gateways}
+                if set(vpc_usage.nat_gateways) != set(nat_by_address):
+                    findings.append(PlanPricingFinding(
+                        "vpc_usage_assumptions_stale", None,
+                        "VPC usage assumptions must match every exact NAT Gateway address in the plan.",
+                    ))
+                else:
+                    eips_by_address = {item["address"]: item for item in elastic_ips}
+                    known_eip_ids = [
+                        item["values"].get("id")
+                        for item in elastic_ips
+                        if isinstance(item["values"].get("id"), str)
+                    ]
+                    eips_by_allocation = {
+                        item["values"].get("id"): item for item in elastic_ips
+                        if isinstance(item["values"].get("id"), str)
+                    }
+                    used_eips: set[str] = set()
+                    invalid_nat = None
+                    if len(eips_by_allocation) != len(known_eip_ids):
+                        invalid_nat = nat_gateways[0]["address"]
+                    for address, item in nat_by_address.items():
+                        if invalid_nat is not None:
+                            break
+                        values = item["values"]
+                        allocation_id = values.get("allocation_id")
+                        secondary_ids = values.get("secondary_allocation_ids") or []
+                        nat_change = changes.get(address)
+                        nat_change_details = (
+                            nat_change.get("change")
+                            if isinstance(nat_change, dict)
+                            else None
+                        )
+                        after_unknown = (
+                            nat_change_details.get("after_unknown")
+                            if isinstance(nat_change_details, dict)
+                            else None
+                        )
+                        secondary_ids_unknown = (
+                            not isinstance(after_unknown, dict)
+                            or not _valid_unknown_tree(after_unknown)
+                            or _path_contains_unknown(
+                                after_unknown, ("secondary_allocation_ids",)
+                            )
+                        )
+                        if isinstance(allocation_id, str):
+                            bound_eip = eips_by_allocation.get(allocation_id)
+                            eip_address = bound_eip.get("address") if bound_eip else None
+                        else:
+                            references = _configured_attribute_references(
+                                document, address, "allocation_id"
+                            )
+                            matches = [
+                                candidate for candidate in eips_by_address
+                                if references
+                                and all(
+                                    _reference_matches_resource((reference,), candidate)
+                                    for reference in references
+                                )
+                            ]
+                            eip_address = (
+                                matches[0]
+                                if references and len(matches) == 1
+                                else None
+                            )
+                        eip = eips_by_address.get(eip_address)
+                        usage = vpc_usage.nat_gateways[address]
+                        if (
+                            values.get("connectivity_type") != "public"
+                            or secondary_ids
+                            or secondary_ids_unknown
+                            or eip_address is None
+                            or not isinstance(eip, dict)
+                            or eip["values"].get("domain") != "vpc"
+                            or eip_address in used_eips
+                        ):
+                            invalid_nat = address
+                            break
+                        used_eips.add(eip_address)
+                        if (
+                            usage.monthly_internet_egress_gb.maximum
+                            > usage.monthly_data_processed_gb.maximum
+                            or usage.monthly_cross_az_payload_gb.maximum
+                            > usage.monthly_data_processed_gb.maximum
+                        ):
+                            invalid_nat = address
+                            break
+                    if invalid_nat is not None:
+                        findings.append(PlanPricingFinding(
+                            "vpc_nat_shape_or_usage_unsupported", invalid_nat,
+                            "Pricing requires one public NAT Gateway bound to one same-plan Elastic IP and consistent transfer bounds.",
+                        ))
+                    elif used_eips != set(eips_by_address):
+                        findings.append(PlanPricingFinding(
+                            "vpc_unbound_public_ipv4", None,
+                            "Every planned Elastic IP must be attached to exactly one priced public NAT Gateway.",
+                        ))
+                    else:
+                        if pricing_catalog is None:
+                            pricing_catalog = AwsPriceListCatalog()
+                        for address in nat_by_address:
+                            usage = vpc_usage.nat_gateways[address]
+                            rates = [
+                                ("Amazon VPC NAT Gateway available hours",
+                                 usage.monthly_available_hours,
+                                 pricing_catalog.nat_gateway_hourly_rate(region), 1),
+                                ("Amazon VPC NAT Gateway data processed",
+                                 usage.monthly_data_processed_gb,
+                                 pricing_catalog.nat_gateway_data_processing_rate(region), 1),
+                                ("Amazon VPC in-use public IPv4 address hours",
+                                 usage.monthly_available_hours,
+                                 pricing_catalog.public_ipv4_in_use_rate(region), 1),
+                            ]
+                            if usage.monthly_internet_egress_gb.maximum:
+                                rates.append((
+                                    "AWS internet data transfer out",
+                                    usage.monthly_internet_egress_gb,
+                                    pricing_catalog.aws_internet_egress_rate(region), 1,
+                                ))
+                            if usage.monthly_cross_az_payload_gb.maximum:
+                                rates.append((
+                                    "Cross-AZ data transfer in and out",
+                                    usage.monthly_cross_az_payload_gb,
+                                    pricing_catalog.regional_data_transfer_rate(region), 2,
+                                ))
+                            for description, quantity, rate, multiplier in rates:
+                                low_quantity = quantity.minimum * multiplier
+                                high_quantity = quantity.maximum * multiplier
+                                unit_price = Decimal(rate.unit_price_usd)
+                                low_unit_price = Decimal(
+                                    rate.low_unit_price_usd or rate.unit_price_usd
+                                )
+                                lines.append(PlanCostLine(
+                                    address=address,
+                                    resource_type="aws_nat_gateway",
+                                    description=description,
+                                    quantity=low_quantity,
+                                    quantity_max=high_quantity,
+                                    unit=rate.unit,
+                                    unit_price_usd=rate.unit_price_usd,
+                                    monthly_cost_minor=int(
+                                        (low_unit_price * low_quantity * 100).quantize(
+                                            Decimal(1), rounding=ROUND_FLOOR
+                                        )
+                                    ),
+                                    monthly_cost_max_minor=int(
+                                        (unit_price * high_quantity * 100).quantize(
+                                            Decimal(1), rounding=ROUND_CEILING
+                                        )
+                                    ),
+                                    catalog_sku=rate.sku,
+                                    catalog_product_sha256=rate.product_digest,
+                                    catalog_published_at=rate.published_at,
+                                    catalog_effective_at=rate.effective_at,
+                                    unit_price_low_usd=format(low_unit_price, "f"),
+                                    unit_price_low_source_url=rate.low_rate_source_url,
+                                    low_cost_quantity=low_quantity,
+                                ))
+            except PriceListUnavailableError:
+                unavailable = True
+                findings.append(PlanPricingFinding(
+                    "regional_price_lookup_unavailable", nat_gateways[0]["address"],
+                    "DavDeploy could not verify current regional VPC/NAT Gateway prices.",
+                ))
+            except PlanPricingError:
+                findings.append(PlanPricingFinding(
+                    "regional_price_ambiguous", nat_gateways[0]["address"],
+                    "DavDeploy could not identify exact regional VPC/NAT Gateway prices.",
+                ))
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "vpc_usage_assumptions_invalid", nat_gateways[0]["address"],
+                    "Persisted VPC usage assumptions are invalid for pricing.",
+                ))
+    elif vpc_usage_document is not None:
+        findings.append(PlanPricingFinding(
+            "vpc_usage_assumptions_stale", None,
+            "VPC usage assumptions do not match any NAT Gateway in this plan.",
+        ))
+    if elastic_ips and not nat_gateways:
+        findings.append(PlanPricingFinding(
+            "resource_pricing_unavailable", elastic_ips[0]["address"],
+            "Elastic IP pricing is only supported when the address is bound to a priced NAT Gateway.",
+        ))
+
     total_max_minor = sum(
         item.monthly_cost_minor
         if item.monthly_cost_max_minor is None
@@ -2200,6 +2489,7 @@ def evaluate_generated_plan_pricing(
             rds_usage_assumptions=trusted_context.rds_usage_assumptions,
             serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
         transitions=transitions,
     )
 
@@ -2252,6 +2542,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "rds_usage_assumptions": document.get("rds_usage_assumptions"),
         "serverless_usage_assumptions": document.get("serverless_usage_assumptions"),
         "dynamodb_usage_assumptions": document.get("dynamodb_usage_assumptions"),
+        "vpc_usage_assumptions": document.get("vpc_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -2279,6 +2570,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("rds_usage_assumptions") != trusted_context.rds_usage_assumptions
         or document.get("serverless_usage_assumptions") != trusted_context.serverless_usage_assumptions
         or document.get("dynamodb_usage_assumptions") != trusted_context.dynamodb_usage_assumptions
+        or document.get("vpc_usage_assumptions") != trusted_context.vpc_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -3429,6 +3721,65 @@ def _changes_by_address(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _configured_attribute_references(
+    document: dict[str, Any], resource_address: str, attribute: str
+) -> tuple[str, ...]:
+    configuration = document.get("configuration")
+    root = configuration.get("root_module") if isinstance(configuration, dict) else None
+    if not isinstance(root, dict):
+        return ()
+    modules = [(root, "")]
+    while modules:
+        module, module_prefix = modules.pop()
+        resources = module.get("resources", [])
+        module_calls = module.get("module_calls", {})
+        if not isinstance(resources, list) or not isinstance(module_calls, dict):
+            return ()
+        for item in resources:
+            if not isinstance(item, dict):
+                continue
+            local_address = item.get("address")
+            if not isinstance(local_address, str):
+                continue
+            configured_address = (
+                f"{module_prefix}{local_address}" if module_prefix else local_address
+            )
+            if _without_instance_keys(configured_address) != _without_instance_keys(
+                resource_address
+            ):
+                continue
+            expressions = item.get("expressions")
+            expression = expressions.get(attribute) if isinstance(expressions, dict) else None
+            references = expression.get("references") if isinstance(expression, dict) else None
+            if not isinstance(references, list):
+                return ()
+            return tuple(
+                f"{module_prefix}{value}" if module_prefix else value
+                for value in references
+                if isinstance(value, str)
+            )
+        for name, call in module_calls.items():
+            child = call.get("module") if isinstance(call, dict) else None
+            if not isinstance(name, str) or not isinstance(child, dict):
+                return ()
+            modules.append((child, f"{module_prefix}module.{name}."))
+    return ()
+
+
+def _reference_matches_resource(references: tuple[str, ...], address: str) -> bool:
+    normalized_address = _without_instance_keys(address)
+    return any(
+        _without_instance_keys(reference) == normalized_address
+        or _without_instance_keys(reference).startswith(f"{normalized_address}.")
+        for reference in references
+    )
+
+
+def _without_instance_keys(address: str) -> str:
+    """Normalize count/for_each instance selectors for config-to-plan matching."""
+    return re.sub(r'\[(?:[0-9]+|"(?:\\.|[^"\\])*")\]', "", address)
+
+
 def _classify_aws_transitions(
     resources: tuple[dict[str, Any], ...],
     changes: dict[str, dict[str, Any]],
@@ -3606,6 +3957,7 @@ def _evidence(
     rds_usage_assumptions: dict[str, Any] | None = None,
     serverless_usage_assumptions: dict[str, Any] | None = None,
     dynamodb_usage_assumptions: dict[str, Any] | None = None,
+    vpc_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -3625,10 +3977,10 @@ def _evidence(
     pricing_context_digest = _pricing_context_digest(
         region, currency, budget, persisted_context_sha256, usage_assumptions,
         sqs_usage_assumptions, rds_usage_assumptions, serverless_usage_assumptions,
-        dynamodb_usage_assumptions,
+        dynamodb_usage_assumptions, vpc_usage_assumptions,
     )
     payload = {
-        "version": 7,
+        "version": 8,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -3656,6 +4008,7 @@ def _evidence(
         "rds_usage_assumptions": rds_usage_assumptions,
         "serverless_usage_assumptions": serverless_usage_assumptions,
         "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
+        "vpc_usage_assumptions": vpc_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -3717,6 +4070,7 @@ def _evidence(
         rds_usage_assumptions=rds_usage_assumptions,
         serverless_usage_assumptions=serverless_usage_assumptions,
         dynamodb_usage_assumptions=dynamodb_usage_assumptions,
+        vpc_usage_assumptions=vpc_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -3746,10 +4100,11 @@ def _pricing_context_digest(
     rds_usage_assumptions: dict[str, Any] | None = None,
     serverless_usage_assumptions: dict[str, Any] | None = None,
     dynamodb_usage_assumptions: dict[str, Any] | None = None,
+    vpc_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 6,
+            "version": 7,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
@@ -3759,5 +4114,6 @@ def _pricing_context_digest(
             "rds_usage_assumptions": rds_usage_assumptions,
             "serverless_usage_assumptions": serverless_usage_assumptions,
             "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
+            "vpc_usage_assumptions": vpc_usage_assumptions,
         }
     )
