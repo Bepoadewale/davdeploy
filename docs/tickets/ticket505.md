@@ -44,9 +44,11 @@ execution.
 
 - [x] Documentation update complete.
 - [x] Documentation convention checks and whitespace validation pass.
-- [x] Required GitHub checks pass on final PR head
+- [x] All seven GitHub checks passed on initial documentation commit
   `538942022946c1b8c0b409d9a9da2904b0461546` in run
-  [45584304895](https://github.com/Bepoadewale/davdeploy/actions/runs/45584304895).
+  [45584304895](https://github.com/Bepoadewale/davdeploy/actions/runs/45584304895)
+  and on ticket-update commit `5a5f351bf039f22d6eff40bcc42a88f4e230f4be` in
+  run [45585178059](https://github.com/Bepoadewale/davdeploy/actions/runs/45585178059).
 - [x] Automated review completed on the final PR head with no findings.
 - [ ] PR is reviewed and merged.
 
@@ -54,7 +56,7 @@ execution.
 
 - `python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- All seven GitHub checks passed in run [45584304895](https://github.com/Bepoadewale/davdeploy/actions/runs/45584304895).
+- All seven GitHub checks passed in runs [45584304895](https://github.com/Bepoadewale/davdeploy/actions/runs/45584304895) and [45585178059](https://github.com/Bepoadewale/davdeploy/actions/runs/45585178059).
 - No `docs/test/test505.md` is required; this is a documentation-only change
   with no cloud workload.
 
