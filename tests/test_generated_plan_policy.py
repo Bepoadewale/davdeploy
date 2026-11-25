@@ -8,6 +8,7 @@ from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResou
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
     _check_rds_final_snapshot_changes,
+    _check_vpc_topology,
     _configured_resources,
     _path_contains_unknown,
     _reference_targets_resource,
@@ -180,6 +181,252 @@ def change(address, kind, actions=("create",), **metadata):
             **metadata,
         },
     }
+
+
+def vpc_topology_plan():
+    tags = ownership_scope().tags()
+    resources = [
+        resource(
+            "aws_vpc.this",
+            "aws_vpc",
+            {
+                "cidr_block": "10.40.0.0/16",
+                "enable_dns_support": True,
+                "enable_dns_hostnames": True,
+                "assign_generated_ipv6_cidr_block": False,
+            },
+        ),
+        resource(
+            "aws_internet_gateway.this",
+            "aws_internet_gateway",
+            {"vpc_id": None},
+        ),
+        resource(
+            "aws_eip.nat",
+            "aws_eip",
+            {"domain": "vpc", "allocation_id": "eipalloc-test"},
+        ),
+        resource(
+            "aws_nat_gateway.this",
+            "aws_nat_gateway",
+            {"allocation_id": "eipalloc-test", "subnet_id": "subnet-public-0", "connectivity_type": "public"},
+        ),
+        resource(
+            "aws_route_table.public",
+            "aws_route_table",
+            {"vpc_id": None, "route": [{"cidr_block": "0.0.0.0/0", "gateway_id": "igw-test", "nat_gateway_id": None}]},
+        ),
+        resource(
+            "aws_route_table.private",
+            "aws_route_table",
+            {"vpc_id": None, "route": [{"cidr_block": "0.0.0.0/0", "gateway_id": None, "nat_gateway_id": "nat-test"}]},
+        ),
+    ]
+    for index, az in enumerate(("us-east-1a", "us-east-1b")):
+        resources.extend(
+            [
+                resource(
+                    f'aws_subnet.public["{index}"]',
+                    "aws_subnet",
+                    {
+                        "vpc_id": None,
+                        "cidr_block": f"10.40.{128 + index * 16}.0/20",
+                        "availability_zone": az,
+                        "map_public_ip_on_launch": False,
+                        "assign_ipv6_address_on_creation": False,
+                        "tags": {**tags, "kubernetes.io/role/elb": "1"},
+                    },
+                ),
+                resource(
+                    f'aws_subnet.private["{index}"]',
+                    "aws_subnet",
+                    {
+                        "vpc_id": None,
+                        "cidr_block": f"10.40.{index * 16}.0/20",
+                        "availability_zone": az,
+                        "map_public_ip_on_launch": False,
+                        "assign_ipv6_address_on_creation": False,
+                        "tags": {**tags, "kubernetes.io/role/internal-elb": "1"},
+                    },
+                ),
+                resource(
+                    f'aws_route_table_association.public["{index}"]',
+                    "aws_route_table_association",
+                    {"subnet_id": None, "route_table_id": None},
+                ),
+                resource(
+                    f'aws_route_table_association.private["{index}"]',
+                    "aws_route_table_association",
+                    {"subnet_id": None, "route_table_id": None},
+                ),
+            ]
+        )
+    references = {
+        "aws_internet_gateway.this": {"vpc_id": ["aws_vpc.this.id"]},
+        "aws_route_table.public": {
+            "vpc_id": ["aws_vpc.this.id"],
+            "route": ["aws_internet_gateway.this.id"],
+        },
+        "aws_route_table.private": {
+            "vpc_id": ["aws_vpc.this.id"],
+            "route": ["aws_nat_gateway.this.id"],
+        },
+        "aws_nat_gateway.this": {
+            "allocation_id": ["aws_eip.nat.id"],
+            "subnet_id": ["aws_subnet.public"],
+        },
+        "aws_subnet.public": {"vpc_id": ["aws_vpc.this.id"]},
+        "aws_subnet.private": {"vpc_id": ["aws_vpc.this.id"]},
+        "aws_route_table_association.public": {
+            "subnet_id": ["aws_subnet.public"],
+            "route_table_id": ["aws_route_table.public.id"],
+        },
+        "aws_route_table_association.private": {
+            "subnet_id": ["aws_subnet.private"],
+            "route_table_id": ["aws_route_table.private.id"],
+        },
+    }
+    config_resources = []
+    configured_addresses = set()
+    for item in resources:
+        address = item["address"]
+        resource_name = address.split("[", 1)[0]
+        if resource_name in configured_addresses:
+            continue
+        configured_addresses.add(resource_name)
+        resource_expressions = references.get(resource_name, references.get(address, {}))
+        config_resources.append(
+            {
+                "address": resource_name,
+                "expressions": {
+                    key: {"references": value}
+                    for key, value in resource_expressions.items()
+                },
+            }
+        )
+    return resources, {"configuration": {"root_module": {"resources": config_resources}}}
+
+
+def vpc_findings(resources, configuration):
+    findings = []
+    _check_vpc_topology({**configuration, "resource_changes": []}, tuple(resources), findings)
+    return findings
+
+
+def test_vpc_plan_accepts_module_topology_and_reviews_nat_cost():
+    resources, configuration = vpc_topology_plan()
+
+    findings = vpc_findings(resources, configuration)
+
+    assert [(item.code, item.severity) for item in findings] == [
+        ("vpc_nat_egress_cost_review", "review")
+    ]
+
+
+def test_vpc_plan_binds_module_resources_from_relative_configuration_references():
+    resources, configuration = vpc_topology_plan()
+    for item in resources:
+        item["address"] = f"module.network.{item['address']}"
+    for item in configuration["configuration"]["root_module"]["resources"]:
+        item["address"] = f"module.network.{item['address']}"
+
+    findings = vpc_findings(resources, configuration)
+
+    assert [(item.code, item.severity) for item in findings] == [
+        ("vpc_nat_egress_cost_review", "review")
+    ]
+
+
+def test_vpc_plan_rejects_public_ipv4_auto_assignment():
+    resources, configuration = vpc_topology_plan()
+    subnet = next(item for item in resources if item["type"] == "aws_subnet")
+    subnet["values"]["map_public_ip_on_launch"] = True
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_subnet_configuration_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_unknown_dns_and_ipv6_configuration():
+    resources, configuration = vpc_topology_plan()
+    vpc = next(item for item in resources if item["type"] == "aws_vpc")
+    vpc["values"]["enable_dns_support"] = None
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_configuration_unsupported" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_unbound_public_default_route():
+    resources, configuration = vpc_topology_plan()
+    route_table = next(
+        item
+        for item in resources
+        if item["type"] == "aws_route_table" and item["address"].endswith("public")
+    )
+    route_table["values"]["route"][0]["gateway_id"] = None
+    config_resource = next(
+        item
+        for item in configuration["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_route_table.public"
+    )
+    config_resource["expressions"]["route"]["references"] = ["aws_nat_gateway.this.id"]
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_public_private_route_tables_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_overlapping_subnet_cidr():
+    resources, configuration = vpc_topology_plan()
+    public_subnet = next(
+        item for item in resources if item["address"] == 'aws_subnet.public["0"]'
+    )
+    private_subnet = next(
+        item for item in resources if item["address"] == 'aws_subnet.private["0"]'
+    )
+    public_subnet["values"]["cidr_block"] = private_subnet["values"]["cidr_block"]
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_subnet_cidr_overlap" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_association_to_wrong_subnet_key():
+    resources, configuration = vpc_topology_plan()
+    configured = next(
+        item
+        for item in configuration["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_route_table_association.public"
+    )
+    configured["expressions"]["subnet_id"]["references"] = ['aws_subnet.public["1"].id']
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_route_association_binding_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_separate_route_resource():
+    resources, configuration = vpc_topology_plan()
+    resources.append(resource("aws_route.extra", "aws_route", {"destination_cidr_block": "0.0.0.0/0"}))
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_route_resource_unsupported" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_ipv6_route():
+    resources, configuration = vpc_topology_plan()
+    route_table = next(
+        item
+        for item in resources
+        if item["type"] == "aws_route_table" and item["address"].endswith("public")
+    )
+    route_table["values"]["route"][0]["ipv6_cidr_block"] = "::/0"
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_route_shape_unsupported" in {item.code for item in findings}
 
 
 def plan(resources=None, changes=None, **overrides):

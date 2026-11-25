@@ -48,7 +48,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-25.6"
+POLICY_VERSION = "nova-generated-plan-2026-11-25.7"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
@@ -250,6 +250,20 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("icmp_type",),
         ("icmp_code",),
     ),
+    "aws_vpc": (
+        ("cidr_block",),
+        ("enable_dns_support",),
+        ("enable_dns_hostnames",),
+        ("assign_generated_ipv6_cidr_block",),
+    ),
+    "aws_subnet": (
+        ("cidr_block",),
+        ("availability_zone",),
+        ("map_public_ip_on_launch",),
+        ("assign_ipv6_address_on_creation",),
+    ),
+    "aws_eip": (("domain",),),
+    "aws_nat_gateway": (("connectivity_type",),),
 }
 
 
@@ -377,6 +391,7 @@ def _evaluate(
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
     _check_autoscaling_groups(document, resources, findings)
+    _check_vpc_topology(document, resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -1542,6 +1557,460 @@ def _check_iam(
                     address,
                     "The attached managed policy contents are not present in this plan and require explicit review.",
                 )
+
+
+def _check_vpc_topology(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Check the small VPC topology produced by modules/vpc, including egress bindings."""
+    supported_types = {
+        "aws_vpc",
+        "aws_subnet",
+        "aws_internet_gateway",
+        "aws_route_table",
+        "aws_route_table_association",
+        "aws_eip",
+        "aws_nat_gateway",
+    }
+    route_resource_types = {
+        "aws_route",
+        "aws_default_route",
+        "aws_default_route_table",
+        "aws_internet_gateway_attachment",
+        "aws_main_route_table_association",
+        "aws_vpc_endpoint",
+        "aws_vpc_peering_connection",
+        "aws_vpc_peering_connection_accepter",
+        "aws_vpc_dhcp_options",
+        "aws_vpc_dhcp_options_association",
+        "aws_ec2_transit_gateway",
+        "aws_ec2_transit_gateway_route_table",
+        "aws_ec2_transit_gateway_route_table_association",
+        "aws_ec2_transit_gateway_vpc_attachment",
+        "aws_ec2_transit_gateway_vpc_attachment_accepter",
+        "aws_ec2_transit_gateway_route",
+        "aws_egress_only_internet_gateway",
+        "aws_vpc_ipv4_cidr_block_association",
+        "aws_vpc_ipv6_cidr_block_association",
+        "aws_eip_association",
+        "aws_network_acl",
+        "aws_default_network_acl",
+        "aws_network_acl_association",
+        "aws_subnet_network_acl_association",
+        "aws_network_interface",
+    }
+    changes = document.get("resource_changes")
+    changed_types = {
+        item.get("type")
+        for item in (changes if isinstance(changes, list) else [])
+        if isinstance(item, dict)
+    }
+    planned_types = {item.get("type") for item in resources}
+    if not (planned_types | changed_types) & (supported_types | route_resource_types):
+        return
+
+    by_type = {
+        kind: [item for item in resources if item.get("type") == kind]
+        for kind in supported_types | route_resource_types
+    }
+    required_counts = {
+        "aws_vpc": (1, 1),
+        "aws_internet_gateway": (1, 1),
+        "aws_route_table": (2, 2),
+        "aws_eip": (1, 1),
+        "aws_nat_gateway": (1, 1),
+    }
+    invalid = False
+    for kind, (minimum, maximum) in required_counts.items():
+        count = len(by_type[kind])
+        if not minimum <= count <= maximum:
+            invalid = True
+            _deny(
+                findings,
+                "vpc_supported_shape_incomplete",
+                None,
+                "The supported VPC plan requires one VPC, internet gateway, public/private route table, EIP, and NAT gateway.",
+            )
+            break
+    subnets = by_type["aws_subnet"]
+    if not 4 <= len(subnets) <= 6 or len(subnets) % 2:
+        invalid = True
+        _deny(
+            findings,
+            "vpc_subnet_count_unsupported",
+            None,
+            "The supported VPC plan requires two or three public and private subnet pairs.",
+        )
+    associations = by_type["aws_route_table_association"]
+    if len(associations) != len(subnets):
+        invalid = True
+        _deny(
+            findings,
+            "vpc_route_association_incomplete",
+            None,
+            "Every supported VPC subnet must have exactly one route-table association.",
+        )
+    if any(by_type[kind] for kind in route_resource_types):
+        invalid = True
+        _deny(
+            findings,
+            "vpc_route_resource_unsupported",
+            None,
+            "The supported VPC profile excludes separate routes, endpoints, peering, transit gateways, IPv6 egress, and secondary CIDR associations.",
+        )
+    if invalid:
+        return
+
+    vpc = by_type["aws_vpc"][0]
+    vpc_address = vpc.get("address")
+    vpc_values = vpc.get("values")
+    if not isinstance(vpc_address, str) or not isinstance(vpc_values, dict):
+        return _deny(findings, "vpc_values_unknown", vpc_address, "A required VPC setting is unknown.")
+    cidr = vpc_values.get("cidr_block")
+    try:
+        vpc_network = ipaddress.ip_network(cidr, strict=True)
+    except (TypeError, ValueError):
+        vpc_network = None
+    if (
+        not isinstance(vpc_network, ipaddress.IPv4Network)
+        or not vpc_network.subnet_of(ipaddress.ip_network("10.0.0.0/8"))
+        and not vpc_network.subnet_of(ipaddress.ip_network("172.16.0.0/12"))
+        and not vpc_network.subnet_of(ipaddress.ip_network("192.168.0.0/16"))
+        or vpc_values.get("enable_dns_support") is not True
+        or vpc_values.get("enable_dns_hostnames") is not True
+        or vpc_values.get("assign_generated_ipv6_cidr_block") is True
+        or any(
+            vpc_values.get(key) not in (None, "")
+            for key in ("ipv6_cidr_block", "ipv6_ipam_pool_id", "ipv6_netmask_length")
+        )
+    ):
+        _deny(
+            findings,
+            "vpc_configuration_unsupported",
+            vpc_address,
+            "The supported VPC requires a known private IPv4 CIDR, DNS support, DNS hostnames, and no generated IPv6 CIDR.",
+        )
+
+    def attribute_references(address: Any, attribute: str) -> tuple[str, ...]:
+        configured = _configured_resources(document)
+        item = configured.get(address) if isinstance(address, str) else None
+        if item is None and isinstance(address, str):
+            matches = [
+                configured_item
+                for configured_address, configured_item in configured.items()
+                if address.startswith(f"{configured_address}[")
+            ]
+            if len(matches) == 1:
+                item = matches[0]
+        expressions = item.get("expressions") if isinstance(item, dict) else None
+        expression = expressions.get(attribute) if isinstance(expressions, dict) else None
+        pending: list[Any] = [expression]
+        found: list[str] = []
+        visited = 0
+        while pending:
+            visited += 1
+            if visited > 10_000:
+                return ()
+            current = pending.pop()
+            if isinstance(current, dict):
+                refs = current.get("references")
+                if isinstance(refs, list):
+                    found.extend(value for value in refs if isinstance(value, str))
+                pending.extend(value for key, value in current.items() if key != "references")
+            elif isinstance(current, list):
+                pending.extend(current)
+        return tuple(found)
+
+    def reference_matches(reference: str, target: dict[str, Any]) -> bool:
+        address = target.get("address")
+        kind = target.get("type")
+        if not isinstance(address, str) or not isinstance(kind, str):
+            return False
+        # Terraform configuration can reference an entire for_each collection
+        # (for example aws_subnet.public); bind that collection to its planned
+        # instances while preserving exact-key references when present.
+        marker = f"{kind}."
+        position = address.rfind(marker)
+        if position < 0:
+            return _reference_targets_resource(reference, address, kind)
+        root = address[:position] + address[position:].split("[", 1)[0]
+        if reference == address or reference.startswith(f"{address}."):
+            return True
+        resource_suffix = address[position:]
+        relative_root = resource_suffix.split("[", 1)[0]
+        for candidate_root, candidate_address in ((root, address), (relative_root, resource_suffix)):
+            if reference == candidate_root or reference.startswith(f"{candidate_root}."):
+                return True
+            if reference.startswith(f"{candidate_root}["):
+                closing_bracket = reference.find("]", len(candidate_root))
+                instance_reference = (
+                    reference[: closing_bracket + 1] if closing_bracket >= 0 else reference
+                )
+                if instance_reference == candidate_address:
+                    return True
+        return False
+
+    def bound_targets(item: dict[str, Any], attribute: str, candidates: list[dict[str, Any]]) -> set[str]:
+        refs = attribute_references(item.get("address"), attribute)
+        return {
+            candidate["address"]
+            for candidate in candidates
+            if isinstance(candidate.get("address"), str)
+            and any(reference_matches(ref, candidate) for ref in refs)
+        }
+
+    def references_only_targets(
+        item: dict[str, Any], attribute: str, candidates: list[dict[str, Any]], expected: set[str]
+    ) -> bool:
+        refs = attribute_references(item.get("address"), attribute)
+        if not refs:
+            return False
+        matched = bound_targets(item, attribute, candidates)
+        return matched == expected and all(
+            any(reference_matches(ref, candidate) for candidate in candidates if candidate.get("address") in expected)
+            for ref in refs
+        )
+
+    vpc_candidates = [vpc]
+    for item in subnets + by_type["aws_internet_gateway"] + by_type["aws_route_table"]:
+        values = item.get("values")
+        address = item.get("address")
+        if not isinstance(values, dict):
+            _deny(findings, "vpc_values_unknown", address, "A required VPC topology value is unknown.")
+            continue
+        if not references_only_targets(item, "vpc_id", vpc_candidates, {vpc_address}):
+            _deny(
+                findings,
+                "vpc_resource_binding_invalid",
+                address,
+                "Every subnet, internet gateway, and route table must bind to the same planned VPC.",
+            )
+
+    subnet_networks: list[tuple[dict[str, Any], ipaddress.IPv4Network]] = []
+    for subnet in subnets:
+        values = subnet.get("values")
+        address = subnet.get("address")
+        if not isinstance(values, dict):
+            continue
+        try:
+            subnet_network = ipaddress.ip_network(values.get("cidr_block"), strict=True)
+        except (TypeError, ValueError):
+            subnet_network = None
+        if (
+            not isinstance(subnet_network, ipaddress.IPv4Network)
+            or not isinstance(vpc_network, ipaddress.IPv4Network)
+            or not subnet_network.subnet_of(vpc_network)
+            or values.get("map_public_ip_on_launch") is not False
+            or values.get("assign_ipv6_address_on_creation") is True
+            or not isinstance(values.get("availability_zone"), str)
+        ):
+            _deny(
+                findings,
+                "vpc_subnet_configuration_invalid",
+                address,
+                "Subnets must use known in-VPC IPv4 CIDRs, distinct reviewed availability zones, and no automatic public or IPv6 address assignment.",
+            )
+            continue
+        if any(subnet_network.overlaps(previous) for _, previous in subnet_networks):
+            _deny(
+                findings,
+                "vpc_subnet_cidr_overlap",
+                address,
+                "VPC subnet CIDRs must not overlap.",
+            )
+        subnet_networks.append((subnet, subnet_network))
+
+    subnet_by_address = {
+        item.get("address"): item for item in subnets if isinstance(item.get("address"), str)
+    }
+    route_tables = by_type["aws_route_table"]
+    public_tables = []
+    private_tables = []
+    for table in route_tables:
+        values = table.get("values")
+        routes = values.get("route") if isinstance(values, dict) else None
+        address = table.get("address")
+        if not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict):
+            _deny(
+                findings,
+                "vpc_route_shape_unsupported",
+                address,
+                "Each supported VPC route table must contain exactly one reviewed IPv4 default route.",
+            )
+            continue
+        route = routes[0]
+        destination = route.get("cidr_block")
+        gateway_targets = [
+            key for key in ("gateway_id", "nat_gateway_id") if route.get(key) not in (None, "")
+        ]
+        if destination != "0.0.0.0/0" or len(gateway_targets) > 1 or any(
+            route.get(key) not in (None, "")
+            for key in (
+                "ipv6_cidr_block",
+                "destination_prefix_list_id",
+                "carrier_gateway_id",
+                "local_gateway_id",
+                "transit_gateway_id",
+                "vpc_peering_connection_id",
+                "egress_only_gateway_id",
+                "instance_id",
+                "network_interface_id",
+                "core_network_arn",
+                "vpc_endpoint_id",
+            )
+        ):
+            _deny(
+                findings,
+                "vpc_route_shape_unsupported",
+                address,
+                "Only one IPv4 default route to the reviewed internet or NAT gateway is supported.",
+            )
+            continue
+        if route.get("gateway_id") not in (None, ""):
+            public_tables.append(table)
+        elif route.get("nat_gateway_id") not in (None, ""):
+            private_tables.append(table)
+        else:
+            # Gateway identifiers can be unknown in planned_values; use the
+            # configuration reference to classify their exact planned target.
+            refs = attribute_references(address, "route")
+            if any(reference_matches(ref, by_type["aws_internet_gateway"][0]) for ref in refs):
+                public_tables.append(table)
+            elif any(reference_matches(ref, by_type["aws_nat_gateway"][0]) for ref in refs):
+                private_tables.append(table)
+            else:
+                _deny(findings, "vpc_route_target_unknown", address, "The VPC default route target is not bound to a supported same-plan gateway.")
+
+    if len(public_tables) != 1 or len(private_tables) != 1:
+        _deny(
+            findings,
+            "vpc_public_private_route_tables_invalid",
+            None,
+            "The VPC requires one public-to-IGW route table and one private-to-NAT route table.",
+        )
+        return
+
+    igw = by_type["aws_internet_gateway"][0]
+    nat = by_type["aws_nat_gateway"][0]
+    eip = by_type["aws_eip"][0]
+    public_table = public_tables[0]
+    private_table = private_tables[0]
+    if not references_only_targets(public_table, "route", [igw], {igw.get("address")}):
+        _deny(findings, "vpc_public_route_binding_invalid", public_table.get("address"), "The public default route must bind only to the planned internet gateway.")
+    if not references_only_targets(private_table, "route", [nat], {nat.get("address")}):
+        _deny(findings, "vpc_private_route_binding_invalid", private_table.get("address"), "The private default route must bind only to the planned NAT gateway.")
+    if not references_only_targets(nat, "allocation_id", [eip], {eip.get("address")}):
+        _deny(findings, "vpc_nat_address_binding_invalid", nat.get("address"), "The NAT gateway must use the planned VPC Elastic IP.")
+    nat_values = nat.get("values")
+    eip_values = eip.get("values")
+    if (
+        not isinstance(nat_values, dict)
+        or nat_values.get("connectivity_type", "public") != "public"
+        or not references_only_targets(nat, "subnet_id", subnets, {
+            item.get("address") for item in subnets
+            if isinstance(item.get("values"), dict)
+            and isinstance(item["values"].get("tags"), dict)
+            and "kubernetes.io/role/elb" in item["values"]["tags"]
+            and isinstance(item.get("address"), str)
+        })
+        or not isinstance(eip_values, dict)
+        or eip_values.get("domain") != "vpc"
+    ):
+        _deny(
+            findings,
+            "vpc_nat_configuration_invalid",
+            nat.get("address"),
+            "The supported NAT gateway must be public, use a VPC Elastic IP, and attach to a same-plan public subnet.",
+        )
+
+    public_addresses: set[str] = set()
+    private_addresses: set[str] = set()
+    for association in associations:
+        values = association.get("values")
+        address = association.get("address")
+        if not isinstance(values, dict):
+            continue
+        subnet_refs = attribute_references(address, "subnet_id")
+        table_refs = attribute_references(address, "route_table_id")
+        subnet_targets = {
+            item["address"] for item in subnets
+            if isinstance(item.get("address"), str)
+            and any(reference_matches(ref, item) for ref in subnet_refs)
+        }
+        # for_each association instances in modules/vpc use the same index as
+        # their corresponding subnet. Configuration references identify the
+        # public/private collection; the instance key binds this association
+        # to one member of that collection.
+        expected_subnet_address = None
+        if isinstance(address, str) and "aws_route_table_association.public[" in address:
+            expected_subnet_address = address.replace(
+                "aws_route_table_association.public[", "aws_subnet.public[", 1
+            )
+        elif isinstance(address, str) and "aws_route_table_association.private[" in address:
+            expected_subnet_address = address.replace(
+                "aws_route_table_association.private[", "aws_subnet.private[", 1
+            )
+        if expected_subnet_address is not None and expected_subnet_address in subnet_targets:
+            subnet_targets = {expected_subnet_address}
+        elif expected_subnet_address is not None:
+            subnet_targets = set()
+        if len(subnet_targets) != 1:
+            _deny(findings, "vpc_route_association_binding_invalid", address, "Each route-table association must bind exactly one planned subnet.")
+            continue
+        subnet_address = next(iter(subnet_targets))
+        if subnet_address not in subnet_by_address or subnet_address in public_addresses | private_addresses:
+            _deny(findings, "vpc_route_association_duplicate", address, "A VPC subnet may have only one explicit route-table association.")
+            continue
+        public_target = any(reference_matches(ref, public_table) for ref in table_refs)
+        private_target = any(reference_matches(ref, private_table) for ref in table_refs)
+        if public_target == private_target:
+            _deny(findings, "vpc_route_association_binding_invalid", address, "Each subnet association must bind to exactly one supported route table.")
+            continue
+        subnet_values = subnet_by_address[subnet_address].get("values", {})
+        tags = subnet_values.get("tags") if isinstance(subnet_values, dict) else None
+        tagged_public = isinstance(tags, dict) and "kubernetes.io/role/elb" in tags
+        tagged_private = isinstance(tags, dict) and "kubernetes.io/role/internal-elb" in tags
+        # The module's public/private role tags are its stable classification
+        # signal; require them to agree with the route table.
+        if public_target:
+            public_addresses.add(subnet_address)
+            if not tagged_public or tagged_private:
+                _deny(findings, "vpc_subnet_classification_invalid", subnet_address, "Public subnets must carry only the reviewed public load-balancer role tag.")
+        else:
+            private_addresses.add(subnet_address)
+            if not tagged_private or tagged_public:
+                _deny(findings, "vpc_subnet_classification_invalid", subnet_address, "Private subnets must carry only the reviewed internal load-balancer role tag.")
+
+    if (
+        len(public_addresses) != len(subnets) // 2
+        or len(private_addresses) != len(subnets) // 2
+        or public_addresses | private_addresses != set(subnet_by_address)
+    ):
+        _deny(findings, "vpc_route_association_incomplete", None, "All VPC subnets must be classified exactly once as public or private.")
+    public_azs = {
+        subnet_by_address[address].get("values", {}).get("availability_zone")
+        for address in public_addresses
+    }
+    private_azs = {
+        subnet_by_address[address].get("values", {}).get("availability_zone")
+        for address in private_addresses
+    }
+    if len(public_azs) != len(public_addresses) or public_azs != private_azs:
+        _deny(findings, "vpc_availability_zone_pairing_invalid", None, "Each public subnet must pair with one private subnet in the same distinct availability zone set.")
+    if public_addresses and not any(
+        reference_matches(ref, subnet_by_address[address])
+        for ref in attribute_references(nat.get("address"), "subnet_id")
+        for address in public_addresses
+    ):
+        _deny(findings, "vpc_nat_subnet_not_public", nat.get("address"), "The NAT gateway must attach to a subnet associated with the public route table.")
+    _review(
+        findings,
+        "vpc_nat_egress_cost_review",
+        nat.get("address"),
+        "This VPC includes a chargeable NAT gateway and outbound data transfer. Confirm the egress need and expected monthly cost.",
+    )
 
 
 def _check_network(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]) -> None:
