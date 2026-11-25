@@ -52,8 +52,8 @@ source change was deployed or that any Nova customer workload was executed.
   the lack of customer workload evidence.
 - [x] No document implies that PR #512 was deployed, enables Batch approval,
   or proves Nova-dispatched customer execution.
-- [ ] Documentation conventions, full required local verification, and all
-  seven final-head CI checks pass.
+- [x] Documentation conventions and full required local verification pass.
+- [ ] The latest ticket-updated final-head CI check set passes before merge.
 - [x] No AWS, Terraform state/locks, hosted control-plane resources, or local
   protected files are changed.
 
@@ -61,7 +61,9 @@ source change was deployed or that any Nova customer workload was executed.
 
 - [x] Documentation reconciliation complete.
 - [x] Local validation and documentation conventions pass.
-- [ ] Final-head CI passed.
+- [x] All seven checks passed on reconciliation head `da911b7` in run
+  [45683545031](https://github.com/Bepoadewale/davdeploy/actions/runs/45683545031).
+- [ ] Latest ticket-updated head CI passed.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -71,6 +73,10 @@ Ruff, Actions configuration, OpenAPI snapshot, and Docker Compose checks passed.
 One upstream Starlette deprecation warning was emitted. `GITHUB_PR_NUMBER=513
 python3 scripts/check_doc_conventions.py` and `git diff --check` passed. No
 customer workload test was performed.
+
+All seven CI checks passed on reconciliation head `da911b7` in run
+[45683545031](https://github.com/Bepoadewale/davdeploy/actions/runs/45683545031).
+This ticket update requires one latest-head CI rerun before merge.
 
 ## Evidence files produced
 
