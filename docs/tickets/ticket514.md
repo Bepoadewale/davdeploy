@@ -55,7 +55,7 @@ unmodeled network costs approval-blocking. This is source-only.
 - [x] S3/DynamoDB gateway endpoints receive no endpoint charge only when their exact supported type is established; other endpoint types fail closed.
 - [x] Any unpriced endpoint/network dependency continues to block pricing completeness and approval; a regression test proves the Batch supporting-cost blocker persists after supported endpoint lines are added.
 - [x] Focused tests, full required local verification, documentation conventions, and diff whitespace checks pass.
-- [x] All seven required checks passed on the implementation head `600cae7` in CI run [45694972899](https://github.com/Bepoadewale/davdeploy/actions/runs/45694972899). The ticket update recording this run will trigger another final-head CI run before merge.
+- [x] All seven required checks passed on final PR head `4112269` in CI run [45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719). The current ticket/handoff update is documentation-only; the updated head's GitHub checks remain the merge gate.
 - [ ] No AWS resources, Terraform state/locks, hosted control-plane resources, protected local files, or customer workloads are changed.
 
 ## Acceptance status
@@ -64,7 +64,7 @@ unmodeled network costs approval-blocking. This is source-only.
 - [x] Focused validation complete: `tests/test_generated_plan_pricing.py` passed 156 tests.
 - [x] Full local verification complete: `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` passed all 1,956 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose validation. One upstream Starlette deprecation warning was emitted.
 - [x] Documentation conventions and `git diff --check` passed.
-- [x] All seven checks passed on code head `600cae7` in run `45694972899`; the ticket-only update's current head CI is the remaining merge gate.
+- [x] All seven checks passed on final PR head `4112269` in run `45695787719`; the documentation-only ticket/handoff update's current head CI remains the merge gate.
 - [ ] PR reviewed and merged.
 - [ ] Merged-main CI passed.
 - [x] No customer workload or cloud mutation is in scope.
@@ -80,8 +80,8 @@ unmodeled network costs approval-blocking. This is source-only.
 - AWS Price List research verified AmazonVPC product dimensions, units, and
   tier shape using the public us-east-1 catalog. No customer-account AWS API
   calls or cloud mutations were made.
-- All seven checks passed on implementation head `600cae7` in PR run
-  [45694972899](https://github.com/Bepoadewale/davdeploy/actions/runs/45694972899).
+- All seven checks passed on final PR head `4112269` in run
+  [45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719).
 - No customer workload test was performed.
 
 ## Evidence files produced

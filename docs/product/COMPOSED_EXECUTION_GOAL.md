@@ -50,11 +50,11 @@ bound to trusted monthly usage and known same-plan subnet IDs/AZs. Exact
 S3/DynamoDB gateway endpoints have no endpoint charge; other interface service
 names, endpoint variants, and unmodeled network costs remain blockers. Focused
 pricing tests pass (156 tests), full local verification passes (1,956 tests),
-and all seven checks passed on implementation head `600cae7` in CI run
-[45694972899](https://github.com/Bepoadewale/davdeploy/actions/runs/45694972899).
-The ticket update recording that result requires a fresh final-head CI run
-before merge. No AWS resource, Terraform state/lock, hosted control plane, or
-customer workload was changed.
+and all seven checks passed on final PR head `4112269` in run
+[45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719).
+The ticket/handoff status update is documentation-only; current-head checks
+remain the merge gate. No AWS resource, Terraform state/lock, hosted control
+plane, or customer workload was changed.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
