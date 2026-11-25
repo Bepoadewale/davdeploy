@@ -59,12 +59,13 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its
-seven checks passed before synchronization. This branch now includes current
-`main` through PR #493, and CI for the merge commit is pending. Two same-account
-cycles verified encrypted 8 GiB gp3 root volumes and teardown. Final clean-room
-cleanup remains pending explicit approval to remove generated artifacts and
-Compose volumes in that specific worktree; those artifacts are preserved.
+PR #486 remains open at synchronized head
+`9a6313a6074c37cdd4b9c0023452dc8710c5b428`; all seven checks passed in run
+[45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
+It includes current `main` through PR #493. Two same-account cycles verified
+encrypted 8 GiB gp3 root volumes and teardown. Final clean-room cleanup remains
+pending explicit approval; containers are stopped and generated files, volume,
+and network are preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
 CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

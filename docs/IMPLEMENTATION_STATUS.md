@@ -118,11 +118,11 @@ are terminated. Local state lists zero resources and is retained. This does
 not prove guest application health, update/recovery, pricing, or Nova dispatch.
 The merge added no AWS resources.
 
-PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`. This
-branch now includes current `main` through PR #493; CI for the merge commit is
-pending. Its seven checks passed before synchronization. The final clean-room
-cleanup review finding remains open, and the exact generated artifacts are
-preserved pending explicit approval.
+PR #486 remains open at synchronized head `9a6313a6074c37cdd4b9c0023452dc8710c5b428`; all seven checks passed in run
+[45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
+It includes current `main` through PR #493. The final clean-room cleanup
+finding remains open pending explicit approval; project containers are stopped,
+and generated files, volume, and network are preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

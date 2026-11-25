@@ -112,7 +112,12 @@ updates, or replacements. Monitored run `nova-asg-486-destroy-20261124`
 the ASG, launch template, VPC, subnets, route table, security group, and volume
 absent; instance `i-070ba188abdaf25b2` is terminated. `terraform state list`
 returned zero resources. Local state artifacts are retained and are not
-committed. The run log is
+committed. After synchronizing with PR #493, head
+`9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven PR checks in run
+[45531340170](https://github.com/Bepoadewale/davdeploy/actions/runs/45531340170).
+The completed local clean-room containers have been stopped; its generated
+files, Compose volume, and network remain pending explicit cleanup approval.
+The run log is
 `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-asg-486-destroy-20261124.log`.
 AWS keeps the terminated instance history record; it is not active.
 

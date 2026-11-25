@@ -93,13 +93,14 @@ planned AMI metadata taking precedence over stale prior state. The clean-room
 cycle passed at base `d6c8585`; the updated policy and regression
 test from this PR were then synchronized into the isolated worktree, where all
 demos and full verification passed again (1,752 tests). Final cleanup of its
-generated artifacts is pending explicit approval. The synchronized status
-head `4623530` passed all seven checks in run `45502916393`; the ticket-evidence
-head `76f5629` passed all seven checks in run `45503868241`; and the current
-synchronized code/status head `d20a599` passed all seven checks in run
-`45504483123`. The root-device review finding is addressed in code; the
-clean-room review finding remains open until final cleanup is approved and recorded. No
-hosted control-plane resource or state was touched.
+generated artifacts is pending explicit approval. Earlier synchronized heads `4623530`, `76f5629`, and `d20a599` passed all
+seven checks in runs `45502916393`, `45503868241`, and `45504483123`. After
+merging current `main` through PR #493 and reconciling the status docs, head
+`9a6313a6074c37cdd4b9c0023452dc8710c5b428` passed all seven checks in run
+`45531340170`. The root-device review finding is addressed in code; the
+clean-room review finding remains open until final cleanup is approved and
+recorded. Project containers are stopped; generated files, volume, and network
+remain preserved. No hosted control-plane resource or state was touched.
 
 ## Tests / validation performed
 
