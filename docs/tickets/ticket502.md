@@ -91,7 +91,10 @@ estimate.
 - [x] Implementation complete.
 - [x] Focused validation complete.
 - [x] All seven GitHub checks passed on the pre-review-fix PR head `be00cf04b9879f71b99aa247234cea366994d736` in CI run [45562393129](https://github.com/Bepoadewale/davdeploy/actions/runs/45562393129).
-- [ ] Final-head checks after the expanded-reference and secondary-allocation review fixes pass.
+- [x] Final source-head checks after the expanded-reference, secondary-allocation,
+  and indexed-instance review fixes passed all seven checks on commit
+  `903402b3bbaedf88a27225f1824541ba4f419a64` in CI run
+  [45577322718](https://github.com/Bepoadewale/davdeploy/actions/runs/45577322718).
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -103,7 +106,7 @@ Validation performed:
 - `uv run --locked --extra dev pytest tests/test_generated_plan_pricing.py -q` — 109 passed after review fixes; Terraform-expanded, module-relative, and count-indexed unknown EIP/NAT bindings, duplicate known IDs, unknown secondary allocations, and complete VPC topology pricing are covered.
 - `uv run --locked --extra dev ruff check apps/api/src/davdeploy/generated_plan_pricing.py tests/test_generated_plan_pricing.py` — passed after the review fix.
 - `git diff --check` — passed.
-- GitHub Actions run [45576263116](https://github.com/Bepoadewale/davdeploy/actions/runs/45576263116) passed all seven checks on PR head `9574c107c90c1ab202b3f92ace43336f7caa9856`. The current worktree additionally addresses count-indexed configuration-reference matching; final-head CI and review refresh are pending.
+- GitHub Actions run [45576263116](https://github.com/Bepoadewale/davdeploy/actions/runs/45576263116) passed all seven checks on PR head `9574c107c90c1ab202b3f92ace43336f7caa9856`. After adding count-indexed configuration-reference matching, run [45577322718](https://github.com/Bepoadewale/davdeploy/actions/runs/45577322718) passed all seven checks on code commit `903402b3bbaedf88a27225f1824541ba4f419a64`; Codex review of that commit completed with no findings.
 - Read-only AWS Price List `GetProducts` checks in `us-east-1` returned one matching NAT Gateway hours product ($0.045/hour), NAT processing product ($0.045/GB), in-use public IPv4 product ($0.005/hour), regional transfer product ($0.01/GB), and internet egress product ($0.085/GB). This validates catalog data only; it does not change AWS resources or verify a customer bill.
 - This PR is source-only and must not create a `docs/test/test502.md` AWS workload report.
 
