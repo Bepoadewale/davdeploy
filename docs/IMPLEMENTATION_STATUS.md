@@ -124,6 +124,13 @@ It includes current `main` through PR #493. The final clean-room cleanup
 finding remains open pending explicit approval; project containers are stopped,
 and generated files, volume, and network are preserved.
 
+Draft PR #495 adds a typed AppConfig feature profile and bounded rollout policy.
+Its direct test observed disabled baseline, `BAKING`→`COMPLETE` deployment, and
+`REVERTED` rollback; all seven checks passed in run
+[45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+The exact teardown plan awaits approval, so its test application remains. No
+Nova dispatch or customer certification is claimed.
+
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
 and merged-main run

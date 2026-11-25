@@ -277,9 +277,12 @@ delegation, record behavior, failover, or cost. No hosted zone was created;
 see [`ticket470`](../tickets/ticket470.md).
 
 PR #471 verifies a same-plan reference from each AppConfig environment to one
-application. It does not create or deploy configuration profiles or flags,
-and no AppConfig workload or lifecycle was tested; see
-[`ticket471`](../tickets/ticket471.md).
+application. Draft PR #495 adds the AppConfig profile/flag rollout and rollback
+checks; its seven checks passed in run
+[45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+The direct test observed disabled, enabled `COMPLETE`, and reverted `REVERTED`
+states. Its exact teardown plan awaits approval and the test application remains
+present. No Nova dispatch is claimed; see PR [#495](https://github.com/Bepoadewale/davdeploy/pull/495).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
 monitor has 62 records and no active operations. A read-only 2026-11-25 AWS
