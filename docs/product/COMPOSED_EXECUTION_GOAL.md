@@ -14,7 +14,7 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512). PR #506 makes the
+`c6b069037516610bd57cca877dfb52af1dfc71a6` (PR #514). PR #506 makes the
 26-architecture / 30-root crosswalk machine-checkable without enabling runtime
 dispatch. PR #507 adds trusted usage assumptions and regional Fargate compute
 price lines for the bounded Batch job shape. Final-head CI passed all seven
@@ -41,20 +41,30 @@ per-address minimum. Its final-head checks passed in run
 [45680499414](https://github.com/Bepoadewale/davdeploy/actions/runs/45680499414);
 merged-main checks passed in run
 [45681334818](https://github.com/Bepoadewale/davdeploy/actions/runs/45681334818).
-Batch/ECR estimates remain incomplete and approval-ineligible while network
-paths, NAT/endpoints, egress, and other material costs remain unpriced. PRs
-#507 and #509–#512 changed no AWS workloads or hosted runtime.
-Draft PR #514 adds source-only regional price lines for same-region ECR API,
+Merged PR #514 adds source-only regional price lines for same-region ECR API,
 ECR Docker, and CloudWatch Logs interface endpoint hours and processed data,
 bound to trusted monthly usage and known same-plan subnet IDs/AZs. Exact
 S3/DynamoDB gateway endpoints have no endpoint charge; other interface service
 names, endpoint variants, and unmodeled network costs remain blockers. Focused
-pricing tests pass (156 tests), full local verification passes (1,956 tests),
-and all seven checks passed on final PR head `4112269` in run
+pricing tests passed (156 tests), full local verification passed (1,956 tests),
+and all seven checks passed on final PR head in run
 [45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719).
-The ticket/handoff status update is documentation-only; current-head checks
-remain the merge gate. No AWS resource, Terraform state/lock, hosted control
-plane, or customer workload was changed.
+Merged-main checks passed all seven in run
+[45697443528](https://github.com/Bepoadewale/davdeploy/actions/runs/45697443528).
+PR #515 is an open draft extending the generated-plan policy to those exact
+endpoint classes: interface endpoints are bound to same-plan private subnets
+and a Batch security-group HTTPS path, and gateway endpoints to the private
+route table. Focused policy and pricing tests pass (793 tests); full local verification
+passes (1,969 tests, one upstream deprecation warning). Documentation checks and
+`git diff --check` pass; final-head PR CI is pending. This package remains source-only. AWS inventory was read-only
+reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
+configuration, test role, and artifact bucket are absent; five tagged Batch
+test definitions are inactive and no matching Batch queues or compute
+environments exist. The retained SageMaker lineage action still has its
+association to the retained context. The Terraform monitor has zero active
+operations. No AWS resource, state/lock,
+hosted control plane, protected local file, or customer workload was changed.
+PRs #507 and #509–#512 also changed no AWS workloads or hosted runtime.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run

@@ -343,8 +343,79 @@ def vpc_topology_plan():
 
 def vpc_findings(resources, configuration):
     findings = []
-    _check_vpc_topology({**configuration, "resource_changes": []}, tuple(resources), findings)
+    _check_vpc_topology({**configuration, "resource_changes": []}, tuple(resources), findings, REGION)
     return findings
+
+
+def vpc_endpoint_case(endpoint_type="Interface", service="ecr.api"):
+    resources, configuration = vpc_topology_plan()
+    private_subnets = [item for item in resources if item["address"].startswith("aws_subnet.private[")]
+    for index, subnet in enumerate(private_subnets):
+        subnet["values"]["id"] = f"subnet-private-{index}"
+    private_table = next(item for item in resources if item["address"] == "aws_route_table.private")
+    private_table["values"]["id"] = "rtb-private"
+    endpoint_sg = resource(
+        "aws_security_group.endpoint",
+        "aws_security_group",
+        {"id": "sg-endpoint", "vpc_id": None, "ingress": [], "egress": []},
+    )
+    batch_sg = resource(
+        "aws_security_group.batch",
+        "aws_security_group",
+        {"id": "sg-batch", "vpc_id": None, "ingress": [], "egress": []},
+    )
+    compute = resource(
+        "aws_batch_compute_environment.jobs",
+        "aws_batch_compute_environment",
+        {"compute_resources": [{"security_group_ids": ["sg-batch"]}]},
+    )
+    ingress = resource(
+        "aws_vpc_security_group_ingress_rule.endpoint_https",
+        "aws_vpc_security_group_ingress_rule",
+        {
+            "security_group_id": "sg-endpoint",
+            "referenced_security_group_id": "sg-batch",
+            "ip_protocol": "tcp",
+            "from_port": 443,
+            "to_port": 443,
+            "cidr_ipv4": None,
+            "cidr_ipv6": None,
+            "prefix_list_id": None,
+        },
+    )
+    endpoint_values = {
+        "id": "vpce-test",
+        "vpc_id": None,
+        "vpc_endpoint_type": endpoint_type,
+        "service_name": f"com.amazonaws.{REGION}.{service}",
+        "policy": None,
+        "private_dns_enabled": endpoint_type == "Interface",
+        "ip_address_type": "ipv4",
+        "dns_options": [],
+        "subnet_ids": ["subnet-private-0", "subnet-private-1"] if endpoint_type == "Interface" else [],
+        "security_group_ids": ["sg-endpoint"] if endpoint_type == "Interface" else [],
+        "route_table_ids": ["rtb-private"] if endpoint_type == "Gateway" else [],
+    }
+    endpoint = resource("aws_vpc_endpoint.test", "aws_vpc_endpoint", endpoint_values)
+    resources.extend([endpoint_sg, batch_sg, compute, ingress, endpoint])
+    configuration["configuration"]["root_module"]["resources"].extend(
+        [
+            {"address": "aws_security_group.endpoint", "expressions": {"vpc_id": {"references": ["aws_vpc.this.id"]}}},
+            {"address": "aws_security_group.batch", "expressions": {"vpc_id": {"references": ["aws_vpc.this.id"]}}},
+            {"address": "aws_batch_compute_environment.jobs", "expressions": {"compute_resources": [{"security_group_ids": {"references": ["aws_security_group.batch.id"]}}]}},
+            {"address": "aws_vpc_security_group_ingress_rule.endpoint_https", "expressions": {
+                "security_group_id": {"references": ["aws_security_group.endpoint.id"]},
+                "referenced_security_group_id": {"references": ["aws_security_group.batch.id"]},
+            }},
+            {"address": "aws_vpc_endpoint.test", "expressions": {
+                "vpc_id": {"references": ["aws_vpc.this.id"]},
+                "subnet_ids": {"references": ["aws_subnet.private"]} if endpoint_type == "Interface" else {"constant_value": []},
+                "security_group_ids": {"references": ["aws_security_group.endpoint.id"]} if endpoint_type == "Interface" else {"constant_value": []},
+                "route_table_ids": {"references": ["aws_route_table.private.id"]} if endpoint_type == "Gateway" else {"constant_value": []},
+            }},
+        ]
+    )
+    return resources, configuration
 
 
 def test_vpc_plan_accepts_module_topology_and_reviews_nat_cost():
@@ -447,6 +518,89 @@ def test_vpc_plan_rejects_separate_route_resource():
     findings = vpc_findings(resources, configuration)
 
     assert "vpc_route_resource_unsupported" in {item.code for item in findings}
+
+
+@pytest.mark.parametrize("service", ["ecr.api", "ecr.dkr", "logs"])
+def test_vpc_plan_accepts_supported_interface_endpoint_on_private_subnets(service):
+    resources, configuration = vpc_endpoint_case(service=service)
+
+    findings = vpc_findings(resources, configuration)
+
+    assert [(item.code, item.severity) for item in findings] == [
+        ("vpc_nat_egress_cost_review", "review")
+    ]
+
+
+def test_vpc_plan_rejects_broad_interface_endpoint_security_group_ingress():
+    resources, configuration = vpc_endpoint_case()
+    ingress = next(item for item in resources if item["type"] == "aws_vpc_security_group_ingress_rule")
+    ingress["values"]["cidr_ipv4"] = "10.0.0.0/8"
+    ingress["values"]["referenced_security_group_id"] = None
+    ingress_config = next(
+        item for item in configuration["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_vpc_security_group_ingress_rule.endpoint_https"
+    )
+    ingress_config["expressions"]["referenced_security_group_id"] = {"constant_value": None}
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_interface_endpoint_ingress_invalid" in {item.code for item in findings}
+
+
+def test_vpc_plan_rejects_interface_ingress_from_unbound_security_group():
+    resources, configuration = vpc_endpoint_case()
+    ingress_config = next(
+        item for item in configuration["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_vpc_security_group_ingress_rule.endpoint_https"
+    )
+    ingress_config["expressions"]["referenced_security_group_id"]["references"] = [
+        "aws_security_group.endpoint.id"
+    ]
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_interface_endpoint_ingress_invalid" in {item.code for item in findings}
+
+
+@pytest.mark.parametrize(
+    ("service", "mutation", "finding"),
+    [
+        ("ec2", lambda endpoint, _: endpoint["values"].update(service_name=f"com.amazonaws.{REGION}.ec2"), "vpc_interface_endpoint_unsupported"),
+        ("ecr.api", lambda endpoint, _: endpoint["values"].update(service_name="com.amazonaws.eu-west-1.ecr.api"), "vpc_interface_endpoint_unsupported"),
+        ("ecr.api", lambda endpoint, config: endpoint["values"].update(private_dns_enabled=False), "vpc_interface_endpoint_configuration_invalid"),
+        ("ecr.api", lambda endpoint, config: endpoint["values"].update(ip_address_type="dualstack"), "vpc_interface_endpoint_configuration_invalid"),
+        ("ecr.api", lambda endpoint, config: config["configuration"]["root_module"]["resources"][-1]["expressions"]["subnet_ids"].update(references=["aws_subnet.public"]), "vpc_interface_endpoint_subnet_binding_invalid"),
+    ],
+)
+def test_vpc_plan_rejects_unsupported_or_unsafe_interface_endpoint(service, mutation, finding):
+    resources, configuration = vpc_endpoint_case(service=service)
+    endpoint = next(item for item in resources if item["type"] == "aws_vpc_endpoint")
+    mutation(endpoint, configuration)
+
+    findings = vpc_findings(resources, configuration)
+
+    assert finding in {item.code for item in findings}
+
+
+@pytest.mark.parametrize("service", ["s3", "dynamodb"])
+def test_vpc_plan_accepts_supported_gateway_endpoint_on_private_route_table(service):
+    resources, configuration = vpc_endpoint_case("Gateway", service)
+
+    findings = vpc_findings(resources, configuration)
+
+    assert [(item.code, item.severity) for item in findings] == [
+        ("vpc_nat_egress_cost_review", "review")
+    ]
+
+
+def test_vpc_plan_rejects_gateway_endpoint_on_public_route_table():
+    resources, configuration = vpc_endpoint_case("Gateway", "dynamodb")
+    endpoint_config = configuration["configuration"]["root_module"]["resources"][-1]
+    endpoint_config["expressions"]["route_table_ids"]["references"] = ["aws_route_table.public.id"]
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_gateway_endpoint_route_table_binding_invalid" in {item.code for item in findings}
 
 
 def test_vpc_plan_rejects_ipv6_route():
