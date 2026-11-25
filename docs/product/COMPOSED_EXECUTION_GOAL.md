@@ -14,7 +14,16 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`e7b697127691f8454e1f468a562338e6276957b4` (PR #501). The last
+`f0bc3b2d7effb59993b507f26d82c427a962619b` (PR #502). PR #502 adds
+assumption-bound NAT/network pricing and is merged after all seven checks
+passed on head `86b4b89` in run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+It is source-only and changes no AWS resources or hosted runtime. PR #503 adds
+source-only bounded Lambda function policy; refreshed head
+`fac74e40625bd97ef3afe3219b03b7cd4d7369a9` passed all seven checks in run
+[45581066045](https://github.com/Bepoadewale/davdeploy/actions/runs/45581066045),
+and automated review completed with no findings. It remains open, unmerged,
+and source-only. The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -32,13 +41,11 @@ packages do not change AWS workloads or the hosted runtime. PR #500's final
 head passed all seven checks in
 [run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
 
-Draft PR #502 adds source-only monthly pricing for bounded public NAT Gateway
+Merged PR #502 adds source-only monthly pricing for bounded public NAT Gateway
 hours, data processing, associated public IPv4, declared internet egress, and
-cross-AZ transfer. Its focused pricing and revision-lifecycle tests pass
-locally, and all seven checks passed on PR head `4acd7d9` in CI run
-[45561355561](https://github.com/Bepoadewale/davdeploy/actions/runs/45561355561).
-The PR remains draft/unmerged. It changes no AWS resource, hosted state, or
-runtime.
+cross-AZ transfer. All seven checks passed on final PR head `86b4b89` in CI
+run [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+The PR changes no AWS resource, hosted state, or runtime.
 
 PR #486 remains open at head
 `bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in

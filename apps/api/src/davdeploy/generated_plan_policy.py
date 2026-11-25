@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import ipaddress
 import json
 import re
@@ -48,8 +50,38 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-25.7"
+POLICY_VERSION = "nova-generated-plan-2026-11-25.8"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
+LAMBDA_SUPPORTED_RUNTIME_IDS = frozenset(
+    {
+        "nodejs22.x",
+        "nodejs24.x",
+        "python3.11",
+        "python3.12",
+        "python3.13",
+        "python3.14",
+        "java8.al2023",
+        "java11.al2023",
+        "java17.al2023",
+        "java21",
+        "java25",
+        "dotnet10",
+        "ruby3.3",
+        "ruby3.4",
+        "ruby4.0",
+        "provided.al2023",
+    }
+)
+LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS = (
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "TOKEN",
+    "CREDENTIAL",
+    "PRIVATEKEY",
+    "APIKEY",
+    "ACCESSKEY",
+)
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
     "secretsmanager:BatchGetSecretValue",
@@ -100,7 +132,28 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("redrive_policy",),
         ("redrive_allow_policy",),
     ),
-    "aws_lambda_function": (("timeout",),),
+    "aws_lambda_function": (
+        ("function_name",),
+        ("runtime",),
+        ("role",),
+        ("handler",),
+        ("package_type",),
+        ("source_code_hash",),
+        ("architectures",),
+        ("memory_size",),
+        ("timeout",),
+        ("ephemeral_storage",),
+        ("snap_start",),
+        ("vpc_config",),
+        ("reserved_concurrent_executions",),
+        ("environment",),
+        ("layers",),
+        ("tracing_config",),
+        ("dead_letter_config",),
+        ("file_system_config",),
+        ("code_signing_config_arn",),
+        ("kms_key_arn",),
+    ),
     "aws_lambda_permission": (
         ("action",),
         ("function_name",),
@@ -372,6 +425,9 @@ def _evaluate(
         document, resources, findings, expected_account_id, expected_region
     )
     _check_step_functions_role_scope(
+        document, resources, findings, expected_account_id, expected_region
+    )
+    _check_lambda_functions(
         document, resources, findings, expected_account_id, expected_region
     )
     _check_lambda_permissions(resources, findings)
@@ -6373,6 +6429,396 @@ def _sqs_lambda_role_grants_queue(
                 continue
             granted.update(sqs_actions)
     return required_actions <= granted
+
+
+def _check_lambda_functions(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    """Bound the ZIP Lambda configuration priced by the generated-plan evaluator."""
+    changes = document.get("resource_changes", [])
+    change_by_address = {
+        item.get("address"): item
+        for item in changes
+        if isinstance(item, dict) and isinstance(item.get("address"), str)
+    } if isinstance(changes, list) else {}
+    planned_roles = [
+        item
+        for item in resources
+        if item.get("type") == "aws_iam_role" and isinstance(item.get("values"), dict)
+    ]
+
+    required_fields = (
+        "function_name",
+        "runtime",
+        "role",
+        "handler",
+        "package_type",
+        "filename",
+        "source_code_hash",
+        "architectures",
+        "memory_size",
+        "timeout",
+        "ephemeral_storage",
+        "snap_start",
+        "vpc_config",
+        "reserved_concurrent_executions",
+        "environment",
+        "layers",
+        "tracing_config",
+        "dead_letter_config",
+        "file_system_config",
+        "code_signing_config_arn",
+        "kms_key_arn",
+    )
+    for item in resources:
+        if item.get("type") != "aws_lambda_function":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        change_item = change_by_address.get(address)
+        change = change_item.get("change") if isinstance(change_item, dict) else None
+        after = change.get("after") if isinstance(change, dict) else None
+        after_unknown = change.get("after_unknown") if isinstance(change, dict) else None
+        if (
+            not isinstance(address, str)
+            or not isinstance(values, dict)
+            or not isinstance(after, dict)
+            or not isinstance(after_unknown, dict)
+            or not _valid_unknown_tree(after_unknown)
+            or any(
+                field not in values
+                or field not in after
+                or values[field] != after[field]
+                or _path_contains_unknown(after_unknown, (field,))
+                for field in required_fields
+            )
+        ):
+            _deny(
+                findings,
+                "lambda_configuration_unknown",
+                address,
+                "The Lambda plan is missing known, integrity-matched configuration values required by the safety policy.",
+            )
+            continue
+
+        function_name = values.get("function_name")
+        if not isinstance(function_name, str) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,64}", function_name
+        ):
+            _deny(
+                findings,
+                "lambda_function_identity_invalid",
+                address,
+                "The Lambda function name must be known and use the supported AWS identifier format.",
+            )
+
+        runtime = values.get("runtime")
+        if not isinstance(runtime, str) or runtime not in LAMBDA_SUPPORTED_RUNTIME_IDS:
+            _deny(
+                findings,
+                "lambda_runtime_unsupported",
+                address,
+                "The Lambda runtime is missing, deprecated, or outside the reviewed managed-runtime set.",
+            )
+
+        handler = values.get("handler")
+        if not isinstance(handler, str) or not handler or len(handler) > 128 or any(
+            ord(char) < 32 for char in handler
+        ):
+            _deny(
+                findings,
+                "lambda_handler_invalid",
+                address,
+                "ZIP Lambda functions require a known, bounded handler string.",
+            )
+
+        if values.get("package_type") != "Zip" or values.get("image_uri") not in (None, ""):
+            _deny(
+                findings,
+                "lambda_package_type_unsupported",
+                address,
+                "Only ZIP-packaged Lambda functions are covered by this policy.",
+            )
+        filename = values.get("filename")
+        if not isinstance(filename, str) or not filename.strip():
+            _deny(
+                findings,
+                "lambda_artifact_source_unknown",
+                address,
+                "The ZIP artifact must come from a known local file input.",
+            )
+        if any(values.get(field) not in (None, "") for field in ("s3_bucket", "s3_key", "s3_object_version")):
+            _deny(
+                findings,
+                "lambda_artifact_source_unsupported",
+                address,
+                "S3-hosted Lambda artifacts are not covered by this source-bound ZIP policy.",
+            )
+        source_code_hash = values.get("source_code_hash")
+        try:
+            decoded_hash = base64.b64decode(source_code_hash, validate=True)
+        except (binascii.Error, TypeError, ValueError):
+            decoded_hash = b""
+        if len(decoded_hash) != 32:
+            _deny(
+                findings,
+                "lambda_source_hash_invalid",
+                address,
+                "The Lambda ZIP artifact must have a known SHA-256 source-code hash.",
+            )
+
+        role_arn = values.get("role")
+        if not _aws_arn_matches(role_arn, "iam", "", expected_account_id, "role/"):
+            _deny(
+                findings,
+                "lambda_execution_role_scope_invalid",
+                address,
+                "The Lambda execution role must be a known role in the trusted AWS account.",
+            )
+        else:
+            roles = [
+                role
+                for role in planned_roles
+                if role["values"].get("arn") == role_arn
+            ]
+            if len(roles) > 1:
+                _deny(
+                    findings,
+                    "lambda_execution_role_ambiguous",
+                    address,
+                    "More than one planned IAM role has the Lambda execution-role ARN.",
+                )
+            elif roles:
+                trust = _json_document(
+                    roles[0]["values"].get("assume_role_policy"),
+                    findings,
+                    roles[0].get("address"),
+                )
+                if trust is None or not _lambda_execution_role_trust_is_exact(trust):
+                    _deny(
+                        findings,
+                        "lambda_execution_role_trust_invalid",
+                        roles[0].get("address"),
+                        "A planned Lambda execution role must trust only the Lambda service.",
+                    )
+            else:
+                _review(
+                    findings,
+                    "lambda_execution_role_permissions_unverified",
+                    address,
+                    "The same-account execution role is external to this plan; its effective permissions require independent review.",
+                )
+
+        architectures = values.get("architectures")
+        if (
+            not isinstance(architectures, list)
+            or len(architectures) != 1
+            or not isinstance(architectures[0], str)
+            or architectures[0] not in {"x86_64", "arm64"}
+        ):
+            _deny(
+                findings,
+                "lambda_architecture_unsupported",
+                address,
+                "A Lambda function must use exactly one supported CPU architecture.",
+            )
+
+        memory = _integer(values.get("memory_size"))
+        if memory is None or not 128 <= memory <= 10_240:
+            _deny(
+                findings,
+                "lambda_memory_out_of_bounds",
+                address,
+                "Lambda memory must be known and between 128 and 10,240 MB.",
+            )
+        timeout = _integer(values.get("timeout"))
+        if timeout is None or not 1 <= timeout <= 900:
+            _deny(
+                findings,
+                "lambda_timeout_out_of_bounds",
+                address,
+                "Lambda timeout must be known and between 1 and 900 seconds, matching the supported cost model.",
+            )
+
+        ephemeral = _single_nested_plan_block(values.get("ephemeral_storage"))
+        if not isinstance(ephemeral, dict) or ephemeral.get("size") != 512:
+            _deny(
+                findings,
+                "lambda_ephemeral_storage_unsupported",
+                address,
+                "Only the default 512 MB Lambda ephemeral-storage size is covered.",
+            )
+
+        if values.get("snap_start") not in (None, [], {}, {"apply_on": "None"}, [{"apply_on": "None"}]):
+            _deny(
+                findings,
+                "lambda_snap_start_unsupported",
+                address,
+                "Lambda SnapStart is outside the supported artifact and cost profile.",
+            )
+
+        raw_vpc_config = values.get("vpc_config")
+        vpc_config = _single_nested_plan_block(raw_vpc_config)
+        if raw_vpc_config not in (None, [], {}) and (
+            not isinstance(vpc_config, dict)
+            or vpc_config.get("subnet_ids") not in (None, [])
+            or vpc_config.get("security_group_ids") not in (None, [])
+            or vpc_config.get("ipv6_allowed_for_dual_stack") not in (None, False)
+        ):
+            _deny(
+                findings,
+                "lambda_vpc_attachment_unsupported",
+                address,
+                "VPC-attached Lambda networking is outside the current policy and cost evidence.",
+            )
+        if values.get("reserved_concurrent_executions") not in (None, -1):
+            _deny(
+                findings,
+                "lambda_reserved_concurrency_unsupported",
+                address,
+                "Reserved Lambda concurrency is outside the current execution and pricing profile.",
+            )
+        if values.get("layers") not in (None, []):
+            _deny(
+                findings,
+                "lambda_layers_unsupported",
+                address,
+                "Lambda layers are not covered by the reviewed artifact-provenance policy.",
+            )
+        if values.get("tracing_config") not in (
+            None,
+            [],
+            {"mode": "PassThrough"},
+            [{"mode": "PassThrough"}],
+        ):
+            _deny(
+                findings,
+                "lambda_tracing_unsupported",
+                address,
+                "Active Lambda tracing is outside the current cost and evidence profile.",
+            )
+        if values.get("dead_letter_config") not in (None, [], {}):
+            _deny(
+                findings,
+                "lambda_dead_letter_config_unsupported",
+                address,
+                "Lambda dead-letter configuration is not covered by this plan's delivery and cost policy.",
+            )
+        if values.get("file_system_config") not in (None, [], {}):
+            _deny(
+                findings,
+                "lambda_file_system_config_unsupported",
+                address,
+                "Lambda file-system attachment is outside the current network and storage policy.",
+            )
+        if values.get("code_signing_config_arn") not in (None, ""):
+            _deny(
+                findings,
+                "lambda_code_signing_unsupported",
+                address,
+                "Lambda code-signing configurations are not yet bound to this artifact evidence.",
+            )
+        if values.get("kms_key_arn") not in (None, ""):
+            _deny(
+                findings,
+                "lambda_customer_kms_key_unpriced",
+                address,
+                "Customer-managed Lambda environment encryption keys are outside the current price evidence.",
+            )
+
+        raw_environment = values.get("environment")
+        environment = _single_nested_plan_block(raw_environment)
+        variables = environment.get("variables", {}) if isinstance(environment, dict) else {}
+        if raw_environment not in (None, [], {}) and not isinstance(environment, dict):
+            _deny(
+                findings,
+                "lambda_environment_unknown",
+                address,
+                "Lambda environment configuration must be absent or one known variables block.",
+            )
+        elif not isinstance(variables, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in variables.items()
+        ):
+            _deny(
+                findings,
+                "lambda_environment_unknown",
+                address,
+                "Lambda environment variables must be known string key/value pairs.",
+            )
+        elif sum(len(key.encode("utf-8")) + len(value.encode("utf-8")) for key, value in variables.items()) > 4096:
+            _deny(
+                findings,
+                "lambda_environment_too_large",
+                address,
+                "Lambda environment variables exceed AWS's aggregate 4 KB limit.",
+            )
+        elif any(
+            _lambda_environment_key_is_secret_like(key)
+            and not _lambda_environment_secret_arn_is_scoped(
+                key, value, expected_account_id, expected_region
+            )
+            for key, value in variables.items()
+        ):
+            _deny(
+                findings,
+                "lambda_environment_secret_key_denied",
+                address,
+                "Secret-like Lambda environment variable names are denied; use a managed secret reference.",
+            )
+
+
+def _lambda_environment_key_is_secret_like(key: str) -> bool:
+    normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key)
+    tokens = re.findall(r"[A-Za-z0-9]+", normalized)
+    compact_key = re.sub(r"[^A-Z0-9]", "", key.upper())
+    return any(marker in compact_key for marker in LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS) or any(
+        marker in token.upper()
+        for token in tokens
+        for marker in LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS
+    )
+
+
+def _lambda_environment_secret_arn_is_scoped(
+    key: str, value: Any, expected_account_id: str, expected_region: str
+) -> bool:
+    if not key.endswith("_SECRET_ARN"):
+        return False
+    parts = value.split(":", maxsplit=5) if isinstance(value, str) else []
+    return (
+        len(parts) == 6
+        and parts[0] == "arn"
+        and parts[1] == "aws"
+        and parts[2] == "secretsmanager"
+        and parts[3] == expected_region
+        and parts[4] == expected_account_id
+        and parts[5].startswith("secret:")
+        and len(parts[5]) > len("secret:")
+    )
+
+
+def _lambda_execution_role_trust_is_exact(policy: dict[str, Any]) -> bool:
+    statements = _statements(policy, require_principal=True)
+    allows = [
+        statement
+        for statement in statements
+        if str(statement.get("Effect", "")).lower() == "allow"
+    ]
+    return bool(allows) and all(
+        {action.lower() for action in _string_list(statement.get("Action"))}
+        == {"sts:assumerole"}
+        and isinstance(statement.get("Principal"), dict)
+        and set(statement["Principal"]) == {"Service"}
+        and set(_string_list(statement["Principal"].get("Service")))
+        == {"lambda.amazonaws.com"}
+        and not statement.get("Condition")
+        and "NotPrincipal" not in statement
+        for statement in allows
+    )
 
 
 def _check_lambda_permissions(
