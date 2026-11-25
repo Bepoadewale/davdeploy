@@ -661,6 +661,40 @@
         "title": "DynamoDbTablePricingUsageAssumptions",
         "type": "object"
       },
+      "EcrPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Usage bounds keyed by exact planned private ECR repository address.",
+        "properties": {
+          "repositories": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/EcrRepositoryStoragePricingUsageAssumptions"
+            },
+            "maxProperties": 20,
+            "minProperties": 1,
+            "title": "Repositories",
+            "type": "object"
+          }
+        },
+        "required": [
+          "repositories"
+        ],
+        "title": "EcrPricingUsageAssumptions",
+        "type": "object"
+      },
+      "EcrRepositoryStoragePricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Customer-declared monthly standard-tier storage for one ECR repository.",
+        "properties": {
+          "monthly_stored_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          }
+        },
+        "required": [
+          "monthly_stored_gb"
+        ],
+        "title": "EcrRepositoryStoragePricingUsageAssumptions",
+        "type": "object"
+      },
       "EnvironmentName": {
         "enum": [
           "staging",
@@ -807,6 +841,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/DynamoDbPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ecr_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EcrPricingUsageAssumptions"
               },
               {
                 "type": "null"

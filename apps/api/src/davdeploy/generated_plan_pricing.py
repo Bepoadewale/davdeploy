@@ -13,7 +13,7 @@ import json
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from enum import StrEnum
@@ -26,6 +26,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from davdeploy.domain import (
     BatchPricingUsageAssumptions,
     DynamoDbPricingUsageAssumptions,
+    EcrPricingUsageAssumptions,
     RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
     ServerlessPricingUsageAssumptions,
@@ -112,6 +113,7 @@ class GeneratedPlanPricingEvidence:
     dynamodb_usage_assumptions: dict[str, Any] | None
     vpc_usage_assumptions: dict[str, Any] | None
     batch_usage_assumptions: dict[str, Any] | None
+    ecr_usage_assumptions: dict[str, Any] | None
     lines: tuple[PlanCostLine, ...]
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
@@ -143,12 +145,13 @@ class GeneratedPlanPricingEvidence:
             "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "vpc_usage_assumptions": self.vpc_usage_assumptions,
             "batch_usage_assumptions": self.batch_usage_assumptions,
+            "ecr_usage_assumptions": self.ecr_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 9,
+            "version": 10,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -174,6 +177,7 @@ class GeneratedPlanPricingEvidence:
             "dynamodb_usage_assumptions": self.dynamodb_usage_assumptions,
             "vpc_usage_assumptions": self.vpc_usage_assumptions,
             "batch_usage_assumptions": self.batch_usage_assumptions,
+            "ecr_usage_assumptions": self.ecr_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -227,17 +231,20 @@ class GeneratedPlanPricingEvidence:
             "usage_assumptions", "sqs_usage_assumptions", "rds_usage_assumptions",
             "serverless_usage_assumptions", "dynamodb_usage_assumptions",
             "vpc_usage_assumptions", "batch_usage_assumptions",
+            "ecr_usage_assumptions",
             "lines", "transitions", "findings", "evidence_sha256",
         }
         version = document.get("version")
-        version_8_fields = expected_fields - {"batch_usage_assumptions"}
+        version_9_fields = expected_fields - {"ecr_usage_assumptions"}
+        version_8_fields = version_9_fields - {"batch_usage_assumptions"}
         version_7_fields = version_8_fields - {"vpc_usage_assumptions"}
         version_6_fields = version_7_fields - {"dynamodb_usage_assumptions"}
         version_5_fields = version_6_fields - {"serverless_usage_assumptions"}
         version_4_fields = version_5_fields - {"rds_usage_assumptions"}
         legacy_fields = version_4_fields - {"sqs_usage_assumptions"}
         valid_shape = (
-            version == 9 and set(document) == expected_fields
+            version == 10 and set(document) == expected_fields
+            or version == 9 and set(document) == version_9_fields
             or version == 8 and set(document) == version_8_fields
             or version == 7 and set(document) == version_7_fields
             or version == 6 and set(document) == version_6_fields
@@ -309,6 +316,16 @@ class GeneratedPlanPricingEvidence:
             )
             if batch_usage != raw_batch_usage:
                 raise ValueError("non-canonical Batch usage assumptions")
+            raw_ecr_usage = document.get("ecr_usage_assumptions")
+            ecr_usage = (
+                None
+                if raw_ecr_usage is None
+                else EcrPricingUsageAssumptions.model_validate(raw_ecr_usage).model_dump(
+                    mode="json"
+                )
+            )
+            if ecr_usage != raw_ecr_usage:
+                raise ValueError("non-canonical ECR usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -344,6 +361,7 @@ class GeneratedPlanPricingEvidence:
                 dynamodb_usage_assumptions=dynamodb_usage,
                 vpc_usage_assumptions=vpc_usage,
                 batch_usage_assumptions=batch_usage,
+                ecr_usage_assumptions=ecr_usage,
                 lines=lines,
                 transitions=transitions,
                 findings=findings,
@@ -351,8 +369,12 @@ class GeneratedPlanPricingEvidence:
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 9 and result.as_manifest_document() != document:
+        if document.get("version") == 10 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
+        if document.get("version") != 10:
+            normalized = result.as_manifest_document()
+            normalized.pop("evidence_sha256")
+            result = replace(result, evidence_sha256=_canonical_digest(normalized))
         return result
 
 
@@ -392,6 +414,7 @@ class TrustedPlanPricingContext:
     dynamodb_usage_assumptions: dict[str, Any] | None = None
     vpc_usage_assumptions: dict[str, Any] | None = None
     batch_usage_assumptions: dict[str, Any] | None = None
+    ecr_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -408,6 +431,7 @@ class TrustedPlanPricingContext:
             self.dynamodb_usage_assumptions,
             self.vpc_usage_assumptions,
             self.batch_usage_assumptions,
+            self.ecr_usage_assumptions,
         )
 
     @classmethod
@@ -467,6 +491,11 @@ class TrustedPlanPricingContext:
         )
         raw_batch_usage_assumptions = (
             workload_spec.get("batch_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
+        raw_ecr_usage_assumptions = (
+            workload_spec.get("ecr_pricing_usage_assumptions")
             if isinstance(workload_spec, dict)
             else None
         )
@@ -545,6 +574,15 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json", exclude_none=True)
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid Batch pricing usage assumptions") from None
+        if raw_ecr_usage_assumptions is None:
+            ecr_usage_assumptions = None
+        else:
+            try:
+                ecr_usage_assumptions = EcrPricingUsageAssumptions.model_validate(
+                    raw_ecr_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid ECR pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -557,6 +595,7 @@ class TrustedPlanPricingContext:
             dynamodb_usage_assumptions=dynamodb_usage_assumptions,
             vpc_usage_assumptions=vpc_usage_assumptions,
             batch_usage_assumptions=batch_usage_assumptions,
+            ecr_usage_assumptions=ecr_usage_assumptions,
         )
 
 
@@ -907,11 +946,11 @@ class AwsPriceListCatalog:
             "GB-Mo",
         )
 
-    def ecr_private_storage_rate(self, region: str) -> CatalogRate:
+    def ecr_standard_storage_rate(self, region: str) -> CatalogRate:
         return self._regional_rate(
             "AmazonECR",
             region,
-            "ecr-private-repository-storage",
+            "ecr-standard-storage",
             [
                 ("productFamily", "EC2 Container Registry"),
                 ("storageType", "S3"),
@@ -1233,6 +1272,7 @@ def evaluate_generated_plan_pricing(
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -1264,6 +1304,7 @@ def evaluate_generated_plan_pricing(
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -1291,6 +1332,7 @@ def evaluate_generated_plan_pricing(
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -1321,6 +1363,7 @@ def evaluate_generated_plan_pricing(
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -1345,6 +1388,7 @@ def evaluate_generated_plan_pricing(
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -1365,6 +1409,7 @@ def evaluate_generated_plan_pricing(
     lambda_functions: list[dict[str, Any]] = []
     http_apis: list[dict[str, Any]] = []
     lambda_log_groups: list[dict[str, Any]] = []
+    ecr_repositories: list[dict[str, Any]] = []
     for resource in resources:
         address = resource["address"]
         resource_type = resource["type"]
@@ -1400,6 +1445,9 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_cloudwatch_log_group":
             lambda_log_groups.append(resource)
+            continue
+        if resource_type == "aws_ecr_repository":
+            ecr_repositories.append(resource)
             continue
         if resource_type == "aws_apigatewayv2_api":
             http_apis.append(resource)
@@ -1475,6 +1523,96 @@ def evaluate_generated_plan_pricing(
                 catalog_effective_at=rate.effective_at,
             )
         )
+
+    ecr_usage_document = trusted_context.ecr_usage_assumptions
+    if ecr_repositories:
+        findings.append(PlanPricingFinding(
+            "ecr_supporting_costs_unpriced", None,
+            "ECR standard storage is priced when bounded; archive retrieval, cross-region or internet transfer, image signing, replication, and other linked usage remain unpriced.",
+        ))
+        if ecr_usage_document is None:
+            findings.append(PlanPricingFinding(
+                "ecr_storage_assumptions_missing", ecr_repositories[0]["address"],
+                "Monthly stored image GB-month bounds are required for each planned private ECR repository.",
+            ))
+        else:
+            try:
+                ecr_usage = EcrPricingUsageAssumptions.model_validate(
+                    ecr_usage_document
+                )
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "ecr_storage_assumptions_invalid", ecr_repositories[0]["address"],
+                    "Persisted ECR storage usage assumptions are invalid.",
+                ))
+            else:
+                expected_repositories = {item["address"] for item in ecr_repositories}
+                if set(ecr_usage.repositories) != expected_repositories:
+                    findings.append(PlanPricingFinding(
+                        "ecr_storage_resource_mismatch", ecr_repositories[0]["address"],
+                        "Storage bounds must cover every planned ECR repository exactly once.",
+                    ))
+                else:
+                    for repository in ecr_repositories:
+                        address = repository["address"]
+                        values = repository["values"]
+                        encryption = values.get("encryption_configuration")
+                        if (
+                            not isinstance(encryption, list)
+                            or len(encryption) != 1
+                            or not isinstance(encryption[0], dict)
+                            or encryption[0].get("encryption_type") != "AES256"
+                            or encryption[0].get("kms_key") not in (None, "")
+                        ):
+                            findings.append(PlanPricingFinding(
+                                "ecr_storage_shape_unsupported", address,
+                                "ECR pricing currently supports the standard private repository with AES256 encryption; customer KMS and unknown encryption settings are unsupported.",
+                            ))
+                            continue
+                        usage = ecr_usage.repositories[address].monthly_stored_gb
+                        try:
+                            if pricing_catalog is None:
+                                pricing_catalog = AwsPriceListCatalog()
+                            rate = pricing_catalog.ecr_standard_storage_rate(region)
+                        except PriceListUnavailableError:
+                            unavailable = True
+                            findings.append(PlanPricingFinding(
+                                "regional_price_lookup_unavailable", address,
+                                "DavDeploy could not verify current regional Amazon ECR storage prices.",
+                            ))
+                        except PlanPricingError:
+                            findings.append(PlanPricingFinding(
+                                "regional_price_ambiguous", address,
+                                "DavDeploy could not identify the exact regional Amazon ECR standard-storage price.",
+                            ))
+                        else:
+                            low_rate = Decimal(rate.low_unit_price_usd or rate.unit_price_usd)
+                            lines.append(PlanCostLine(
+                                address=address,
+                                resource_type="aws_ecr_repository",
+                                description="Amazon ECR standard image storage",
+                                quantity=usage.minimum,
+                                quantity_max=usage.maximum,
+                                unit="GB-Mo",
+                                unit_price_usd=rate.unit_price_usd,
+                                monthly_cost_minor=int((
+                                    low_rate * usage.minimum * 100
+                                ).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                                monthly_cost_max_minor=int((
+                                    Decimal(rate.unit_price_usd) * usage.maximum * 100
+                                ).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                                catalog_sku=rate.sku,
+                                catalog_product_sha256=rate.product_digest,
+                                catalog_published_at=rate.published_at,
+                                catalog_effective_at=rate.effective_at,
+                                unit_price_low_usd=format(low_rate, "f"),
+                                low_cost_quantity=usage.minimum,
+                            ))
+    elif ecr_usage_document is not None:
+        findings.append(PlanPricingFinding(
+            "ecr_storage_assumptions_stale", None,
+            "ECR storage usage assumptions do not match any ECR repository in this plan.",
+        ))
 
     batch_jobs = [
         item for item in resources if item["type"] == "aws_batch_job_definition"
@@ -1643,111 +1781,6 @@ def evaluate_generated_plan_pricing(
                             ))
                         else:
                             usage = batch_usage.jobs[job["address"]]
-                            image_url = _batch_private_ecr_image_url(
-                                properties.get("image"), region
-                            )
-                            if image_url is None:
-                                findings.append(PlanPricingFinding(
-                                    "batch_image_cost_unpriced",
-                                    job["address"],
-                                    "Batch image storage is priced only for a digest-pinned same-region private ECR image bound to a planned repository.",
-                                ))
-                            elif usage.ecr_image is None:
-                                findings.append(PlanPricingFinding(
-                                    "batch_image_usage_assumptions_missing",
-                                    job["address"],
-                                    "A bounded monthly storage assumption for the exact Batch image repository is required.",
-                                ))
-                            else:
-                                repositories = [
-                                    item for item in resources
-                                    if item["type"] == "aws_ecr_repository"
-                                    and item["values"].get("repository_url") == image_url
-                                ]
-                                if len(repositories) != 1:
-                                    findings.append(PlanPricingFinding(
-                                        "batch_image_repository_mismatch",
-                                        job["address"],
-                                        "The Batch image must match exactly one known same-plan ECR repository URL.",
-                                    ))
-                                else:
-                                    repository = repositories[0]
-                                    repository_change = changes.get(repository["address"])
-                                    after = (
-                                        repository_change.get("change", {}).get("after")
-                                        if isinstance(repository_change, dict)
-                                        else None
-                                    )
-                                    after_unknown = (
-                                        repository_change.get("change", {}).get("after_unknown")
-                                        if isinstance(repository_change, dict)
-                                        else None
-                                    )
-                                    if (
-                                        not isinstance(after, dict)
-                                        or not isinstance(after_unknown, dict)
-                                        or not _valid_unknown_tree(after_unknown)
-                                        or after.get("repository_url") != image_url
-                                        or repository["values"].get("repository_url") != image_url
-                                        or _path_contains_unknown(after_unknown, ("repository_url",))
-                                    ):
-                                        findings.append(PlanPricingFinding(
-                                            "batch_image_repository_unknown",
-                                            repository["address"],
-                                            "The same-plan ECR repository URL must be known in the reviewed plan.",
-                                        ))
-                                    elif usage.ecr_image.monthly_repository_storage_gb_month.maximum == 0:
-                                        findings.append(PlanPricingFinding(
-                                            "batch_image_usage_assumptions_unbounded",
-                                            repository["address"],
-                                            "A nonzero upper bound for retained ECR repository storage is required.",
-                                        ))
-                                    else:
-                                        try:
-                                            if pricing_catalog is None:
-                                                pricing_catalog = AwsPriceListCatalog()
-                                            image_storage_rate = pricing_catalog.ecr_private_storage_rate(region)
-                                        except PriceListUnavailableError:
-                                            unavailable = True
-                                            findings.append(PlanPricingFinding(
-                                                "regional_price_lookup_unavailable",
-                                                repository["address"],
-                                                "DavDeploy could not verify current regional private ECR storage prices.",
-                                            ))
-                                        except PlanPricingError:
-                                            findings.append(PlanPricingFinding(
-                                                "regional_price_ambiguous",
-                                                repository["address"],
-                                                "DavDeploy could not identify an exact regional private ECR storage price.",
-                                            ))
-                                        else:
-                                            amount = usage.ecr_image.monthly_repository_storage_gb_month
-                                            low_rate = Decimal(
-                                                image_storage_rate.low_unit_price_usd
-                                                or image_storage_rate.unit_price_usd
-                                            )
-                                            lines.append(PlanCostLine(
-                                                address=repository["address"],
-                                                resource_type="aws_ecr_repository",
-                                                description="Amazon ECR private repository storage for the Batch image",
-                                                quantity=amount.minimum,
-                                                quantity_max=amount.maximum,
-                                                unit="GB-Mo",
-                                                unit_price_usd=image_storage_rate.unit_price_usd,
-                                                monthly_cost_minor=int((
-                                                    low_rate * amount.minimum * 100
-                                                ).quantize(Decimal(1), rounding=ROUND_FLOOR)),
-                                                monthly_cost_max_minor=int((
-                                                    Decimal(image_storage_rate.unit_price_usd)
-                                                    * amount.maximum * 100
-                                                ).quantize(Decimal(1), rounding=ROUND_CEILING)),
-                                                catalog_sku=image_storage_rate.sku,
-                                                catalog_product_sha256=image_storage_rate.product_digest,
-                                                catalog_published_at=image_storage_rate.published_at,
-                                                catalog_effective_at=image_storage_rate.effective_at,
-                                                unit_price_low_usd=format(low_rate, "f"),
-                                                low_cost_quantity=amount.minimum,
-                                            ))
                             lower_seconds = max(60, usage.average_billed_runtime_seconds.minimum)
                             upper_seconds = max(60, usage.average_billed_runtime_seconds.maximum)
                             quantities = (
@@ -3050,6 +3083,7 @@ def evaluate_generated_plan_pricing(
             dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
         transitions=transitions,
     )
 
@@ -3104,6 +3138,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "dynamodb_usage_assumptions": document.get("dynamodb_usage_assumptions"),
         "vpc_usage_assumptions": document.get("vpc_usage_assumptions"),
         "batch_usage_assumptions": document.get("batch_usage_assumptions"),
+        "ecr_usage_assumptions": document.get("ecr_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -3133,6 +3168,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("dynamodb_usage_assumptions") != trusted_context.dynamodb_usage_assumptions
         or document.get("vpc_usage_assumptions") != trusted_context.vpc_usage_assumptions
         or document.get("batch_usage_assumptions") != trusted_context.batch_usage_assumptions
+        or document.get("ecr_usage_assumptions") != trusted_context.ecr_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -3791,21 +3827,6 @@ def _batch_awslogs_group_name(
     ):
         return None, "unsupported_options"
     return group_name, None
-
-
-def _batch_private_ecr_image_url(image: Any, region: str) -> str | None:
-    """Accept only a digest-pinned private ECR image in the plan's region."""
-    if not isinstance(image, str):
-        return None
-    match = re.fullmatch(
-        r"(?P<registry>\d{12}\.dkr\.ecr\.(?P<region>[a-z0-9-]+)\.amazonaws\.com)"
-        r"/(?P<repository>[a-z0-9]+(?:[._/-][a-z0-9]+)*)"
-        r"@sha256:[a-f0-9]{64}",
-        image,
-    )
-    if match is None or match.group("region") != region:
-        return None
-    return f"{match.group('registry')}/{match.group('repository')}"
 
 
 def _validate_lambda_log_group(
@@ -4597,6 +4618,7 @@ def _evidence(
     dynamodb_usage_assumptions: dict[str, Any] | None = None,
     vpc_usage_assumptions: dict[str, Any] | None = None,
     batch_usage_assumptions: dict[str, Any] | None = None,
+    ecr_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -4617,10 +4639,10 @@ def _evidence(
         region, currency, budget, persisted_context_sha256, usage_assumptions,
         sqs_usage_assumptions, rds_usage_assumptions, serverless_usage_assumptions,
         dynamodb_usage_assumptions, vpc_usage_assumptions,
-        batch_usage_assumptions,
+        batch_usage_assumptions, ecr_usage_assumptions,
     )
     payload = {
-        "version": 9,
+        "version": 10,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -4650,6 +4672,7 @@ def _evidence(
         "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
         "vpc_usage_assumptions": vpc_usage_assumptions,
         "batch_usage_assumptions": batch_usage_assumptions,
+        "ecr_usage_assumptions": ecr_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -4713,6 +4736,7 @@ def _evidence(
         dynamodb_usage_assumptions=dynamodb_usage_assumptions,
         vpc_usage_assumptions=vpc_usage_assumptions,
         batch_usage_assumptions=batch_usage_assumptions,
+        ecr_usage_assumptions=ecr_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -4744,10 +4768,11 @@ def _pricing_context_digest(
     dynamodb_usage_assumptions: dict[str, Any] | None = None,
     vpc_usage_assumptions: dict[str, Any] | None = None,
     batch_usage_assumptions: dict[str, Any] | None = None,
+    ecr_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
     return _canonical_digest(
         {
-            "version": 8,
+            "version": 9,
             "region": region,
             "currency": currency,
             "monthly_budget_minor": monthly_budget_minor,
@@ -4759,5 +4784,6 @@ def _pricing_context_digest(
             "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
             "vpc_usage_assumptions": vpc_usage_assumptions,
             "batch_usage_assumptions": batch_usage_assumptions,
+            "ecr_usage_assumptions": ecr_usage_assumptions,
         }
     )

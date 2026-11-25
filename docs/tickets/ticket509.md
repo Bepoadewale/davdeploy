@@ -1,6 +1,6 @@
 # ticket509 — price explicit Batch CloudWatch Logs usage
 
-PR: [#509 — feat: price bounded Batch CloudWatch Logs](https://github.com/Bepoadewale/davdeploy/pull/509) (merged)
+PR: [#509 — feat: price bounded Batch CloudWatch Logs](https://github.com/Bepoadewale/davdeploy/pull/509) (draft)
 Branch: `feat/batch-cloudwatch-log-pricing-509`
 
 ## Problem / goal
@@ -15,10 +15,9 @@ unpriced Batch dependency and unsupported logging configuration.
 
 ## Current repo state
 
-- Backend `main` is `46fe152233ac9fcbdba1961d5d02086c30c959fa`, the PR #509
-  merge commit. PR #509 is merged; its final head `9b9cea37d94e6cc3a0a4d85f997ffdd2dbfc52e8`
-  passed all seven required checks in run
-  [45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335).
+- Backend `main` is `29605fa9192a3ff4ac0ba168ced82e39e784d1f6`, after PR #508
+  merged. PR #509 was opened as a draft after the ticket-only bootstrap commit
+  and is the only open PR.
 - PR #507 provides bounded Linux/x86 Fargate compute prices and a generic
   supporting-cost blocker; Batch estimates cannot approve.
 - Existing CloudWatch catalog lookup functions and usage assumptions price
@@ -72,7 +71,8 @@ unpriced Batch dependency and unsupported logging configuration.
   networking, transfer, and every other material cost is priced.
 - [x] Focused tests, generated OpenAPI validation, and documentation
   conventions pass; all seven required checks passed on final PR head
-  `9b9cea3` in run `45658404335`.
+  `9b9cea3` in run `45658404335`, and merged-main CI passed in run
+  `45659294372`.
 - [x] No AWS workload, Terraform state/lock, or hosted control-plane resource
   is changed; no customer workload test is claimed.
 
@@ -82,7 +82,8 @@ unpriced Batch dependency and unsupported logging configuration.
 - [x] Focused validation complete.
 - [x] All seven CI checks passed on final head `9b9cea3` in
   [run 45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335).
-- [x] PR merged as `46fe152233ac9fcbdba1961d5d02086c30c959fa`.
+- [x] PR #509 merged as `46fe152233ac9fcbdba1961d5d02086c30c959fa`; merged-main
+  CI passed in [run 45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
 
 ## Tests / validation performed
 
@@ -96,7 +97,8 @@ unpriced Batch dependency and unsupported logging configuration.
   includes the additive optional Batch log-usage contract.
 - `GITHUB_PR_NUMBER=509 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head PR run `45658404335` passed all seven required checks.
+- Final-head PR run `45658404335` and merged-main run `45659294372` passed all
+  seven required checks.
 - No Terraform or cloud mutation was run.
 
 ## Evidence files produced
@@ -112,6 +114,6 @@ AWS audit evidence.
 
 ## Follow-up work
 
-ECR image storage and transfer, VPC/NAT/public IPv4, other material Batch
-dependencies, effective role permissions, runtime/recovery, and Nova-dispatched
-execution remain open.
+ECR image transfer and image-to-job binding, archive retrieval, signing,
+replication, VPC/NAT/public IPv4, other material Batch dependencies, effective
+role permissions, runtime/recovery, and Nova-dispatched execution remain open.
