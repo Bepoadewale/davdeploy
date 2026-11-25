@@ -1007,6 +1007,7 @@ ZERO_DIRECT_CHARGE_RESOURCE_TYPES = frozenset(
     {
         "terraform_data",
         "aws_vpc",
+        "aws_internet_gateway",
         "aws_subnet",
         "aws_route_table",
         "aws_route",
@@ -3704,27 +3705,39 @@ def _configured_attribute_references(
     root = configuration.get("root_module") if isinstance(configuration, dict) else None
     if not isinstance(root, dict):
         return ()
-    modules = [root]
+    modules = [(root, "")]
     while modules:
-        module = modules.pop()
+        module, module_prefix = modules.pop()
         resources = module.get("resources", [])
         module_calls = module.get("module_calls", {})
         if not isinstance(resources, list) or not isinstance(module_calls, dict):
             return ()
         for item in resources:
-            if not isinstance(item, dict) or item.get("address") != resource_address:
+            if not isinstance(item, dict):
+                continue
+            local_address = item.get("address")
+            if not isinstance(local_address, str):
+                continue
+            configured_address = (
+                f"{module_prefix}{local_address}" if module_prefix else local_address
+            )
+            if configured_address != resource_address:
                 continue
             expressions = item.get("expressions")
             expression = expressions.get(attribute) if isinstance(expressions, dict) else None
             references = expression.get("references") if isinstance(expression, dict) else None
             if not isinstance(references, list):
                 return ()
-            return tuple(value for value in references if isinstance(value, str))
-        for call in module_calls.values():
+            return tuple(
+                f"{module_prefix}{value}" if module_prefix else value
+                for value in references
+                if isinstance(value, str)
+            )
+        for name, call in module_calls.items():
             child = call.get("module") if isinstance(call, dict) else None
-            if not isinstance(child, dict):
+            if not isinstance(name, str) or not isinstance(child, dict):
                 return ()
-            modules.append(child)
+            modules.append((child, f"{module_prefix}module.{name}."))
     return ()
 
 

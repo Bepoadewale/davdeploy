@@ -929,7 +929,6 @@ def test_price_api_error_is_unavailable_and_never_uses_fixture_price():
     [
         ("aws_s3_bucket", {"bucket": "has-variable-storage-and-requests"}),
         ("aws_instance", {"instance_type": "t4g.small", "ami": "ami-x"}),
-        ("aws_internet_gateway", {"vpc_id": "vpc-123"}),
         ("aws_ebs_volume", ebs_values(type="gp2")),
         ("aws_ebs_volume", ebs_values(iops=6000)),
         ("aws_ebs_volume", ebs_values(throughput=250)),
@@ -1102,7 +1101,7 @@ def test_s3_without_usage_assumptions_remains_incomplete_and_skips_catalog():
     assert client.calls == []
 
 
-def nat_gateway_plan(*, connectivity_type="public"):
+def nat_gateway_plan(*, connectivity_type="public", extra_resources=()):
     nat = {
         "connectivity_type": connectivity_type,
         "allocation_id": "eipalloc-nat-test",
@@ -1115,6 +1114,7 @@ def nat_gateway_plan(*, connectivity_type="public"):
         extra_resources=(
             resource("aws_eip.nat", "aws_eip", eip),
             resource("aws_nat_gateway.nat", "aws_nat_gateway", nat),
+            *extra_resources,
         ),
     )
 
@@ -1158,6 +1158,30 @@ def test_nat_gateway_pricing_covers_hours_processing_ipv4_egress_and_cross_az():
         ),
         now=CAPTURED_AT,
     )
+
+
+def test_complete_vpc_topology_prices_nat_and_treats_internet_gateway_as_zero_direct_charge():
+    topology = (
+        resource("aws_vpc.main", "aws_vpc", {"id": "vpc-main"}),
+        resource("aws_internet_gateway.main", "aws_internet_gateway", {"vpc_id": "vpc-main"}),
+        resource("aws_subnet.public", "aws_subnet", {"id": "subnet-public", "vpc_id": "vpc-main"}),
+        resource("aws_subnet.private", "aws_subnet", {"id": "subnet-private", "vpc_id": "vpc-main"}),
+        resource("aws_route_table.public", "aws_route_table", {"vpc_id": "vpc-main"}),
+        resource("aws_route_table.private", "aws_route_table", {"vpc_id": "vpc-main"}),
+        resource("aws_route_table_association.public", "aws_route_table_association", {"subnet_id": "subnet-public"}),
+        resource("aws_route_table_association.private", "aws_route_table_association", {"subnet_id": "subnet-private"}),
+        resource("aws_route.public_default", "aws_route", {"route_table_id": "rtb-public"}),
+        resource("aws_route.private_default", "aws_route", {"route_table_id": "rtb-private"}),
+    )
+    result, _ = evaluate(
+        nat_gateway_plan(extra_resources=topology),
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=NAT_USAGE,
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+    assert not any(finding.code == "resource_pricing_unavailable" for finding in result.findings)
 
 
 def test_nat_gateway_without_usage_assumptions_blocks_before_price_lookup():
@@ -1254,6 +1278,65 @@ def test_nat_gateway_unknown_allocation_is_bound_by_configuration_reference():
         document, catalog_client=FakeVpcPriceList(), vpc_usage_assumptions=NAT_USAGE
     )
     assert result.status == PlanPricingStatus.COMPLETE
+
+
+def test_nat_gateway_module_relative_reference_binds_unknown_nat_and_eip_ids():
+    document = nat_gateway_plan()
+    module_eip_address = "module.network.aws_eip.nat"
+    module_nat_address = "module.network.aws_nat_gateway.nat"
+    eip_values = document["planned_values"]["root_module"]["resources"][1]["values"]
+    eip_values["id"] = None
+    nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
+    nat_values["allocation_id"] = None
+    for item in document["planned_values"]["root_module"]["resources"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = module_eip_address
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = module_nat_address
+    for item in document["resource_changes"]:
+        if item["address"] == "aws_eip.nat":
+            item["address"] = module_eip_address
+            item["change"]["after"]["id"] = None
+            item["change"]["after_unknown"]["id"] = True
+        elif item["address"] == "aws_nat_gateway.nat":
+            item["address"] = module_nat_address
+            item["change"]["after"]["allocation_id"] = None
+            item["change"]["after_unknown"]["allocation_id"] = True
+    document["configuration"]["root_module"] = {
+        "resources": [],
+        "module_calls": {
+            "network": {
+                "module": {
+                    "resources": [
+                        {"address": "aws_eip.nat", "expressions": {}},
+                        {
+                            "address": "aws_nat_gateway.nat",
+                            "expressions": {
+                                "allocation_id": {
+                                    "references": ["aws_eip.nat.id"]
+                                }
+                            },
+                        },
+                    ],
+                    "module_calls": {},
+                }
+            }
+        },
+    }
+    module_usage = {
+        "nat_gateways": {
+            module_nat_address: NAT_USAGE["nat_gateways"]["aws_nat_gateway.nat"]
+        }
+    }
+
+    result, _ = evaluate(
+        document,
+        catalog_client=FakeVpcPriceList(),
+        vpc_usage_assumptions=module_usage,
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
 
 
 def test_nat_gateway_unknown_allocation_with_wrong_reference_blocks_pricing():
