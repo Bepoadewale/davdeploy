@@ -41,13 +41,13 @@ The active Nova handoff and implementation status predate the merged Batch, EKS,
 
 ## Acceptance status
 
-Documentation reconciliation is implemented and locally validated. Final-head GitHub CI remains pending.
+Documentation reconciliation is implemented. Local checks and all seven checks on evidence commit `6d1c746c8523c0ccb4f84f31cf6c0e7a59f8c819` passed. Final-head CI after the last status corrections remains pending.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=501 python3 scripts/check_doc_conventions.py` — passed after the ticket status update.
 - `git diff --check` — passed after the ticket status update.
-- Final-head GitHub CI will be recorded after the ticket status update.
+- All seven required checks passed on documentation commit `6d1c746c8523c0ccb4f84f31cf6c0e7a59f8c819` in [CI run 45553527932](https://github.com/Bepoadewale/davdeploy/actions/runs/45553527932). Final-head CI after the last status corrections remains pending.
 - No customer workload test or Terraform operation is planned for this documentation-only PR.
 
 ## Evidence files produced

@@ -85,9 +85,8 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its
-seven required checks pass on that head, but it remains behind current `main`
-and GitHub reports a dirty merge state. Two same-account cycles verified
+PR #486 remains open at head `bb374e8ec06d613a963f1768e71b91175a416898`; all
+seven checks passed in run `45545915711`. Two same-account cycles verified
 encrypted 8 GiB gp3 root volumes and teardown. Its final clean-room cleanup
 remains pending explicit approval to remove generated artifacts and Compose
 volumes in that specific worktree; those artifacts are preserved.
@@ -357,9 +356,15 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
+- Backend `main` is `f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
+- Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
+  bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
+  passed all seven checks in run `45552193668`.
+- PR #486 remains open with clean-room cleanup pending explicit approval. Draft
+  PR #495's tagged AppConfig rollout resources remain preserved pending exact
+  teardown approval. The run monitor has 66 records and zero active runs.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
   default-off Nova apply worker, credential broker, and customer apply-role
   template. A temporary same-account role test verified ExternalId-based
