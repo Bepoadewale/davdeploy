@@ -2,8 +2,8 @@
 
 ## Current state
 
-**As of 2026-11-24, backend `main` is
-`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The hosted control plane
+**As of 2026-11-25, backend `main` is
+`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -13,6 +13,17 @@ and `/healthz` returned HTTP 200 in account `654654474502`, region
 `us-east-1`. This is control-plane deployment evidence only. This status
 refresh did not access or change the hosted control plane. The older runtime
 health observation above is historical and was not rechecked here.**
+
+PR #493 merged with all seven CI checks passing in run
+[45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).
+Its exact `modules/parameter-config` lifecycle created a tagged synthetic
+Standard `SecureString`, updated version 1 to version 2, compared both values
+in memory without printing them, and destroyed the exact parameter through the
+Terraform run monitor. Independent AWS reads confirmed absence; the empty
+local state and saved plans remain retained with mode 600. This is evidence for
+the tested module shape, not runtime consumer authorization, secret rotation,
+Nova dispatch, or customer deployment certification. The hosted control plane
+and its state and locks were not touched.
 
 Source includes durable plan requests, isolated Terraform state, plan review,
 actual-plan policy, typed health/recovery requirements, exact workspace
