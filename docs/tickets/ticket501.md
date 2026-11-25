@@ -1,6 +1,6 @@
 # ticket501 — reconcile Nova status through PR #500
 
-PR: pending draft creation
+PR: [#501 — docs: reconcile Nova status through PR #500](https://github.com/Bepoadewale/davdeploy/pull/501)
 Branch: `docs/nova-status-through-500`
 
 ## Problem / goal
@@ -32,20 +32,22 @@ The active Nova handoff and implementation status predate the merged Batch, EKS,
 
 ## Acceptance criteria
 
-- [ ] Canonical Nova handoff points to current main and PR #500, with accurate PR #486/#495 state and CI evidence.
-- [ ] Source policy is kept distinct from direct customer-side lifecycle evidence and Nova-originated execution.
-- [ ] AppConfig test resources and current rollout state are recorded as retained evidence; no deletion is performed.
-- [ ] The control-plane isolation, open cleanup approvals, and remaining Nova acceptance gates remain explicit.
-- [ ] Documentation convention checks and `git diff --check` pass; final-head GitHub CI passes.
-- [ ] No AWS mutation, Terraform operation, hosted control-plane access, or protected local-file modification occurs.
+- [x] Canonical Nova handoff points to current main and PR #500, with accurate PR #486/#495 state and CI evidence.
+- [x] Source policy is kept distinct from direct customer-side lifecycle evidence and Nova-originated execution.
+- [x] AppConfig test resources and current rollout state are recorded as retained evidence; no deletion is performed.
+- [x] The control-plane isolation, open cleanup approvals, and remaining Nova acceptance gates remain explicit.
+- [ ] Documentation convention checks and `git diff --check` pass; final-head GitHub CI passes. Local checks pass; final-head CI is pending.
+- [x] No AWS mutation, Terraform operation, hosted control-plane access, or protected local-file modification occurred.
 
 ## Acceptance status
 
-Pending documentation reconciliation.
+Documentation reconciliation is implemented and locally validated. Final-head GitHub CI remains pending.
 
 ## Tests / validation performed
 
-- Documentation convention and diff checks will be recorded before review-ready status.
+- `GITHUB_PR_NUMBER=501 python3 scripts/check_doc_conventions.py` — passed after the ticket status update.
+- `git diff --check` — passed after the ticket status update.
+- Final-head GitHub CI will be recorded after the ticket status update.
 - No customer workload test or Terraform operation is planned for this documentation-only PR.
 
 ## Evidence files produced
