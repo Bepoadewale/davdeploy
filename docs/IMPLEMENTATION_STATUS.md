@@ -1,7 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`ee3a407dbe5166b66abea38e47c7a20778f01e90` (PR #486); hosted runtime remains
+`2afd0070cb7991a2eec77c25d1750a6cf4de190c` (PR #507); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -10,6 +10,16 @@ Both workflow jobs succeeded, including database migrations. Read-only checks
 found all six `davdeploy-*` Lambda packages on code hash
 `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
 HTTP 200. This is deployed control-plane evidence only.
+
+PR #506 makes the 26-architecture / 30-root candidate crosswalk
+machine-checkable; it does not enable Nova dispatch. PR #507 adds source-only
+AWS Batch Fargate Linux/x86 vCPU and memory cost lines with trusted job usage
+assumptions and a 60-second per-job minimum. It deliberately keeps estimates
+incomplete and approval-ineligible while image transfer, logs, networking,
+public IPv4, and other material supporting costs are unpriced. All seven
+final-head checks passed in run
+[45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
+No AWS workload or hosted-control-plane resource changed.
 
 Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
 final-head checks in run

@@ -3,8 +3,18 @@
 ## Nova status snapshot — 2026-11-25
 
 Backend `main` is
-`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
-reconciliation through PR #493). The hosted control plane remains at PR #420 commit
+`2afd0070cb7991a2eec77c25d1750a6cf4de190c` (PR #507). Merged PR #506
+validates the architecture-to-Terraform crosswalk but does not enable Nova
+dispatch. PR #507 adds trusted-usage, regional Linux/x86 Fargate compute price
+lines for bounded Batch plans; the estimate stays incomplete and
+approval-ineligible until material supporting costs are priced. Its final-head
+CI passed all seven checks in
+[run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
+No PR was open after #507 merged. The Terraform run monitor has 67 records and
+zero active operations. AWS identity was rechecked as account `654654474502`;
+this documentation reconciliation made no AWS or hosted-control-plane change.
+
+The hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -148,11 +158,9 @@ records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
 cross-account isolation. The merge added no AWS resources.
 
-PR #486 remains open at synchronized head `3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
-[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
-It includes current `main` through PR #494. Its final clean-room cleanup
-finding remains open; stopped containers, generated files, volume, and network
-are preserved pending explicit approval.
+PR #486 merged as `ee3a407`; its final-head and merged-main checks passed and
+the approved clean-room cleanup is complete. Its worktree and retained test
+state/evidence remain preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head run
 [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

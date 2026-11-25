@@ -1,6 +1,6 @@
 # ticket508 — reconcile Nova handoff after PR #507
 
-PR: draft, to be linked after opening
+PR: [#508 — docs: reconcile Nova status after PR #507](https://github.com/Bepoadewale/davdeploy/pull/508) (draft)
 Branch: `docs/nova-status-after-507-508`
 
 ## Problem / goal
@@ -37,8 +37,8 @@ historical. This PR changes no product behavior.
    status.
 2. Update the capability matrix to distinguish Batch Fargate compute pricing
    from complete Batch cost coverage and approval eligibility.
-3. Correct the backlog's current snapshot, removing stale open-PR claims and
-   preserving older entries as historical evidence.
+3. Correct the backlog and project/implementation status snapshots, removing
+   stale open-PR claims and preserving older entries as historical evidence.
 4. Record the current Terraform monitor and AWS boundary without exposing
    credentials or claiming customer workload deployment.
 
@@ -64,7 +64,8 @@ historical. This PR changes no product behavior.
 
 ## Evidence files produced
 
-- Updated Nova product handoff, evidence matrix, and backlog current snapshot.
+- Updated Nova product handoff, evidence matrix, backlog, and project status
+  current snapshots.
 - No `docs/test/test508.md` is expected: this PR performs no workload test.
 
 ## Tests / validation performed
