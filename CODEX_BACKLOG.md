@@ -2,8 +2,9 @@
 
 ## Nova status snapshot — 2026-11-25
 
-Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The
-hosted control plane remains at PR #420 commit
+Backend `main` is
+`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+reconciliation through PR #493). The hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -66,9 +67,13 @@ delegation, records, failover, or DNS costs. No hosted zone was created. See
 `docs/tickets/ticket470.md`.
 
 PR #471 binds each planned AppConfig environment to exactly one same-plan
-application. The module still creates no configuration profile or feature-flag
-deployment, and no AWS AppConfig resource was changed. See
-`docs/tickets/ticket471.md`.
+application. Draft PR #495 adds the feature profile, typed flag content,
+bounded deployment strategy, and revision-retention policy, with direct
+same-account rollout and rollback evidence. All seven final-head checks pass
+in run [45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+The exact seven-resource teardown plan is reviewed but awaits approval; the test
+AppConfig application remains present. No Nova dispatch or customer
+certification is claimed. See PR [#495](https://github.com/Bepoadewale/davdeploy/pull/495).
 
 PR #473 adds source-only DynamoDB plan checks for known table/partition-key
 identity, on-demand billing, server-side encryption, deletion protection, and
@@ -141,10 +146,11 @@ records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
 cross-account isolation. The merge added no AWS resources.
 
-PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`;
-its base still points to pre-PR #493 `main` and must be synchronized before
-merge. Its final-head CI is green, but the final clean-room cleanup finding
-remains open and the generated artifacts stay preserved.
+PR #486 remains open at synchronized head `3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
+[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
+It includes current `main` through PR #494. Its final clean-room cleanup
+finding remains open; stopped containers, generated files, volume, and network
+are preserved pending explicit approval.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head run
 [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

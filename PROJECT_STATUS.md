@@ -3,7 +3,8 @@
 ## Current state
 
 **As of 2026-11-25, backend `main` is
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The hosted control plane
+`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+reconciliation through PR #493). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -117,15 +118,22 @@ the local Terraform state is retained and empty. No Nova dispatch or guest
 application health is claimed. The merge added no AWS or control-plane
 resources.
 
-PR #486 remains open and unmerged at head
-`f65c1fed551eeb9f16802f6eb67dbd7d75227edb`. Its seven required checks passed
-in run [45505303210](https://github.com/Bepoadewale/davdeploy/actions/runs/45505303210).
-Two isolated direct same-account cycles verified an encrypted 8 GiB gp3 root
-volume, healthy ASG/EC2 checks, and teardown with independent absence checks.
-GitHub currently reports a dirty merge state because the branch is behind
-current `main`. Its remaining clean-room review finding requires final cleanup
-of generated `.venv`, `.local`, and Compose volumes; this remains pending
-explicit approval, so those artifacts are preserved.
+PR #486 remains open and unmerged at synchronized head
+`3d7fe8b89adb6fd6407afe989336a1d756e02d99`. All seven checks passed in run
+[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
+Two isolated direct same-account cycles verified encrypted 8 GiB gp3 root
+volumes, healthy ASG/EC2 checks, and teardown with independent absence checks.
+The branch includes current `main` through PR #494. Final clean-room cleanup of
+`.venv`, `.local`, Compose volume, and network remains pending explicit
+approval; the project containers are stopped and all remaining artifacts are
+preserved.
+
+Draft PR #495 adds feature-flag profile and rollout policy. Its direct AppConfig
+test observed a disabled baseline, `BAKING`→`COMPLETE` enabled deployment, and
+`REVERTED` rollback; all seven checks passed in run
+[45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+The exact teardown plan awaits approval, so the test application remains. No
+Nova dispatch or customer certification is claimed.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

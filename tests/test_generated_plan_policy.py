@@ -4089,10 +4089,24 @@ def autoscaling_case(
     template_address = "aws_launch_template.web"
     second_template_address = "aws_launch_template.worker"
     group_address = "aws_autoscaling_group.web"
+    ami_address = "data.aws_ami.al2023"
     template = {
         "image_id": "ami-0123456789abcdef0",
         "instance_type": "t3.micro",
         "instance_market_options": None,
+        "block_device_mappings": [
+            {
+                "device_name": "/dev/xvda",
+                "ebs": [
+                    {
+                        "delete_on_termination": "true",
+                        "encrypted": "true",
+                        "volume_size": 8,
+                        "volume_type": "gp3",
+                    }
+                ],
+            }
+        ],
         "metadata_options": [
             {"http_endpoint": "enabled", "http_tokens": "required"}
         ],
@@ -4107,6 +4121,14 @@ def autoscaling_case(
         "mixed_instances_policy": None,
     }
     group.update(group_values or {})
+    ami_source = {
+        "address": ami_address,
+        "mode": "data",
+        "type": "aws_ami",
+        "values": {"id": template["image_id"], "root_device_name": "/dev/xvda"},
+    }
+    ami_change = change(ami_address, "aws_ami", actions=("read",))
+    ami_change["mode"] = "data"
     planned_templates = [resource(template_address, "aws_launch_template", template)]
     template_changes = [change(template_address, "aws_launch_template")]
     if include_second_template:
@@ -4115,10 +4137,10 @@ def autoscaling_case(
         )
         template_changes.append(change(second_template_address, "aws_launch_template"))
     document["planned_values"]["root_module"]["resources"].extend(
-        [*planned_templates, resource(group_address, "aws_autoscaling_group", group)]
+        [ami_source, *planned_templates, resource(group_address, "aws_autoscaling_group", group)]
     )
     document["resource_changes"].extend(
-        [*template_changes, change(group_address, "aws_autoscaling_group")]
+        [ami_change, *template_changes, change(group_address, "aws_autoscaling_group")]
     )
     references = (
         [f"{template_address}.id", f"{template_address}.latest_version"]
@@ -4131,11 +4153,28 @@ def autoscaling_case(
         else launch_template_references
     )
     configured_template_resources = [
-        {"address": template_address, "expressions": {}}
+        {
+            "address": template_address,
+            "expressions": {
+                "image_id": {"references": [f"{ami_address}.id"]},
+                "block_device_mappings": [
+                    {"device_name": {"references": [f"{ami_address}.root_device_name"]}}
+                ],
+            },
+        },
+        {"address": ami_address, "mode": "data", "type": "aws_ami", "expressions": {}},
     ]
     if include_second_template:
         configured_template_resources.append(
-            {"address": second_template_address, "expressions": {}}
+            {
+                "address": second_template_address,
+                "expressions": {
+                    "image_id": {"references": [f"{ami_address}.id"]},
+                    "block_device_mappings": [
+                        {"device_name": {"references": [f"{ami_address}.root_device_name"]}}
+                    ],
+                },
+            }
         )
     document["configuration"]["root_module"] = {
         "resources": [
@@ -4265,6 +4304,224 @@ def test_autoscaling_template_requires_known_ami_t3_micro_and_imdsv2(
 
     assert result.verdict == PlanPolicyVerdict.DENY
     assert expected_code in codes(result)
+
+
+@pytest.mark.parametrize(
+    "mappings",
+    [
+        None,
+        [],
+        [{"device_name": "/dev/xvda", "ebs": [{"encrypted": "true"}]}] * 2,
+        [{"device_name": "/dev/xvda", "ebs": [{"encrypted": "true"}] * 2}],
+        [{"device_name": "/dev/sda1", "ebs": [{"encrypted": "true"}]}],
+    ],
+)
+def test_autoscaling_root_volume_requires_one_verifiable_root_mapping(mappings):
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": mappings}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_volume_unknown_is_denied():
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": None}
+    )
+    template_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_launch_template"
+    )
+    template_change["change"]["after_unknown"]["block_device_mappings"] = True
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_volume_critical_unknown_metadata_is_denied():
+    document, proposal_value = autoscaling_case()
+    template_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_launch_template"
+    )
+    template_change["change"]["after_unknown"]["block_device_mappings"] = [
+        {"ebs": [{"encrypted": True}]}
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_device_must_match_same_plan_ami_metadata():
+    document, proposal_value = autoscaling_case()
+    ami_source = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") == "aws_ami"
+    )
+    ami_source["values"]["root_device_name"] = "/dev/sda1"
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_device_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_device_uses_refreshed_prior_state_ami_metadata():
+    document, proposal_value = autoscaling_case()
+    planned_resources = document["planned_values"]["root_module"]["resources"]
+    ami_source = next(item for item in planned_resources if item.get("type") == "aws_ami")
+    planned_resources.remove(ami_source)
+    document["prior_state"] = {
+        "values": {"root_module": {"resources": [ami_source], "child_modules": []}}
+    }
+    document["resource_changes"] = [
+        item for item in document["resource_changes"] if item.get("type") != "aws_ami"
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("autoscaling_") for code in codes(result))
+
+
+def test_autoscaling_planned_ami_metadata_takes_precedence_over_prior_state():
+    document, proposal_value = autoscaling_case()
+    planned_ami = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item.get("type") == "aws_ami"
+    )
+    stale_ami = {**planned_ami, "values": dict(planned_ami["values"])}
+    stale_ami["values"]["root_device_name"] = "/dev/sda1"
+    document["prior_state"] = {
+        "values": {"root_module": {"resources": [stale_ami], "child_modules": []}}
+    }
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("autoscaling_") for code in codes(result))
+
+
+def test_autoscaling_image_and_root_mapping_must_share_ami_source():
+    document, proposal_value = autoscaling_case()
+    template_config = next(
+        item
+        for item in document["configuration"]["root_module"]["resources"]
+        if item.get("address") == "aws_launch_template.web"
+    )
+    template_config["expressions"]["image_id"] = {"references": ["var.ami_id"]}
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_device_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_device_unknown_ami_metadata_is_denied():
+    document, proposal_value = autoscaling_case()
+    ami_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_ami"
+    )
+    ami_change["change"]["after_unknown"]["root_device_name"] = True
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_device_unverifiable" in codes(result)
+
+
+def test_autoscaling_root_volume_allows_unknown_optional_provider_defaults():
+    document, proposal_value = autoscaling_case()
+    template_change = next(
+        item
+        for item in document["resource_changes"]
+        if item.get("type") == "aws_launch_template"
+    )
+    template_change["change"]["after_unknown"]["block_device_mappings"] = [
+        {
+            "ebs": [
+                {
+                    "iops": True,
+                    "throughput": True,
+                    "volume_initialization_rate": True,
+                }
+            ]
+        }
+    ]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
+    assert not any(code.startswith("autoscaling_") for code in codes(result))
+
+
+@pytest.mark.parametrize(
+    "ebs_overrides",
+    [
+        {"encrypted": "false"},
+        {"delete_on_termination": "false"},
+        {"volume_type": "gp2"},
+        {"volume_size": 9},
+    ],
+)
+def test_autoscaling_root_volume_requires_encryption_and_bounded_storage(ebs_overrides):
+    mapping = {
+        "device_name": "/dev/xvda",
+        "ebs": [
+            {
+                "delete_on_termination": "true",
+                "encrypted": "true",
+                "volume_size": 8,
+                "volume_type": "gp3",
+                **ebs_overrides,
+            }
+        ],
+    }
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": [mapping]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unsafe" in codes(result)
+
+
+@pytest.mark.parametrize("field", ["encrypted", "delete_on_termination", "volume_type", "volume_size"])
+def test_autoscaling_root_volume_rejects_unknown_critical_settings(field):
+    mapping = {
+        "device_name": "/dev/xvda",
+        "ebs": [
+            {
+                "delete_on_termination": "true",
+                "encrypted": "true",
+                "volume_size": 8,
+                "volume_type": "gp3",
+            }
+        ],
+    }
+    mapping["ebs"][0][field] = None
+    document, proposal_value = autoscaling_case(
+        template_values={"block_device_mappings": [mapping]}
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "autoscaling_root_volume_unverifiable" in codes(result)
 
 
 @pytest.mark.parametrize(
