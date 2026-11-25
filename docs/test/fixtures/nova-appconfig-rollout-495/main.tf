@@ -11,9 +11,10 @@ locals {
 }
 
 module "feature_flags" {
-  source       = "../../../../infrastructure/terraform/modules/feature-flags"
-  name         = local.name
-  tags         = local.tags
-  flag_name    = "nova_demo"
-  flag_enabled = var.flag_enabled
+  source          = "../../../../infrastructure/terraform/modules/feature-flags"
+  name            = local.name
+  tags            = local.tags
+  flag_name       = "nova_demo"
+  flag_revisions  = var.flag_revisions
+  active_revision = var.active_revision
 }

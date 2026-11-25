@@ -7,6 +7,7 @@ from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResourceOwnershipRecord
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
+    _check_appconfig_bindings,
     _check_rds_final_snapshot_changes,
     _configured_resources,
     _path_contains_unknown,
@@ -1820,6 +1821,99 @@ def test_appconfig_feature_rollout_binds_profile_version_strategy_and_deployment
 
     assert result.verdict == PlanPolicyVerdict.ELIGIBLE_FOR_HUMAN_REVIEW
     assert not any(code.startswith("appconfig_") for code in codes(result))
+
+
+def test_appconfig_feature_rollout_keeps_prior_version_and_publishes_new_revision():
+    document, _proposal_value = appconfig_feature_rollout_case()
+    baseline_address = "aws_appconfig_hosted_configuration_version.this"
+    rollout_address = 'aws_appconfig_hosted_configuration_version.this["rollout"]'
+    deployment_address = "aws_appconfig_deployment.this"
+    content = json.dumps(
+        {
+            "flags": {"davdeploy_demo": {"name": "davdeploy_demo"}},
+            "values": {"davdeploy_demo": {"enabled": True}},
+            "version": "1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    baseline = next(
+        item
+        for item in document["planned_values"]["root_module"]["resources"]
+        if item["address"] == baseline_address
+    )
+    rollout = json.loads(json.dumps(baseline))
+    rollout["address"] = rollout_address
+    rollout["values"]["content"] = content
+    document["planned_values"]["root_module"]["resources"].append(rollout)
+    document["resource_changes"].append(
+        change(rollout_address, "aws_appconfig_hosted_configuration_version")
+    )
+
+    configuration = document["configuration"]["root_module"]["resources"]
+    baseline_configuration = next(
+        item for item in configuration if item["address"] == baseline_address
+    )
+    rollout_configuration = json.loads(json.dumps(baseline_configuration))
+    rollout_configuration["address"] = rollout_address
+    configuration.append(rollout_configuration)
+    deployment = next(item for item in configuration if item["address"] == deployment_address)
+    deployment["expressions"]["configuration_version"]["references"] = [
+        f"{rollout_address}.version_number"
+    ]
+
+    findings = []
+    _check_appconfig_bindings(
+        document,
+        tuple(document["planned_values"]["root_module"]["resources"]),
+        findings,
+    )
+
+    assert not findings, [finding.code for finding in findings]
+
+
+def test_appconfig_hosted_version_replacement_is_denied_while_application_remains():
+    document, proposal_value = appconfig_feature_rollout_case()
+    version_change = next(
+        item
+        for item in document["resource_changes"]
+        if item["type"] == "aws_appconfig_hosted_configuration_version"
+    )
+    version_change["change"]["actions"] = ["delete", "create"]
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.DENY
+    assert "appconfig_hosted_version_delete_forbidden" in codes(result)
+
+
+def test_appconfig_hosted_version_delete_requires_its_application_teardown():
+    document, _proposal_value = appconfig_feature_rollout_case()
+    version_address = "aws_appconfig_hosted_configuration_version.this"
+    application_address = "aws_appconfig_application.this"
+    version_change = next(
+        item for item in document["resource_changes"] if item["address"] == version_address
+    )
+    version_change["change"].update(
+        actions=["delete"], before={"application_id": "app-1"}, after=None
+    )
+    application_change = next(
+        item for item in document["resource_changes"] if item["address"] == application_address
+    )
+    application_change["change"].update(
+        actions=["delete"], before={"id": "different-app"}, after=None
+    )
+
+    findings = []
+    _check_appconfig_bindings(
+        document,
+        tuple(document["planned_values"]["root_module"]["resources"]),
+        findings,
+    )
+
+    assert "appconfig_hosted_version_delete_forbidden" in {
+        finding.code for finding in findings
+    }
 
 
 def test_appconfig_feature_profile_rejects_unplanned_application():

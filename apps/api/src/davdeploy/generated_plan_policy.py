@@ -4204,6 +4204,40 @@ def _check_appconfig_bindings(
     resources: tuple[dict[str, Any], ...],
     findings: list[PlanPolicyFinding],
 ) -> None:
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        _deny(
+            findings,
+            "appconfig_resource_changes_unknown",
+            None,
+            "AppConfig version changes must be known before review.",
+        )
+        return
+    deleted_application_ids = {
+        change.get("before", {}).get("id")
+        for item in changes
+        if isinstance(item, dict)
+        and item.get("type") == "aws_appconfig_application"
+        and isinstance((change := item.get("change")), dict)
+        and "delete" in change.get("actions", [])
+        and isinstance(change.get("before"), dict)
+        and isinstance(change.get("before", {}).get("id"), str)
+    }
+    for item in changes:
+        if not isinstance(item, dict) or item.get("type") != "aws_appconfig_hosted_configuration_version":
+            continue
+        change = item.get("change")
+        actions = change.get("actions") if isinstance(change, dict) else None
+        before = change.get("before") if isinstance(change, dict) else None
+        application_id = before.get("application_id") if isinstance(before, dict) else None
+        if isinstance(actions, list) and "delete" in actions and application_id not in deleted_application_ids:
+            _deny(
+                findings,
+                "appconfig_hosted_version_delete_forbidden",
+                item.get("address"),
+                "Do not delete a hosted AppConfig version while its application remains; publish a new revision instead.",
+            )
+
     applications = [
         item for item in resources if item.get("type") == "aws_appconfig_application"
     ]

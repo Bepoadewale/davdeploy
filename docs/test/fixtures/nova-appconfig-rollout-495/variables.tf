@@ -12,7 +12,12 @@ variable "test_id" {
   }
 }
 
-variable "flag_enabled" {
-  type    = bool
-  default = false
+variable "flag_revisions" {
+  type    = map(bool)
+  default = { baseline = false }
+}
+
+variable "active_revision" {
+  type    = string
+  default = "baseline"
 }

@@ -47,6 +47,7 @@ class FakeAppConfig:
         self.app_name = app_name
         self.remains_present = remains_present
         self.missing_deployments = missing_deployments
+        self.tagged_arns: list[str] = []
 
     def _not_found(self, operation: str) -> None:
         raise ClientError(
@@ -56,18 +57,15 @@ class FakeAppConfig:
 
     def get_application(self, *, ApplicationId: str) -> dict[str, object]:
         if self.remains_present:
-            return {"Application": {"Id": ApplicationId, "Name": self.app_name, "Arn": "arn:app"}}
+            return {"Id": ApplicationId, "Name": self.app_name}
         self._not_found("GetApplication")
 
     def get_environment(self, *, ApplicationId: str, EnvironmentId: str) -> dict[str, object]:
         if self.remains_present:
             return {
-                "Environment": {
-                    "ApplicationId": ApplicationId,
-                    "EnvironmentId": EnvironmentId,
-                    "Name": "production",
-                    "Arn": "arn:environment",
-                }
+                "ApplicationId": ApplicationId,
+                "Id": EnvironmentId,
+                "Name": "production",
             }
         self._not_found("GetEnvironment")
 
@@ -76,29 +74,23 @@ class FakeAppConfig:
     ) -> dict[str, object]:
         if self.remains_present:
             return {
-                "ConfigurationProfile": {
-                    "ApplicationId": ApplicationId,
-                    "ConfigurationProfileId": ConfigurationProfileId,
-                    "LocationUri": "hosted",
-                    "Name": f"{APP_NAME}-flags",
-                    "Type": "AWS.AppConfig.FeatureFlags",
-                    "Arn": "arn:profile",
-                }
+                "ApplicationId": ApplicationId,
+                "Id": ConfigurationProfileId,
+                "LocationUri": "hosted",
+                "Name": f"{APP_NAME}-flags",
+                "Type": "AWS.AppConfig.FeatureFlags",
             }
         self._not_found("GetConfigurationProfile")
 
     def get_deployment_strategy(self, *, DeploymentStrategyId: str) -> dict[str, object]:
         if self.remains_present:
             return {
-                "DeploymentStrategy": {
-                    "Name": f"{APP_NAME}-linear",
-                    "GrowthFactor": 50.0,
-                    "GrowthType": "LINEAR",
-                    "DeploymentDurationInMinutes": 1,
-                    "FinalBakeTimeInMinutes": 1,
-                    "ReplicateTo": "NONE",
-                    "Arn": "arn:strategy",
-                }
+                "Name": f"{APP_NAME}-linear",
+                "GrowthFactor": 50.0,
+                "GrowthType": "LINEAR",
+                "DeploymentDurationInMinutes": 1,
+                "FinalBakeTimeInMinutes": 1,
+                "ReplicateTo": "NONE",
             }
         self._not_found("GetDeploymentStrategy")
 
@@ -116,17 +108,16 @@ class FakeAppConfig:
             state = self.deployment_states.popleft()
             self.last_state = state
         return {
-            "Deployment": {
-                "ApplicationId": ApplicationId,
-                "EnvironmentId": EnvironmentId,
-                "ConfigurationProfileId": PROFILE_ID,
-                "DeploymentStrategyId": STRATEGY_ID,
-                "DeploymentNumber": DeploymentNumber,
-                "State": state,
-            }
+            "ApplicationId": ApplicationId,
+            "EnvironmentId": EnvironmentId,
+            "ConfigurationProfileId": PROFILE_ID,
+            "DeploymentStrategyId": STRATEGY_ID,
+            "DeploymentNumber": DeploymentNumber,
+            "State": state,
         }
 
     def list_tags_for_resource(self, *, ResourceArn: str) -> dict[str, object]:
+        self.tagged_arns.append(ResourceArn)
         return {
             "Tags": {
                 "Product": "davdeploy",
@@ -178,6 +169,12 @@ def verify(*, enabled: bool, states: list[str] | None = None, progressive: bool 
         timeout_seconds=1,
         sleep=lambda _: None,
     )
+    assert appconfig.tagged_arns == [
+        f"arn:aws:appconfig:us-east-1:{ACCOUNT_ID}:application/{APP_ID}",
+        f"arn:aws:appconfig:us-east-1:{ACCOUNT_ID}:application/{APP_ID}/environment/{ENV_ID}",
+        f"arn:aws:appconfig:us-east-1:{ACCOUNT_ID}:application/{APP_ID}/configurationprofile/{PROFILE_ID}",
+        f"arn:aws:appconfig:us-east-1:{ACCOUNT_ID}:deploymentstrategy/{STRATEGY_ID}",
+    ]
     return result, data
 
 
@@ -236,6 +233,56 @@ def test_progressive_rollout_waits_for_new_deployment_to_appear():
     assert result["progressive_state_observed"] is True
     assert result["deployment_state"] == "COMPLETE"
     assert len(sleeps) == 2
+
+
+def test_rollout_enforces_appconfig_data_request_cap():
+    appconfig = FakeAppConfig(deployment_states=["DEPLOYING", "DEPLOYING"], remains_present=True)
+    data = FakeAppConfigData(True)
+
+    with pytest.raises(LifecycleCheckError, match="request cap"):
+        verify_flag_rollout(
+            sts=FakeSTS(),
+            appconfig=appconfig,
+            appconfigdata=data,
+            expected_account_id=ACCOUNT_ID,
+            test_id=TEST_ID,
+            application_id=APP_ID,
+            environment_id=ENV_ID,
+            profile_id=PROFILE_ID,
+            strategy_id=STRATEGY_ID,
+            deployment_number=2,
+            expected_enabled=True,
+            expected_deployment_state="COMPLETE",
+            timeout_seconds=120,
+            max_get_latest_calls=1,
+            sleep=lambda _: None,
+        )
+    assert len(data.seen_tokens) == 1
+
+
+def test_rollout_enforces_appconfig_configuration_response_cap():
+    appconfig = FakeAppConfig(deployment_states=["DEPLOYING", "DEPLOYING"], remains_present=True)
+    data = FakeAppConfigData(True)
+
+    with pytest.raises(LifecycleCheckError, match="response cap"):
+        verify_flag_rollout(
+            sts=FakeSTS(),
+            appconfig=appconfig,
+            appconfigdata=data,
+            expected_account_id=ACCOUNT_ID,
+            test_id=TEST_ID,
+            application_id=APP_ID,
+            environment_id=ENV_ID,
+            profile_id=PROFILE_ID,
+            strategy_id=STRATEGY_ID,
+            deployment_number=2,
+            expected_enabled=True,
+            expected_deployment_state="COMPLETE",
+            timeout_seconds=120,
+            max_configuration_responses=1,
+            sleep=lambda _: None,
+        )
+    assert len(data.seen_tokens) == 1
 
 
 def test_rollout_accepts_explicit_reverted_state_and_old_flag():

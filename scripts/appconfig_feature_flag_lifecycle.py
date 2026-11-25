@@ -47,7 +47,8 @@ def _deployment(client: Any, *, application_id: str, environment_id: str, number
         EnvironmentId=environment_id,
         DeploymentNumber=number,
     )
-    deployment = result.get("Deployment")
+    # AppConfig's GetDeployment API returns deployment fields at the top level.
+    deployment = result.get("Deployment", result)
     if not isinstance(deployment, dict):
         raise LifecycleCheckError("exact AppConfig deployment metadata is missing")
     return deployment
@@ -63,17 +64,21 @@ def _verify_resources(
     deployment_number: int,
     expected_name: str,
     test_id: str,
+    expected_account_id: str,
+    region: str,
 ) -> dict[str, Any]:
-    application = appconfig.get_application(ApplicationId=application_id).get("Application")
-    environment = appconfig.get_environment(
+    application_result = appconfig.get_application(ApplicationId=application_id)
+    environment_result = appconfig.get_environment(
         ApplicationId=application_id, EnvironmentId=environment_id
-    ).get("Environment")
-    profile = appconfig.get_configuration_profile(
+    )
+    profile_result = appconfig.get_configuration_profile(
         ApplicationId=application_id, ConfigurationProfileId=profile_id
-    ).get("ConfigurationProfile")
-    strategy = appconfig.get_deployment_strategy(
-        DeploymentStrategyId=strategy_id
-    ).get("DeploymentStrategy")
+    )
+    strategy_result = appconfig.get_deployment_strategy(DeploymentStrategyId=strategy_id)
+    application = application_result.get("Application", application_result)
+    environment = environment_result.get("Environment", environment_result)
+    profile = profile_result.get("ConfigurationProfile", profile_result)
+    strategy = strategy_result.get("DeploymentStrategy", strategy_result)
     deployment = _deployment(
         appconfig,
         application_id=application_id,
@@ -112,10 +117,13 @@ def _verify_resources(
     ):
         raise LifecycleCheckError("deployment is not bound to the exact test resources")
 
-    for item in (application, environment, profile, strategy):
-        arn = item.get("Arn")
-        if not isinstance(arn, str):
-            raise LifecycleCheckError("AppConfig resource ARN is missing")
+    arns = (
+        f"arn:aws:appconfig:{region}:{expected_account_id}:application/{application_id}",
+        f"arn:aws:appconfig:{region}:{expected_account_id}:application/{application_id}/environment/{environment_id}",
+        f"arn:aws:appconfig:{region}:{expected_account_id}:application/{application_id}/configurationprofile/{profile_id}",
+        f"arn:aws:appconfig:{region}:{expected_account_id}:deploymentstrategy/{strategy_id}",
+    )
+    for arn in arns:
         _tags_for_resource(appconfig, arn, test_id=test_id)
     return deployment
 
@@ -183,14 +191,21 @@ def verify_flag_rollout(
     expected_enabled: bool,
     expected_deployment_state: str,
     require_progressive_state: bool = False,
+    region: str = "us-east-1",
     timeout_seconds: int = 600,
     poll_interval_seconds: int = 15,
+    max_get_latest_calls: int = 8,
+    max_configuration_responses: int = 4,
     sleep: Any = time.sleep,
 ) -> dict[str, Any]:
     if timeout_seconds < 1 or timeout_seconds > 900:
         raise LifecycleCheckError("rollout timeout is outside the 1-900 second bound")
     if poll_interval_seconds < 15 or poll_interval_seconds > 30:
         raise LifecycleCheckError("configuration polling interval is outside the 15-30 second bound")
+    if max_get_latest_calls < 1 or max_get_latest_calls > 10:
+        raise LifecycleCheckError("AppConfig Data request cap is outside the 1-10 bound")
+    if max_configuration_responses < 1 or max_configuration_responses > 4:
+        raise LifecycleCheckError("AppConfig Data response cap is outside the 1-4 bound")
     verify_account(sts, expected_account_id)
     expected_name = f"davdeploy-nova-ff-495-{test_id}"
     deadline = time.monotonic() + timeout_seconds
@@ -205,6 +220,8 @@ def verify_flag_rollout(
                 deployment_number=deployment_number,
                 expected_name=expected_name,
                 test_id=test_id,
+                expected_account_id=expected_account_id,
+                region=region,
             )
             break
         except ClientError as exc:
@@ -222,6 +239,10 @@ def verify_flag_rollout(
     get_latest_configuration_calls = 0
     configurations_received = 0
     while time.monotonic() < deadline:
+        if get_latest_configuration_calls >= max_get_latest_calls:
+            raise LifecycleCheckError("AppConfig Data request cap was reached before verification")
+        if configurations_received >= max_configuration_responses:
+            raise LifecycleCheckError("AppConfig Data response cap was reached before verification")
         token, observed, received, service_poll_interval = _read_enabled_flag(
             appconfigdata=appconfigdata,
             application_id=application_id,
@@ -347,6 +368,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-progressive-state", action="store_true")
     parser.add_argument("--timeout-seconds", type=int, default=600)
     parser.add_argument("--poll-interval-seconds", type=int, default=15)
+    parser.add_argument("--max-get-latest-calls", type=int, default=8)
+    parser.add_argument("--max-configuration-responses", type=int, default=4)
     parser.add_argument("--profile")
     args = parser.parse_args(argv)
     session = boto3.Session(profile_name=args.profile, region_name=args.region)
@@ -374,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
                 appconfig=appconfig,
                 appconfigdata=appconfigdata,
                 expected_account_id=args.account_id,
+                region=args.region,
                 test_id=args.test_id,
                 application_id=args.application_id,
                 environment_id=args.environment_id,
@@ -385,6 +409,8 @@ def main(argv: list[str] | None = None) -> int:
                 require_progressive_state=args.require_progressive_state,
                 timeout_seconds=args.timeout_seconds,
                 poll_interval_seconds=args.poll_interval_seconds,
+                max_get_latest_calls=args.max_get_latest_calls,
+                max_configuration_responses=args.max_configuration_responses,
             )
     except LifecycleCheckError as exc:
         print(json.dumps({"status": "failed", "reason": str(exc)}))

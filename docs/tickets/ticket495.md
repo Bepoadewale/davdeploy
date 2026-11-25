@@ -37,7 +37,7 @@ this exact shape only; it does not prove Nova dispatch.
   and [feature-flag content schema](https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-type-reference-feature-flags.html).
 - AWS AppConfig [deployment strategies](https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-creating-deployment-strategy.html)
   and [reverting configuration](https://docs.aws.amazon.com/appconfig/latest/userguide/appconfig-deploying-reverting.html).
-- AWS [Systems Manager and AppConfig pricing](https://aws.amazon.com/systems-manager/pricing/): current published rates are $0.0000002 per configuration request and $0.0008 per configuration received. Limit the test to at most 50 configuration requests and 10 returned configurations, an estimated AppConfig data charge below $0.01; this is an estimate, not a bill or spending cap.
+- AWS [Systems Manager and AppConfig pricing](https://aws.amazon.com/systems-manager/pricing/): current published rates are $0.0000002 per configuration request and $0.0008 per configuration received. The lifecycle verifier attempts are bounded to at most 24 requests and 11 returned configurations, an estimated AppConfig data charge below $0.01; this is an estimate, not a bill or spending cap.
 - HashiCorp AWS provider resources for [`aws_appconfig_configuration_profile`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appconfig_configuration_profile), [`aws_appconfig_hosted_configuration_version`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appconfig_hosted_configuration_version), [`aws_appconfig_deployment_strategy`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appconfig_deployment_strategy), and [`aws_appconfig_deployment`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/appconfig_deployment).
 - Existing AppConfig environment policy and regressions in
   `apps/api/src/davdeploy/generated_plan_policy.py` and
@@ -66,22 +66,23 @@ this exact shape only; it does not prove Nova dispatch.
 
 ## Acceptance criteria
 
-- [ ] Module builds a hosted feature-flag profile and a bounded rollout
+- [x] Module builds a hosted feature-flag profile and a bounded rollout
   strategy from known, same-application identities.
-- [ ] Actual-plan policy rejects unknown/missing/cross-plan or cross-app
+- [x] Actual-plan policy rejects unknown/missing/cross-plan or cross-app
   references, malformed feature-flag JSON, and unsafe strategy values.
-- [ ] Regression tests cover valid configuration and each fail-closed case.
-- [ ] Isolated AWS evidence observes disabled → enabled progressive rollout →
+- [x] Regression tests cover valid configuration and each fail-closed case,
+  including append-only version publishing and exact application teardown.
+- [x] Isolated AWS evidence observes disabled → enabled progressive rollout →
   rollback → disabled, using synthetic data and the exact test ID.
 - [ ] Monitored destroy and independent AWS reads confirm exact test resources
   absent; local state and plans are retained with mode 600.
-- [ ] The 26 architecture entries and 30 implementation roots remain intact;
+- [x] The 26 architecture entries and 30 implementation roots remain intact;
   the matrix links this exact test and keeps Nova dispatch/hosted execution
   gaps explicit.
-- [ ] The estimate uses bounded request/response counts and records the
+- [x] The estimate uses bounded request/response counts and records the
   current price source; no claim of an actual bill or hard cap is made.
-- [ ] Focused tests, `make verify`, Terraform validation, documentation
-  conventions, clean-room gate, final-head CI, and review pass.
+- [x] Focused tests, `make verify`, Terraform validation, and documentation
+  conventions pass. The clean-room gate, final-head CI, and review remain.
 - [ ] No hosted control-plane, remote-state, lock, unrelated AWS, or customer
   data is accessed or changed. No Nova dispatch or customer workload
   certification is claimed.
@@ -91,37 +92,51 @@ this exact shape only; it does not prove Nova dispatch.
 - [x] Ticket and draft PR opened before substantive implementation.
 - [x] Module, generated-plan policy, regression tests, Terraform fixture, and
   redacted lifecycle verifier are implemented locally.
-- [x] Focused policy and lifecycle tests pass (528 tests).
-- [ ] Direct AWS disabled → progressive enabled → reverted lifecycle evidence.
+- [x] Focused policy and lifecycle tests pass (533 tests after append-only
+  version-retention and exact application-teardown regressions).
+- [x] Direct AWS disabled → progressive enabled → reverted lifecycle evidence
+  is verified for deployment 2; the failed progressive verifier observed
+  `BAKING`, a bounded completion read confirmed `COMPLETE` and enabled, and a
+  rollback read confirmed `REVERTED` and disabled.
 - [ ] Exact monitored destroy and independent absence check.
-- [ ] Matrix update, full repository validation, clean-room gate, final-head
-  CI, review, and merge.
+- [x] Matrix update, full repository validation, and documentation conventions.
+- [ ] Clean-room gate, final-head CI, review, and merge.
 
-Implementation is uncommitted on the PR branch. The exact reviewed six-create
-AppConfig plan has been submitted through the run monitor; completion and
-resource IDs are pending reconciliation. PR #495 remains a draft.
+Implementation remains uncommitted on the PR branch. The initial six-resource
+create succeeded and the disabled flag was independently verified. A reviewed
+append-only plan retained hosted version 1, added a new version, and replaced
+only the Terraform deployment resource. The enabled revision reached
+`BAKING` and `COMPLETE`; rollback returned the flag to disabled. The exact
+seven-resource destroy plan is reviewed and awaits approval before apply. PR
+#495 remains a draft.
 
 ## Tests / validation performed
 
 - Read-only main, matrix, module, and policy inspection completed.
-- Read-only AWS identity was previously verified for account
-  `654654474502`; recheck identity immediately before the disposable test.
+- AWS identity was verified for account `654654474502` before create, rollout,
+  and rollback.
 - Current AWS AppConfig pricing and AWS/HashiCorp primary references were
   reviewed on 2026-11-25.
 - Read-only AWS caller identity returned account `654654474502`; the exact
   application and deployment-strategy name prefixes for test ID
   `20261125-a1b2c3` were absent. The Terraform monitor showed 62 records and
   zero active operations.
-- `pytest tests/test_generated_plan_policy.py tests/test_appconfig_feature_flag_lifecycle_script.py -q`:
-  528 passed.
+- `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest -q
+  tests/test_generated_plan_policy.py tests/test_appconfig_feature_flag_lifecycle_script.py`:
+  533 passed.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
-  1,783 tests passed; lint, Actions configuration, OpenAPI snapshot, and
+  1,788 tests passed; lint, Actions configuration, OpenAPI snapshot, and
   Compose configuration checks passed.
 - Terraform fixture formatting and validation passed with the pinned lockfile.
 - Ruff lint passed. Formatting check reports pre-existing formatting
   differences in large existing files; do not mass-format unrelated code.
-- AWS lifecycle work is pending; `docs/test/test495.md` records the exact
-  planned manifest and commands before any apply.
+- Initial AWS create, disabled-value verification, append-only version 2,
+  enabled-value observation, rollback, and disabled-value verification
+  succeeded. The exact destroy plan shows seven test resources and remains
+  unapplied pending approval; see `docs/test/test495.md`.
+- AppConfig Data verification honors AWS's next-poll interval, enforces at
+  most eight `GetLatestConfiguration` calls and four responses per phase, and
+  returns only counts and a boolean flag value; it never returns tokens.
 
 ## Evidence files produced
 
