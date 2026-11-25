@@ -3,7 +3,8 @@
 ## Current state
 
 **As of 2026-11-25, backend `main` is
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The hosted control plane
+`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+reconciliation through PR #493). The hosted control plane
 remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
 using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
@@ -122,7 +123,7 @@ PR #486 remains open and unmerged at synchronized head
 [45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
 Two isolated direct same-account cycles verified encrypted 8 GiB gp3 root
 volumes, healthy ASG/EC2 checks, and teardown with independent absence checks.
-The branch includes current `main` through PR #493. Final clean-room cleanup of
+The branch includes current `main` through PR #494. Final clean-room cleanup of
 `.venv`, `.local`, Compose volume, and network remains pending explicit
 approval; the project containers are stopped and all remaining artifacts are
 preserved.

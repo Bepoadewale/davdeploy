@@ -1,7 +1,8 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493); hosted runtime remains
+`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+reconciliation through PR #493); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -120,7 +121,7 @@ The merge added no AWS resources.
 
 PR #486 remains open at synchronized head `3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
 [45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
-It includes current `main` through PR #493. The final clean-room cleanup
+It includes current `main` through PR #494. The final clean-room cleanup
 finding remains open pending explicit approval; project containers are stopped,
 and generated files, volume, and network are preserved.
 

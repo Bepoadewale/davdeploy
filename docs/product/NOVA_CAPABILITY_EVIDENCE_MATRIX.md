@@ -1,7 +1,8 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493), 2026-11-25. PR #492
+`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+reconciliation through PR #493), 2026-11-25. PR #492
 records the bootstrapped growth strategy as roadmap-only; it changes no
 product behavior or AWS resources. Merged PR #493's final-head CI run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)
@@ -20,7 +21,7 @@ The hosted control plane was not accessed or changed for this reconciliation.
 PR #485 is merged and records direct same-account Auto Scaling scale/health/
 teardown evidence for its bounded shape. PR #486 remains open at synchronized
 head `3d7fe8b89adb6fd6407afe989336a1d756e02d99`; its encrypted root-volume tests
-passed, and the synchronized branch includes current `main` through PR #493.
+passed, and the synchronized branch includes current `main` through PR #494.
 All seven checks passed in run
 [45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
 Final clean-room cleanup is pending approval; containers are stopped and its

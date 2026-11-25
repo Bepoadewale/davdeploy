@@ -8,7 +8,8 @@ lifecycle coverage remain distinct.
 ## Current source and acceptance status — 2026-11-25
 
 The source baseline for this reconciliation is backend `main` at
-`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
+`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+reconciliation through PR #493). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -62,7 +63,7 @@ added no AWS resources.
 PR #486 remains open at synchronized head
 `3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
 [45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
-It includes current `main` through PR #493. Two same-account cycles verified
+It includes current `main` through PR #494. Two same-account cycles verified
 encrypted 8 GiB gp3 root volumes and teardown. Final clean-room cleanup remains
 pending explicit approval; containers are stopped and generated files, volume,
 and network are preserved.
@@ -335,7 +336,9 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
+- Backend `main` is
+  `2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
+  reconciliation through PR #493). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
