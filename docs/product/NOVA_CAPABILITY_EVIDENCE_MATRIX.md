@@ -1,7 +1,15 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491), 2026-11-24. PR #413
+`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493), 2026-11-25. PR #492
+records the bootstrapped growth strategy as roadmap-only; it changes no
+product behavior or AWS resources. Merged PR #493's final-head CI run
+[45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)
+passed all seven checks. Its exact synthetic Parameter Store lifecycle created
+and updated version 1 to version 2, verified both values in memory without
+printing them, destroyed the exact parameter through the Terraform run
+monitor, and independently confirmed absence. Local state and plans are
+retained with mode 600; Nova dispatch is not claimed. PR #413
 merged this 26-architecture-entry / 30-root coverage ledger. The last recorded
 hosted release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
@@ -10,20 +18,19 @@ after plan [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/ru
 The hosted control plane was not accessed or changed for this reconciliation.
 
 PR #485 is merged and records direct same-account Auto Scaling scale/health/
-teardown evidence for its bounded shape. PR #486 remains open; its AMI-bound
-encrypted root-volume tests passed, while final clean-room cleanup is pending
-approval and its generated local artifacts remain preserved. PR #487 is merged and
+teardown evidence for its bounded shape. PR #486 remains open at head
+`f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its encrypted root-volume tests
+passed, and this branch now includes current `main` through PR #493. CI for
+the merge commit is pending. Final clean-room cleanup is pending approval; its
+generated local artifacts remain preserved. PR #487 is merged and
 records exact-module DynamoDB point-in-time recovery and teardown. PR #489 is
 merged with final-head CI run [45487279034](https://github.com/Bepoadewale/davdeploy/actions/runs/45487279034)
 and merged-main run [45488186730](https://github.com/Bepoadewale/davdeploy/actions/runs/45488186730)
 passing all seven checks. It records exact-module Lambda v1 invocation,
 in-place v2 update, teardown, and independent absence verification. A read-only AWS check found no matching
 DynamoDB test table, Auto Scaling group, EC2 instance, or Lambda test resources.
-PR #491 is merged after verifying the exact `modules/artifacts` bucket
-settings, synthetic object versions, exact-key cleanup, monitored destroy,
-and independent absence checks. The S3 test uses local Terraform state and
-does not establish Nova dispatch. These tests count only for the tested
-shapes. Terraform monitor: 59 records, no active operations.
+These tests count only for the tested shapes and do not establish Nova
+dispatch. Terraform monitor: 62 records, no active operations.
 
 PR #473 merged with seven checks passing in CI run
 [45284594649](https://github.com/Bepoadewale/davdeploy/actions/runs/45284594649).
@@ -355,7 +362,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-dns-zone` | `modules/dns-zone` | `aws-edge-https` / `multi-region` | PR #470 requires known zone name, no VPC associations, and `force_destroy=false`. It does not verify ownership, records, delegation, failover, or DNS cost. | [`test260.md`](../test/test260.md), [`test244.md`](../test/test244.md); neither proves this module's complete customer lifecycle |
 | `aws-acm-certificate` | `modules/acm-certificate` | `aws-edge-https` / `multi-region` | PR #468 requires known domain, DNS validation, RSA_2048, and export disabled. It does not verify domain ownership, certificate issuance/renewal, or DNS record publication. | [`test254.md`](../test/test254.md) records ACM/SES DNS validation; it does not certify this module's complete lifecycle |
 | `aws-kms-key` | `modules/kms-key` | `aws-secrets-config` (candidate; KMS not listed in module services) / no scenario | PR #463 requires known symmetric `ENCRYPT_DECRYPT` keys, automatic rotation, regional scope, and a 30-day deletion window. It does not validate the key policy or consumer binding. | `test244` used AWS-managed KMS encryption for Kinesis, not this customer-managed-key root; no root-specific evidence found. No customer-managed-key apply because AWS charges for keys and deletion has a 7–30 day waiting period. |
-| `aws-parameter-config` | `modules/parameter-config` | `aws-secrets-config` / no scenario | PR #465 requires `SecureString`, Standard tier, and a known optional KMS key reference. It does not protect the value from Terraform state, validate consumer access, or handle rotation. | No root-specific workload evidence found |
+| `aws-parameter-config` | `modules/parameter-config` | `aws-secrets-config` / no scenario | PR #465 requires `SecureString`, Standard tier, and a known optional KMS key reference. It does not protect the value from Terraform state, validate consumer access, or handle rotation. | Merged PR #493's [`test493.md`](../test/test493.md) records exact-module synthetic version 1→2 retrieval, in-memory redacted verification, monitored destroy, independent absence, and retained mode-600 state/plans; no Nova dispatch. |
 | `aws-feature-flags` | `modules/feature-flags` | No matching catalogue module / no scenario | PR #471 requires each planned AppConfig environment to reference exactly one same-plan application and requires known names. It does not create a configuration profile, feature flag, deployment strategy, or rollout. | No root-specific workload evidence found |
 | `aws-s3-private-storage` | `modules/artifacts` | `aws-file-storage`, `aws-static-web`, `aws-ai-retrieval` / `ai-rag`, `web-application` | S3 block-public-access/public ACL checks; merged PRs #434–#436 require same-plan TLS-deny, default encryption, and `BucketOwnerEnforced`. Not a complete private-upload policy | [`test262.md`](../test/test262.md) private source bucket; draft PR #491 [`test491.md`](../test/test491.md) records exact `modules/artifacts` settings, synthetic v1/v2 reads, and monitored teardown; no Nova dispatch |
 | `aws-cloudfront-delivery` | `modules/cloudfront-delivery` | `aws-edge-https`, `aws-static-web` / `multi-region`, `web-application` | Merged PRs #432/#433 deny unknown or cleartext viewer policies and check custom-origin HTTPS/TLS 1.2; standard S3 origins rely on viewer HTTPS. Source-only. No response-header, private-origin-access, or cache-safety policy | [`test253.md`](../test/test253.md) |
@@ -378,7 +385,7 @@ behaviors; they do not establish Nova dispatch or hosted execution.
 | `aws-kinesis-stream` | `modules/kinesis-stream` | `aws-stream-processing` / `async-data` | PR #475 bounds plans to one provisioned shard, 24-hour retention, KMS encryption, and the AWS-managed Kinesis key. The policy does not cover consumers, producer authorization, checkpoints/replay, or complete regional costs. | [`test258.md`](../test/test258.md): one record accepted; no consumer processing |
 | `aws-batch-compute` | `modules/batch-compute` | `aws-jobs-events`, `aws-data-analytics` / `saas-backend`, `async-data` | Shared IAM/network checks only; no queue/job role, retry, capacity, or budget policy suite | [`test252.md`](../test/test252.md): controlled disposable Batch job; merged PR #458 [`test458.md`](../test/test458.md): first-attempt failure, automatic retry, success, and exact teardown |
 | `aws-eks-cluster` | `modules/eks` | `aws-kubernetes-platform`, `aws-gpu-inference` / `kubernetes` | Deployed PR #404 checks managed-node metadata only when the plan binds one in-plan launch template with IMDSv2 required. It does not cover Kubernetes/RBAC, cluster endpoint, quota policy, or customer-plan behavior. | [`test255.md`](../test/test255.md): workload service probe through EKS |
-| `aws-ec2-autoscaling` | `modules/ec2-autoscaling` | `aws-virtual-machine-service`, possible GPU compute / no scenario for VM/GPU | Merged PR #483 bounds capacity to `0 <= min <= desired <= max <= 3`, one same-plan launch template with fixed `latest_version`, known AMI ID, `t3.micro`, and IMDSv2. PR #486 binds the launch-template image and root-device mapping to the same planned `aws_ami` metadata and requires encrypted, delete-on-termination, gp3, 8 GiB storage; missing, unknown, mismatched or unsafe mappings fail closed. Two direct test cycles verified one `Healthy` / `InService` instance, EC2 checks, encrypted root volume, network isolation, and teardown. This direct Terraform run is not Nova dispatch. AMI provenance, scoped instance-role permission, guest health, update/recovery, full price, remote Nova state, and Nova dispatch remain unproven. | [`test244.md`](../test/test244.md): zero-capacity ASG reached service-valid state; merged PR #485 [`test485.md`](../test/test485.md): direct isolated `t3.micro` capacity 1→2→1, EC2 checks, and teardown; PR #486 [`test486.md`](../test/test486.md): encrypted EBS root, ASG health, and exact teardown. The test instances are terminated. |
+| `aws-ec2-autoscaling` | `modules/ec2-autoscaling` | `aws-virtual-machine-service`, possible GPU compute / no scenario for VM/GPU | Merged PR #483 bounds capacity to `0 <= min <= desired <= max <= 3`, one same-plan launch template with fixed `latest_version`, known AMI ID, `t3.micro`, and IMDSv2. Open PR #486 adds source checks that bind the encrypted, delete-on-termination gp3 8 GiB root volume to the selected AMI root-device metadata; it remains unmerged pending synchronized CI and clean-room review. AMI provenance, scoped instance role, guest health, update/recovery, complete price, and Nova dispatch remain unproven. | [`test244.md`](../test/test244.md): zero-capacity ASG reached service-valid state; merged PR #485 [`test485.md`](../test/test485.md): direct isolated `t3.micro` capacity 1→2→1, EC2 checks, and teardown; open PR #486 [`test486.md`](../test/test486.md): two direct encrypted root-volume create/health/teardown cycles. All test EC2 records are terminated. |
 | `aws-vpc-private-network` | `modules/vpc` | `aws-private-connectivity` / `hybrid-network` | Security-group ingress checks only; no VPC topology, egress, endpoint, route, or NAT policy | [`test244.md`](../test/test244.md) VPC for EKS; [`test263.md`](../test/test263.md) includes routed topology |
 | `aws-site-to-site-vpn` | `modules/site-to-site-vpn` | `aws-private-connectivity` / `hybrid-network` | Shared network checks only; no peer, tunnel, route propagation, or encryption policy | [`test263.md`](../test/test263.md): encrypted routed traffic; [`test244.md`](../test/test244.md) was lifecycle-only with tunnels down |
 | `aws-multi-region-dns` | `modules/multi-region-dns` | `aws-edge-https`, `aws-backup-recovery` / `multi-region` | No failover health-check/record/region policy | [`test260.md`](../test/test260.md): public DNS failed over between two endpoints; not backup/restore evidence |
