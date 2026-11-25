@@ -7,6 +7,12 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-25
 
+The next major engineering goal is registered in the
+[AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
+It is queued only: this handoff and its existing Nova acceptance gates remain
+the active priority and are not reduced or replaced. Start the queued goal only
+after this handoff records genuine completion with its required evidence.
+
 The source baseline for this reconciliation is backend `main` at
 `f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
 hosted backend release remains PR #420 commit
