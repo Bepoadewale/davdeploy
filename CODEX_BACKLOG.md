@@ -1,8 +1,8 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-24
+## Nova status snapshot — 2026-11-25
 
-Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The
+Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The
 hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
 [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -12,6 +12,17 @@ The recorded deployment passed database migrations; all six Lambda packages
 shared code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz`
 returned HTTP 200. These checks describe the hosted control plane, not a
 customer workload. PR #430 refreshed the 26-capability/30-root evidence map.
+
+PR #493 merged with all seven checks passing in final-head run
+[45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).
+The exact `modules/parameter-config` test created a tagged synthetic Standard
+`SecureString`, updated it from version 1 to 2, verified both decrypted
+versions in memory without printing them, then destroyed the exact parameter.
+Independent AWS reads confirmed absence; local state and saved plans are
+retained with mode 600. This covers only the tested module shape, not consumer
+authorization, rotation, complete cost, Nova dispatch, or workload
+certification. Merged-main CI passed all seven checks in
+[45516309809](https://github.com/Bepoadewale/davdeploy/actions/runs/45516309809).
 
 PR #424's bounded Aurora pricing and PRs #425–#429's Nova provenance/schema
 evidence are in backend source but are not deployed by PR #420. Cost coverage
@@ -130,13 +141,10 @@ records are terminated and local state is empty. This does not prove guest
 application health, recovery, complete pricing, Nova dispatch, or
 cross-account isolation. The merge added no AWS resources.
 
-PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782` with all
-seven checks passing in run
-[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590).
-It verifies encrypted Auto Scaling root volumes in two direct same-account
-cycles. The clean-room review finding remains open until final cleanup of only
-that worktree's generated `.venv`, `.local`, and Compose volumes; preserve these
-artifacts pending explicit approval.
+PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`;
+its base still points to pre-PR #493 `main` and must be synchronized before
+merge. Its final-head CI is green, but the final clean-room cleanup finding
+remains open and the generated artifacts stay preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head run
 [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)

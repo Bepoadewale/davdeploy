@@ -1,14 +1,14 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-24. This handoff tracks the Nova-led infrastructure goal
+Updated: 2026-11-25. This handoff tracks the Nova-led infrastructure goal
 without claiming launch readiness. Source, hosted control-plane state,
 customer-side AWS evidence, Nova execution, application behavior, and per-entry
 lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-24
+## Current source and acceptance status — 2026-11-25
 
 The source baseline for this reconciliation is backend `main` at
-`5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
+`229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -59,13 +59,12 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at `d8f0d7aff2851815cb46150fb187f01bd5ba9782`; its
-final-head CI run
-[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
-passed all seven checks. Two same-account cycles verified encrypted 8 GiB gp3
-root volumes and teardown. Its final clean-room cleanup remains pending
-approval to remove generated artifacts and Compose volumes in that specific
-worktree; those artifacts are preserved.
+PR #486 remains open at head `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its
+seven required checks pass on that head, but it remains behind current `main`
+and GitHub reports a dirty merge state. Two same-account cycles verified
+encrypted 8 GiB gp3 root volumes and teardown. Its final clean-room cleanup
+remains pending explicit approval to remove generated artifacts and Compose
+volumes in that specific worktree; those artifacts are preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
 CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
@@ -87,6 +86,18 @@ reviewed four-resource create, synthetic v1 invocation, in-place v2 code
 update, monitored destroy, and independent function/role/log-group absence.
 This is direct customer-side evidence for the tested Lambda shape; it is not
 Nova authorization, dispatch, or customer workload certification.
+
+PR #493 merged as `229f0f332f7a1bccc8199317e7e9ad40a912717c`; its final-head
+CI run [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)
+passed all seven checks. The exact `modules/parameter-config` test created a
+tagged synthetic Standard `SecureString`, updated version 1 to version 2,
+compared both decrypted values in memory without printing them, then destroyed
+the exact parameter through the Terraform run monitor. Independent AWS reads
+confirmed absence; local state and all three saved plans remain retained with
+mode 600. This is direct evidence for that module shape only: consumer
+authorization, rotation, complete cost, Nova dispatch, and customer workload
+certification remain open. The hosted control plane and its state and locks
+were not touched.
 
 PR #483 passed all seven checks on final head in CI run
 [45425670662](https://github.com/Bepoadewale/davdeploy/actions/runs/45425670662)
@@ -270,8 +281,13 @@ and no AppConfig workload or lifecycle was tested; see
 [`ticket471`](../tickets/ticket471.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
-monitor has 57 records and no active operations. The PR #489 Lambda test
-function, role, and log group are absent.
+monitor has 62 records and no active operations. A read-only 2026-11-25 AWS
+check found no Parameter Store parameter under PR #493's test prefix, no
+SageMaker endpoints, models, or endpoint configurations, and five inactive
+DavDeploy-named Batch job definitions. The SageMaker lineage action/context
+and associated evidence remain preserved. The PR #489 Lambda test function,
+role, and log group are absent. Persistent control-plane roles and buckets
+remain present and untouched.
 Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
 lineage evidence.
 
@@ -315,7 +331,7 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `5691f070400ac882c9291885668ba3d0150e48a2` (PR #489). The last
+- Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a

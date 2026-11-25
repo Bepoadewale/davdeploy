@@ -117,15 +117,15 @@ the local Terraform state is retained and empty. No Nova dispatch or guest
 application health is claimed. The merge added no AWS or control-plane
 resources.
 
-PR #486 remains open and unmerged at
-`d8f0d7aff2851815cb46150fb187f01bd5ba9782`. Its final-head CI run
-[45466557590](https://github.com/Bepoadewale/davdeploy/actions/runs/45466557590)
-passed all seven checks. Two isolated direct same-account cycles verified an
-encrypted 8 GiB gp3 root volume, healthy ASG/EC2 checks, and teardown with
-independent absence checks. Its remaining review finding requires final
-clean-room cleanup; that cleanup would remove the clean-room worktree's
-generated `.venv`, `.local`, and Compose volumes and remains pending explicit
-approval. Those local artifacts are preserved.
+PR #486 remains open and unmerged at head
+`f65c1fed551eeb9f16802f6eb67dbd7d75227edb`. Its seven required checks passed
+in run [45505303210](https://github.com/Bepoadewale/davdeploy/actions/runs/45505303210).
+Two isolated direct same-account cycles verified an encrypted 8 GiB gp3 root
+volume, healthy ASG/EC2 checks, and teardown with independent absence checks.
+GitHub currently reports a dirty merge state because the branch is behind
+current `main`. Its remaining clean-room review finding requires final cleanup
+of generated `.venv`, `.local`, and Compose volumes; this remains pending
+explicit approval, so those artifacts are preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
