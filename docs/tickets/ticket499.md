@@ -94,8 +94,10 @@ needs an explicit reviewed migration plan.
   invalid subnet sets, unbounded scaling, unsupported instance shapes, bad
   bindings, and SSH remote access fail closed.
 - [x] Regression tests cover the supported profile and fail-closed cases.
-- [x] Documentation conventions and Terraform formatting pass. Final-head CI
-  remains pending.
+- [x] Documentation conventions, Terraform formatting, and all seven required
+  GitHub checks pass on implementation commit `032d363` in [run
+  45548237114](https://github.com/Bepoadewale/davdeploy/actions/runs/45548237114).
+  The final ticket-evidence commit receives a separate run.
 - [x] Capability matrix keeps source policy distinct from direct workload
   evidence and does not claim Nova dispatch or certification.
 - [x] This PR makes no AWS, hosted control-plane, Terraform-state/lock, or
@@ -105,8 +107,10 @@ needs an explicit reviewed migration plan.
 
 Implementation and focused regression coverage are in place. The generated-plan
 policy test file passes 541 tests. Ruff, Terraform formatting, documentation
-conventions, and `git diff --check` pass locally. Required final-head GitHub
-checks remain pending.
+conventions, and `git diff --check` pass locally. All seven GitHub checks passed
+for implementation commit `032d363` in [run
+45548237114](https://github.com/Bepoadewale/davdeploy/actions/runs/45548237114);
+the final ticket-evidence head is checked separately.
 
 ## Tests / validation performed
 
@@ -118,6 +122,8 @@ checks remain pending.
   passed.
 - `GITHUB_PR_NUMBER=499 python3 scripts/check_doc_conventions.py` and
   `git diff --check`: passed.
+- Final implementation-head CI: all seven checks passed in [run
+  45548237114](https://github.com/Bepoadewale/davdeploy/actions/runs/45548237114).
 - No AWS workload, hosted-control-plane, or Terraform mutation was run.
 
 ## Evidence files produced
