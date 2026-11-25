@@ -2270,13 +2270,18 @@ def evaluate_generated_plan_pricing(
                     ))
                 else:
                     eips_by_address = {item["address"]: item for item in elastic_ips}
+                    known_eip_ids = [
+                        item["values"].get("id")
+                        for item in elastic_ips
+                        if isinstance(item["values"].get("id"), str)
+                    ]
                     eips_by_allocation = {
                         item["values"].get("id"): item for item in elastic_ips
                         if isinstance(item["values"].get("id"), str)
                     }
                     used_eips: set[str] = set()
                     invalid_nat = None
-                    if len(eips_by_allocation) != len(elastic_ips):
+                    if len(eips_by_allocation) != len(known_eip_ids):
                         invalid_nat = nat_gateways[0]["address"]
                     for address, item in nat_by_address.items():
                         if invalid_nat is not None:

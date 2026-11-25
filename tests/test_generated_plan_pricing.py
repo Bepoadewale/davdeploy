@@ -1209,6 +1209,11 @@ def test_nat_gateway_unsupported_eip_shape_blocks_pricing():
 
 def test_nat_gateway_unknown_allocation_is_bound_by_configuration_reference():
     document = nat_gateway_plan()
+    eip_values = document["planned_values"]["root_module"]["resources"][1]["values"]
+    eip_values["id"] = None
+    eip_change = next(item for item in document["resource_changes"] if item["type"] == "aws_eip")
+    eip_change["change"]["after"]["id"] = None
+    eip_change["change"]["after_unknown"]["id"] = True
     nat_values = document["planned_values"]["root_module"]["resources"][2]["values"]
     nat_values["allocation_id"] = None
     nat_change = next(item for item in document["resource_changes"] if item["type"] == "aws_nat_gateway")
