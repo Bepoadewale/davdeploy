@@ -69,8 +69,10 @@ unpriced Batch dependency and unsupported logging configuration.
   storage lines; no prices are hardcoded.
 - [x] Batch estimates remain incomplete and approval-ineligible until image,
   networking, transfer, and every other material cost is priced.
-- [ ] Focused tests, generated OpenAPI validation, documentation conventions,
-  and required final-head CI pass.
+- [x] Focused tests, generated OpenAPI validation, and documentation
+  conventions pass; all seven required checks passed on implementation head
+  `e0aa6c0` in run `45656472518`. Any final ticket-only update must pass its own
+  current-head CI before merge.
 - [x] No AWS workload, Terraform state/lock, or hosted control-plane resource
   is changed; no customer workload test is claimed.
 
@@ -78,7 +80,8 @@ unpriced Batch dependency and unsupported logging configuration.
 
 - [x] Implementation complete.
 - [x] Focused validation complete.
-- [ ] Final-head CI passed.
+- [x] All seven CI checks passed on head `e0aa6c0` in
+  [run 45656472518](https://github.com/Bepoadewale/davdeploy/actions/runs/45656472518).
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -93,8 +96,9 @@ unpriced Batch dependency and unsupported logging configuration.
   includes the additive optional Batch log-usage contract.
 - `GITHUB_PR_NUMBER=509 python3 scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Final-head PR CI remains required before merge. No Terraform or cloud
-  mutation was run.
+- Final-head PR run `45656472518` passed all seven required checks.
+- Any later ticket-only update must pass its own current-head CI before merge.
+- No Terraform or cloud mutation was run.
 
 ## Evidence files produced
 

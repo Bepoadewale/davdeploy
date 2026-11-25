@@ -3,16 +3,20 @@
 ## Nova status snapshot — 2026-11-25
 
 Backend `main` is
-`2afd0070cb7991a2eec77c25d1750a6cf4de190c` (PR #507). Merged PR #506
-validates the architecture-to-Terraform crosswalk but does not enable Nova
-dispatch. PR #507 adds trusted-usage, regional Linux/x86 Fargate compute price
-lines for bounded Batch plans; the estimate stays incomplete and
-approval-ineligible until material supporting costs are priced. Its final-head
-CI passed all seven checks in
+`29605fa9192a3ff4ac0ba168ced82e39e784d1f6` (PR #508, docs-only atop PR #507).
+Merged PR #506 validates the architecture-to-Terraform crosswalk but does not
+enable Nova dispatch. PR #507 adds trusted-usage, regional Linux/x86 Fargate
+compute price lines for bounded Batch plans; the estimate remains incomplete
+and approval-ineligible until material supporting costs are priced. Its
+final-head CI passed all seven checks in
 [run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-No PR was open after #507 merged. The Terraform run monitor has 67 records and
-zero active operations. AWS identity was rechecked as account `654654474502`;
-this documentation reconciliation made no AWS or hosted-control-plane change.
+PR #508 reconciles the current goal status and merged-main CI. Draft PR #509
+adds source-only, trusted-usage-bound CloudWatch Logs ingestion/storage prices
+for explicitly configured Batch `awslogs`; other material image/network costs
+still block approval. One PR, #509, is open. The Terraform run monitor has 67
+records and zero active operations. AWS identity was rechecked as account
+`654654474502`; this documentation and pricing work made no AWS or
+hosted-control-plane change.
 
 The hosted control plane remains at PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
