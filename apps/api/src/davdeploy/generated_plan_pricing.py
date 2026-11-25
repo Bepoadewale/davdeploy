@@ -1410,6 +1410,7 @@ def evaluate_generated_plan_pricing(
     http_apis: list[dict[str, Any]] = []
     lambda_log_groups: list[dict[str, Any]] = []
     ecr_repositories: list[dict[str, Any]] = []
+    priced_ecr_addresses: set[str] = set()
     for resource in resources:
         address = resource["address"]
         resource_type = resource["type"]
@@ -1608,6 +1609,7 @@ def evaluate_generated_plan_pricing(
                                 unit_price_low_usd=format(low_rate, "f"),
                                 low_cost_quantity=usage.minimum,
                             ))
+                            priced_ecr_addresses.add(address)
     elif ecr_usage_document is not None:
         findings.append(PlanPricingFinding(
             "ecr_storage_assumptions_stale", None,
@@ -1637,8 +1639,48 @@ def evaluate_generated_plan_pricing(
     if batch_resources:
         findings.append(PlanPricingFinding(
             "batch_supporting_costs_unpriced", None,
-            "Batch pricing includes bounded Fargate compute and supported explicit CloudWatch Logs usage; image storage and transfer, networking, public IPv4, and other material linked usage still block approval.",
+            "Batch pricing includes bounded Fargate compute, supported CloudWatch Logs usage, and storage for a priced same-plan ECR repository; uncovered image storage or transfer, network path charges, public IPv4, and other material linked usage still block approval.",
         ))
+        for job in batch_jobs:
+            try:
+                properties = json.loads(job["values"].get("container_properties"))
+            except (json.JSONDecodeError, TypeError, RecursionError):
+                properties = None
+            image_value = properties.get("image") if isinstance(properties, dict) else None
+            image_reference, image_error = _private_ecr_image_reference(image_value)
+            if image_error is not None:
+                findings.append(PlanPricingFinding(
+                    "batch_image_ecr_reference_invalid", job["address"],
+                    "A private ECR image reference must use an exact regional registry, repository name, and sha256 digest.",
+                ))
+            elif image_reference is None:
+                findings.append(PlanPricingFinding(
+                    "batch_image_source_unpriced", job["address"],
+                    "Batch image pricing requires a digest-pinned same-region private ECR image linked to one priced same-plan repository.",
+                ))
+            elif image_reference is not None:
+                image_account, image_region, image_repository = image_reference
+                if image_region != region:
+                    findings.append(PlanPricingFinding(
+                        "batch_image_region_mismatch", job["address"],
+                        "Private ECR images are linked for pricing only when their registry region matches the plan region.",
+                    ))
+                else:
+                    matching_repositories = [
+                        item for item in ecr_repositories
+                        if item["values"].get("registry_id") == image_account
+                        and item["values"].get("name") == image_repository
+                    ]
+                    if len(matching_repositories) != 1:
+                        findings.append(PlanPricingFinding(
+                            "batch_image_repository_unbound", job["address"],
+                            "The private ECR image must match exactly one same-plan repository by registry account and repository name.",
+                        ))
+                    elif matching_repositories[0]["address"] not in priced_ecr_addresses:
+                        findings.append(PlanPricingFinding(
+                            "batch_image_storage_unpriced", matching_repositories[0]["address"],
+                            "The same-plan ECR repository storage assumptions or regional price are missing or unsupported.",
+                        ))
         batch_compute = [
             item for item in batch_resources
             if item["type"] == "aws_batch_compute_environment"
@@ -3835,6 +3877,28 @@ def _validate_lambda_log_group(
     return _validate_standard_cloudwatch_log_group(
         values, change, expected_name, code_prefix="lambda_log"
     )
+
+
+def _private_ecr_image_reference(
+    image: Any,
+) -> tuple[tuple[str, str, str] | None, str | None]:
+    """Return account, region, and repository for a digest-pinned private ECR image."""
+    if not isinstance(image, str) or ".dkr.ecr." not in image:
+        return None, None
+    match = re.fullmatch(
+        r"(?P<account>[0-9]{12})\.dkr\.ecr\.(?P<region>[a-z]{2}(?:-[a-z0-9]+)+-[0-9])"
+        r"\.amazonaws\.com(?:\.cn)?/(?P<repository>[a-z0-9]+(?:[._/-][a-z0-9]+)*)"
+        r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?"
+        r"@sha256:(?P<digest>[a-f0-9]{64})",
+        image,
+    )
+    if match is None:
+        return None, "invalid"
+    return (
+        match.group("account"),
+        match.group("region"),
+        match.group("repository"),
+    ), None
 
 
 def _validate_batch_log_group(

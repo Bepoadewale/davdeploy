@@ -1,8 +1,8 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509, source-only pricing and
-documentation reconciliation); hosted runtime remains
+`d5d9eebe663a8a1f3f3ff13086e570b63feaf490` (PR #511, source-only ECR storage
+pricing); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -22,10 +22,16 @@ checks in run
 [45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335),
 and merged-main CI passed in run
 [45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
-Draft PR #511 adds a bounded standard-storage price for each explicitly
-addressed private ECR repository. ECR transfer, archival, signing, replication,
-networking, public IPv4, and other material costs still block approval. No AWS
-workload or hosted-control-plane resource changed.
+Merged PR #511 adds a bounded standard-storage price for each explicitly
+addressed private ECR repository. Draft PR #510 binds a digest-pinned,
+same-region Batch image to exactly one same-plan repository and reuses the #511
+storage line without double-counting. Unsupported image transfer, NAT/network
+path costs, archival, signing, replication, public IPv4, and other material
+costs still block approval. No AWS workload or hosted-control-plane resource
+changed. Read-only inventory on 2026-11-25 verified account `654654474502`,
+five `davdeploy-*` inactive Batch test definitions, and the retained SageMaker test
+action and context; the Terraform monitor had 67 terminal records and no active
+runs.
 
 Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
 final-head checks in run
