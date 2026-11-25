@@ -1,6 +1,6 @@
 # ticket493 — verify Parameter Store module lifecycle
 
-PR: [#493 — test: verify Parameter Store module lifecycle](https://github.com/Bepoadewale/davdeploy/pull/493) (draft).
+PR: [#493 — test: verify Parameter Store module lifecycle](https://github.com/Bepoadewale/davdeploy/pull/493) (merged).
 Branch: `test/parameter-config-lifecycle-493`.
 
 ## Problem / goal
@@ -17,10 +17,12 @@ never print either value.
 
 ## Current repo state
 
-- Backend `main` is `fb9a0dca09f5604b45aeef81c3a2dbe8423b87c4` (PR #491),
+- Backend `main` is `229f0f332f7a1bccc8199317e7e9ad40a912717c` (PR #493),
   including merged roadmap documentation from PR #492.
-- PR #486 remains open; its synchronized CI is green, while its clean-room
-  artifact cleanup awaits explicit approval. Preserve those artifacts.
+- PR #486 remains open at head
+  `f65c1fed551eeb9f16802f6eb67dbd7d75227edb`; its checks are green, but it is
+  behind current `main`. Its clean-room artifact cleanup awaits explicit
+  approval. Preserve those artifacts.
 - AWS test account is `654654474502`, region `us-east-1`. The hosted control
   plane, Terraform remote state, and lock resources are outside this test.
 
@@ -67,7 +69,7 @@ never print either value.
 
 ## Acceptance status
 
-Ticket-first draft PR #493 is open. The local-state fixture and redacted
+PR #493 is merged. The local-state fixture and redacted
 verification helper are implemented. Nine focused tests, Ruff, Terraform
 format/validation, and documentation checks pass. Reviewed create, update, and
 destroy plans each contained only the exact synthetic parameter change. The
@@ -76,8 +78,9 @@ place to version 2, and verified both decrypted versions in memory without
 printing either value. The monitored destroy succeeded; exact-name and
 test-prefix reads returned no parameter, and `GetParameter` returned
 `ParameterNotFound`. Local state and plans are retained with mode 600. The
-hosted control plane remains untouched. Final-head CI run `45514474947` passed
-all seven checks on lifecycle-evidence commit `89cfcaa`. Earlier runs
+hosted control plane remains untouched. Final-head CI run `45515203315` passed
+all seven checks on commit `100ec22e095a99c64e69956db0bf5ac2c741f367`; the PR
+merged as `229f0f332f7a1bccc8199317e7e9ad40a912717c`. Earlier runs
 `45507936770` and `45510209824` also passed all seven checks on their respective
 heads.
 
@@ -96,9 +99,10 @@ heads.
   `docs/test/fixtures/nova-parameter-config-493`: passed.
 - Read-only identity check returned account `654654474502`; exact SSM name
   `/davdeploy/nova-parameter-config-493/20261125-d0f5ab/synthetic` was absent.
-- Saved plan `/tmp/davdeploy-nova-parameter-config-493-20261125-d0f5ab/create-v1.tfplan`
-  contains exactly one create, zero updates, and zero deletes. The sensitive
-  value is redacted in the plan output. No apply or destroy has run.
+- Saved create plan `/tmp/davdeploy-nova-parameter-config-493-20261125-d0f5ab/create-v1.tfplan`
+  contained exactly one create, zero updates, and zero deletes. The sensitive
+  value was redacted in the plan output. The create, in-place update, and exact
+  destroy were applied through the Terraform run monitor as recorded below.
 - `gh pr checks 493` — all seven checks passed in final-head run
   `45507936770`.
 - Read-only Parameter Store lookup after CI confirmed the exact synthetic
@@ -126,8 +130,9 @@ heads.
   `GetParameter` returned `ParameterNotFound`. Terraform state is empty and
   retained at mode 600; all three saved plans are retained at mode 600. The
   monitor has 62 records and zero active runs.
-- `gh pr checks 493` — all seven checks passed on commit `89cfcaa` in run
-  `45514474947`.
+- `gh pr checks 493` — final-head run `45515203315` passed all seven checks on
+  `100ec22e095a99c64e69956db0bf5ac2c741f367`; PR #493 merged as
+  `229f0f332f7a1bccc8199317e7e9ad40a912717c`.
 
 ## Evidence files produced
 
