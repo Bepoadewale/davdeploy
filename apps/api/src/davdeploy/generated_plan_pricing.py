@@ -2290,6 +2290,24 @@ def evaluate_generated_plan_pricing(
                         values = item["values"]
                         allocation_id = values.get("allocation_id")
                         secondary_ids = values.get("secondary_allocation_ids") or []
+                        nat_change = changes.get(address)
+                        nat_change_details = (
+                            nat_change.get("change")
+                            if isinstance(nat_change, dict)
+                            else None
+                        )
+                        after_unknown = (
+                            nat_change_details.get("after_unknown")
+                            if isinstance(nat_change_details, dict)
+                            else None
+                        )
+                        secondary_ids_unknown = (
+                            not isinstance(after_unknown, dict)
+                            or not _valid_unknown_tree(after_unknown)
+                            or _path_contains_unknown(
+                                after_unknown, ("secondary_allocation_ids",)
+                            )
+                        )
                         if isinstance(allocation_id, str):
                             bound_eip = eips_by_allocation.get(allocation_id)
                             eip_address = bound_eip.get("address") if bound_eip else None
@@ -2299,11 +2317,15 @@ def evaluate_generated_plan_pricing(
                             )
                             matches = [
                                 candidate for candidate in eips_by_address
-                                if _reference_matches_resource(references, candidate)
+                                if references
+                                and all(
+                                    _reference_matches_resource((reference,), candidate)
+                                    for reference in references
+                                )
                             ]
                             eip_address = (
                                 matches[0]
-                                if len(references) == 1 and len(matches) == 1
+                                if references and len(matches) == 1
                                 else None
                             )
                         eip = eips_by_address.get(eip_address)
@@ -2311,6 +2333,7 @@ def evaluate_generated_plan_pricing(
                         if (
                             values.get("connectivity_type") != "public"
                             or secondary_ids
+                            or secondary_ids_unknown
                             or eip_address is None
                             or not isinstance(eip, dict)
                             or eip["values"].get("domain") != "vpc"

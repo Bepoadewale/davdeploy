@@ -1269,7 +1269,9 @@ def test_nat_gateway_unknown_allocation_is_bound_by_configuration_reference():
         "resources": [
             {"address": "aws_eip.nat", "expressions": {}},
             {"address": "aws_nat_gateway.nat", "expressions": {
-                "allocation_id": {"references": ["aws_eip.nat.id"]},
+                "allocation_id": {
+                    "references": ["aws_eip.nat.id", "aws_eip.nat"]
+                },
             }},
         ],
         "module_calls": {},
@@ -1313,7 +1315,7 @@ def test_nat_gateway_module_relative_reference_binds_unknown_nat_and_eip_ids():
                             "address": "aws_nat_gateway.nat",
                             "expressions": {
                                 "allocation_id": {
-                                    "references": ["aws_eip.nat.id"]
+                                    "references": ["aws_eip.nat.id", "aws_eip.nat"]
                                 }
                             },
                         },
@@ -1337,6 +1339,26 @@ def test_nat_gateway_module_relative_reference_binds_unknown_nat_and_eip_ids():
 
     assert result.status == PlanPricingStatus.COMPLETE
     assert result.approval_eligible is True
+
+
+def test_nat_gateway_unknown_secondary_allocations_block_pricing():
+    document = nat_gateway_plan()
+    nat_change = next(
+        item for item in document["resource_changes"]
+        if item["type"] == "aws_nat_gateway"
+    )
+    nat_change["change"]["after_unknown"]["secondary_allocation_ids"] = True
+    client = FakeVpcPriceList()
+
+    result, _ = evaluate(
+        document, catalog_client=client, vpc_usage_assumptions=NAT_USAGE
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "vpc_nat_shape_or_usage_unsupported" in {
+        finding.code for finding in result.findings
+    }
+    assert client.calls == []
 
 
 def test_nat_gateway_unknown_allocation_with_wrong_reference_blocks_pricing():
