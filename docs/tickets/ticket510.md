@@ -66,31 +66,34 @@ costs are unknown or unsupported.
 
 ## Acceptance criteria
 
-- [ ] Image costs are priced only when the exact Batch image and repository,
+- [x] Image costs are priced only when the exact Batch image and repository,
   region, and trusted PR #511 usage inputs are unambiguously bound to the
   reviewed plan, with no duplicate repository-storage line.
-- [ ] Missing, malformed, stale, over-bound, external, public/private-ambiguous,
+- [x] Missing, malformed, stale, over-bound, external, public/private-ambiguous,
   cross-region-unsupported, or otherwise unpriced cases fail closed without
   invented price lines.
 - [x] The registry account must be explicitly known in the planned repository
   values; an unknown registry ID fails closed instead of being inferred from
   the image URI.
-- [ ] Regional AWS Price List data provides every emitted rate and auditable
+- [x] Regional AWS Price List data provides every emitted rate and auditable
   source metadata; no prices are hardcoded.
-- [ ] Existing Batch log/compute assumptions and manifests remain readable and
+- [x] Existing Batch log/compute assumptions and manifests remain readable and
   digest checked.
-- [ ] Batch approval remains blocked for every material image, network,
+- [x] Batch approval remains blocked for every material image, network,
   transfer, or other cost not covered by verified assumptions and regional
   prices.
-- [ ] Focused tests, required local validation, documentation conventions, and
-  all required GitHub checks pass on the final PR head.
-- [ ] No AWS workload, Terraform state/lock, hosted control-plane resource, or
+- [x] Focused tests, required local validation, documentation conventions, and
+  all seven required checks passed on code head `242e271` in run
+  [45672425136](https://github.com/Bepoadewale/davdeploy/actions/runs/45672425136).
+  This ticket-only follow-up also requires its own final-head CI before merge.
+- [x] No AWS workload, Terraform state/lock, hosted control-plane resource, or
   feature gate is changed; no Nova customer workload is claimed.
 
 ## Acceptance status
 
 - [x] Implementation and focused validation complete.
-- [ ] Final-head GitHub checks pass.
+- [x] Seven checks passed on final code head `242e271`; the ticket-only
+  follow-up requires one final CI rerun.
 - [ ] PR reviewed and merged.
 
 ## Tests / validation performed
@@ -107,8 +110,10 @@ costs are unknown or unsupported.
 - `git diff --check` — passed.
 - The prior pushed head `070110e` passed all seven required checks in run
   [45671187103](https://github.com/Bepoadewale/davdeploy/actions/runs/45671187103).
-  This follow-up adds a regression assertion and evidence updates; final-head
-  CI must pass before merge.
+  Follow-up code head `242e271` also passed all seven checks in run
+  [45672425136](https://github.com/Bepoadewale/davdeploy/actions/runs/45672425136).
+  This ticket-only update records the verified status; its final-head CI must
+  pass before merge.
 - AWS account/inventory and Terraform monitor were checked read-only as recorded
   above; no Terraform operation, workload, or control-plane call was made.
 
