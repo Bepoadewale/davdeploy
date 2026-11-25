@@ -214,14 +214,21 @@ Cloudinary announced a $100M secondary investment from Blackstone Growth at a
 $2B valuation in 2022. Mailchimp was a bootstrapped company when Intuit agreed
 to acquire it for $12B in 2021; in November 2026, Bending Spoons announced a
 new $3.68B enterprise-value acquisition agreement, which remains subject to
-closing conditions. Their histories show different ownership, market, and
-transaction outcomes; none sets DavDeploy's future multiple or founder
-ownership. [Zoho's company history](https://www.zoho.com/aboutus.html),
+closing conditions. Surge AI is another useful founder-supplied reference: its
+workforce page says the company has run profitably without venture funding.
+That is a company self-description, not an audited financial or ownership
+record. Surge AI sells AI data services rather than developer/cloud
+infrastructure, so its buyers, delivery model, and economics differ from
+DavDeploy's. Treat the examples as sources of questions about customer-funded
+growth, ownership, and distribution—not as a directly comparable peer set or
+evidence that DavDeploy will reach a particular valuation.
+[Zoho's company history](https://www.zoho.com/aboutus.html),
 [Atlassian's 2010 announcement](https://www.atlassian.com/blog/news/2010/07/atlassian_closes_60_million_investment_from_accel_partners),
 [Cloudinary's investment announcement](https://cloudinary.com/blog/our_2b_valuation),
 [Axios on Mailchimp's 2021 acquisition](https://www.axios.com/2021/09/13/intuit-buy-mailchimp-12-billion),
-and [Bending Spoons' 2026 agreement](https://investors.bendingspoons.com/newsroom/bending-spoons-to-acquire-mailchimp)
-document those differences.
+[Bending Spoons' 2026 agreement](https://investors.bendingspoons.com/newsroom/bending-spoons-to-acquire-mailchimp),
+and [Surge AI's workforce page](https://surgehq.ai/workforce) document those
+different histories and claims.
 
 ## Sources and assumptions
 
