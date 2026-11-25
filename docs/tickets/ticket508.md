@@ -73,8 +73,8 @@ historical. This PR changes no product behavior.
 - `GITHUB_PR_NUMBER=508 python3 scripts/check_doc_conventions.py` passed.
 - `git diff --check` passed.
 - PR #507 merge-to-main run `45647722781` passed all seven checks.
-- Previous PR #508 head `fbf825a` passed all seven checks in run
-  `45648486686`; this ticket update requires a fresh final-head run.
+- PR #508 head `da77500` passed all seven checks in run `45648955777`.
+- The current PR head must also pass CI before merge.
 
 ## Boundaries
 
