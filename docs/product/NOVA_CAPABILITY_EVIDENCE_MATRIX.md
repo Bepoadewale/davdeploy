@@ -29,8 +29,9 @@ and merged-main CI passed in run
 [45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
 Merged PR #511 adds source-only bounded standard-storage pricing for exact
 planned private ECR repositories. Draft PR #510 binds a digest-pinned,
-same-region Batch image to one same-plan repository and reuses the #511 storage
-line without duplicate charges. ECR transfer beyond the documented same-region
+same-region Batch image to one same-plan repository with a known registry
+account and reuses the #511 storage line without duplicate charges; unknown
+account values fail closed. ECR transfer beyond the documented same-region
 ECR-to-Fargate zero-charge path, network path, archival, signing, replication,
 and other supporting costs remain unpriced.
 PR #500 final-head CI passed all seven checks in

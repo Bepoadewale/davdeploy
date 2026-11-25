@@ -52,8 +52,10 @@ recorded health observation belongs to the earlier deployment check and was
 not repeated here.
 
 Draft PR #510 binds a digest-pinned, same-region Batch image to exactly one
-same-plan private ECR repository. It reuses merged PR #511's revision-bound
-storage assumption and cost line, avoiding duplicate repository charges. AWS
+same-plan private ECR repository, requiring its registry account to be known in
+the plan and failing closed if unknown. It reuses merged PR #511's
+revision-bound storage assumption and cost line, avoiding duplicate repository
+charges. AWS
 documents same-region ECR-to-Fargate image transfer as free; this does not
 price NAT, VPC endpoint, or other network costs. Unsupported image sources
 remain unpriced, and the general Batch supporting-cost blocker remains.

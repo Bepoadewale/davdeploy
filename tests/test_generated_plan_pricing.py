@@ -1906,6 +1906,17 @@ def test_batch_private_ecr_image_must_bind_to_same_plan_account_region_and_price
         item.code for item in wrong_registry.findings
     }
 
+    unknown_registry, _ = evaluate(
+        batch_plan(private_ecr=True, ecr_registry_id=None),
+        batch_usage_assumptions=valid_usage,
+        ecr_usage_assumptions=ECR_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert "batch_image_repository_unbound" in {
+        item.code for item in unknown_registry.findings
+    }
+    assert not unknown_registry.approval_eligible
+
     cross_region_uri = (
         f"{ECR_ACCOUNT_ID}.dkr.ecr.us-west-2.amazonaws.com/{ECR_REPOSITORY_NAME}"
         "@sha256:" + "a" * 64
