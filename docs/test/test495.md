@@ -178,6 +178,22 @@ Verify the deployment state is `REVERTED` and the AppConfig Data value is
 disabled using `--max-get-latest-calls 8 --max-configuration-responses 4`.
 Do not print or save AppConfig Data session tokens.
 
+## Local clean-room validation
+
+At code commit `07860e0`, a fresh detached worktree at
+`/tmp/davdeploy-cleanroom-pr495` ran the full local sequence with isolated
+Compose project `davdeploy-pr495-cleanroom`: bootstrap, smoke, API contract,
+customer-plan end-to-end, seed data, simple/complex/degraded/Day-2 demos,
+policy failure, readiness failure, trace check, and `make verify`. The
+sequence passed, including 1,788 tests. The first bootstrap attempt hit host
+port 8181, already used by the separate PR #486 clean-room stack; no unrelated
+container was changed. The retry used dedicated host ports 48080, 48090,
+48181, 49090, 43200, and 43000. The isolated containers are stopped. Final
+`make clean-local` was not run: it would delete this worktree's `.venv`,
+`.local`, and Postgres Docker volume. Those generated artifacts remain pending
+owner approval for cleanup. The protected main-worktree `.venv-pr399/` was
+restored to its original editable repository path and was not deleted.
+
 The exact saved destroy plan is
 `/tmp/davdeploy-appconfig-rollout-495-20261125-a1b2c3/exact-destroy.tfplan`;
 it proposes zero additions, zero changes, and seven destroys, all for this

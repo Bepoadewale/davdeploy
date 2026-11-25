@@ -100,7 +100,7 @@ this exact shape only; it does not prove Nova dispatch.
   rollback read confirmed `REVERTED` and disabled.
 - [ ] Exact monitored destroy and independent absence check.
 - [x] Matrix update, full repository validation, and documentation conventions.
-- [ ] Clean-room gate, final-head CI, review, and merge.
+- [ ] Clean-room final cleanup, final-head CI, review, and merge.
 
 Implementation commit `a4c629c` is on the PR branch. The initial six-resource
 create succeeded and the disabled flag was independently verified. A reviewed
@@ -127,6 +127,11 @@ seven-resource destroy plan is reviewed and awaits approval before apply. PR
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
   1,788 tests passed; lint, Actions configuration, OpenAPI snapshot, and
   Compose configuration checks passed.
+- Fresh detached worktree `/tmp/davdeploy-cleanroom-pr495` passed bootstrap,
+  smoke, API contract, customer-plan end-to-end, seed data, all canonical and
+  failure demos, trace check, and `make verify` with 1,788 tests. Its isolated
+  containers are stopped. `make clean-local` remains pending approval because
+  it deletes the generated `.venv`, `.local`, and Postgres Docker volume.
 - Terraform fixture formatting and validation passed with the pinned lockfile.
 - Ruff lint passed. Formatting check reports pre-existing formatting
   differences in large existing files; do not mass-format unrelated code.
