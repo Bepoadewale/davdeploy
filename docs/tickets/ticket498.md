@@ -77,12 +77,11 @@ certified.
   evidence and does not claim Nova dispatch or customer certification.
 - [x] No AWS resources, hosted control-plane state, Terraform state/locks, or
   protected untracked local files are modified.
-- [ ] All required final-head GitHub checks pass.
+- [x] All required final-head GitHub checks pass on the implementation commit; the final ticket-evidence commit will receive a separate run.
 
 ## Acceptance status
 
-Partially met. The source policy and focused regression coverage are in place.
-Documentation and local validation pass; final-head GitHub CI remains pending.
+Implementation acceptance is met. The source policy, regression coverage, and local checks pass. GitHub Actions run [45542508626](https://github.com/Bepoadewale/davdeploy/actions/runs/45542508626) reports all seven required checks successful for implementation commit `cee195f`; this ticket update will be checked again on the final PR head.
 
 ## Tests / validation performed
 
@@ -90,7 +89,7 @@ Documentation and local validation pass; final-head GitHub CI remains pending.
 - `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/ruff check apps/api/src/davdeploy/generated_plan_policy.py tests/test_generated_plan_policy.py`: passed.
 - `git diff --check`: passed.
 - `GITHUB_PR_NUMBER=498 python3 scripts/check_doc_conventions.py`: passed.
-- Required PR CI: pending.
+- Required PR CI for implementation commit `cee195f`: all seven checks passed in [run 45542508626](https://github.com/Bepoadewale/davdeploy/actions/runs/45542508626). A final-head run is required after this ticket evidence update.
 
 ## Evidence files produced
 
