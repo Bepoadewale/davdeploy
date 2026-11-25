@@ -1,8 +1,9 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`80ed545898986282976f6e6e8f952c847f2648cb` (PR #510, source-only Batch image
-binding); merged PR #511 adds source-only regional ECR storage pricing. Hosted
+`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only Batch public
+IPv4 pricing). Merged PR #511 adds source-only regional ECR storage pricing.
+Hosted
 runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
@@ -26,11 +27,13 @@ and merged-main CI passed in run
 Merged PR #511 adds a bounded standard-storage price for each explicitly
 addressed private ECR repository; merged PR #510 binds a digest-pinned,
 same-region Batch image to exactly one same-plan repository and reuses the #511
-storage line without double-counting. Draft PR #512 prices explicitly enabled
+storage line without double-counting. Merged PR #512 prices explicitly enabled
 Batch Fargate public IPv4 assignment with trusted job-count, separate
 per-attempt address-duration, and 1–10 maximum-attempt bounds including
-submission-time overrides. Unsupported network paths, NAT/endpoints, egress,
-archival, signing, replication, and other material costs still block approval.
+submission-time overrides. All seven final-head checks passed in run
+`45680499414`, and merged-main CI passed in run `45681334818`. Unsupported
+network paths, NAT/endpoints, egress, archival, signing, replication, and other
+material costs still block approval.
 No AWS workload or hosted-control-plane resource changed. Read-only inventory
 on 2026-11-25 verified account `654654474502`,
 five `davdeploy-*` inactive Batch test definitions, and the retained SageMaker test

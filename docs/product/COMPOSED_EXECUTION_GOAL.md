@@ -14,7 +14,7 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`80ed545898986282976f6e6e8f952c847f2648cb` (PR #510). PR #506 makes the
+`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512). PR #506 makes the
 26-architecture / 30-root crosswalk machine-checkable without enabling runtime
 dispatch. PR #507 adds trusted usage assumptions and regional Fargate compute
 price lines for the bounded Batch job shape. Final-head CI passed all seven
@@ -34,13 +34,16 @@ all seven final-head checks passed in run
 [45673533738](https://github.com/Bepoadewale/davdeploy/actions/runs/45673533738),
 and merged-main checks passed in run
 [45674452179](https://github.com/Bepoadewale/davdeploy/actions/runs/45674452179).
-Draft PR #512 adds a regional public IPv4 price for explicitly enabled Batch
+Merged PR #512 adds a regional public IPv4 price for explicitly enabled Batch
 Fargate jobs, bound to job count, per-attempt address duration, and a maximum
 attempt count that includes submission-time overrides, with a 60-second
-per-address minimum. Batch/ECR estimates remain incomplete and
-approval-ineligible while network paths, NAT/endpoints, egress, and other
-material costs remain unpriced. PRs #507 and #509–#512 changed no AWS workloads
-or hosted runtime.
+per-address minimum. Its final-head checks passed in run
+[45680499414](https://github.com/Bepoadewale/davdeploy/actions/runs/45680499414);
+merged-main checks passed in run
+[45681334818](https://github.com/Bepoadewale/davdeploy/actions/runs/45681334818).
+Batch/ECR estimates remain incomplete and approval-ineligible while network
+paths, NAT/endpoints, egress, and other material costs remain unpriced. PRs
+#507 and #509–#512 changed no AWS workloads or hosted runtime.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
@@ -75,13 +78,14 @@ context. The Terraform monitor had 67 terminal records and zero active
 operations. No AWS workload, Terraform state/lock, or hosted control-plane
 resource was changed.
 
-Draft PR #512 prices explicit Batch Fargate public IPv4 assignment with a
+Merged PR #512 prices explicit Batch Fargate public IPv4 assignment with a
 catalog-backed regional rate, one-minute per-address floor, trusted job-count,
 per-attempt address-duration, and 1–10 maximum-attempt bounds including
-submission-time overrides. The estimate remains
-incomplete and blocked for unmodeled NAT/endpoints, image and other network
-paths, egress, and other material dependencies. The PR is source-only and does
-not change AWS or the hosted control plane.
+submission-time overrides. Its final-head and merged-main CI passed in runs
+`45680499414` and `45681334818`. The estimate remains incomplete and blocked
+for unmodeled NAT/endpoints, image and other network paths, egress, and other
+material dependencies. The PR is source-only and does not change AWS or the
+hosted control plane.
 
 Merged PR #498 adds source-only bounds for a small AWS Batch Fargate shape;
 merged PR #499 bounds a private-endpoint EKS shape; and merged PR #500 adds
@@ -424,7 +428,7 @@ execution strategy. Dated release details below remain historical records.
 | 4. Hosted Lambda/API lifecycle | `in progress` | PR #283 binds renderer dispatch to the persisted certification mode. PR #284 adds typed single-module lifecycle requests, exact prior-run/artifact/saved-plan chaining, apply/destroy confirmations, and an allowlist. PR #285 wires that setting into Terraform. All three are merged and deployed with the gate off. The live hosted lifecycle still needs an authenticated test workspace, pinned compatible source, real HTTP request, destroy and independent cleanup verification. |
 | 5. Genuine module composition | `in progress` | PRs #293–#297 add graph identity, typed references/outputs, exact callback matching and output persistence. PR #298 (merged as `42200c0`) schedules one dependency-ready module at a time. PR #299 (merged as `982bb50`) adds a private S3 renderer, still disabled and without real AWS lifecycle evidence. PR #300 (merged as `afd6736`) resolves a validated S3 bucket output into its Lambda/API consumer and scopes Lambda access to that bucket. PR #301 (`5b067b0`) adds a gated DynamoDB table renderer and PR #302 binds its table name to the Lambda/API renderer. PR #303 (`ea9de3a`) fixes the dispatcher allowlist in source; it must be deployed before the DynamoDB binding can run through hosted CodeBuild. Repeated renderer state isolation, hosted worker restart/reconciliation, and composed data-flow/failure/recovery proof remain. |
 | 6. Renderer families 1–8 | `in progress` | The full ordering and module scope are in `EXECUTION_READINESS_MATRIX.md`: storage/data/queues; web/edge; containers/VM; databases/cache; async; search/analytics/streaming; AI/ML; Kubernetes/networking/failover. PR #299 is the first checked-in private S3 lifecycle renderer, still gated and locally validated only. PR #300 adds narrow S3-to-Lambda input delivery and scoped Lambda permissions. PR #301 adds a gated DynamoDB renderer; PR #302 adds the table-to-API binding. PR #303 fixes the dispatcher input mismatch in merged source but is not deployed. `NovaTerraformGenerator` is connected in source to a gated durable worker and fixed plan-only CodeBuild path; `enable_nova_plan_only_runner` defaults to false, and no authenticated customer plan is evidenced. This source path does not certify renderer families or a composed application. Remaining work includes provider-schema, policy, IAM, cost, saved-plan and lifecycle coverage. |
-| 7. Planning, artifact, pricing and preflight | `in progress` | Planner and constraints exist, but the matrix still has incomplete per-entry pricing and quota/permission evidence. Merged PR #507 prices bounded Batch Fargate CPU/memory; merged PR #509 adds regional CloudWatch Logs ingestion/storage prices for an explicit Batch log group; merged PR #511 adds bounded regional ECR standard-storage pricing; merged PR #510 binds the digest-pinned image to its priced repository. Draft PR #512 prices explicit public IPv4 assignment for bounded jobs. Batch/ECR approval remains blocked for unpriced network paths, NAT/endpoints, egress, archival, signing, replication, and other material costs. Bind deployed artifacts to reviewed source and add timestamped region/quota/permission evidence as each entry is extended. |
+| 7. Planning, artifact, pricing and preflight | `in progress` | Planner and constraints exist, but the matrix still has incomplete per-entry pricing and quota/permission evidence. Merged PR #507 prices bounded Batch Fargate CPU/memory; merged PR #509 adds regional CloudWatch Logs ingestion/storage prices for an explicit Batch log group; merged PR #511 adds bounded regional ECR standard-storage pricing; merged PR #510 binds the digest-pinned image to its priced repository; merged PR #512 prices explicit public IPv4 assignment for bounded jobs. Batch/ECR approval remains blocked for unpriced network paths, NAT/endpoints, egress, archival, signing, replication, and other material costs. Bind deployed artifacts to reviewed source and add timestamped region/quota/permission evidence as each entry is extended. |
 | 8. Browser, CLI and MCP parity | `not started` | Shared backend APIs exist; frontend execution remains App Runner-specific and deployment capabilities are not fully surfaced consistently. Align all clients with the same server-authorized lifecycle and observed states. |
 | 9. Real application certification harness | `implemented` | A scenario catalogue/runner exists and standalone real AWS workload evidence covers several services. The current runner primarily validates service roots, not composed applications through the hosted runner. Extend it with traffic, update/recovery, cleanup, and machine-readable evidence for all eight scenarios. |
 | 10. Security and operational resilience | `not started` | Add adversarial coverage for tenant boundaries, approvals, artifact tampering, duplicate jobs, concurrency, revoked roles, worker restart, partial failures, quotas, callback authenticity, redaction, alarms and cleanup isolation. |
@@ -433,8 +437,9 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `46fe152233ac9fcbdba1961d5d02086c30c959fa` (PR #509, source-only
-  pricing and documentation reconciliation). The last
+- Backend `main` is `ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only
+  public IPv4 pricing). PR #512 final-head and merged-main CI passed all seven
+  checks in runs `45680499414` and `45681334818`. The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #507 merged as `2afd007`; final-head CI passed all seven checks in run
@@ -447,11 +452,12 @@ execution strategy. Dated release details below remain historical records.
   pricing for a Batch job with an explicit same-plan, same-region Standard log
   group, using strict trusted usage ranges. Its final-head CI passed all seven
   checks in run `45658404335`, and merged-main CI passed in run `45659294372`.
-  Draft PR #511 adds bounded regional ECR standard-storage pricing for exact
-  planned private repositories. Batch and ECR approval remain blocked for
-  unpriced image transfer, networking, unsupported public IPv4 usage, archival, signing,
-  replication, and other material dependencies. These source-only changes do
-  not dispatch Nova or modify AWS resources.
+  Merged PRs #510 and #511 bind the digest-pinned same-region image to its
+  planned repository and add bounded regional ECR standard-storage pricing.
+  Merged PR #512 adds a bounded public IPv4 line. Batch and ECR approval remain
+  blocked for unpriced image transfer, networking, NAT/endpoints, egress,
+  archival, signing, replication, and other material dependencies. These
+  source-only changes do not dispatch Nova or modify AWS resources.
 - Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
   bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
   passed all seven checks in run `45552193668`.
