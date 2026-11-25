@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import ipaddress
 import json
 import re
@@ -48,8 +50,38 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-25.6"
+POLICY_VERSION = "nova-generated-plan-2026-11-25.8"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
+LAMBDA_SUPPORTED_RUNTIME_IDS = frozenset(
+    {
+        "nodejs22.x",
+        "nodejs24.x",
+        "python3.11",
+        "python3.12",
+        "python3.13",
+        "python3.14",
+        "java8.al2023",
+        "java11.al2023",
+        "java17.al2023",
+        "java21",
+        "java25",
+        "dotnet10",
+        "ruby3.3",
+        "ruby3.4",
+        "ruby4.0",
+        "provided.al2023",
+    }
+)
+LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS = (
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "TOKEN",
+    "CREDENTIAL",
+    "PRIVATEKEY",
+    "APIKEY",
+    "ACCESSKEY",
+)
 SECRET_VALUE_READ_ACTIONS = (
     "secretsmanager:GetSecretValue",
     "secretsmanager:BatchGetSecretValue",
@@ -100,7 +132,28 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("redrive_policy",),
         ("redrive_allow_policy",),
     ),
-    "aws_lambda_function": (("timeout",),),
+    "aws_lambda_function": (
+        ("function_name",),
+        ("runtime",),
+        ("role",),
+        ("handler",),
+        ("package_type",),
+        ("source_code_hash",),
+        ("architectures",),
+        ("memory_size",),
+        ("timeout",),
+        ("ephemeral_storage",),
+        ("snap_start",),
+        ("vpc_config",),
+        ("reserved_concurrent_executions",),
+        ("environment",),
+        ("layers",),
+        ("tracing_config",),
+        ("dead_letter_config",),
+        ("file_system_config",),
+        ("code_signing_config_arn",),
+        ("kms_key_arn",),
+    ),
     "aws_lambda_permission": (
         ("action",),
         ("function_name",),
@@ -250,6 +303,20 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("icmp_type",),
         ("icmp_code",),
     ),
+    "aws_vpc": (
+        ("cidr_block",),
+        ("enable_dns_support",),
+        ("enable_dns_hostnames",),
+        ("assign_generated_ipv6_cidr_block",),
+    ),
+    "aws_subnet": (
+        ("cidr_block",),
+        ("availability_zone",),
+        ("map_public_ip_on_launch",),
+        ("assign_ipv6_address_on_creation",),
+    ),
+    "aws_eip": (("domain",),),
+    "aws_nat_gateway": (("connectivity_type",),),
 }
 
 
@@ -345,6 +412,7 @@ def _evaluate(
     _check_route53_zones(resources, findings)
     _check_appconfig_bindings(document, resources, findings)
     _check_batch_fargate(document, resources, findings, expected_account_id)
+    _check_eks_cluster(document, resources, findings)
     _check_sqs_queue_encryption(resources, findings)
     _check_sqs_queue_policies(resources, findings, expected_account_id)
     _check_sns_sqs_subscription_bindings(
@@ -357,6 +425,9 @@ def _evaluate(
         document, resources, findings, expected_account_id, expected_region
     )
     _check_step_functions_role_scope(
+        document, resources, findings, expected_account_id, expected_region
+    )
+    _check_lambda_functions(
         document, resources, findings, expected_account_id, expected_region
     )
     _check_lambda_permissions(resources, findings)
@@ -376,6 +447,7 @@ def _evaluate(
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
     _check_autoscaling_groups(document, resources, findings)
+    _check_vpc_topology(document, resources, findings)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -1597,6 +1669,460 @@ def _check_iam(
                 )
 
 
+def _check_vpc_topology(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Check the small VPC topology produced by modules/vpc, including egress bindings."""
+    supported_types = {
+        "aws_vpc",
+        "aws_subnet",
+        "aws_internet_gateway",
+        "aws_route_table",
+        "aws_route_table_association",
+        "aws_eip",
+        "aws_nat_gateway",
+    }
+    route_resource_types = {
+        "aws_route",
+        "aws_default_route",
+        "aws_default_route_table",
+        "aws_internet_gateway_attachment",
+        "aws_main_route_table_association",
+        "aws_vpc_endpoint",
+        "aws_vpc_peering_connection",
+        "aws_vpc_peering_connection_accepter",
+        "aws_vpc_dhcp_options",
+        "aws_vpc_dhcp_options_association",
+        "aws_ec2_transit_gateway",
+        "aws_ec2_transit_gateway_route_table",
+        "aws_ec2_transit_gateway_route_table_association",
+        "aws_ec2_transit_gateway_vpc_attachment",
+        "aws_ec2_transit_gateway_vpc_attachment_accepter",
+        "aws_ec2_transit_gateway_route",
+        "aws_egress_only_internet_gateway",
+        "aws_vpc_ipv4_cidr_block_association",
+        "aws_vpc_ipv6_cidr_block_association",
+        "aws_eip_association",
+        "aws_network_acl",
+        "aws_default_network_acl",
+        "aws_network_acl_association",
+        "aws_subnet_network_acl_association",
+        "aws_network_interface",
+    }
+    changes = document.get("resource_changes")
+    changed_types = {
+        item.get("type")
+        for item in (changes if isinstance(changes, list) else [])
+        if isinstance(item, dict)
+    }
+    planned_types = {item.get("type") for item in resources}
+    if not (planned_types | changed_types) & (supported_types | route_resource_types):
+        return
+
+    by_type = {
+        kind: [item for item in resources if item.get("type") == kind]
+        for kind in supported_types | route_resource_types
+    }
+    required_counts = {
+        "aws_vpc": (1, 1),
+        "aws_internet_gateway": (1, 1),
+        "aws_route_table": (2, 2),
+        "aws_eip": (1, 1),
+        "aws_nat_gateway": (1, 1),
+    }
+    invalid = False
+    for kind, (minimum, maximum) in required_counts.items():
+        count = len(by_type[kind])
+        if not minimum <= count <= maximum:
+            invalid = True
+            _deny(
+                findings,
+                "vpc_supported_shape_incomplete",
+                None,
+                "The supported VPC plan requires one VPC, internet gateway, public/private route table, EIP, and NAT gateway.",
+            )
+            break
+    subnets = by_type["aws_subnet"]
+    if not 4 <= len(subnets) <= 6 or len(subnets) % 2:
+        invalid = True
+        _deny(
+            findings,
+            "vpc_subnet_count_unsupported",
+            None,
+            "The supported VPC plan requires two or three public and private subnet pairs.",
+        )
+    associations = by_type["aws_route_table_association"]
+    if len(associations) != len(subnets):
+        invalid = True
+        _deny(
+            findings,
+            "vpc_route_association_incomplete",
+            None,
+            "Every supported VPC subnet must have exactly one route-table association.",
+        )
+    if any(by_type[kind] for kind in route_resource_types):
+        invalid = True
+        _deny(
+            findings,
+            "vpc_route_resource_unsupported",
+            None,
+            "The supported VPC profile excludes separate routes, endpoints, peering, transit gateways, IPv6 egress, and secondary CIDR associations.",
+        )
+    if invalid:
+        return
+
+    vpc = by_type["aws_vpc"][0]
+    vpc_address = vpc.get("address")
+    vpc_values = vpc.get("values")
+    if not isinstance(vpc_address, str) or not isinstance(vpc_values, dict):
+        return _deny(findings, "vpc_values_unknown", vpc_address, "A required VPC setting is unknown.")
+    cidr = vpc_values.get("cidr_block")
+    try:
+        vpc_network = ipaddress.ip_network(cidr, strict=True)
+    except (TypeError, ValueError):
+        vpc_network = None
+    if (
+        not isinstance(vpc_network, ipaddress.IPv4Network)
+        or not vpc_network.subnet_of(ipaddress.ip_network("10.0.0.0/8"))
+        and not vpc_network.subnet_of(ipaddress.ip_network("172.16.0.0/12"))
+        and not vpc_network.subnet_of(ipaddress.ip_network("192.168.0.0/16"))
+        or vpc_values.get("enable_dns_support") is not True
+        or vpc_values.get("enable_dns_hostnames") is not True
+        or vpc_values.get("assign_generated_ipv6_cidr_block") is True
+        or any(
+            vpc_values.get(key) not in (None, "")
+            for key in ("ipv6_cidr_block", "ipv6_ipam_pool_id", "ipv6_netmask_length")
+        )
+    ):
+        _deny(
+            findings,
+            "vpc_configuration_unsupported",
+            vpc_address,
+            "The supported VPC requires a known private IPv4 CIDR, DNS support, DNS hostnames, and no generated IPv6 CIDR.",
+        )
+
+    def attribute_references(address: Any, attribute: str) -> tuple[str, ...]:
+        configured = _configured_resources(document)
+        item = configured.get(address) if isinstance(address, str) else None
+        if item is None and isinstance(address, str):
+            matches = [
+                configured_item
+                for configured_address, configured_item in configured.items()
+                if address.startswith(f"{configured_address}[")
+            ]
+            if len(matches) == 1:
+                item = matches[0]
+        expressions = item.get("expressions") if isinstance(item, dict) else None
+        expression = expressions.get(attribute) if isinstance(expressions, dict) else None
+        pending: list[Any] = [expression]
+        found: list[str] = []
+        visited = 0
+        while pending:
+            visited += 1
+            if visited > 10_000:
+                return ()
+            current = pending.pop()
+            if isinstance(current, dict):
+                refs = current.get("references")
+                if isinstance(refs, list):
+                    found.extend(value for value in refs if isinstance(value, str))
+                pending.extend(value for key, value in current.items() if key != "references")
+            elif isinstance(current, list):
+                pending.extend(current)
+        return tuple(found)
+
+    def reference_matches(reference: str, target: dict[str, Any]) -> bool:
+        address = target.get("address")
+        kind = target.get("type")
+        if not isinstance(address, str) or not isinstance(kind, str):
+            return False
+        # Terraform configuration can reference an entire for_each collection
+        # (for example aws_subnet.public); bind that collection to its planned
+        # instances while preserving exact-key references when present.
+        marker = f"{kind}."
+        position = address.rfind(marker)
+        if position < 0:
+            return _reference_targets_resource(reference, address, kind)
+        root = address[:position] + address[position:].split("[", 1)[0]
+        if reference == address or reference.startswith(f"{address}."):
+            return True
+        resource_suffix = address[position:]
+        relative_root = resource_suffix.split("[", 1)[0]
+        for candidate_root, candidate_address in ((root, address), (relative_root, resource_suffix)):
+            if reference == candidate_root or reference.startswith(f"{candidate_root}."):
+                return True
+            if reference.startswith(f"{candidate_root}["):
+                closing_bracket = reference.find("]", len(candidate_root))
+                instance_reference = (
+                    reference[: closing_bracket + 1] if closing_bracket >= 0 else reference
+                )
+                if instance_reference == candidate_address:
+                    return True
+        return False
+
+    def bound_targets(item: dict[str, Any], attribute: str, candidates: list[dict[str, Any]]) -> set[str]:
+        refs = attribute_references(item.get("address"), attribute)
+        return {
+            candidate["address"]
+            for candidate in candidates
+            if isinstance(candidate.get("address"), str)
+            and any(reference_matches(ref, candidate) for ref in refs)
+        }
+
+    def references_only_targets(
+        item: dict[str, Any], attribute: str, candidates: list[dict[str, Any]], expected: set[str]
+    ) -> bool:
+        refs = attribute_references(item.get("address"), attribute)
+        if not refs:
+            return False
+        matched = bound_targets(item, attribute, candidates)
+        return matched == expected and all(
+            any(reference_matches(ref, candidate) for candidate in candidates if candidate.get("address") in expected)
+            for ref in refs
+        )
+
+    vpc_candidates = [vpc]
+    for item in subnets + by_type["aws_internet_gateway"] + by_type["aws_route_table"]:
+        values = item.get("values")
+        address = item.get("address")
+        if not isinstance(values, dict):
+            _deny(findings, "vpc_values_unknown", address, "A required VPC topology value is unknown.")
+            continue
+        if not references_only_targets(item, "vpc_id", vpc_candidates, {vpc_address}):
+            _deny(
+                findings,
+                "vpc_resource_binding_invalid",
+                address,
+                "Every subnet, internet gateway, and route table must bind to the same planned VPC.",
+            )
+
+    subnet_networks: list[tuple[dict[str, Any], ipaddress.IPv4Network]] = []
+    for subnet in subnets:
+        values = subnet.get("values")
+        address = subnet.get("address")
+        if not isinstance(values, dict):
+            continue
+        try:
+            subnet_network = ipaddress.ip_network(values.get("cidr_block"), strict=True)
+        except (TypeError, ValueError):
+            subnet_network = None
+        if (
+            not isinstance(subnet_network, ipaddress.IPv4Network)
+            or not isinstance(vpc_network, ipaddress.IPv4Network)
+            or not subnet_network.subnet_of(vpc_network)
+            or values.get("map_public_ip_on_launch") is not False
+            or values.get("assign_ipv6_address_on_creation") is True
+            or not isinstance(values.get("availability_zone"), str)
+        ):
+            _deny(
+                findings,
+                "vpc_subnet_configuration_invalid",
+                address,
+                "Subnets must use known in-VPC IPv4 CIDRs, distinct reviewed availability zones, and no automatic public or IPv6 address assignment.",
+            )
+            continue
+        if any(subnet_network.overlaps(previous) for _, previous in subnet_networks):
+            _deny(
+                findings,
+                "vpc_subnet_cidr_overlap",
+                address,
+                "VPC subnet CIDRs must not overlap.",
+            )
+        subnet_networks.append((subnet, subnet_network))
+
+    subnet_by_address = {
+        item.get("address"): item for item in subnets if isinstance(item.get("address"), str)
+    }
+    route_tables = by_type["aws_route_table"]
+    public_tables = []
+    private_tables = []
+    for table in route_tables:
+        values = table.get("values")
+        routes = values.get("route") if isinstance(values, dict) else None
+        address = table.get("address")
+        if not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict):
+            _deny(
+                findings,
+                "vpc_route_shape_unsupported",
+                address,
+                "Each supported VPC route table must contain exactly one reviewed IPv4 default route.",
+            )
+            continue
+        route = routes[0]
+        destination = route.get("cidr_block")
+        gateway_targets = [
+            key for key in ("gateway_id", "nat_gateway_id") if route.get(key) not in (None, "")
+        ]
+        if destination != "0.0.0.0/0" or len(gateway_targets) > 1 or any(
+            route.get(key) not in (None, "")
+            for key in (
+                "ipv6_cidr_block",
+                "destination_prefix_list_id",
+                "carrier_gateway_id",
+                "local_gateway_id",
+                "transit_gateway_id",
+                "vpc_peering_connection_id",
+                "egress_only_gateway_id",
+                "instance_id",
+                "network_interface_id",
+                "core_network_arn",
+                "vpc_endpoint_id",
+            )
+        ):
+            _deny(
+                findings,
+                "vpc_route_shape_unsupported",
+                address,
+                "Only one IPv4 default route to the reviewed internet or NAT gateway is supported.",
+            )
+            continue
+        if route.get("gateway_id") not in (None, ""):
+            public_tables.append(table)
+        elif route.get("nat_gateway_id") not in (None, ""):
+            private_tables.append(table)
+        else:
+            # Gateway identifiers can be unknown in planned_values; use the
+            # configuration reference to classify their exact planned target.
+            refs = attribute_references(address, "route")
+            if any(reference_matches(ref, by_type["aws_internet_gateway"][0]) for ref in refs):
+                public_tables.append(table)
+            elif any(reference_matches(ref, by_type["aws_nat_gateway"][0]) for ref in refs):
+                private_tables.append(table)
+            else:
+                _deny(findings, "vpc_route_target_unknown", address, "The VPC default route target is not bound to a supported same-plan gateway.")
+
+    if len(public_tables) != 1 or len(private_tables) != 1:
+        _deny(
+            findings,
+            "vpc_public_private_route_tables_invalid",
+            None,
+            "The VPC requires one public-to-IGW route table and one private-to-NAT route table.",
+        )
+        return
+
+    igw = by_type["aws_internet_gateway"][0]
+    nat = by_type["aws_nat_gateway"][0]
+    eip = by_type["aws_eip"][0]
+    public_table = public_tables[0]
+    private_table = private_tables[0]
+    if not references_only_targets(public_table, "route", [igw], {igw.get("address")}):
+        _deny(findings, "vpc_public_route_binding_invalid", public_table.get("address"), "The public default route must bind only to the planned internet gateway.")
+    if not references_only_targets(private_table, "route", [nat], {nat.get("address")}):
+        _deny(findings, "vpc_private_route_binding_invalid", private_table.get("address"), "The private default route must bind only to the planned NAT gateway.")
+    if not references_only_targets(nat, "allocation_id", [eip], {eip.get("address")}):
+        _deny(findings, "vpc_nat_address_binding_invalid", nat.get("address"), "The NAT gateway must use the planned VPC Elastic IP.")
+    nat_values = nat.get("values")
+    eip_values = eip.get("values")
+    if (
+        not isinstance(nat_values, dict)
+        or nat_values.get("connectivity_type", "public") != "public"
+        or not references_only_targets(nat, "subnet_id", subnets, {
+            item.get("address") for item in subnets
+            if isinstance(item.get("values"), dict)
+            and isinstance(item["values"].get("tags"), dict)
+            and "kubernetes.io/role/elb" in item["values"]["tags"]
+            and isinstance(item.get("address"), str)
+        })
+        or not isinstance(eip_values, dict)
+        or eip_values.get("domain") != "vpc"
+    ):
+        _deny(
+            findings,
+            "vpc_nat_configuration_invalid",
+            nat.get("address"),
+            "The supported NAT gateway must be public, use a VPC Elastic IP, and attach to a same-plan public subnet.",
+        )
+
+    public_addresses: set[str] = set()
+    private_addresses: set[str] = set()
+    for association in associations:
+        values = association.get("values")
+        address = association.get("address")
+        if not isinstance(values, dict):
+            continue
+        subnet_refs = attribute_references(address, "subnet_id")
+        table_refs = attribute_references(address, "route_table_id")
+        subnet_targets = {
+            item["address"] for item in subnets
+            if isinstance(item.get("address"), str)
+            and any(reference_matches(ref, item) for ref in subnet_refs)
+        }
+        # for_each association instances in modules/vpc use the same index as
+        # their corresponding subnet. Configuration references identify the
+        # public/private collection; the instance key binds this association
+        # to one member of that collection.
+        expected_subnet_address = None
+        if isinstance(address, str) and "aws_route_table_association.public[" in address:
+            expected_subnet_address = address.replace(
+                "aws_route_table_association.public[", "aws_subnet.public[", 1
+            )
+        elif isinstance(address, str) and "aws_route_table_association.private[" in address:
+            expected_subnet_address = address.replace(
+                "aws_route_table_association.private[", "aws_subnet.private[", 1
+            )
+        if expected_subnet_address is not None and expected_subnet_address in subnet_targets:
+            subnet_targets = {expected_subnet_address}
+        elif expected_subnet_address is not None:
+            subnet_targets = set()
+        if len(subnet_targets) != 1:
+            _deny(findings, "vpc_route_association_binding_invalid", address, "Each route-table association must bind exactly one planned subnet.")
+            continue
+        subnet_address = next(iter(subnet_targets))
+        if subnet_address not in subnet_by_address or subnet_address in public_addresses | private_addresses:
+            _deny(findings, "vpc_route_association_duplicate", address, "A VPC subnet may have only one explicit route-table association.")
+            continue
+        public_target = any(reference_matches(ref, public_table) for ref in table_refs)
+        private_target = any(reference_matches(ref, private_table) for ref in table_refs)
+        if public_target == private_target:
+            _deny(findings, "vpc_route_association_binding_invalid", address, "Each subnet association must bind to exactly one supported route table.")
+            continue
+        subnet_values = subnet_by_address[subnet_address].get("values", {})
+        tags = subnet_values.get("tags") if isinstance(subnet_values, dict) else None
+        tagged_public = isinstance(tags, dict) and "kubernetes.io/role/elb" in tags
+        tagged_private = isinstance(tags, dict) and "kubernetes.io/role/internal-elb" in tags
+        # The module's public/private role tags are its stable classification
+        # signal; require them to agree with the route table.
+        if public_target:
+            public_addresses.add(subnet_address)
+            if not tagged_public or tagged_private:
+                _deny(findings, "vpc_subnet_classification_invalid", subnet_address, "Public subnets must carry only the reviewed public load-balancer role tag.")
+        else:
+            private_addresses.add(subnet_address)
+            if not tagged_private or tagged_public:
+                _deny(findings, "vpc_subnet_classification_invalid", subnet_address, "Private subnets must carry only the reviewed internal load-balancer role tag.")
+
+    if (
+        len(public_addresses) != len(subnets) // 2
+        or len(private_addresses) != len(subnets) // 2
+        or public_addresses | private_addresses != set(subnet_by_address)
+    ):
+        _deny(findings, "vpc_route_association_incomplete", None, "All VPC subnets must be classified exactly once as public or private.")
+    public_azs = {
+        subnet_by_address[address].get("values", {}).get("availability_zone")
+        for address in public_addresses
+    }
+    private_azs = {
+        subnet_by_address[address].get("values", {}).get("availability_zone")
+        for address in private_addresses
+    }
+    if len(public_azs) != len(public_addresses) or public_azs != private_azs:
+        _deny(findings, "vpc_availability_zone_pairing_invalid", None, "Each public subnet must pair with one private subnet in the same distinct availability zone set.")
+    if public_addresses and not any(
+        reference_matches(ref, subnet_by_address[address])
+        for ref in attribute_references(nat.get("address"), "subnet_id")
+        for address in public_addresses
+    ):
+        _deny(findings, "vpc_nat_subnet_not_public", nat.get("address"), "The NAT gateway must attach to a subnet associated with the public route table.")
+    _review(
+        findings,
+        "vpc_nat_egress_cost_review",
+        nat.get("address"),
+        "This VPC includes a chargeable NAT gateway and outbound data transfer. Confirm the egress need and expected monthly cost.",
+    )
+
+
 def _check_network(resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]) -> None:
     for item in resources:
         kind = item.get("type")
@@ -1931,6 +2457,310 @@ def _check_ebs_volumes(
                 item.get("address"),
                 "EBS volumes must have encryption enabled.",
             )
+
+
+def _check_eks_cluster(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+) -> None:
+    """Bound the repository's private EKS cluster and managed node group."""
+    by_type = {
+        kind: [item for item in resources if item.get("type") == kind]
+        for kind in ("aws_eks_cluster", "aws_eks_node_group")
+    }
+    if not any(by_type.values()):
+        return
+    if any(len(items) != 1 for items in by_type.values()):
+        _deny(
+            findings,
+            "eks_supported_shape_incomplete",
+            None,
+            "The supported EKS shape requires exactly one cluster and one managed node group.",
+        )
+        return
+
+    changes = document.get("resource_changes")
+    if not isinstance(changes, list):
+        _deny(
+            findings,
+            "eks_change_metadata_invalid",
+            None,
+            "DavDeploy could not verify EKS plan metadata.",
+        )
+        return
+    changes_by_address = {
+        item.get("address"): item.get("change")
+        for item in changes
+        if isinstance(item, dict) and isinstance(item.get("address"), str)
+    }
+
+    def known_values(item: dict[str, Any], paths: tuple[tuple[str, ...], ...]):
+        address = item.get("address")
+        values = item.get("values")
+        change_value = changes_by_address.get(address)
+        unknown = change_value.get("after_unknown") if isinstance(change_value, dict) else None
+        if (
+            not isinstance(address, str)
+            or not isinstance(values, dict)
+            or not isinstance(unknown, dict)
+            or not _valid_unknown_tree(unknown)
+            or any(_path_contains_unknown(unknown, path) for path in paths)
+        ):
+            _deny(
+                findings,
+                "eks_plan_value_unknown",
+                address,
+                "A required EKS safety setting is missing or unknown in this plan.",
+            )
+            return address, None
+        return address, values
+
+    configured = _configured_resources(document)
+
+    def references_for(address: Any, attribute: str) -> list[str] | None:
+        item = configured.get(address) if isinstance(address, str) else None
+        expressions = item.get("expressions") if isinstance(item, dict) else None
+        expression = expressions.get(attribute) if isinstance(expressions, dict) else None
+        pending: list[Any] = [expression]
+        references: list[str] = []
+        visited = 0
+        while pending:
+            visited += 1
+            if visited > 10_000:
+                return None
+            current = pending.pop()
+            if isinstance(current, dict):
+                raw_references = current.get("references")
+                if isinstance(raw_references, list):
+                    references.extend(
+                        value for value in raw_references if isinstance(value, str)
+                    )
+                pending.extend(
+                    value for key, value in current.items() if key != "references"
+                )
+            elif isinstance(current, list):
+                pending.extend(current)
+        return references
+
+    def has_one_same_plan_reference(
+        address: Any, attribute: str, resource_type: str
+    ) -> bool:
+        references = references_for(address, attribute)
+        candidates = [
+            item
+            for item in resources
+            if item.get("type") == resource_type
+            and isinstance(item.get("address"), str)
+            and references
+            and any(
+                _reference_targets_resource(reference, item["address"], resource_type)
+                for reference in references
+            )
+        ]
+        matched_addresses = {item["address"] for item in candidates}
+        every_reference_is_planned = bool(references) and all(
+            any(
+                _reference_targets_resource(reference, item["address"], resource_type)
+                for item in candidates
+            )
+            for reference in references
+        )
+        return len(matched_addresses) == 1 and every_reference_is_planned
+
+    cluster = by_type["aws_eks_cluster"][0]
+    cluster_address, cluster_values = known_values(
+        cluster,
+        (
+            ("name",),
+            ("version",),
+            ("enabled_cluster_log_types",),
+            ("vpc_config", "subnet_ids"),
+            ("vpc_config", "endpoint_public_access"),
+            ("vpc_config", "endpoint_private_access"),
+        ),
+    )
+    cluster_name = None
+    cluster_subnets: list[str] = []
+    if cluster_values is not None:
+        cluster_name = cluster_values.get("name")
+        version = cluster_values.get("version")
+        version_match = re.fullmatch(r"1\.(\d{2})", version) if isinstance(version, str) else None
+        # As of 2026-11-25, Kubernetes 1.36 is a current EKS standard-support
+        # version with a longer runway than the oldest supported minors. Keep
+        # this threshold synchronized with AWS lifecycle data.
+        if version_match is None or int(version_match.group(1)) < 36:
+            _deny(
+                findings,
+                "eks_kubernetes_version_out_of_support_window",
+                cluster_address,
+                "The EKS Kubernetes version is malformed or below the current supported-version floor.",
+            )
+        required_logs = {"api", "audit", "authenticator"}
+        enabled_logs = cluster_values.get("enabled_cluster_log_types")
+        if (
+            not isinstance(enabled_logs, list)
+            or any(not isinstance(value, str) for value in enabled_logs)
+            or not required_logs.issubset(set(enabled_logs))
+            or len(enabled_logs) != len(set(enabled_logs))
+            or not set(enabled_logs).issubset(
+                {"api", "audit", "authenticator", "controllerManager", "scheduler"}
+            )
+        ):
+            _deny(
+                findings,
+                "eks_control_plane_logging_incomplete",
+                cluster_address,
+                "EKS must enable API, audit, and authenticator logs using supported log types.",
+            )
+
+        vpc_config = cluster_values.get("vpc_config")
+        if isinstance(vpc_config, dict):
+            vpc_config = [vpc_config]
+        if not isinstance(vpc_config, list) or len(vpc_config) != 1 or not isinstance(
+            vpc_config[0], dict
+        ):
+            _deny(
+                findings,
+                "eks_vpc_configuration_invalid",
+                cluster_address,
+                "The supported EKS cluster requires one known VPC configuration block.",
+            )
+        else:
+            vpc = vpc_config[0]
+            if vpc.get("endpoint_public_access") is not False or vpc.get(
+                "endpoint_private_access"
+            ) is not True:
+                _deny(
+                    findings,
+                    "eks_public_endpoint_denied",
+                    cluster_address,
+                    "The supported EKS API endpoint must be private-only.",
+                )
+            subnets = vpc.get("subnet_ids")
+            if (
+                not isinstance(subnets, list)
+                or len(subnets) < 2
+                or any(
+                    not isinstance(subnet, str)
+                    or not re.fullmatch(r"subnet-[0-9a-fA-F]+", subnet)
+                    for subnet in subnets
+                )
+                or len(subnets) != len(set(subnets))
+            ):
+                _deny(
+                    findings,
+                    "eks_subnet_set_invalid",
+                    cluster_address,
+                    "EKS requires at least two distinct known subnet IDs in this supported shape.",
+                )
+            else:
+                cluster_subnets = subnets
+
+        if not has_one_same_plan_reference(cluster_address, "role_arn", "aws_iam_role"):
+            _deny(
+                findings,
+                "eks_cluster_role_unbound",
+                cluster_address,
+                "The EKS control plane must reference exactly one IAM role created in this plan.",
+            )
+
+    node_group = by_type["aws_eks_node_group"][0]
+    node_address, node_values = known_values(
+        node_group,
+        (
+            ("cluster_name",),
+            ("node_role_arn",),
+            ("subnet_ids",),
+            ("instance_types",),
+            ("capacity_type",),
+            ("scaling_config", "min_size"),
+            ("scaling_config", "desired_size"),
+            ("scaling_config", "max_size"),
+            ("remote_access",),
+        ),
+    )
+    if node_values is None:
+        return
+    if (
+        not isinstance(cluster_name, str)
+        or node_values.get("cluster_name") != cluster_name
+        or not has_one_same_plan_reference(node_address, "cluster_name", "aws_eks_cluster")
+    ):
+        _deny(
+            findings,
+            "eks_node_cluster_unbound",
+            node_address,
+            "The managed node group must reference the exact cluster created in this plan.",
+        )
+    if not has_one_same_plan_reference(node_address, "node_role_arn", "aws_iam_role"):
+        _deny(
+            findings,
+            "eks_node_role_unbound",
+            node_address,
+            "The managed node group must reference one IAM role created in this plan.",
+        )
+    if not has_one_same_plan_reference(node_address, "launch_template", "aws_launch_template"):
+        _deny(
+            findings,
+            "eks_node_launch_template_unbound",
+            node_address,
+            "The managed node group must reference one launch template created in this plan.",
+        )
+
+    scaling = node_values.get("scaling_config")
+    if isinstance(scaling, dict):
+        scaling = [scaling]
+    if not isinstance(scaling, list) or len(scaling) != 1 or not isinstance(scaling[0], dict):
+        _deny(
+            findings,
+            "eks_node_scaling_invalid",
+            node_address,
+            "The managed node group must use one explicit bounded scaling configuration.",
+        )
+    else:
+        minimum = scaling[0].get("min_size")
+        desired = scaling[0].get("desired_size")
+        maximum = scaling[0].get("max_size")
+        if (
+            any(isinstance(value, bool) or not isinstance(value, int) for value in (minimum, desired, maximum))
+            or not 1 <= minimum <= desired <= maximum <= 3
+        ):
+            _deny(
+                findings,
+                "eks_node_scaling_out_of_bounds",
+                node_address,
+                "EKS node capacity must satisfy 1 <= min <= desired <= max <= 3.",
+            )
+    if node_values.get("instance_types") != ["t3.medium"]:
+        _deny(
+            findings,
+            "eks_node_instance_type_unsupported",
+            node_address,
+            "The current EKS profile supports one t3.medium node instance type.",
+        )
+    if node_values.get("capacity_type") != "ON_DEMAND":
+        _deny(
+            findings,
+            "eks_node_capacity_type_unsupported",
+            node_address,
+            "The current EKS profile supports bounded ON_DEMAND nodes only.",
+        )
+    if node_values.get("remote_access") not in (None, []):
+        _deny(
+            findings,
+            "eks_node_remote_access_denied",
+            node_address,
+            "Managed-node SSH remote access is unsupported by the current EKS profile.",
+        )
+    node_subnets = node_values.get("subnet_ids")
+    if not isinstance(node_subnets, list) or node_subnets != cluster_subnets:
+        _deny(
+            findings,
+            "eks_node_subnet_binding_invalid",
+            node_address,
+            "The managed node group must use the cluster's exact known subnet set.",
+        )
 
 
 def _check_instance_metadata(
@@ -5817,6 +6647,396 @@ def _sqs_lambda_role_grants_queue(
                 continue
             granted.update(sqs_actions)
     return required_actions <= granted
+
+
+def _check_lambda_functions(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> None:
+    """Bound the ZIP Lambda configuration priced by the generated-plan evaluator."""
+    changes = document.get("resource_changes", [])
+    change_by_address = {
+        item.get("address"): item
+        for item in changes
+        if isinstance(item, dict) and isinstance(item.get("address"), str)
+    } if isinstance(changes, list) else {}
+    planned_roles = [
+        item
+        for item in resources
+        if item.get("type") == "aws_iam_role" and isinstance(item.get("values"), dict)
+    ]
+
+    required_fields = (
+        "function_name",
+        "runtime",
+        "role",
+        "handler",
+        "package_type",
+        "filename",
+        "source_code_hash",
+        "architectures",
+        "memory_size",
+        "timeout",
+        "ephemeral_storage",
+        "snap_start",
+        "vpc_config",
+        "reserved_concurrent_executions",
+        "environment",
+        "layers",
+        "tracing_config",
+        "dead_letter_config",
+        "file_system_config",
+        "code_signing_config_arn",
+        "kms_key_arn",
+    )
+    for item in resources:
+        if item.get("type") != "aws_lambda_function":
+            continue
+        address = item.get("address")
+        values = item.get("values")
+        change_item = change_by_address.get(address)
+        change = change_item.get("change") if isinstance(change_item, dict) else None
+        after = change.get("after") if isinstance(change, dict) else None
+        after_unknown = change.get("after_unknown") if isinstance(change, dict) else None
+        if (
+            not isinstance(address, str)
+            or not isinstance(values, dict)
+            or not isinstance(after, dict)
+            or not isinstance(after_unknown, dict)
+            or not _valid_unknown_tree(after_unknown)
+            or any(
+                field not in values
+                or field not in after
+                or values[field] != after[field]
+                or _path_contains_unknown(after_unknown, (field,))
+                for field in required_fields
+            )
+        ):
+            _deny(
+                findings,
+                "lambda_configuration_unknown",
+                address,
+                "The Lambda plan is missing known, integrity-matched configuration values required by the safety policy.",
+            )
+            continue
+
+        function_name = values.get("function_name")
+        if not isinstance(function_name, str) or not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,64}", function_name
+        ):
+            _deny(
+                findings,
+                "lambda_function_identity_invalid",
+                address,
+                "The Lambda function name must be known and use the supported AWS identifier format.",
+            )
+
+        runtime = values.get("runtime")
+        if not isinstance(runtime, str) or runtime not in LAMBDA_SUPPORTED_RUNTIME_IDS:
+            _deny(
+                findings,
+                "lambda_runtime_unsupported",
+                address,
+                "The Lambda runtime is missing, deprecated, or outside the reviewed managed-runtime set.",
+            )
+
+        handler = values.get("handler")
+        if not isinstance(handler, str) or not handler or len(handler) > 128 or any(
+            ord(char) < 32 for char in handler
+        ):
+            _deny(
+                findings,
+                "lambda_handler_invalid",
+                address,
+                "ZIP Lambda functions require a known, bounded handler string.",
+            )
+
+        if values.get("package_type") != "Zip" or values.get("image_uri") not in (None, ""):
+            _deny(
+                findings,
+                "lambda_package_type_unsupported",
+                address,
+                "Only ZIP-packaged Lambda functions are covered by this policy.",
+            )
+        filename = values.get("filename")
+        if not isinstance(filename, str) or not filename.strip():
+            _deny(
+                findings,
+                "lambda_artifact_source_unknown",
+                address,
+                "The ZIP artifact must come from a known local file input.",
+            )
+        if any(values.get(field) not in (None, "") for field in ("s3_bucket", "s3_key", "s3_object_version")):
+            _deny(
+                findings,
+                "lambda_artifact_source_unsupported",
+                address,
+                "S3-hosted Lambda artifacts are not covered by this source-bound ZIP policy.",
+            )
+        source_code_hash = values.get("source_code_hash")
+        try:
+            decoded_hash = base64.b64decode(source_code_hash, validate=True)
+        except (binascii.Error, TypeError, ValueError):
+            decoded_hash = b""
+        if len(decoded_hash) != 32:
+            _deny(
+                findings,
+                "lambda_source_hash_invalid",
+                address,
+                "The Lambda ZIP artifact must have a known SHA-256 source-code hash.",
+            )
+
+        role_arn = values.get("role")
+        if not _aws_arn_matches(role_arn, "iam", "", expected_account_id, "role/"):
+            _deny(
+                findings,
+                "lambda_execution_role_scope_invalid",
+                address,
+                "The Lambda execution role must be a known role in the trusted AWS account.",
+            )
+        else:
+            roles = [
+                role
+                for role in planned_roles
+                if role["values"].get("arn") == role_arn
+            ]
+            if len(roles) > 1:
+                _deny(
+                    findings,
+                    "lambda_execution_role_ambiguous",
+                    address,
+                    "More than one planned IAM role has the Lambda execution-role ARN.",
+                )
+            elif roles:
+                trust = _json_document(
+                    roles[0]["values"].get("assume_role_policy"),
+                    findings,
+                    roles[0].get("address"),
+                )
+                if trust is None or not _lambda_execution_role_trust_is_exact(trust):
+                    _deny(
+                        findings,
+                        "lambda_execution_role_trust_invalid",
+                        roles[0].get("address"),
+                        "A planned Lambda execution role must trust only the Lambda service.",
+                    )
+            else:
+                _review(
+                    findings,
+                    "lambda_execution_role_permissions_unverified",
+                    address,
+                    "The same-account execution role is external to this plan; its effective permissions require independent review.",
+                )
+
+        architectures = values.get("architectures")
+        if (
+            not isinstance(architectures, list)
+            or len(architectures) != 1
+            or not isinstance(architectures[0], str)
+            or architectures[0] not in {"x86_64", "arm64"}
+        ):
+            _deny(
+                findings,
+                "lambda_architecture_unsupported",
+                address,
+                "A Lambda function must use exactly one supported CPU architecture.",
+            )
+
+        memory = _integer(values.get("memory_size"))
+        if memory is None or not 128 <= memory <= 10_240:
+            _deny(
+                findings,
+                "lambda_memory_out_of_bounds",
+                address,
+                "Lambda memory must be known and between 128 and 10,240 MB.",
+            )
+        timeout = _integer(values.get("timeout"))
+        if timeout is None or not 1 <= timeout <= 900:
+            _deny(
+                findings,
+                "lambda_timeout_out_of_bounds",
+                address,
+                "Lambda timeout must be known and between 1 and 900 seconds, matching the supported cost model.",
+            )
+
+        ephemeral = _single_nested_plan_block(values.get("ephemeral_storage"))
+        if not isinstance(ephemeral, dict) or ephemeral.get("size") != 512:
+            _deny(
+                findings,
+                "lambda_ephemeral_storage_unsupported",
+                address,
+                "Only the default 512 MB Lambda ephemeral-storage size is covered.",
+            )
+
+        if values.get("snap_start") not in (None, [], {}, {"apply_on": "None"}, [{"apply_on": "None"}]):
+            _deny(
+                findings,
+                "lambda_snap_start_unsupported",
+                address,
+                "Lambda SnapStart is outside the supported artifact and cost profile.",
+            )
+
+        raw_vpc_config = values.get("vpc_config")
+        vpc_config = _single_nested_plan_block(raw_vpc_config)
+        if raw_vpc_config not in (None, [], {}) and (
+            not isinstance(vpc_config, dict)
+            or vpc_config.get("subnet_ids") not in (None, [])
+            or vpc_config.get("security_group_ids") not in (None, [])
+            or vpc_config.get("ipv6_allowed_for_dual_stack") not in (None, False)
+        ):
+            _deny(
+                findings,
+                "lambda_vpc_attachment_unsupported",
+                address,
+                "VPC-attached Lambda networking is outside the current policy and cost evidence.",
+            )
+        if values.get("reserved_concurrent_executions") not in (None, -1):
+            _deny(
+                findings,
+                "lambda_reserved_concurrency_unsupported",
+                address,
+                "Reserved Lambda concurrency is outside the current execution and pricing profile.",
+            )
+        if values.get("layers") not in (None, []):
+            _deny(
+                findings,
+                "lambda_layers_unsupported",
+                address,
+                "Lambda layers are not covered by the reviewed artifact-provenance policy.",
+            )
+        if values.get("tracing_config") not in (
+            None,
+            [],
+            {"mode": "PassThrough"},
+            [{"mode": "PassThrough"}],
+        ):
+            _deny(
+                findings,
+                "lambda_tracing_unsupported",
+                address,
+                "Active Lambda tracing is outside the current cost and evidence profile.",
+            )
+        if values.get("dead_letter_config") not in (None, [], {}):
+            _deny(
+                findings,
+                "lambda_dead_letter_config_unsupported",
+                address,
+                "Lambda dead-letter configuration is not covered by this plan's delivery and cost policy.",
+            )
+        if values.get("file_system_config") not in (None, [], {}):
+            _deny(
+                findings,
+                "lambda_file_system_config_unsupported",
+                address,
+                "Lambda file-system attachment is outside the current network and storage policy.",
+            )
+        if values.get("code_signing_config_arn") not in (None, ""):
+            _deny(
+                findings,
+                "lambda_code_signing_unsupported",
+                address,
+                "Lambda code-signing configurations are not yet bound to this artifact evidence.",
+            )
+        if values.get("kms_key_arn") not in (None, ""):
+            _deny(
+                findings,
+                "lambda_customer_kms_key_unpriced",
+                address,
+                "Customer-managed Lambda environment encryption keys are outside the current price evidence.",
+            )
+
+        raw_environment = values.get("environment")
+        environment = _single_nested_plan_block(raw_environment)
+        variables = environment.get("variables", {}) if isinstance(environment, dict) else {}
+        if raw_environment not in (None, [], {}) and not isinstance(environment, dict):
+            _deny(
+                findings,
+                "lambda_environment_unknown",
+                address,
+                "Lambda environment configuration must be absent or one known variables block.",
+            )
+        elif not isinstance(variables, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in variables.items()
+        ):
+            _deny(
+                findings,
+                "lambda_environment_unknown",
+                address,
+                "Lambda environment variables must be known string key/value pairs.",
+            )
+        elif sum(len(key.encode("utf-8")) + len(value.encode("utf-8")) for key, value in variables.items()) > 4096:
+            _deny(
+                findings,
+                "lambda_environment_too_large",
+                address,
+                "Lambda environment variables exceed AWS's aggregate 4 KB limit.",
+            )
+        elif any(
+            _lambda_environment_key_is_secret_like(key)
+            and not _lambda_environment_secret_arn_is_scoped(
+                key, value, expected_account_id, expected_region
+            )
+            for key, value in variables.items()
+        ):
+            _deny(
+                findings,
+                "lambda_environment_secret_key_denied",
+                address,
+                "Secret-like Lambda environment variable names are denied; use a managed secret reference.",
+            )
+
+
+def _lambda_environment_key_is_secret_like(key: str) -> bool:
+    normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key)
+    tokens = re.findall(r"[A-Za-z0-9]+", normalized)
+    compact_key = re.sub(r"[^A-Z0-9]", "", key.upper())
+    return any(marker in compact_key for marker in LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS) or any(
+        marker in token.upper()
+        for token in tokens
+        for marker in LAMBDA_SECRET_ENVIRONMENT_KEY_PARTS
+    )
+
+
+def _lambda_environment_secret_arn_is_scoped(
+    key: str, value: Any, expected_account_id: str, expected_region: str
+) -> bool:
+    if not key.endswith("_SECRET_ARN"):
+        return False
+    parts = value.split(":", maxsplit=5) if isinstance(value, str) else []
+    return (
+        len(parts) == 6
+        and parts[0] == "arn"
+        and parts[1] == "aws"
+        and parts[2] == "secretsmanager"
+        and parts[3] == expected_region
+        and parts[4] == expected_account_id
+        and parts[5].startswith("secret:")
+        and len(parts[5]) > len("secret:")
+    )
+
+
+def _lambda_execution_role_trust_is_exact(policy: dict[str, Any]) -> bool:
+    statements = _statements(policy, require_principal=True)
+    allows = [
+        statement
+        for statement in statements
+        if str(statement.get("Effect", "")).lower() == "allow"
+    ]
+    return bool(allows) and all(
+        {action.lower() for action in _string_list(statement.get("Action"))}
+        == {"sts:assumerole"}
+        and isinstance(statement.get("Principal"), dict)
+        and set(statement["Principal"]) == {"Service"}
+        and set(_string_list(statement["Principal"].get("Service")))
+        == {"lambda.amazonaws.com"}
+        and not statement.get("Condition")
+        and "NotPrincipal" not in statement
+        for statement in allows
+    )
 
 
 def _check_lambda_permissions(

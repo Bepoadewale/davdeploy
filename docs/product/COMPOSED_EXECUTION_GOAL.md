@@ -7,9 +7,24 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-25
 
+The next major engineering goal is registered in the
+[AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
+It is queued only: this handoff and its existing Nova acceptance gates remain
+the active priority and are not reduced or replaced. Start the queued goal only
+after this handoff records genuine completion with its required evidence.
+
 The source baseline for this reconciliation is backend `main` at
-`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
-reconciliation through PR #493). The last
+`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503). PR #502 adds
+assumption-bound NAT/network pricing and is merged after all seven checks
+passed on head `86b4b89` in run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+It is source-only and changes no AWS resources or hosted runtime. Merged PR #503
+adds source-only bounded Lambda function policy as commit
+`f58b308376f759e45e63e3d7c79422f84bbdfd40`. Its final PR head `08ace0b` passed
+all seven checks in run
+[45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631);
+automated review completed with no findings on code head `fac74e4`. It changes
+no AWS resources or hosted runtime. The last
 hosted backend release remains PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
@@ -18,6 +33,38 @@ after plan
 This reconciliation did not access or change the hosted control plane. The
 recorded health observation belongs to the earlier deployment check and was
 not repeated here.
+
+Merged PR #498 adds source-only bounds for a small AWS Batch Fargate shape;
+merged PR #499 bounds a private-endpoint EKS shape; and merged PR #500 adds
+source-only review of the bounded VPC module's subnet, route, internet gateway,
+NAT gateway, and Elastic IP bindings. Their final-head checks pass. These
+packages do not change AWS workloads or the hosted runtime. PR #500's final
+head passed all seven checks in
+[run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
+
+Merged PR #502 adds source-only monthly pricing for bounded public NAT Gateway
+hours, data processing, associated public IPv4, declared internet egress, and
+cross-AZ transfer. All seven checks passed on final PR head `86b4b89` in CI
+run [45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+The PR changes no AWS resource, hosted state, or runtime.
+
+PR #486 remains open at head
+`bb374e8ec06d613a963f1768e71b91175a416898`; all seven checks passed in
+[run 45545915711](https://github.com/Bepoadewale/davdeploy/actions/runs/45545915711).
+Its two direct same-account encrypted-root-volume cycles are recorded, but
+clean-room artifact/volume/network cleanup is pending explicit approval and
+the generated artifacts remain preserved. PR #495 remains a draft at head
+`8a3c23828e619c04a50a9fe6144f389b4924adb1`; all seven checks passed in
+[run 45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
+Its tagged AppConfig test application, environment, feature-flag profile,
+rollout strategy, and deployment history remain preserved. Read-only account
+checks observed deployments 1 and 2 as `COMPLETE` and `REVERTED`, with the
+environment `Reverted`; no teardown was performed.
+
+The Terraform run monitor has 66 historical records and no active runs. No
+Terraform operation, AWS mutation, or hosted-control-plane access occurred for
+this reconciliation. The hosted backend remains at the previously recorded
+PR #420 release; its earlier HTTP 200 observation was not repeated.
 
 PR #477 passed all seven checks on its final head in CI run
 [45341680734](https://github.com/Bepoadewale/davdeploy/actions/runs/45341680734).
@@ -60,13 +107,11 @@ independently verified absent. This is exact-shape customer-side evidence, not
 Nova dispatch, guest application health, or cross-account isolation. The merge
 added no AWS resources.
 
-PR #486 remains open at synchronized head
-`3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
-[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
-It includes current `main` through PR #494. Two same-account cycles verified
-encrypted 8 GiB gp3 root volumes and teardown. Final clean-room cleanup remains
-pending explicit approval; containers are stopped and generated files, volume,
-and network are preserved.
+PR #486 remains open at head `bb374e8ec06d613a963f1768e71b91175a416898`; all
+seven checks passed in run `45545915711`. Two same-account cycles verified
+encrypted 8 GiB gp3 root volumes and teardown. Its final clean-room cleanup
+remains pending explicit approval to remove generated artifacts and Compose
+volumes in that specific worktree; those artifacts are preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`. Its final-head
 CI run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
@@ -278,12 +323,9 @@ delegation, record behavior, failover, or cost. No hosted zone was created;
 see [`ticket470`](../tickets/ticket470.md).
 
 PR #471 verifies a same-plan reference from each AppConfig environment to one
-application. Draft PR #495 adds the AppConfig profile/flag rollout and rollback
-checks; its seven checks passed in run
-[45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
-The direct test observed disabled, enabled `COMPLETE`, and reverted `REVERTED`
-states. Its exact teardown plan awaits approval and the test application remains
-present. No Nova dispatch is claimed; see PR [#495](https://github.com/Bepoadewale/davdeploy/pull/495).
+application. It does not create or deploy configuration profiles or flags,
+and no AppConfig workload or lifecycle was tested; see
+[`ticket471`](../tickets/ticket471.md).
 
 The tested ECR repository and local Terraform state are absent. The Terraform
 monitor has 62 records and no active operations. A read-only 2026-11-25 AWS
@@ -336,11 +378,15 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is
-  `2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
-  reconciliation through PR #493). The last
+- Backend `main` is `f1c18f1a36b12971f883f1edc88c9fb93fac5c44` (PR #500). The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
+- Merged PRs #498–#500 add source-only Batch, EKS, and VPC generated-plan
+  bounds; none changes hosted runtime or AWS workloads. PR #500 final-head CI
+  passed all seven checks in run `45552193668`.
+- PR #486 remains open with clean-room cleanup pending explicit approval. Draft
+  PR #495's tagged AppConfig rollout resources remain preserved pending exact
+  teardown approval. The run monitor has 66 records and zero active runs.
 - PR #399 merged with seven checks passing in run `44598735006`. It adds a
   default-off Nova apply worker, credential broker, and customer apply-role
   template. A temporary same-account role test verified ExternalId-based

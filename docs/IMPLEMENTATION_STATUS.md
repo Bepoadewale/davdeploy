@@ -1,8 +1,7 @@
 # Implementation Status
 
 Status snapshot: 2026-11-25. Backend `main` is
-`2dec62484f3c7ec52859dab23c0b4b37acf9f45e` (PR #494; documentation
-reconciliation through PR #493); hosted runtime remains
+`f58b308376f759e45e63e3d7c79422f84bbdfd40` (PR #503); hosted runtime remains
 at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
 plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
@@ -11,6 +10,39 @@ Both workflow jobs succeeded, including database migrations. Read-only checks
 found all six `davdeploy-*` Lambda packages on code hash
 `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
 HTTP 200. This is deployed control-plane evidence only.
+
+Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
+final-head checks in run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+Merged PR #503 adds source-only generated Lambda function bounds. Final PR head
+`08ace0b` passed all seven checks in run
+[45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631),
+and automated review completed with no findings on code head `fac74e4`. Neither
+package changes AWS resources or hosted runtime.
+
+Merged PRs #498–#500 add source-only AWS Batch Fargate, EKS, and VPC
+generated-plan bounds. PR #500's final head passed all seven checks in
+[run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
+These changes do not alter the hosted runtime or AWS workloads. The last
+recorded hosted release and health observation above remain the PR #420
+deployment; they were not repeated for this source reconciliation.
+
+Merged PR #502 adds source-only, assumption-bound NAT Gateway pricing to the
+generated-plan evaluator. Focused pricing and revision-lifecycle tests pass
+locally, and all seven checks passed on final PR head `86b4b89` in CI run
+[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
+It changes neither the hosted runtime nor AWS resources.
+
+PR #486 remains open at `bb374e8ec06d613a963f1768e71b91175a416898`, with all
+seven checks passing in run `45545915711`; clean-room generated artifact,
+volume, and network cleanup remains pending explicit approval. Draft PR #495
+remains open at `8a3c23828e619c04a50a9fe6144f389b4924adb1`, with all seven
+checks passing in run `45530027533`. Its tagged AppConfig test application,
+environment, feature-flag profile, rollout strategy, and deployment history
+are preserved; the environment is `Reverted` and deployments are `COMPLETE`
+then `REVERTED`. No cleanup was performed. The Terraform run monitor has 66
+historical records and no active runs. The hosted control plane and its state
+and locks were not accessed or changed.
 
 PR #493's final-head CI run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)
@@ -119,18 +151,11 @@ are terminated. Local state lists zero resources and is retained. This does
 not prove guest application health, update/recovery, pricing, or Nova dispatch.
 The merge added no AWS resources.
 
-PR #486 remains open at synchronized head `3d7fe8b89adb6fd6407afe989336a1d756e02d99`; all seven checks passed in run
-[45532421344](https://github.com/Bepoadewale/davdeploy/actions/runs/45532421344).
-It includes current `main` through PR #494. The final clean-room cleanup
-finding remains open pending explicit approval; project containers are stopped,
-and generated files, volume, and network are preserved.
-
-Draft PR #495 adds a typed AppConfig feature profile and bounded rollout policy.
-Its direct test observed disabled baseline, `BAKING`→`COMPLETE` deployment, and
-`REVERTED` rollback; all seven checks passed in run
-[45530027533](https://github.com/Bepoadewale/davdeploy/actions/runs/45530027533).
-The exact teardown plan awaits approval, so its test application remains. No
-Nova dispatch or customer certification is claimed.
+PR #486 remains open at head `bb374e8ec06d613a963f1768e71b91175a416898`;
+all seven checks passed in run `45545915711`. Its encrypted-root-volume
+cycles are complete. Clean-room generated artifact/volume/network cleanup is
+still pending explicit approval, and the exact generated artifacts remain
+preserved.
 
 PR #487 merged as `426d81da901555b3fdabbde19d2c2d971319212d`; final-head CI
 run [45476895398](https://github.com/Bepoadewale/davdeploy/actions/runs/45476895398)
