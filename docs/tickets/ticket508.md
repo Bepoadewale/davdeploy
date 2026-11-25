@@ -51,7 +51,7 @@ historical. This PR changes no product behavior.
 - [x] The hosted control-plane boundary and absence of Nova-dispatched customer
   workload evidence remain accurate.
 - [x] Documentation conventions and `git diff --check` pass; final-head CI
-  passed all seven checks on head `fd88e00` in run `45649598879`.
+  passed all seven checks on head `758d23f` in run `45650251672`.
 - [x] No AWS resources, hosted resources, Terraform state/locks, or protected
   local files are changed.
 
@@ -59,7 +59,7 @@ historical. This PR changes no product behavior.
 
 - [x] Documentation reconciled.
 - [x] Validation complete.
-- [ ] Final-head CI passed.
+- [x] Final-head CI passed on `758d23f` in run `45650251672`.
 - [ ] PR reviewed and merged.
 
 ## Evidence files produced
@@ -75,7 +75,8 @@ historical. This PR changes no product behavior.
 - PR #507 merge-to-main run `45647722781` passed all seven checks.
 - PR #508 head `da77500` passed all seven checks in run `45648955777`.
 - PR #508 head `fd88e00` passed all seven checks in run `45649598879`.
-- The current final ticket update must also pass CI before merge.
+- PR #508 head `758d23f` passed all seven checks in run `45650251672`.
+- This final ticket update must pass current-head CI before merge.
 
 ## Boundaries
 
