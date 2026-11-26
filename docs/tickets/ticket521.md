@@ -1,6 +1,6 @@
-# ticket520 — Keep the hosted Lambda environment within AWS limits
+# ticket521 — Keep the hosted Lambda environment within AWS limits
 
-PR: #520
+PR: #521
 Branch: `feat/lambda-env-budget-520`
 
 ## Problem / goal
@@ -79,7 +79,7 @@ recorded above; no retry will use its saved plan.
 ## Evidence files produced
 
 - Protected workflow run `45886527901` is the current failure evidence.
-- `docs/test/test520.md` will record a later fresh plan/apply and deployment
+- `docs/test/test521.md` will record a later fresh plan/apply and deployment
   health verification if that workflow is completed.
 
 ## Boundaries
@@ -98,5 +98,5 @@ recorded above; no retry will use its saved plan.
   updates were rejected at 4,487 bytes. Read-only reconciliation confirmed
   prior API/worker/migration packages and no active Terraform operation.
 - Fresh plan/apply and post-deploy health, package, and template URL checks
-  will be recorded in a PR-numbered `docs/test/test520.md` evidence file after
+  will be recorded in a PR-numbered `docs/test/test521.md` evidence file after
   the hosted workflow runs.
