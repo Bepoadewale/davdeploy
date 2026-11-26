@@ -35,10 +35,11 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 
 ## Acceptance criteria
 
-- [ ] Existing module callers retain their current behavior unless they opt into private networking.
-- [ ] The test root uses same-plan private subnets, endpoint bindings, and an endpoint SG that permits TCP/443 from the Batch SG only.
-- [ ] Terraform plan has no public task IP assignment and uses a digest-pinned private ECR image.
-- [ ] Local tests, Terraform validation, docs conventions, diff checks, and final-head CI pass.
+- [x] Existing module callers retain their current public-IP behavior by default; private networking is an explicit opt-in.
+- [x] The test root declares same-plan private subnets, endpoint bindings, and endpoint SG ingress limited to TCP/443 from the Batch SG; the Batch SG egress is limited to those endpoints and the S3 gateway prefix list.
+- [x] The test root sets public-IP assignment to `DISABLED` and requires a SHA256-pinned private ECR image; an authenticated plan and image digest are not yet recorded.
+- [x] Focused policy tests (639 passed), Terraform formatting/validation, docs conventions, and diff checks pass locally.
+- [ ] Final-head CI passes.
 - [ ] Before AWS apply, current pricing/quota/capacity and exact resource inventory are recorded; maximum runtime is one hour and estimated maximum spend is USD $1.00.
 - [ ] With explicit cleanup authorization, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
 - [ ] Exact test resources are destroyed through the run monitor and independently verified absent; AWS-retained inactive job-definition history is listed separately.
@@ -47,17 +48,22 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 ## Acceptance status
 
 - [x] Draft PR opened before substantive implementation; matching PR-numbered ticket created.
-- [ ] Module input, private validation root, and regression tests are implemented.
-- [ ] Local validation and final-head CI pass.
+- [x] Module input, private validation root, and regression test are implemented.
+- [x] Focused local validation passes.
+- [ ] Final-head CI passes.
 - [ ] Cloud experiment pricing, quota, exact plan, and approval prerequisites are satisfied.
 - [ ] Customer-side lifecycle and cleanup evidence are recorded; no Nova dispatch is claimed.
 - [ ] PR is reviewed and merged.
 
 ## Tests / validation performed
 
-- Initial bootstrap commit: `terraform/modules/batch-compute` now accepts `assign_public_ip`, default `true`; no cloud changes.
-- `git diff --check`: passed on bootstrap commit.
-- Focused module tests, Terraform validation, and CI: pending.
+- `pytest tests/test_generated_plan_policy.py -q`: 639 passed.
+- `ruff check tests/test_generated_plan_policy.py`: passed.
+- `terraform fmt -recursive` on the changed roots/modules: passed.
+- `make terraform-validate`: passed, including the new private-endpoint test root.
+- `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- GitHub CI: pending on final head.
 - AWS planning/apply: not started.
 
 ## Evidence files produced

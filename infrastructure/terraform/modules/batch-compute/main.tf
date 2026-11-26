@@ -7,7 +7,26 @@ variable "image" { type = string }
 variable "log_group_name" { type = string }
 variable "region" { type = string }
 variable "tags" { type = map(string) }
-variable "assign_public_ip" { type = bool, default = true }
+variable "assign_public_ip" {
+  type        = bool
+  default     = true
+  description = "Whether Fargate tasks receive a public IPv4 address."
+}
+variable "retry_attempts" {
+  type        = number
+  default     = null
+  description = "Optional bounded retry count for the Batch job definition."
+}
+variable "timeout_seconds" {
+  type        = number
+  default     = null
+  description = "Optional per-attempt job timeout in seconds."
+}
+variable "max_vcpus" {
+  type        = number
+  default     = 16
+  description = "Maximum vCPU capacity for the managed Fargate compute environment."
+}
 
 resource "aws_batch_compute_environment" "this" {
   compute_environment_name = var.name
@@ -16,7 +35,7 @@ resource "aws_batch_compute_environment" "this" {
   service_role             = var.service_role_arn
   compute_resources {
     type               = "FARGATE"
-    max_vcpus          = 16
+    max_vcpus          = var.max_vcpus
     subnets            = var.subnet_ids
     security_group_ids = var.security_group_ids
   }
@@ -41,9 +60,8 @@ resource "aws_batch_job_definition" "this" {
   container_properties = jsonencode({
     image            = var.image
     executionRoleArn = var.instance_role_arn
-    # Fargate tasks in a public subnet need a public address to reach public
-    # ECR and CloudWatch Logs unless the caller supplies private endpoints/NAT.
-    # The validation root deliberately uses public default-VPC subnets.
+    # Public-IP assignment is configurable for callers that use private
+    # subnets with approved endpoints or NAT-based egress.
     networkConfiguration = {
       assignPublicIp = var.assign_public_ip ? "ENABLED" : "DISABLED"
     }
@@ -60,7 +78,20 @@ resource "aws_batch_job_definition" "this" {
       { type = "MEMORY", value = "512" }
     ]
   })
+  dynamic "retry_strategy" {
+    for_each = var.retry_attempts == null ? [] : [var.retry_attempts]
+    content {
+      attempts = retry_strategy.value
+    }
+  }
+  dynamic "timeout" {
+    for_each = var.timeout_seconds == null ? [] : [var.timeout_seconds]
+    content {
+      attempt_duration_seconds = timeout.value
+    }
+  }
   tags = var.tags
 }
 
 output "job_queue_arn" { value = aws_batch_job_queue.this.arn }
+output "job_definition_arn" { value = aws_batch_job_definition.this.arn }

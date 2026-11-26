@@ -41,6 +41,7 @@ roots=(
   infrastructure/terraform/customer-workload-serverless-api
   infrastructure/terraform/customer-workload-private-s3
   infrastructure/terraform/customer-workload-dynamodb
+  infrastructure/terraform/module-validation/batch-private-endpoints
   infrastructure/terraform/renderers/app-runner-plan
   infrastructure/terraform/pilot
 )

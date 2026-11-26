@@ -8042,6 +8042,20 @@ def test_batch_public_ip_assignment_is_a_review_finding():
     assert "batch_public_ip_enabled_review" in codes(result)
 
 
+def test_batch_private_ip_assignment_does_not_add_public_ip_review():
+    document, proposal_value = batch_fargate_case()
+    _set_batch_container_properties(
+        document,
+        networkConfiguration={"assignPublicIp": "DISABLED"},
+    )
+
+    result = evaluate(document, proposal_value)
+
+    assert result.verdict == PlanPolicyVerdict.REVIEW_REQUIRED
+    assert "batch_role_permissions_unverified" in codes(result)
+    assert "batch_public_ip_enabled_review" not in codes(result)
+
+
 def test_batch_unknown_capacity_is_denied_without_echoing_values():
     document, proposal_value = batch_fargate_case(
         unknowns={
