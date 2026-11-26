@@ -78,3 +78,39 @@ This is direct same-account AWS infrastructure evidence. It does not prove a suc
 ## Final boundary
 
 The hosted control plane and its state/lock resources were not changed. The evidence is limited to this disposable same-account AWS infrastructure apply and cleanup; no workload execution or Nova dispatch is claimed.
+
+## Retry cycle b — exact manifest before apply
+
+This separate retry uses test ID `batch-private-endpoints-517-20261126b` and
+ECR repository `davdeploy-batch-private-endpoints-517-20261126b` in account
+`654654474502`, region `us-east-1`. Its `ExpiresAt` tag is
+`2026-11-26T17:15:00Z`; the maximum runtime is one hour. Fresh preflight at
+2026-11-26 confirmed the expected account, no AWS resources tagged with this
+TestId, no repository with this name, no `AWSServiceRoleForBatch`, no Batch
+compute environment in `us-east-1`, an empty Terraform test state, and no
+active monitored Terraform operation. The exact prior stack-a resources are
+absent; the retained inactive job definition belongs only to suffix `a`.
+
+The authorized manifest is limited to one ECR repository and one immutable
+Linux/x86 test image; one private two-AZ VPC with two private subnets and no
+internet gateway, NAT, or public IPv4; one route table and associations; two
+security groups and three scoped security-group rules; three interface
+endpoints (`ecr.api`, `ecr.dkr`, `logs`) across the two AZs; one S3 gateway
+endpoint; one CloudWatch log group; one ECS task execution role and policy
+attachment; one explicitly owned AWS Batch service-linked role; and one Batch
+Fargate compute environment, queue, and job definition capped at one vCPU. One
+job will be submitted once with a five-minute timeout. It must reach
+`SUCCEEDED`; the exact digest-pinned image and CloudWatch stream must be
+verified before teardown.
+
+The estimated fixed charges remain approximately $0.0724 for one endpoint
+hour plus one hour of 0.25-vCPU/0.5-GiB Fargate, before data processing,
+logging, and ECR storage. The estimated spend is bounded at $1.00 by prompt
+cleanup; this is not an AWS billing cap. The test has not started: no ECR
+repository, image, VPC, endpoint, IAM role, Batch environment, queue, or log
+group exists for suffix `b`. Generate the targeted ECR plan and full saved
+plan in a private `0700` artifact directory with plans/logs mode `0600`,
+review their exact resources and actions, then apply through the Terraform
+monitor. Destroy only the exact suffix-`b` state and image digests, then
+independently verify resource absence. No control-plane resource or retained
+suffix-`a` audit history is in this retry's cleanup scope.

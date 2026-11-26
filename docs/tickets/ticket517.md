@@ -75,11 +75,11 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - `git diff --check`: passed.
 - GitHub CI run `45839400505` passed all seven checks on final head `37b4be1fb330c66bb72791804181d43bcd5bc308`.
 - Full isolated local clean-room cycle: bootstrap, smoke, API contract, customer-plan E2E, all five canonical demos, seed/restart persistence, trace check, and `make verify`; 1,971 tests passed with one Starlette/httpx deprecation warning. No AWS resources were used. Project containers were removed; local `.venv/`, `.local/`, and `davdeploy-pr517-cleanroom_davdeploy-postgres` were retained because cleanup of those non-container resources needs explicit approval.
-- AWS infrastructure provisioning and cleanup: complete for the exact test stack. The actual private Batch job/readiness/logging cycle was not run and remains unproven.
+- AWS infrastructure provisioning and cleanup: complete for exact test suffix `a`. Its one submitted Batch job failed because a concurrent cleanup deleted the queue during `STARTING`. A separately scoped suffix-`b` retry manifest is recorded in `docs/test/test517.md`, but no retry resources have been created.
 
 ## Evidence files produced
 
-`docs/test/test517.md` records the direct same-account infrastructure apply, exact cleanup, independently verified absence, retained inactive definition, and the unrun Batch workload step.
+`docs/test/test517.md` records the direct same-account infrastructure apply, failed job attempt, exact cleanup, independently verified absence, retained inactive definition, and the separate pre-apply manifest for retry suffix `b`.
 
 ## Boundaries
 
@@ -87,4 +87,4 @@ Do not modify hosted control-plane runtime, Terraform state, or lock resources. 
 
 ## Follow-up work
 
-The private test would validate only this Batch/network/image/logging shape. It does not certify Nova dispatch, all Batch images, general private internet egress, cross-account execution, or any other workload family. Do not start another paid workload run without a fresh preflight and authorization under the active goal's boundaries.
+The private test would validate only this Batch/network/image/logging shape. It does not certify Nova dispatch, all Batch images, general private internet egress, cross-account execution, or any other workload family. The active goal authorization covers only the exact suffix-`b` manifest; recheck the account, quota, pricing, and monitor before starting it.
