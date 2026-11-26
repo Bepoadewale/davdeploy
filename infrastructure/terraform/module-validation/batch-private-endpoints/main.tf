@@ -109,16 +109,6 @@ module "ecr" {
   tags   = local.tags
 }
 
-data "aws_iam_policy_document" "batch_service_assume" {
-  statement {
-    actions = ["sts:AssumeRole"]
-    principals {
-      type        = "Service"
-      identifiers = ["batch.amazonaws.com"]
-    }
-  }
-}
-
 data "aws_iam_policy_document" "ecs_tasks_assume" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -129,15 +119,9 @@ data "aws_iam_policy_document" "ecs_tasks_assume" {
   }
 }
 
-resource "aws_iam_role" "batch_service" {
-  name               = "${local.name}-service"
-  assume_role_policy = data.aws_iam_policy_document.batch_service_assume.json
-  tags               = local.tags
-}
-
-resource "aws_iam_role_policy_attachment" "batch_service" {
-  role       = aws_iam_role.batch_service.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole"
+resource "aws_iam_service_linked_role" "batch" {
+  aws_service_name = "batch.amazonaws.com"
+  description      = "AWS Batch service-linked role owned by the PR 517 disposable test."
 }
 
 resource "aws_iam_role" "task_execution" {
@@ -227,7 +211,6 @@ resource "aws_cloudwatch_log_group" "batch" {
 module "batch" {
   source             = "../../modules/batch-compute"
   name               = local.name
-  service_role_arn   = aws_iam_role.batch_service.arn
   instance_role_arn  = aws_iam_role.task_execution.arn
   subnet_ids         = values(aws_subnet.private)[*].id
   security_group_ids = [aws_security_group.batch.id]
@@ -239,7 +222,7 @@ module "batch" {
   retry_attempts     = 1
   timeout_seconds    = 300
   max_vcpus          = 1
-  depends_on         = [aws_iam_role_policy_attachment.batch_service, aws_iam_role_policy_attachment.task_execution]
+  depends_on         = [aws_iam_service_linked_role.batch, aws_iam_role_policy_attachment.task_execution]
 }
 
 output "account_id" { value = data.aws_caller_identity.current.account_id }

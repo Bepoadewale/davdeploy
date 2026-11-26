@@ -23,13 +23,14 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - AWS [PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/): interface endpoints incur hourly per-AZ charges and processed-data fees; partial endpoint-hours are rounded up.
 - AWS [VPC pricing](https://aws.amazon.com/vpc/pricing/): NAT gateway hourly/data-processing and public IPv4 charges apply to the current bounded VPC module shape.
 - AWS [Fargate pricing](https://aws.amazon.com/fargate/pricing/): task compute is metered by vCPU, memory, and runtime, with per-second billing and a one-minute minimum for Linux/x86.
+- AWS [Batch service-linked role documentation](https://docs.aws.amazon.com/batch/latest/userguide/using-service-linked-roles-batch-general.html) and HashiCorp [`aws_batch_compute_environment`](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/batch_compute_environment): managed Fargate environments omit the inapplicable custom service-role argument.
 - Preflight refreshed 2026-11-26: AWS public rates indicate about $0.01 per interface endpoint ENI-hour and $0.01235 per hour for the 0.25-vCPU/0.5-GB test task; six endpoint ENIs plus the task are about $0.07235 for the first hour before processing/logging. Recheck immediately before apply.
-- AWS Fargate On-Demand quota in `us-east-1` is 64 vCPUs; the proposed Batch environment is capped at 1 vCPU. Two selected AZs are available, and no resource carries the test purpose tag.
+- AWS Fargate On-Demand quota in `us-east-1` is 64 vCPUs; the proposed Batch environment is capped at 1 vCPU. Two selected AZs are available. Before the ECR bootstrap, no resources carried the exact test ID.
 
 ## Work planned for the PR
 
 1. Add an `assign_public_ip` input to `modules/batch-compute`, defaulting to current behavior for backwards compatibility.
-2. Add a focused Terraform validation root with a fresh two-AZ private-only VPC (no NAT or public IP), ECR API/Docker/Logs endpoints, an S3 gateway endpoint, restricted endpoint SG ingress from the Batch SG, an ECR image, and one bounded Fargate job with public-IP assignment disabled.
+2. Add a focused Terraform validation root with a fresh two-AZ private-only VPC (no NAT or public IP), ECR API/Docker/Logs endpoints, an S3 gateway endpoint, restricted endpoint SG ingress from the Batch SG, an ECR image, an explicitly owned Batch service-linked role, and one bounded Fargate job with public-IP assignment disabled.
 3. Add tests that verify the private/public IP input changes the generated Batch job definition as expected; run Terraform format/validation and required CI.
 4. Before AWS apply, verify current us-east-1 Price List prices, Batch/Fargate quotas and availability, review an exact saved plan, and record a maximum of one hour and USD $1.00 estimated total spend. AWS Budgets are not a hard cap.
 5. Run one job, prove it reaches `SUCCEEDED`, verify private image retrieval and CloudWatch logs, then use the Terraform run monitor and independently check the exact resources absent after cleanup.
@@ -39,11 +40,12 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 
 - [x] Existing module callers retain their current public-IP behavior by default; private networking is an explicit opt-in.
 - [x] The test root declares same-plan private subnets without NAT/public IP resources, endpoint bindings, and endpoint SG ingress limited to TCP/443 from the Batch SG; the Batch SG egress is limited to those endpoints and the S3 gateway prefix list.
-- [x] The test root sets public-IP assignment to `DISABLED` and requires a SHA256-pinned private ECR image; an authenticated plan and image digest are not yet recorded.
+- [x] The test root sets public-IP assignment to `DISABLED` and requires a SHA256-pinned private ECR image; the private image digest is recorded in `docs/test/test517.md`.
 - [x] Focused policy and Terraform-validation tests (641 passed), Terraform formatting/validation, docs conventions, and diff checks pass locally.
+- [x] Fargate uses an explicitly managed, untaggable `AWSServiceRoleForBatch`; preflight found it absent and no existing Batch compute environments in 17 enabled regions, defining the exact cleanup boundary.
 - [ ] Final-head CI passes.
 - [ ] Before AWS apply, current pricing/quota/capacity and exact resource inventory are recorded; maximum runtime is one hour and estimated maximum spend is USD $1.00.
-- [ ] With explicit cleanup authorization, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
+- [ ] Within the previously authorized exact test manifest, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
 - [ ] Exact test resources are destroyed through the run monitor and independently verified absent; AWS-retained inactive job-definition history is listed separately.
 - [ ] No hosted control-plane or control-plane state/lock resource is changed; no Nova dispatch claim is made.
 
@@ -54,7 +56,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - [x] Focused local validation passes.
 - [ ] Final-head CI passes.
 - [ ] Cloud experiment pricing, quota, exact plan, and approval prerequisites are satisfied.
-- [ ] Customer-side lifecycle and cleanup evidence are recorded; no Nova dispatch is claimed.
+- [ ] Customer-side lifecycle and cleanup evidence are recorded within the exact authorized test scope; no Nova dispatch is claimed.
 - [ ] PR is reviewed and merged.
 
 ## Tests / validation performed
@@ -63,7 +65,9 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - `ruff check tests/test_generated_plan_policy.py tests/test_terraform_validation.py`: passed.
 - `terraform fmt -recursive` on the changed roots/modules: passed.
 - `make terraform-validate`: passed, including the new private-endpoint test root.
+- Focused Terraform tests, full `make terraform-validate`, docs conventions and diff checks passed after the Fargate service-role change. The Batch service-linked role is owned at exact resource address `aws_iam_service_linked_role.batch`; it has no tags.
 - Read-only AWS preflight: expected account confirmed, two AZs available, Fargate quota 64 vCPUs, and no pre-existing resources with the test purpose tag.
+- Exact targeted ECR plan apply `nova-batch517-ecr-apply-20261126a` succeeded through the Terraform run monitor (supervisor PID `92773`, Terraform PID `92774`); the test image was pushed to the exact new repository and its digest is recorded in `docs/test/test517.md`.
 - `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - GitHub CI: pending on final head.
@@ -76,7 +80,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 
 ## Boundaries
 
-Do not modify hosted control-plane runtime, Terraform state, or lock resources. Before any customer-side apply, verify AWS account `654654474502`, region `us-east-1`, current prices and quotas, and the exact reviewed plan. Do not exceed one hour or the USD $1.00 estimated-cost bound. Keep secrets out of logs. No AWS resource may be destroyed without explicit approval in this conversation. Preserve inactive Batch definition records and all SageMaker lineage evidence.
+Do not modify hosted control-plane runtime, Terraform state, or lock resources. Before any customer-side apply, verify AWS account `654654474502`, region `us-east-1`, current prices and quotas, and the exact reviewed plan. Do not exceed one hour or the USD $1.00 estimated-cost bound. Keep secrets out of logs. Only resources listed in this PR's exact disposable test manifest are in the authorized cleanup scope. Preserve inactive Batch definition records and all SageMaker lineage evidence.
 
 ## Follow-up work
 

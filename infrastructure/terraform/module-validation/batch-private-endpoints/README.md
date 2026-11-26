@@ -16,6 +16,14 @@ create and inspect the full saved plan, which contains the rest of the VPC,
 endpoints, IAM roles, Batch resources, and the exact image digest. Apply only
 after the full resource inventory and cleanup scope are approved.
 
+Fargate compute environments omit the Batch service-role argument, which AWS
+documents as inapplicable to Fargate. The test explicitly creates the
+account-level, untaggable `AWSServiceRoleForBatch` service-linked role and owns
+it at the exact Terraform address `aws_iam_service_linked_role.batch`. The
+preflight found the role absent and no Batch compute environments in 17 enabled
+regions. Before teardown, recheck all enabled regions; destroy the test
+compute environment and queue before removing this exact service-linked role.
+
 Before applying, verify the caller account is `654654474502`, the region is
 `us-east-1`, current prices and quotas, and every resource in the exact saved
 plan. The experiment bound is one hour and USD $1.00 estimated spend. The

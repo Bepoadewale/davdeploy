@@ -1,5 +1,9 @@
 variable "name" { type = string }
-variable "service_role_arn" { type = string }
+variable "service_role_arn" {
+  type        = string
+  default     = null
+  description = "Optional Batch service role ARN; omit for Fargate managed compute environments."
+}
 variable "instance_role_arn" { type = string }
 variable "subnet_ids" { type = list(string) }
 variable "security_group_ids" { type = list(string) }
