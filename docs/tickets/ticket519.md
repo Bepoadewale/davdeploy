@@ -23,11 +23,12 @@ execution.
 - `docs/test/test437.md` records direct same-account AWS create, health,
   in-place update, failed-health rollback, recovery, and cleanup. It does not
   prove Nova dispatch or cross-account isolation.
-- `module_renderers.py` now has a disabled `aws-container-service` renderer
-  bound to the ECS Express root and maps only `aws-ecs-express-pilot` to it.
-  The broader `aws-ecs-fargate` planning profile does not resolve to this
-  single-container pilot. The renderer remains unavailable for customer
-  execution pending IAM, pricing/policy, and isolated runner certification.
+- `module_renderers.py` now has a disabled, pilot-specific
+  `aws-ecs-express-pilot` renderer bound to the ECS Express root. It does not
+  reuse the broad `aws-container-service` module contract. The broader
+  `aws-ecs-fargate` planning profile does not resolve to this single-container
+  pilot. Customer execution remains unavailable pending IAM, pricing/policy,
+  and isolated runner certification.
 - Current cloud-execution gates and hosted control-plane configuration must
   remain untouched by this PR.
 

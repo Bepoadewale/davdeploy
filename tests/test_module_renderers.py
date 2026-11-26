@@ -47,7 +47,7 @@ def test_only_checked_in_module_renderer_is_resolved():
         "destroy": "destroy-saved-plan",
         "verify_cleanup": "verify-cleanup",
     }
-    ecs = next(item for item in manifest if item.module_id == "aws-container-service")
+    ecs = next(item for item in manifest if item.module_id == "aws-ecs-express-pilot")
     assert ecs.execution_enabled is False
     assert ecs.terraform_root == "infrastructure/terraform/customer-workload-ecs-express-pilot"
     assert ecs.runner_script == "scripts/customer-workload-ecs-express-pilot.sh"
@@ -69,7 +69,7 @@ def test_unbound_or_unsupported_renderer_work_is_rejected():
         ("aws-serverless-api", "apply"),
         ("aws-file-storage", "apply"),
         ("aws-nosql-data", "apply"),
-        ("aws-container-service", "apply"),
+        ("aws-ecs-express-pilot", "apply"),
     ):
         try:
             renderer_for(module_id, operation)
@@ -116,7 +116,7 @@ def test_only_the_narrow_ecs_express_pilot_resolves_to_its_gated_renderer():
     else:
         raise AssertionError("ECS Express must stay gated until renderer certification")
 
-    renderer = next(item for item in renderer_manifest() if item.module_id == "aws-container-service")
+    renderer = next(item for item in renderer_manifest() if item.module_id == "aws-ecs-express-pilot")
     assert renderer.execution_enabled is False
 
     try:
