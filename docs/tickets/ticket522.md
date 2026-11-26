@@ -86,14 +86,16 @@ and trusted usage bounds.
   unsupported sharing, and malformed input cannot produce `COMPLETE` pricing.
 - [x] Existing pricing manifest versions remain readable and canonical; new
   evidence uses a versioned strict shape.
-- [ ] Focused and full relevant tests, lint, docs conventions, and final-head CI
+- [x] Focused and full relevant tests, lint, docs conventions, and final-head CI
   pass. A full clean-room run is not applicable to this pricing-only change.
 - [x] No AWS workload or hosted control-plane resource is changed; no Terraform
   plan/apply/destroy or state/lock operation is run.
 
 ## Acceptance status
 
-Implementation and all local validation are complete. Final-head CI is pending.
+Implementation and local validation are complete. Final-head CI run
+`45894761342` passed all seven checks. The PR remains a draft, stacked on PR
+#520.
 
 ## Tests / validation performed
 
@@ -112,8 +114,8 @@ Implementation and all local validation are complete. Final-head CI is pending.
 - `python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - Initial final-head CI run `45893810916` exposed an OpenAPI snapshot mismatch;
-  the contract snapshot has been regenerated and now matches the app. CI rerun
-  on the refreshed head is pending.
+  after regenerating the contract snapshot, CI run `45894761342` passed all
+  seven checks.
 - No Terraform plan or AWS/control-plane operation was run for this PR.
 
 ## Evidence files produced
