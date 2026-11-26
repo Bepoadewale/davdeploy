@@ -33,6 +33,10 @@ Current public pricing references reviewed 2026-11-26: AWS PrivateLink lists $0.
 
 Not executed. No image pull, Batch job, or CloudWatch log delivery is claimed.
 
+## Local clean-room validation
+
+In a fresh worktree using isolated Compose project `davdeploy-pr517-cleanroom`, ran `make bootstrap-local`, then the repository's smoke, API contract, customer plan E2E, simple/complex/degraded/Day-2/failure/readiness-failure demos, seed and API-restart persistence check, trace check, and `make verify`. Result: passed; `make verify` reported 1,971 tests passed with one upstream Starlette/httpx deprecation warning. This used local fixtures only and is not AWS workload evidence. Project containers were stopped and removed. The project Postgres volume `davdeploy-pr517-cleanroom_davdeploy-postgres`, local `.venv/`, and `.local/` remain untouched pending explicit cleanup approval.
+
 ## Teardown
 
 Not executed. The exact Terraform resources will not be created until the one-hour/USD $1.00 estimated-cost bound, account/region, quota, reviewed plan, and exact cleanup authorization are recorded. If authorized and run, destroy via the PID-based Terraform monitor and verify exact resource absence independently.

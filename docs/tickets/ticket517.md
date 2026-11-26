@@ -67,6 +67,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - GitHub CI: pending on final head.
+- Full isolated local clean-room cycle: bootstrap, smoke, API contract, customer-plan E2E, all five canonical demos, seed/restart persistence, trace check, and `make verify`; 1,971 tests passed with one Starlette/httpx deprecation warning. No AWS resources were used. Project containers were removed; local `.venv/`, `.local/`, and `davdeploy-pr517-cleanroom_davdeploy-postgres` were retained because cleanup of those non-container resources needs explicit approval.
 - AWS planning/apply: not started.
 
 ## Evidence files produced
