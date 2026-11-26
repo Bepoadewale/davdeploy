@@ -115,7 +115,8 @@ its then-current head. The PR remains a draft, stacked on PR #520.
   product families.
 - `make PY=/private/tmp/davdeploy-private-batch-endpoints-517/.venv/bin/python openapi-check`: passed.
 - Focused pricing and lifecycle tests: 188 passed.
-- Current `make verify`: 1,994 passed, with one existing Starlette/httpx
+- Current `make verify` after rebasing on PR #520 and main commit `4cc177c`:
+  2,001 passed, with one existing Starlette/httpx
   deprecation warning; Ruff, OpenAPI snapshot, actions configuration, and
   Compose checks passed.
 - Ruff checks on changed Python files: passed.
