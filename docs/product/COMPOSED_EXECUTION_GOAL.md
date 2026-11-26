@@ -14,7 +14,20 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`78cab9b943c2215826fd26fd3cf0d90376cf46a7` (PR #515). PR #515 adds
+`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517). PR #517 adds
+a backward-compatible `assign_public_ip` input to the Batch Fargate module and
+a private-only validation root. Its final-head CI passed all seven checks in
+run [45863379689](https://github.com/Bepoadewale/davdeploy/actions/runs/45863379689);
+merged-main CI passed all seven checks in run
+[45864105035](https://github.com/Bepoadewale/davdeploy/actions/runs/45864105035).
+In the direct same-account test, suffix `a` failed during a queue-cleanup race;
+isolated suffix `b` completed a private ECR image pull and Batch job with exit
+code 0, private networking, and expected CloudWatch output. Both exact stacks
+were destroyed and independently checked absent. AWS retains both job
+definitions as inactive history; the Resource Groups Tagging API showed stale
+deleted-resource entries. This is lifecycle evidence for that exact Batch
+shape, not Nova dispatch, cross-account execution, or broader Batch support.
+PR #515 adds
 source-only, fail-closed generated-plan bounds for selected VPC endpoints;
 all seven checks passed on final PR head `e917c30` in run
 [45776482608](https://github.com/Bepoadewale/davdeploy/actions/runs/45776482608),
@@ -90,7 +103,7 @@ all seven checks in run
 [45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631);
 automated review completed with no findings on code head `fac74e4`. It changes
 no AWS resources or hosted runtime. The last
-hosted backend release remains PR #420 commit
+recorded hosted backend release is PR #420 commit
 `9951caa9244128b1551fea3af66b1bdbf884c800`, applied by
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
@@ -455,22 +468,21 @@ close other per-entry requirements or prove Nova-originated execution.
 
 ## Next dependency-ready package
 
-PR #517 implements a configurable private-IP path for Batch Fargate and
-records direct same-account evidence for one private ECR image and CloudWatch
-logging shape. Suffix `a` failed during a cleanup race; isolated suffix `b`
-completed successfully and both exact stacks were cleaned. Review and merge
-PR #517 only after its current final-head CI and review requirements pass.
-Evidence is in [`test517.md`](../test/test517.md) and [`ticket517.md`](../tickets/ticket517.md).
+PR #517 is merged and its exact direct same-account Batch lifecycle evidence is
+recorded in [`test517.md`](../test/test517.md) and [`ticket517.md`](../tickets/ticket517.md).
+Together with the accepted direct ECS lifecycle in PR #437, this satisfies the
+general customer-side lifecycle gate for those tested shapes. It does not prove
+Nova authorization/dispatch, cross-account trust, or support for other shapes.
 
-After that package, prioritize Nova-specific authorization, customer-role
-credential issuance, and dispatch for a supported workload shape. Reuse the
-already demonstrated Batch private path where appropriate; do not repeat a
-direct lifecycle test merely to claim Nova integration. Preserve the distinction
-between direct same-account lifecycle evidence and Nova-originated execution.
-Any cloud test requires a new exact resource manifest, current cost/quota
-preflight, explicit cost/runtime bounds, monitored Terraform operations, and
-independent cleanup checks. Keep the hosted control plane untouched unless a
-separate approved scope explicitly requires a change.
+Draft PR #518 reconciles the source/deployed snapshots, evidence matrix, and
+backlog through PR #517. Complete that documentation handoff first. Then
+prioritize a narrowly scoped source-and-isolated-test package for Nova's
+customer authorization and exact-plan lifecycle interfaces. The explicit user
+boundary remains: do not log into, mutate, or run customer tests through the
+hosted control plane. Direct tests may use fresh, project-scoped customer-side
+resources only, with a new exact manifest, current cost/quota preflight,
+explicit cost/runtime bounds, monitored Terraform operations, and independent
+cleanup checks. Keep each lifecycle claim limited to its tested resource shape.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 

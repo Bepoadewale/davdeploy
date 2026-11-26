@@ -263,11 +263,11 @@ the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
 ## Nova deployment workflow next gates
 
-1. Define and verify the customer-owned least-privilege apply role for a bounded supported plan; keep trust/account checks separate from effective-permission and service-limit evidence.
-2. Prove the hosted Nova plan and exact cost-bound approval journey for a supported configuration; unsupported or unpriced resources must continue to block approval.
-3. Complete PR #399 review after current CI; keep apply and credential gates disabled until the customer role and exact-plan path are independently verified.
-4. Run the first authorized hosted lifecycle: apply the saved plan, probe the real application, perform an update and controlled failure/recovery, then destroy and independently verify absence.
-5. Extend composition and renderer coverage and align browser, CLI, and MCP behavior. No Nova customer workload has been applied or certified yet.
+1. Continue source-only Nova authorization and exact-plan improvements with deterministic policy and isolated tests; keep hosted apply and credential gates disabled.
+2. Define and verify customer-owned least-privilege role scopes and service limits for supported shapes; keep role trust, account verification, and effective permissions as separate evidence.
+3. Use fresh, explicitly bounded AWS environments and direct Terraform for any further customer-side lifecycle evidence. PRs #437 and #517 meet the general lifecycle gate only for the ECS and private Batch shapes tested.
+4. Preserve the current boundary: do not log into, mutate, or run customer tests through the hosted control plane. Nova authorization, dispatch, customer credential issuance, broader policy/cost coverage, and support for additional shapes remain open.
+5. Extend composition and renderer coverage and align browser, CLI, and MCP behavior. No Nova-dispatched customer workload has been applied or certified.
 
 ## Clean-room reproducibility
 

@@ -5,7 +5,7 @@ Branch: `docs/nova-status-through-517`
 
 ## Problem / goal
 
-Refresh the durable Nova status, backlog, and capability-evidence crosswalk against merged backend PR #517, the currently deployed control-plane version, and the exact hosted acceptance work still outstanding. This is a documentation-only reconciliation; it does not enable a runner or assert customer deployment readiness.
+Refresh the durable Nova status, backlog, and capability-evidence crosswalk against merged backend PR #517, the last recorded hosted control-plane release, and the exact acceptance work still outstanding. This is a documentation-only reconciliation; it does not enable a runner or assert customer deployment readiness.
 
 ## Current repo state
 
@@ -27,27 +27,30 @@ Refresh the durable Nova status, backlog, and capability-evidence crosswalk agai
 1. Update the source/deployed version snapshots through PR #517 while keeping the hosted deployment version distinct from backend `main`.
 2. Reconcile the Batch and private-network rows with the exact direct same-account result in `test517.md`, including the suffix-`a` failure, suffix-`b` success, teardown, retained AWS history, and evidence limits.
 3. Keep the 26 architecture entries and 30 Terraform roots intact; preserve unsupported/unpriced gaps and state explicitly that PR #517 is not Nova-dispatch evidence.
-4. Update the backlog to reflect that PR #517 merged and that hosted authentication, customer connection verification, hosted planning, apply, health, recovery, and lifecycle acceptance remain open.
+4. Update the backlog to reflect that PR #517 merged. Direct isolated ECS and Batch lifecycle tests satisfy the general lifecycle gate for their exact tested shapes; Nova authorization/dispatch, customer-role verification, and cross-account execution remain separate gaps. Do not require a hosted control-plane test under the current user boundary.
 
 ## Acceptance criteria
 
-- [x] Source `main`, deployed package hash, API health, and active Terraform-operation state are reconciled with current reads.
+- [x] Source `main`, last recorded deployed package hash/health observation, and active Terraform-operation state are reconciled. The PR #420 hash and health check are dated evidence, not evidence that later source is deployed.
 - [x] PR #517's exact AWS evidence and retained resources are represented without claiming a hosted Nova workload.
 - [x] The 26 architecture entries and 30 Terraform roots remain intact; unsupported capabilities remain explicitly unmet.
-- [x] Status docs distinguish the authentication/customer-connection blocker from implemented source and name the next hosted step.
-- [ ] Documentation conventions, `git diff --check`, and required PR CI all pass.
+- [x] Status docs distinguish direct customer-side lifecycle evidence from Nova authorization/dispatch, and record the explicit no-hosted-control-plane boundary.
+- [x] Documentation conventions, `git diff --check`, and 26/30 crosswalk counts pass locally.
+- [ ] All seven required PR checks pass on the final head after the latest documentation edits.
 - [x] This PR changes documentation only; no application code, AWS resource, hosted-control-plane configuration, or Terraform state was changed as part of this PR.
 
 ## Acceptance status
 
-The source/deployed snapshots and PR #517 evidence crosswalk are updated. Local documentation conventions and `git diff --check` pass. CI for this PR is pending; keep the PR draft until all seven required checks pass. No hosted Nova plan or workload is claimed.
+The source/deployed snapshots and PR #517 evidence crosswalk are updated. Local documentation conventions and `git diff --check` pass; the architecture and Terraform-root crosswalks still contain exactly 26 and 30 entries. The previous PR head passed all seven checks in run `45865782751`; final-head CI is required for the latest edits. Keep the PR draft until final-head checks pass. No hosted Nova plan or workload is claimed.
 
 ## Tests / validation performed
 
 - Read-only GitHub checks confirmed PR #517 merged as `1453a5efdffbbbf7f7853b7ccfa71903a231bb96`; its final-head CI run `45863379689` and merged-main CI run `45864105035` passed all seven checks.
-- Read-only AWS identity, Lambda package hash, public `/healthz`, and Terraform monitor checks confirmed account `654654474502`, current package hash, HTTP 200, and zero active operations.
+- Read-only AWS identity and Terraform monitor checks confirmed account `654654474502` and zero active operations. The package hash and HTTP 200 observation are retained as the documented 2026-11-26 read-only snapshot; no hosted deployment or resource mutation was performed.
 - `GITHUB_PR_NUMBER=518 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
+- The matrix retains 26 architecture entries and 30 Terraform roots, counted between its named section boundaries.
+- Previous PR head `a7ee8af3263a27621d324eed7c6417cb05889615` passed all seven checks in CI run `45865782751`; latest local edits require a new final-head run.
 - No runtime test was needed for this documentation-only PR.
 
 ## Evidence files produced
@@ -61,4 +64,4 @@ No AWS or control-plane mutation. Do not copy the private handoff or credential-
 
 ## Follow-up work
 
-Once a workspace administrator authenticates through the required DavDeploy TOTP flow, verify the isolated customer connection and role, then submit the first hosted generated-plan request and inspect its durable evidence. Continue independent generic-runner implementation work without weakening MFA or tenant authorization.
+Do not log into, mutate, or run customer tests through the hosted control plane under the current user boundary. Continue source and isolated-test work on Nova authorization and exact-plan lifecycle interfaces, preserving TOTP, tenant binding, immutable plan/artifact checks, deterministic policy, and the disabled hosted apply/credential gates. Any direct AWS lifecycle test must use a fresh exact customer-side manifest and remain limited to its verified resource shape.
