@@ -7,14 +7,60 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-26
 
+### Reconciliation after PR #518
+
+The current backend `main` is `4cc177c2605c2ee313c161fe83b9eac02fc83aa0`
+(merged PR #521), not the earlier PR #517 baseline recorded below. PR #521
+keeps the Nova control-plane Lambda environment within its quota; it does not
+change the customer workload acceptance evidence.
+
+The open ECS Express implementation stack is still draft and has not been
+merged:
+
+- PR #519 (`403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`) adds a default-off,
+  project-scoped ECS Express renderer and bounded runner. Its final-head CI
+  run [45884741945](https://github.com/Bepoadewale/davdeploy/actions/runs/45884741945)
+  passed all seven checks. IAM/effective-permission review, provider-generated
+  actual-plan validation, complete cost review, and its isolated runner cycle
+  remain open.
+- PR #520 (`3be5a9e59f919e19bf18233c5c4b65bcb57aafe4`) adds the source-only
+  ECS Express actual-plan policy. Its final-head CI run
+  [45888420911](https://github.com/Bepoadewale/davdeploy/actions/runs/45888420911)
+  passed all seven checks. A real provider-generated saved-plan fixture and
+  effective role-permission evidence remain open.
+- PR #522 (`38fd230b2f13211237b96a07d1dd26fee4d76fc1`), stacked on #520,
+  adds the ECS Express regional cost model and plan-bound usage assumptions.
+  Its final-head CI run
+  [45895348910](https://github.com/Bepoadewale/davdeploy/actions/runs/45895348910)
+  passed all seven checks. Review whether the model covers every billed
+  service-managed resource and usage path before treating the profile as
+  cost-complete.
+
+All three PRs remain drafts with no recorded GitHub review. PRs #519 and #520
+are based on `dbbf7c1`; PR #522 is stacked on #520's head, so the stack
+predates #521. Reconcile their bases and review the stack before merging or
+enabling any renderer. The #520 worktree also has
+uncommitted changes to its policy and tests; preserve and review those changes
+before syncing that worktree. The #519 worktree has untracked provider-plan
+stdout/stderr files; preserve them locally and do not publish their contents.
+
+The Terraform run monitor currently has 75 terminal records and zero active
+runs; process inspection found no Terraform plan, apply, or destroy process.
+Read-only AWS checks verified the customer-side test account and found seven
+DavDeploy Batch job definitions in `INACTIVE` status. The tested Batch stacks
+are already absent; the inactive definitions are retained history, not running
+workloads. Do not claim they were deleted. The previously recorded SageMaker
+lineage evidence remains protected; no lineage deletion was performed. The
+hosted control plane was not inspected or changed during this reconciliation.
+
 The next major engineering goal is registered in the
 [AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
 It is queued only: this handoff and its existing Nova acceptance gates remain
 the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
-The source baseline for this reconciliation is backend `main` at
-`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517). PR #517 adds
+The historical PR #517 snapshot below used backend `main` at
+`1453a5efdffbbbf7f7853b7ccfa71903a231bb96`. PR #517 adds
 a backward-compatible `assign_public_ip` input to the Batch Fargate module and
 a private-only validation root. Its final-head CI passed all seven checks in
 run [45863379689](https://github.com/Bepoadewale/davdeploy/actions/runs/45863379689);
@@ -474,15 +520,21 @@ Together with the accepted direct ECS lifecycle in PR #437, this satisfies the
 general customer-side lifecycle gate for those tested shapes. It does not prove
 Nova authorization/dispatch, cross-account trust, or support for other shapes.
 
-PR #518 reconciles the source/deployed snapshots, evidence matrix, and
-backlog through PR #517. Complete that documentation handoff first. The first hosted acceptance gate
-remains an authenticated workspace administrator, a verified isolated customer
-connection and role, and a successful hosted generated plan. The selected
-account's latest DavDeploy TOTP attempt was rejected, so no authenticated
-session or customer plan exists. Preserve MFA and tenant controls; continue
-independent source work while that login dependency is unresolved. Any direct
-customer-side lifecycle test must use fresh, project-scoped resources, a new
-exact manifest, current cost/quota preflight, explicit cost/runtime bounds,
+PR #518's documentation handoff is merged. Continue with the ECS Express stack
+in dependency order: review/reconcile #519, #520, and #522 against current
+`main`; verify the actual provider-generated plan contract and full supported
+cost model; complete effective IAM review; then run the isolated, authorized
+customer-side renderer lifecycle with project-scoped state and independent
+cleanup checks. The direct ECS Express lifecycle in PR #437 and the direct
+private Batch lifecycle in PR #517 satisfy the general customer-side
+plan/apply/lifecycle gate for their exact tested shapes. They do not prove
+Nova-originated dispatch, credential-path behavior, or cross-account trust.
+
+The last recorded hosted authentication attempt was rejected by DavDeploy TOTP;
+no later authenticated workspace-admin session or hosted customer plan is
+recorded here. The control plane must remain untouched for customer-side tests.
+Preserve MFA and tenant controls. Any paid test requires current pricing and
+quota preflight, a fresh exact manifest, explicit resource and runtime bounds,
 monitored Terraform operations, and independent cleanup checks. Deploy
 control-plane code only through its protected, reviewed Terraform workflow.
 
