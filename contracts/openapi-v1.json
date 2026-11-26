@@ -694,6 +694,64 @@
         "title": "EcrRepositoryStoragePricingUsageAssumptions",
         "type": "object"
       },
+      "EcsExpressPricingUsageAssumptions": {
+        "additionalProperties": false,
+        "description": "Bounded monthly quantities for one ECS Express service and its hidden resources.",
+        "properties": {
+          "average_billed_task_runtime_seconds": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "average_task_public_ipv4_address_seconds": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "cloudwatch_logs": {
+            "$ref": "#/components/schemas/BatchCloudWatchLogPricingUsageAssumptions"
+          },
+          "log_group_address": {
+            "const": "aws_cloudwatch_log_group.workload",
+            "title": "Log Group Address",
+            "type": "string"
+          },
+          "monthly_alb_billed_hours": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_alb_lcu_hours": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_alb_public_ipv4_address_seconds": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_cross_az_transfer_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_internet_egress_gb": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "monthly_task_starts": {
+            "$ref": "#/components/schemas/MonthlyUsageRange"
+          },
+          "service_address": {
+            "const": "aws_ecs_express_gateway_service.workload[0]",
+            "title": "Service Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_address",
+          "log_group_address",
+          "monthly_task_starts",
+          "average_billed_task_runtime_seconds",
+          "average_task_public_ipv4_address_seconds",
+          "monthly_alb_billed_hours",
+          "monthly_alb_lcu_hours",
+          "monthly_alb_public_ipv4_address_seconds",
+          "cloudwatch_logs",
+          "monthly_internet_egress_gb",
+          "monthly_cross_az_transfer_gb"
+        ],
+        "title": "EcsExpressPricingUsageAssumptions",
+        "type": "object"
+      },
       "EnvironmentName": {
         "enum": [
           "staging",
@@ -850,6 +908,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/EcrPricingUsageAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ecs_express_pricing_usage_assumptions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EcsExpressPricingUsageAssumptions"
               },
               {
                 "type": "null"

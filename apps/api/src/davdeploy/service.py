@@ -1423,6 +1423,14 @@ class ProductService:
             else:
                 workload["ecr_pricing_usage_assumptions"] = usage_assumptions
                 next_constraints["ecr_pricing_usage_assumptions"] = usage_assumptions
+        if "ecs_express_pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["ecs_express_pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("ecs_express_pricing_usage_assumptions", None)
+                next_constraints.pop("ecs_express_pricing_usage_assumptions", None)
+            else:
+                workload["ecs_express_pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["ecs_express_pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1498,6 +1506,10 @@ class ProductService:
             "ecr_pricing_usage_assumptions": (
                 before_spec.get("ecr_pricing_usage_assumptions"),
                 after_spec.get("ecr_pricing_usage_assumptions"),
+            ),
+            "ecs_express_pricing_usage_assumptions": (
+                before_spec.get("ecs_express_pricing_usage_assumptions"),
+                after_spec.get("ecs_express_pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),

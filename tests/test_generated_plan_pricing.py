@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 from davdeploy.domain import (
     BatchPricingUsageAssumptions,
     EcrPricingUsageAssumptions,
+    EcsExpressPricingUsageAssumptions,
     RdsPricingUsageAssumptions,
     VpcPricingUsageAssumptions,
 )
@@ -30,6 +31,22 @@ ECR_ACCOUNT_ID = "123456789012"
 ECR_REPOSITORY_NAME = "davdeploy-test-images"
 CAPTURED_AT = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 PERSISTED_CONTEXT_SHA256 = "a" * 64
+ECS_EXPRESS_USAGE = {
+    "service_address": "aws_ecs_express_gateway_service.workload[0]",
+    "log_group_address": "aws_cloudwatch_log_group.workload",
+    "monthly_task_starts": {"minimum": 1, "maximum": 100},
+    "average_billed_task_runtime_seconds": {"minimum": 60, "maximum": 3_600},
+    "average_task_public_ipv4_address_seconds": {"minimum": 60, "maximum": 3_600},
+    "monthly_alb_billed_hours": {"minimum": 24, "maximum": 744},
+    "monthly_alb_lcu_hours": {"minimum": 24, "maximum": 1_000},
+    "monthly_alb_public_ipv4_address_seconds": {"minimum": 172_800, "maximum": 267_840_000},
+    "cloudwatch_logs": {
+        "monthly_ingested_gb": {"minimum": 0, "maximum": 10},
+        "monthly_retained_gb_month": {"minimum": 0, "maximum": 30},
+    },
+    "monthly_internet_egress_gb": {"minimum": 0, "maximum": 100},
+    "monthly_cross_az_transfer_gb": {"minimum": 0, "maximum": 100},
+}
 
 
 def rds_values(**overrides):
@@ -255,6 +272,8 @@ class FakeBatchPriceList:
                 unit, price, sku = "GB", "0.50", "batch-log-ingestion"
             elif family == "Storage Snapshot":
                 unit, price, sku = "GB-Mo", "0.03", "batch-log-storage"
+            elif family == "Alarm":
+                unit, price, sku = "Alarms", "0.10", "express-alarm"
             else:
                 raise AssertionError("unexpected CloudWatch price family")
             product = {
@@ -275,6 +294,47 @@ class FakeBatchPriceList:
                 }}},
             }
             return {"PriceList": [json.dumps(product)]}
+        if kwargs["ServiceCode"] == "AWSELB":
+            description = filters.get("groupDescription")
+            if description == "LoadBalancer hourly usage by Application Load Balancer":
+                unit, price, sku = "Hrs", "0.0225", "express-alb-hours"
+            elif description == "Used Application Load Balancer capacity units-hr":
+                unit, price, sku = "LCU-Hrs", "0.008", "express-alb-lcu"
+            else:
+                raise AssertionError("unexpected ELB price family")
+            product = {
+                "product": {"sku": sku, "productFamily": "Load Balancer-Application", "attributes": {**filters}},
+                "serviceCode": "AWSELB",
+                "publicationDate": "2026-11-13T12:00:00Z",
+                "terms": {"OnDemand": {"offer": {
+                    "sku": sku,
+                    "effectiveDate": "2026-11-01T00:00:00Z",
+                    "priceDimensions": {"dimension": {
+                        "beginRange": "0", "endRange": "Inf", "unit": unit,
+                        "pricePerUnit": {"USD": price},
+                    }},
+                }}},
+            }
+            return {"PriceList": [json.dumps(product)]}
+        if kwargs["ServiceCode"] == "AWSDataTransfer":
+            unit, price, sku = "GB", "0.09", "express-egress"
+            product = {
+                "product": {"sku": sku, "productFamily": "Data Transfer", "attributes": {**filters}},
+                "serviceCode": "AWSDataTransfer",
+                "publicationDate": "2026-11-13T12:00:00Z",
+                "terms": {"OnDemand": {"offer": {
+                    "sku": sku,
+                    "effectiveDate": "2026-11-01T00:00:00Z",
+                    "priceDimensions": {"dimension": {
+                        "beginRange": "0", "endRange": "Inf", "unit": unit,
+                        "pricePerUnit": {"USD": price},
+                    }},
+                }}},
+            }
+            return {"PriceList": [json.dumps(product)]}
+        if kwargs["ServiceCode"] == "AmazonECS":
+            # The existing branch below supplies Linux/x86 Fargate rates.
+            pass
         if kwargs["ServiceCode"] == "AmazonVPC":
             if self.public_ipv4_error is not None:
                 raise self.public_ipv4_error
@@ -298,7 +358,7 @@ class FakeBatchPriceList:
             }
             return {"PriceList": [json.dumps(product)]}
         dimension = "vcpu" if "cputype" in filters else "memory"
-        unit = "Hrs"
+        unit = "hours"
         price = "0.04048" if dimension == "vcpu" else "0.004445"
         attrs = {
             "productFamily": "Compute",
@@ -397,6 +457,134 @@ def plan(
         },
         "planned_values": {"root_module": {"resources": resources}},
         "resource_changes": changes,
+    }
+
+
+def ecs_express_plan(*, unknown_create_ids=False, variable_region=False):
+    account = ECR_ACCOUNT_ID
+    name = "davdeploy-ecs-0123456789abcdef01234567"
+    repo_url = f"{account}.dkr.ecr.{REGION}.amazonaws.com/{name}"
+    subnet_ids = ["subnet-0123456789abcdef0", "subnet-1123456789abcdef0"]
+    resources = [
+        resource("terraform_data.account_guard", "terraform_data", {"input": account}),
+        resource("aws_ecs_express_gateway_service.workload[0]", "aws_ecs_express_gateway_service", {
+            "service_name": name, "cpu": "256", "memory": "512", "region": REGION,
+            "health_check_path": "/healthz", "wait_for_steady_state": True,
+            "primary_container": [{
+                "image": f"{repo_url}@sha256:{'a' * 64}", "container_port": 8000,
+                "environment": [{"name": "DAVDEPLOY_TEST_SCOPE", "value": "same-account-customer-sandbox"}],
+                "secret": [], "repository_credentials": [], "command": [],
+                "aws_logs_configuration": [{"log_group": f"/aws/ecs/{name}", "log_stream_prefix": "customer-test"}],
+            }],
+            "network_configuration": [{"subnets": subnet_ids, "security_groups": []}],
+            "scaling_target": [{
+                "min_task_count": 1, "max_task_count": 1,
+                "auto_scaling_metric": "AVERAGE_CPU", "auto_scaling_target_value": 70,
+            }],
+            "task_role_arn": None,
+        }),
+        resource("aws_iam_role.execution", "aws_iam_role", {"name": "execution"}),
+        resource("aws_iam_role.infrastructure", "aws_iam_role", {"name": "infrastructure"}),
+        resource("aws_iam_role_policy_attachment.execution", "aws_iam_role_policy_attachment", {"role": "execution"}),
+        resource("aws_iam_role_policy_attachment.infrastructure", "aws_iam_role_policy_attachment", {"role": "infrastructure"}),
+        resource("aws_vpc.customer", "aws_vpc", {
+            "id": "vpc-0123456789abcdef0", "cidr_block": "10.84.0.0/16",
+            "enable_dns_support": True, "enable_dns_hostnames": True,
+            "assign_generated_ipv6_cidr_block": False,
+        }),
+        resource("aws_internet_gateway.customer", "aws_internet_gateway", {
+            "id": "igw-0123456789abcdef0", "vpc_id": "vpc-0123456789abcdef0",
+        }),
+        resource("aws_subnet.public[0]", "aws_subnet", {
+            "id": subnet_ids[0], "vpc_id": "vpc-0123456789abcdef0",
+            "cidr_block": "10.84.10.0/24", "availability_zone": f"{REGION}a",
+            "map_public_ip_on_launch": True,
+        }),
+        resource("aws_subnet.public[1]", "aws_subnet", {
+            "id": subnet_ids[1], "vpc_id": "vpc-0123456789abcdef0",
+            "cidr_block": "10.84.11.0/24", "availability_zone": f"{REGION}b",
+            "map_public_ip_on_launch": True,
+        }),
+        resource("aws_route_table.public", "aws_route_table", {
+            "id": "rtb-0123456789abcdef0", "vpc_id": "vpc-0123456789abcdef0",
+            "route": [{"cidr_block": "0.0.0.0/0", "gateway_id": "igw-0123456789abcdef0"}],
+        }),
+        resource("aws_route_table_association.public[0]", "aws_route_table_association", {
+            "subnet_id": subnet_ids[0], "route_table_id": "rtb-0123456789abcdef0",
+        }),
+        resource("aws_route_table_association.public[1]", "aws_route_table_association", {
+            "subnet_id": subnet_ids[1], "route_table_id": "rtb-0123456789abcdef0",
+        }),
+        resource("aws_ecr_repository.workload", "aws_ecr_repository", {
+            "name": name, "registry_id": account, "repository_url": repo_url,
+            "encryption_configuration": [{"encryption_type": "AES256", "kms_key": None}],
+            "force_delete": True,
+        }),
+        resource("aws_cloudwatch_log_group.workload", "aws_cloudwatch_log_group", {
+            "name": f"/aws/ecs/{name}", "retention_in_days": 3,
+        }),
+    ]
+    configuration = {
+        "provider_config": {
+            "aws": {
+                "expressions": {
+                    "region": (
+                        {"references": ["var.region"]}
+                        if variable_region
+                        else {"constant_value": REGION}
+                    )
+                }
+            }
+        }
+    }
+    variables = {"region": {"value": REGION}} if variable_region else {}
+    if unknown_create_ids:
+        by_address = {item["address"]: item["values"] for item in resources}
+        for address, fields in {
+            "aws_vpc.customer": ("id",),
+            "aws_internet_gateway.customer": ("id", "vpc_id"),
+            "aws_subnet.public[0]": ("id", "vpc_id"),
+            "aws_subnet.public[1]": ("id", "vpc_id"),
+            "aws_route_table.public": ("id", "vpc_id"),
+            "aws_route_table_association.public[0]": ("route_table_id", "subnet_id"),
+            "aws_route_table_association.public[1]": ("route_table_id", "subnet_id"),
+            "aws_ecr_repository.workload": ("registry_id", "repository_url"),
+        }.items():
+            for field in fields:
+                by_address[address][field] = None
+        by_address["aws_route_table.public"]["route"][0]["gateway_id"] = None
+        by_address["aws_ecs_express_gateway_service.workload[0]"]["network_configuration"][0]["subnets"] = [None, None]
+
+        def configured(address, **references_by_field):
+            return {
+                "address": address,
+                "mode": "managed",
+                "type": address.split(".", maxsplit=1)[0],
+                "expressions": {
+                    field: {"references": references}
+                    for field, references in references_by_field.items()
+                },
+            }
+
+        configuration["root_module"] = {
+            "resources": [
+                configured("aws_ecs_express_gateway_service.workload", network_configuration=["aws_subnet.public"]),
+                configured("aws_internet_gateway.customer", vpc_id=["aws_vpc.customer.id"]),
+                configured("aws_route_table.public", vpc_id=["aws_vpc.customer.id"], route=["aws_internet_gateway.customer.id"]),
+                configured("aws_route_table_association.public", subnet_id=["aws_subnet.public", "count.index"], route_table_id=["aws_route_table.public.id"]),
+                configured("aws_subnet.public", vpc_id=["aws_vpc.customer.id"]),
+            ]
+        }
+    else:
+        configuration = {**configuration, "root_module": {"resources": []}}
+    return {
+        "format_version": "1.2",
+        "applyable": True,
+        "errored": False,
+        "configuration": configuration,
+        "variables": variables,
+        "planned_values": {"root_module": {"resources": resources}},
+        "resource_changes": [change(item["address"], item["type"], item["values"]) for item in resources],
     }
 
 
@@ -594,6 +782,7 @@ def evaluate(
     vpc_usage_assumptions=None,
     batch_usage_assumptions=None,
     ecr_usage_assumptions=None,
+    ecs_express_usage_assumptions=None,
     catalog_client=None,
 ):
     client = catalog_client or client or FakePriceList()
@@ -613,6 +802,7 @@ def evaluate(
                 vpc_usage_assumptions=vpc_usage_assumptions,
                 batch_usage_assumptions=batch_usage_assumptions,
                 ecr_usage_assumptions=ecr_usage_assumptions,
+                ecs_express_usage_assumptions=ecs_express_usage_assumptions,
             ),
             proposal_declared_budget_minor=declared_budget,
             proposal_declared_currency=declared_currency,
@@ -678,6 +868,7 @@ def test_v2_saved_pricing_evidence_remains_readable_and_approval_compatible():
     legacy.pop("vpc_usage_assumptions")
     legacy.pop("batch_usage_assumptions")
     legacy.pop("ecr_usage_assumptions")
+    legacy.pop("ecs_express_usage_assumptions")
     for line in legacy["lines"]:
         for field in (
             "quantity_max",
@@ -791,6 +982,277 @@ def test_trusted_pricing_context_is_extracted_only_from_integrity_checked_revisi
             {**revision, "target": {"provider": "aws", "region": "eu-west-1"}},
             expected_sha256=revision_sha256,
         )
+
+
+def test_ecs_express_usage_is_validated_and_bound_to_persisted_context():
+    validated = EcsExpressPricingUsageAssumptions.model_validate(ECS_EXPRESS_USAGE)
+    assert validated.model_dump(mode="json") == ECS_EXPRESS_USAGE
+
+    revision = {
+        "target": {"provider": "aws", "region": REGION},
+        "application_analysis": {
+            "workload_spec": {
+                "ecs_express_pricing_usage_assumptions": ECS_EXPRESS_USAGE,
+            },
+        },
+    }
+    revision_sha256 = hashlib.sha256(
+        json.dumps(revision, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    context = TrustedPlanPricingContext.from_persisted_revision(
+        revision, expected_sha256=revision_sha256
+    )
+    assert context.ecs_express_usage_assumptions == ECS_EXPRESS_USAGE
+    changed = {
+        **ECS_EXPRESS_USAGE,
+        "monthly_task_starts": {"minimum": 1, "maximum": 101},
+    }
+    assert context.pricing_context_sha256 != TrustedPlanPricingContext(
+        REGION, "USD", None, revision_sha256,
+        ecs_express_usage_assumptions=changed,
+    ).pricing_context_sha256
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"service_address": "aws_ecs_express_gateway_service.other[0]"},
+        {"log_group_address": "aws_cloudwatch_log_group.other"},
+        {"average_billed_task_runtime_seconds": {"minimum": 60, "maximum": 2_678_401}},
+        {"average_task_public_ipv4_address_seconds": {"minimum": 60, "maximum": 3_601}},
+        {"monthly_alb_billed_hours": {"minimum": 0, "maximum": 744}},
+        {"monthly_alb_public_ipv4_address_seconds": {"minimum": 172_800, "maximum": 172_800}},
+        {"monthly_alb_public_ipv4_address_seconds": {"minimum": 1, "maximum": 267_840_000}},
+        {"monthly_internet_egress_gb": {"minimum": 0, "maximum": 500_001}},
+    ],
+)
+def test_ecs_express_usage_rejects_unbounded_or_inconsistent_quantities(override):
+    with pytest.raises(ValueError):
+        EcsExpressPricingUsageAssumptions.model_validate({**ECS_EXPRESS_USAGE, **override})
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"service_address": "aws_ecs_express_gateway_service.other[0]"},
+        {"log_group_address": "aws_cloudwatch_log_group.other"},
+    ],
+)
+def test_ecs_express_usage_is_bound_to_the_exact_pilot_addresses(override):
+    with pytest.raises(ValueError):
+        EcsExpressPricingUsageAssumptions.model_validate({**ECS_EXPRESS_USAGE, **override})
+
+
+def test_ecs_express_usage_is_included_in_pricing_evidence_and_context_hash():
+    result, _ = evaluate(ecs_express_usage_assumptions=ECS_EXPRESS_USAGE)
+    manifest = result.as_manifest_document()
+    assert manifest["ecs_express_usage_assumptions"] == ECS_EXPRESS_USAGE
+    assert result.safe_summary()["ecs_express_usage_assumptions"] == ECS_EXPRESS_USAGE
+    assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
+
+    other, _ = evaluate(
+        ecs_express_usage_assumptions={
+            **ECS_EXPRESS_USAGE,
+            "monthly_task_starts": {"minimum": 1, "maximum": 101},
+        }
+    )
+    assert result.pricing_context_sha256 != other.pricing_context_sha256
+
+
+def test_ecs_express_pilot_prices_its_hidden_resources_and_variable_usage():
+    assumptions = {
+        **ECS_EXPRESS_USAGE,
+        "monthly_task_starts": {"minimum": 10, "maximum": 20},
+        "average_billed_task_runtime_seconds": {"minimum": 120, "maximum": 600},
+        "average_task_public_ipv4_address_seconds": {"minimum": 120, "maximum": 600},
+        "monthly_alb_billed_hours": {"minimum": 100, "maximum": 200},
+        "monthly_alb_lcu_hours": {"minimum": 100, "maximum": 200},
+        "monthly_alb_public_ipv4_address_seconds": {"minimum": 720_000, "maximum": 1_440_000},
+        "cloudwatch_logs": {
+            "monthly_ingested_gb": {"minimum": 1, "maximum": 2},
+            "monthly_retained_gb_month": {"minimum": 1, "maximum": 2},
+        },
+        "monthly_internet_egress_gb": {"minimum": 1, "maximum": 2},
+        "monthly_cross_az_transfer_gb": {"minimum": 1, "maximum": 2},
+    }
+    ecr_usage = {"repositories": {
+        "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+    }}
+    result, client = evaluate(
+        ecs_express_plan(),
+        ecs_express_usage_assumptions=assumptions,
+        ecr_usage_assumptions=ecr_usage,
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+    descriptions = {line.description for line in result.lines}
+    assert descriptions == {
+        "Amazon ECR standard image storage",
+        "AWS Fargate Linux/x86 vCPU",
+        "AWS Fargate Linux/x86 memory",
+        "AWS ECS Express Application Load Balancer hours",
+        "AWS ECS Express Application Load Balancer capacity",
+        "AWS ECS Express task public IPv4 addresses",
+        "AWS ECS Express load-balancer public IPv4 addresses",
+        "AWS ECS Express CloudWatch Logs ingestion",
+        "AWS ECS Express CloudWatch Logs storage",
+        "AWS ECS Express target-tracking CloudWatch alarms",
+        "AWS ECS Express internet data transfer out",
+        "AWS ECS Express cross-AZ data transfer in and out",
+    }
+    assert all(line.catalog_product_sha256 for line in result.lines)
+    alarm_line = next(
+        line for line in result.lines
+        if line.description == "AWS ECS Express target-tracking CloudWatch alarms"
+    )
+    assert alarm_line.quantity == 2
+    assert alarm_line.monthly_cost_minor == 20
+    assert result.ecs_express_usage_assumptions == assumptions
+    assert not any("unpriced" in item.code for item in result.findings)
+    assert {call["ServiceCode"] for call in client.calls} >= {
+        "AmazonECS", "AWSELB", "AmazonVPC", "AmazonCloudWatch",
+        "AmazonECR", "AWSDataTransfer",
+    }
+
+
+def test_ecs_express_create_plan_with_unknown_ids_is_costed_from_same_plan_references():
+    result, _ = evaluate(
+        ecs_express_plan(unknown_create_ids=True, variable_region=True),
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+
+
+def test_ecs_express_create_plan_unknown_ids_without_exact_references_is_unpriced():
+    document = ecs_express_plan(unknown_create_ids=True, variable_region=True)
+    document["configuration"]["root_module"]["resources"] = []
+    result, _ = evaluate(
+        document,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
+
+
+def test_ecs_express_create_plan_does_not_accept_vpc_reference_in_unrelated_field():
+    document = ecs_express_plan(unknown_create_ids=True, variable_region=True)
+    subnet = next(
+        item for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_subnet.public"
+    )
+    subnet["expressions"] = {
+        "vpc_id": {"references": ["var.untrusted_vpc"]},
+        "tags": {"references": ["aws_vpc.customer.id"]},
+    }
+    result, _ = evaluate(
+        document,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
+
+
+def test_ecs_express_create_plan_rejects_mixed_same_field_vpc_references():
+    document = ecs_express_plan(unknown_create_ids=True, variable_region=True)
+    subnet = next(
+        item for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_subnet.public"
+    )
+    subnet["expressions"] = {
+        "vpc_id": {"references": ["aws_vpc.customer.id", "var.untrusted_vpc"]},
+    }
+    result, _ = evaluate(
+        document,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
+
+
+def test_ecs_express_pricing_fails_closed_for_missing_usage_or_extra_resources():
+    missing, _ = evaluate(ecs_express_plan(), catalog_client=FakeBatchPriceList())
+    assert missing.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_usage_assumptions_missing" in {item.code for item in missing.findings}
+
+    unsupported_plan = ecs_express_plan()
+    extra = resource("aws_nat_gateway.extra", "aws_nat_gateway", {"connectivity_type": "public"})
+    unsupported_plan["planned_values"]["root_module"]["resources"].append(extra)
+    unsupported_plan["resource_changes"].append(change(extra["address"], extra["type"], extra["values"]))
+    unsupported, _ = evaluate(
+        unsupported_plan,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert unsupported.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in unsupported.findings}
+
+    wrong_region_plan = ecs_express_plan()
+    service = next(
+        item for item in wrong_region_plan["planned_values"]["root_module"]["resources"]
+        if item["type"] == "aws_ecs_express_gateway_service"
+    )
+    service["values"]["region"] = "eu-west-1"
+    service_change = next(
+        item for item in wrong_region_plan["resource_changes"]
+        if item["address"] == service["address"]
+    )
+    service_change["change"]["after"]["region"] = "eu-west-1"
+    wrong_region, _ = evaluate(
+        wrong_region_plan,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert wrong_region.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in wrong_region.findings}
+
+    unavailable, _ = evaluate(
+        ecs_express_plan(),
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(
+            public_ipv4_error=PriceListUnavailableError("provider detail stays private")
+        ),
+    )
+    assert unavailable.status == PlanPricingStatus.UNAVAILABLE
+    assert "regional_price_lookup_unavailable" in {item.code for item in unavailable.findings}
+
+    stale, _ = evaluate(
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        catalog_client=FakeBatchPriceList(),
+    )
+    assert stale.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_usage_assumptions_stale" in {item.code for item in stale.findings}
 
 
 def test_sqs_usage_is_extracted_from_integrity_checked_customer_revision():
@@ -1292,7 +1754,7 @@ def test_nat_gateway_pricing_covers_hours_processing_ipv4_egress_and_cross_az():
     assert cross_az.unit_price_usd == "0.01"
     assert all(line.catalog_product_sha256 for line in result.lines)
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 10
+    assert manifest["version"] == 11
     assert manifest["vpc_usage_assumptions"] == NAT_USAGE
     assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
     assert pricing_evidence_is_approval_eligible(
@@ -2024,7 +2486,7 @@ def test_batch_fargate_usage_is_priced_by_bound_job_and_applies_one_minute_floor
     }
     assert result.batch_usage_assumptions == BATCH_USAGE
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 10
+    assert manifest["version"] == 11
     assert manifest["batch_usage_assumptions"] == BATCH_USAGE
     assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
     bound_context = TrustedPlanPricingContext(
@@ -2278,7 +2740,7 @@ def test_ecr_standard_storage_uses_exact_address_regional_price_and_bound_usage(
         50,
     )]
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 10
+    assert manifest["version"] == 11
     assert manifest["ecr_usage_assumptions"] == ECR_USAGE
     assert result.safe_summary()["ecr_usage_assumptions"] == ECR_USAGE
     assert GeneratedPlanPricingEvidence.from_manifest_document(manifest) == result
@@ -2402,6 +2864,7 @@ def test_v9_pricing_manifest_remains_readable_and_normalizes_to_current_shape():
     legacy = result.as_manifest_document()
     legacy["version"] = 9
     legacy.pop("ecr_usage_assumptions")
+    legacy.pop("ecs_express_usage_assumptions")
     unsigned = {key: value for key, value in legacy.items() if key != "evidence_sha256"}
     legacy["evidence_sha256"] = hashlib.sha256(
         json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
@@ -2410,9 +2873,33 @@ def test_v9_pricing_manifest_remains_readable_and_normalizes_to_current_shape():
     parsed = GeneratedPlanPricingEvidence.from_manifest_document(legacy)
     normalized = parsed.as_manifest_document()
 
-    assert normalized["version"] == 10
+    assert normalized["version"] == 11
     assert normalized["ecr_usage_assumptions"] is None
     assert pricing_evidence_document_is_valid(normalized)
+
+
+def test_v10_pricing_manifest_normalizes_after_ecs_express_context_was_added():
+    result, _ = evaluate()
+    legacy = result.as_manifest_document()
+    legacy["version"] = 10
+    legacy.pop("ecs_express_usage_assumptions")
+    unsigned = {key: value for key, value in legacy.items() if key != "evidence_sha256"}
+    legacy["evidence_sha256"] = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    ).hexdigest()
+
+    parsed = GeneratedPlanPricingEvidence.from_manifest_document(legacy)
+    normalized = parsed.as_manifest_document()
+    assert normalized["version"] == 11
+    assert normalized["ecs_express_usage_assumptions"] is None
+    assert pricing_evidence_document_is_valid(normalized)
+    assert pricing_evidence_is_approval_eligible(
+        legacy,
+        trusted_context=TrustedPlanPricingContext(
+            REGION, "USD", None, PERSISTED_CONTEXT_SHA256
+        ),
+        now=CAPTURED_AT,
+    )
 
 
 def test_ecr_pricing_fails_closed_for_missing_usage_and_nonstandard_encryption():
@@ -2694,7 +3181,7 @@ def test_s3_high_usage_range_controls_budget_and_preserves_estimate_range():
     assert result.within_budget is False
     assert result.approval_eligible is False
     manifest = result.as_manifest_document()
-    assert manifest["version"] == 10
+    assert manifest["version"] == 11
     assert pricing_evidence_document_is_valid(manifest)
     assert not pricing_evidence_is_approval_eligible(
         manifest,
