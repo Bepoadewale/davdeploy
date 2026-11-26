@@ -42,6 +42,15 @@ complete.
   runner operations. Final-head `bf876fe155a7fe946a457b6d61d74c25696893e0`
   passed all seven checks in run `45907548159`. This does not prove the
   runner's effective permissions or enable the renderer.
+- PR #526 is an open draft security review. Final-head CI run `45910551656`
+  passed all seven checks; source review confirmed the runner assumes its
+  customer role without a session policy and that the `administrator-pilot`
+  role can carry `AdministratorAccess`.
+- PR #527 is an open draft stacked on #526. It documents AWS action/resource
+  mapping and the computed-subnet scope gap for the ECS Express root. Its
+  content head `4ac9ab04` passed all seven checks in run `45911833917`; a
+  subsequent ticket-status commit `36fa7031` is pending final-head CI. It
+  contains no policy code or cloud execution.
 - The direct ECS Express lifecycle evidence in PR #437 and private Batch
   evidence in PR #517 satisfy the general customer-side lifecycle gate for
   those exact tested shapes; neither proves Nova dispatch.
@@ -67,6 +76,12 @@ complete.
 - PR #525 head `bf876fe155a7fe946a457b6d61d74c25696893e0` passed all seven
   checks in run `45907548159`; it is source-only and keeps the renderer
   disabled.
+- PR #526 head `df82c553fcfeef388592b9b1a5ddeb0c787f1cae` passed all seven
+  checks in run `45910551656`; it records the unbounded execution-role path.
+- PR #527 head `4ac9ab04` records a sourced AWS permission map and the need to
+  separate network foundation from ECS service creation. All seven checks
+  passed in run `45911833917`; ticket-status head `36fa7031` is now pending
+  CI. No AWS mutation or Terraform operation occurred.
 - A provider-generated saved plan from the PR #519 root was evaluated under
   #520 policy. It yielded three review findings and no policy denials; this is
   plan-policy evidence only, not remote-state runner or lifecycle evidence.
@@ -119,6 +134,8 @@ complete.
   claiming the inactive job definitions were deleted.
 - [x] PR #525's connection-scoped role bootstrap is classified as
   source-only, and effective runner-role permissions remain an open gate.
+- [x] PRs #526 and #527 are classified as source reviews only; the broad role
+  permission and computed-subnet policy gaps remain hard apply blockers.
 - [x] The next action is actionable and does not enable the renderer, mutate
   AWS, or alter the hosted control plane.
 - [x] Documentation conventions and `git diff --check` pass.
@@ -128,8 +145,8 @@ complete.
 ## Acceptance status
 
 The handoff and matrix are reconciled to current `main`, merged PRs #520/#522,
-and open drafts #519/#524/#525. PRs #524 and #525 final-head CI are verified;
-this documentation update still requires its own final-head CI.
+and open drafts #519/#524/#525/#526/#527. Content CI for #527 passed, but its
+ticket-status update and this documentation update require final-head CI.
 
 ## Tests / validation performed
 
@@ -163,8 +180,8 @@ reconciliation and performs no customer workload test or cloud mutation.
 
 ## Follow-up work
 
-Continue review of the #519/#524/#525 dependency stack, independently review
-the runner's effective permissions and pass-role scope, then complete
+Continue review of the #519/#524–#527 dependency stack, implement separate
+phase identities and tested exact-plan permissions, then complete
 approval-bound pricing and the authorized isolated remote-state renderer
 lifecycle. The actual-plan policy in #520 is merged and has been evaluated
 against a provider-generated plan. Keep the renderer disabled until the

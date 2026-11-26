@@ -44,15 +44,31 @@ The ECS Express implementation and evidence stack is:
   [45907548159](https://github.com/Bepoadewale/davdeploy/actions/runs/45907548159)
   passed all seven checks. This is source-only; effective runner permissions
   remain unreviewed and the renderer remains disabled.
+- Draft PR #526 records a source-verified security blocker: the ECS runner
+  assumes its customer execution role without a session policy, and the
+  supported `administrator-pilot` role carries `AdministratorAccess`. Its
+  final-head CI run [45910551656](https://github.com/Bepoadewale/davdeploy/actions/runs/45910551656)
+  passed all seven checks. It changed no cloud resources.
+- Draft PR #527 (`4ac9ab04`, based on #526) maps the AWS action/resource
+  boundary for the ECS Express root. Current AWS references show a composite
+  ECS API path and the pilot's initial combined plan cannot bind the ECS
+  subnet condition to subnet IDs that do not yet exist. It records a required
+  foundation/service phase split and remains documentation-only. All seven
+  checks passed on content head `4ac9ab04` in run
+  [45911833917](https://github.com/Bepoadewale/davdeploy/actions/runs/45911833917).
+  A subsequent ticket-status commit `36fa7031` is pending its own final-head
+  checks. No AWS, hosted control-plane, state or lock mutation occurred.
 
 PR #519 remains an open draft with no recorded GitHub review and is based on
 its earlier source revision. PR #524 is an open draft that corrects pricing
 evidence wording; its two-file documentation diff passed all seven checks in
 run [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966).
 PR #525 is also an open draft stacked on #519. Review the current
-#519/#524/#525 stack before merging or enabling a renderer. The #519 worktree
-has untracked provider-plan stdout/stderr files; preserve them locally and do
-not publish their contents.
+#519/#524/#525/#526/#527 stack before merging or enabling a renderer. The
+#526/#527 reviews confirm that the current runner role is not eligible for
+apply and that network and ECS service provisioning must use separate plans.
+The #519 worktree has untracked provider-plan stdout/stderr files; preserve
+them locally and do not publish their contents.
 
 The Terraform run monitor currently has 75 terminal records and zero active
 runs; process inspection found no Terraform plan, apply, or destroy process.
