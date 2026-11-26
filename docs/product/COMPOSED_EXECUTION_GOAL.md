@@ -57,15 +57,17 @@ and a Batch security-group HTTPS path, and gateway endpoints to the private
 route table. Focused policy and pricing tests pass (794 tests); full local
 verification passes (1,970 tests, one upstream deprecation warning).
 Documentation checks and `git diff --check` pass. All seven checks passed on
-code head `61db1e6` in
-[run 45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900); a subsequent policy hardening requires a fresh final-head CI run before merge.
+code head `dcb9c24` in
+[run 45775684796](https://github.com/Bepoadewale/davdeploy/actions/runs/45775684796).
 The isolated workstation clean-room sequence at `870ce27` passed through the
-full `verify` step (1,969 tests); the later fail-closed policy refinement passed
-full local verification (1,970 tests) and awaits the final-head PR CI result.
-A read-only inventory confirmed the nine project containers, PostgreSQL volume,
-network, and generated `.venv` and `.local` are absent; this agent performed no
-deletion. The clean-room worktree remains for evidence review. No GitHub review has been
-submitted, so the PR remains a draft. This package is source-only. AWS inventory was read-only
+full `verify` step (1,969 tests); the subsequent fail-closed rule-target
+regression passed full local verification (1,970 tests) and all seven final-head
+CI checks. The nine project containers, PostgreSQL volume, network, and
+generated `.venv` and `.local` were absent before cleanup. With the user's
+explicit approval in this conversation, the clean-room worktree
+`/private/tmp/davdeploy-pr515-cleanroom-20261126` was removed; no AWS resources
+or retained audit evidence were deleted. No GitHub review has been submitted,
+so the PR remains a draft. This package is source-only. AWS inventory was read-only
 reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
 configuration, test role, and artifact bucket are absent; five tagged Batch
 test definitions are inactive and no matching Batch queues or compute

@@ -75,8 +75,8 @@ in the endpoint plan must also bind to a known same-plan security group.
   [45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
 - [x] All seven documentation-head CI checks passed on `61db1e6` in run
   [45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900).
-- [ ] Fresh CI and clean-room evidence for the added unknown security-group
-  rule-binding regression are pending.
+- [x] All seven final-head CI checks passed on `dcb9c24` in run
+  [45775684796](https://github.com/Bepoadewale/davdeploy/actions/runs/45775684796).
 - [ ] The PR is reviewed and merged.
 - [x] No AWS resources, Terraform state/locks, hosted control-plane resources,
   customer workloads, `--only-show-errors`, or `.venv-pr399/` are changed.
@@ -89,11 +89,11 @@ in the endpoint plan must also bind to a known same-plan security group.
   worktree changes: `make VENV=... verify` reports 1,970 passed; docs checks
   and Ruff pass.
 - [x] All seven checks passed in run `45774078900` on source commit `61db1e6`.
-- [ ] The subsequent fail-closed rule-target check and regression test require
-  a fresh final-head CI run before merge.
-- [x] The prior clean-room sequence and cleanup at code head `870ce27` are
-  complete. The new rule-binding regression still requires a fresh full clean-room
-  cycle before merge.
+- [x] The fail-closed rule-target check and regression test passed local
+  validation and final-head CI.
+- [x] The prior clean-room sequence at code head `870ce27` is complete. Its
+  scoped worktree was removed after the user's explicit approval; generated
+  containers, volume, network, `.venv`, and `.local` were already absent.
 - [ ] Review and merge remain pending.
 - [x] No customer workload or cloud mutation is in scope.
 
@@ -107,17 +107,18 @@ in the endpoint plan must also bind to a known same-plan security group.
 - Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` on current worktree changes: 1,970 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
 - `GITHUB_PR_NUMBER=515 /Users/adewale/Projects/davdeploy/.venv/bin/python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- All seven GitHub final-head checks passed on source commit `61db1e6` in
-  [run 45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900).
+- All seven GitHub final-head checks passed on commit `dcb9c24` in
+  [run 45775684796](https://github.com/Bepoadewale/davdeploy/actions/runs/45775684796).
 - Isolated local clean-room worktree `/private/tmp/davdeploy-pr515-cleanroom-20261126`
   at `870ce27` passed initial clean from an empty project, bootstrap, smoke,
   simple/complex/degraded/Day-2/failure/readiness demos, trace check, and full
   verification (1,969 passed). A later read-only inventory confirmed the nine
   `davdeploy-pr515-cleanroom` containers, volume
   `davdeploy-pr515-cleanroom_davdeploy-postgres`, network
-  `davdeploy-pr515-cleanroom_default`, and generated `.venv` and `.local` are
-  absent after the scoped cleanup. Independent checks confirmed this; the
-  worktree remains.
+  `davdeploy-pr515-cleanroom_default`, and generated `.venv` and `.local` were
+  absent before the scoped cleanup. The worktree was then removed after explicit
+  user approval. No AWS resources, lineage evidence, or inactive Batch definitions
+  were deleted.
 - The final code review identified the need to reject unknown security-group
   rule targets whenever an interface endpoint is present. The new regression
   test and fail-closed check pass locally. No GitHub review has been submitted.

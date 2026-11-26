@@ -3,8 +3,8 @@
 Status snapshot: backend `main` at
 `c6b069037516610bd57cca877dfb52af1dfc71a6` (PR #514), 2026-11-26. Open draft
 PR #515 extends generated-plan policy to the priced endpoint shapes; all seven
-checks passed on head `61db1e6` in run
-[45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900).
+checks passed on final head `dcb9c24` in run
+[45775684796](https://github.com/Bepoadewale/davdeploy/actions/runs/45775684796).
 Its full local clean-room cycle and exact cleanup passed; review and merge
 remain pending. Merged PR
 #486 adds AMI-root-bound encrypted Auto Scaling EBS policy; its final-head and
