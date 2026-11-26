@@ -10,7 +10,8 @@ Customer repository: None; disposable DavDeploy test environment.
 
 PR: [#517](https://github.com/Bepoadewale/davdeploy/pull/517).
 
-Commit: PR head at last completed CI `9a44de28c31ce6a398d3cb3ac5a3efa363a4c4dc`; current uncommitted implementation changes require a new final-head CI run.
+Commit: `94088574ed4cee18e598acb891ead564d0a90572`. Final-head CI run
+`45789356920` is in progress.
 
 Exact test ID: `batch-private-endpoints-517-20261126a`.
 
@@ -30,13 +31,12 @@ not errored. It is stored at
 (mode 600), with its log beside it (mode 600). This targeted plan is only for
 the ECR bootstrap; a separate complete saved plan will cover the workload.
 
-The user authorized creating disposable test resources in the customer-side
-account. The earlier “Approve this exact cleanup” was scoped to a local PR
-worktree, not AWS. Explicit approval to delete the AWS test repository/images
-and remaining planned resources is still required before further cloud
-resources are applied or any AWS resource is deleted. The requested cleanup is
-limited to this exact TestId, repository, image digests, resource names/ARNs,
-and its Terraform state; no control-plane or account-wide cleanup is included.
+The active Nova goal authorizes creation and teardown of disposable AWS
+validation resources identified by exact manifests and test IDs. This test's
+scope is limited to this exact TestId, repository, image digests, resource
+names/ARNs, and its Terraform state; no control-plane or account-wide cleanup
+is authorized. The exact image and resource inventory is recorded below and
+must be rechecked before teardown.
 
 Fresh preflight on 2026-11-26 confirmed account `654654474502`, available
 `us-east-1a` and `us-east-1b`, a 64-vCPU Fargate On-Demand quota versus this
@@ -94,10 +94,10 @@ log-group resources were applied.
 - `aws resourcegroupstaggingapi get-resources --region us-east-1 --tag-filters Key=TestId,Values=batch-private-endpoints-517-20261126a` — no resource has this exact test ID.
 - `terraform plan -target=module.ecr ... -out=ecr.tfplan` — exact result: one `aws_ecr_repository` create, zero updates/deletes; plan is applyable and saved mode 600. The initial invocation without `AWS_PROFILE` failed with no credentials and made no changes; the profile-scoped retry succeeded.
 - `AWS_PROFILE=ai-platform-pilot-key python3 scripts/terraform_run_monitor.py start apply infrastructure/terraform/module-validation/batch-private-endpoints --run-id nova-batch517-ecr-apply-20261126a --terraform-arg=/private/tmp/davdeploy-batch-private-endpoints-517-20261126a/ecr.tfplan` — succeeded, supervisor PID `92773`, Terraform PID `92774`; monitor log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/nova-batch517-ecr-apply-20261126a.log`.
-- `docker build --platform linux/amd64 --tag davdeploy-private-batch-endpoints-517:20261126a infrastructure/terraform/module-validation/batch-private-endpoints/image` and `docker push --quiet 654654474502.dkr.ecr.us-east-1.amazonaws.com/davdeploy-batch-private-endpoints-517-20261126a:20261126a` — succeeded. Registry digest `sha256:2ecf897431368650ff88989150358f12375f83459849e46d787fc8b66eb8daf2`, size 54,566,047 bytes.
+- `docker buildx build --platform linux/amd64 --load --tag davdeploy-batch-private-endpoints-517:run-20261126a infrastructure/terraform/module-validation/batch-private-endpoints/image`, local `docker run`, and ECR push to tag `run-20261126a` — succeeded, but duplicated the existing test image. Tagged digest `sha256:e7265ccc6387caa80d69aa215049baddb204e6736eb49623b9afc1fdbc49013d`. ECR also lists three untagged manifests; all five digests are enumerated above. No image has been deleted.
 - AWS Batch service-linked-role preflight — `AWSServiceRoleForBatch` was absent and `describe-compute-environments` found none in 17 enabled regions. This exact, untaggable role is declared as `aws_iam_service_linked_role.batch` for owned cleanup.
 - Monitored full-plan attempt `batch-private-517-full-apply-20261126a` failed at 08:55:35Z due missing credentials before creating resources; log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/batch-private-517-full-apply-20261126a.log`.
-- Latest read-only saved plan `/tmp/davdeploy-batch-private-517-reviewed.tfplan`: 22 creates, one ECR expiry-tag update, zero deletes. Cleanup approval for this AWS scope is pending.
+- Latest read-only saved plan `/tmp/davdeploy-batch-private-517-final-reviewed.tfplan`: 22 creates, one ECR expiry-tag update, zero deletes. It references the intended digest `sha256:2ecf897431368650ff88989150358f12375f83459849e46d787fc8b66eb8daf2`. Cleanup approval for this AWS scope is pending.
 - Current ECR inventory contains the five exact digests listed above. No image has been deleted.
 
 Current public pricing references reviewed 2026-11-26: AWS PrivateLink lists $0.01 per interface endpoint ENI-hour for the first tier; AWS Fargate lists $0.000011244 per vCPU-second and $0.000001235 per GB-second in us-east-1. At 0.25 vCPU and 0.5 GB, compute is approximately $0.01235/hour before the one-minute minimum. Six endpoint ENIs add approximately $0.06 for the first billed hour. These are preliminary public rates, not a quote; recheck before any apply. Sources: [AWS PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/) and [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/).
@@ -114,12 +114,11 @@ In a fresh worktree using isolated Compose project `davdeploy-pr517-cleanroom`, 
 
 ## Teardown
 
-Not executed. The full-stack apply is on hold pending explicit AWS cleanup
-approval for the repository, all five exact image digests above, and the 22
-resources in the saved plan. If approved and run, delete only those exact image
-digests, destroy the test Terraform state through the PID-based monitor,
-independently verify absence, and record AWS-retained Batch job-definition and
-service-linked-role lifecycle.
+Not executed. Under the active goal's exact-manifest authorization, delete only
+the five image digests listed above, destroy only this test's Terraform state
+through the PID-based monitor, independently verify absence, and record
+AWS-retained Batch job-definition and service-linked-role lifecycle. Recheck
+the exact current inventory immediately before starting teardown.
 
 ## Final boundary
 

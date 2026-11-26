@@ -42,7 +42,10 @@ Do not apply until the exact plan, maximum runtime, cost assumptions, and exact
 cleanup authorization are recorded in `docs/test/test517.md`. Use the PID-based
 Terraform run monitor for each apply/destroy. On teardown, delete only the
 single tagged test image from the exact test repository, then destroy the
-reviewed Terraform state. Independently verify the VPC, endpoints, ECR repo,
-Batch queue/environment, roles, security groups, and log
-group are absent. Record AWS-retained inactive job-definition history
-separately. Never touch the hosted control plane or its state/lock resources.
+reviewed Terraform state. Remove only the explicitly approved image digests
+from the exact test repository before destroy; BuildKit may leave untagged
+OCI attestation manifests, so enumerate ECR image digests rather than deleting
+by a broad tag filter. Independently verify the VPC, endpoints, ECR repo,
+Batch queue/environment, roles, security groups, and log group are absent.
+Record AWS-retained inactive job-definition history separately. Never touch
+the hosted control plane or its state/lock resources.
