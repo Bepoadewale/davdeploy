@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from urllib.parse import urlsplit
 
 import boto3
 import jwt
@@ -167,8 +168,20 @@ class JwksIdentityVerifier:
 
 def configured_verifier() -> IdentityVerifier:
     jwks_url = os.getenv("DAVDEPLOY_JWKS_URL")
+    issuer = os.getenv("DAVDEPLOY_OIDC_ISSUER", "")
+    if not jwks_url and issuer:
+        parsed_issuer = urlsplit(issuer)
+        cognito_host = parsed_issuer.hostname or ""
+        if (
+            parsed_issuer.scheme == "https"
+            and cognito_host.endswith((".amazonaws.com", ".amazonaws.com.cn"))
+            and cognito_host.startswith(("cognito-idp.", "issuer-cognito-idp."))
+            and parsed_issuer.path
+            and not parsed_issuer.query
+            and not parsed_issuer.fragment
+        ):
+            jwks_url = f"{issuer.rstrip('/')}/.well-known/jwks.json"
     if jwks_url:
-        issuer = os.environ["DAVDEPLOY_OIDC_ISSUER"]
         audience = os.environ["DAVDEPLOY_OIDC_AUDIENCE"]
         return JwksIdentityVerifier(jwks_url, issuer, audience)
     if os.getenv("DAVDEPLOY_HOSTED_MODE", "false").lower() == "true":

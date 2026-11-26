@@ -1546,76 +1546,84 @@ resource "aws_lambda_permission" "cognito_link" {
 }
 
 locals {
-  runtime_environment = {
-    DAVDEPLOY_HOSTED_MODE                                     = "true"
-    DAVDEPLOY_AUTO_MIGRATE                                    = "false"
-    DAVDEPLOY_AURORA_CLUSTER_ARN                              = aws_rds_cluster.control_plane.arn
-    DAVDEPLOY_DATABASE_SECRET_ARN                             = aws_rds_cluster.control_plane.master_user_secret[0].secret_arn
-    DAVDEPLOY_DATABASE_NAME                                   = var.database_name
-    DAVDEPLOY_ALLOWED_FRONTEND_ORIGINS                        = var.frontend_origin
-    DAVDEPLOY_RATE_LIMIT_PER_MINUTE                           = tostring(var.application_rate_limit_per_minute)
-    DAVDEPLOY_JWKS_URL                                        = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}/.well-known/jwks.json"
-    DAVDEPLOY_OIDC_ISSUER                                     = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}"
-    DAVDEPLOY_OIDC_AUDIENCE                                   = aws_cognito_user_pool_client.frontend.id
-    DAVDEPLOY_POLICY_FUNCTION_ARN                             = aws_lambda_function.policy.arn
-    DAVDEPLOY_MODEL_PROVIDER                                  = "bedrock"
-    DAVDEPLOY_ENABLE_NOVA_MODEL                               = "true"
-    DAVDEPLOY_BEDROCK_MODEL_ID                                = var.nova_model_id
-    DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS                   = tostring(var.nova_intent_schema_repair_attempts)
-    DAVDEPLOY_EXECUTOR_MODE                                   = "embedded_fixture"
-    DAVDEPLOY_EMAIL_PROVIDER                                  = var.resend_invitation_parameter_name != "" ? "resend" : (var.ses_identity_arn == "" ? "disabled" : "ses")
-    DAVDEPLOY_SES_FROM_ADDRESS                                = var.ses_from_address
-    DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER                    = var.resend_invitation_parameter_name
-    DAVDEPLOY_RESEND_FROM_ADDRESS                             = var.resend_invitation_parameter_name == "" ? "" : "DavDeploy <notify@davdeploy.tech>"
-    DAVDEPLOY_RESEND_REPLY_TO_ADDRESS                         = var.resend_invitation_parameter_name == "" ? "" : "support@davdeploy.tech"
-    DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER                 = var.edge_origin_token_parameter_name
-    DAVDEPLOY_FRONTEND_ORIGIN                                 = var.frontend_origin
-    DAVDEPLOY_CONNECTION_SECRET_BACKEND                       = "aws_secrets_manager"
-    DAVDEPLOY_CONNECTION_SECRET_PREFIX                        = "davdeploy/customer-connections"
-    DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED                      = "true"
-    DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN                       = aws_iam_role.api.arn
-    DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                       = aws_iam_role.customer_executor.arn
-    DAVDEPLOY_NOVA_PLAN_PROJECT                               = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
-    DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                         = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
-    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT                   = var.enable_nova_exact_plan_apply_runner ? aws_codebuild_project.nova_exact_plan_apply[0].name : ""
-    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN                  = var.enable_nova_exact_plan_apply_runner ? aws_iam_role.nova_exact_plan_apply[0].arn : ""
-    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY              = tostring(var.enable_nova_exact_plan_apply_runner && var.enable_nova_exact_plan_apply_credential_broker)
-    DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = tostring(var.enable_nova_exact_plan_apply_credential_broker)
-    DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED                   = tostring(var.enable_nova_apply_role_onboarding)
-    DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL                    = var.nova_apply_role_template_url
-    DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN                      = var.enable_nova_apply_role_onboarding ? aws_iam_role.api.arn : ""
-    DAVDEPLOY_TERRAFORM_STATE_ENABLED                         = tostring(var.enable_nova_terraform_state_api)
-    DAVDEPLOY_TERRAFORM_STATE_API_URL                         = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
-    DAVDEPLOY_TERRAFORM_STATE_BUCKET                          = var.enable_nova_terraform_state_storage ? aws_s3_bucket.nova_terraform_state[0].bucket : ""
-    DAVDEPLOY_TERRAFORM_STATE_KMS_KEY_ARN                     = var.enable_nova_terraform_state_storage ? aws_kms_key.nova_terraform_state[0].arn : ""
-    DAVDEPLOY_TERRAFORM_STATE_BUCKET_OWNER                    = var.enable_nova_terraform_state_storage ? data.aws_caller_identity.current.account_id : ""
-    DAVDEPLOY_NOVA_PLAN_RUNNER_READY                          = tostring(var.enable_nova_plan_only_runner)
-    DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED                   = tostring(var.enable_nova_plan_role_verification)
-    DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED             = tostring(var.enable_nova_plan_credential_broker)
-    DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                     = var.aws_connection_template_url
-    DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                       = aws_codebuild_project.customer_executor.name
-    DAVDEPLOY_CLOUD_EXECUTION_BACKEND                         = "codebuild"
-    DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED                 = tostring(var.enable_customer_cloud_execution)
-    DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION                     = tostring(var.enable_customer_cloud_execution)
-    DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION      = tostring(var.enable_serverless_api_hosted_certification)
-    DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS          = join(",", var.serverless_certification_workspace_ids)
-    ALLOW_CLOUD_PLAN                                          = tostring(var.enable_customer_cloud_execution)
-    ALLOW_CLOUD_APPLY                                         = tostring(var.enable_customer_cloud_execution)
-    DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI              = "s3://${var.artifact_bucket}/${var.customer_execution_artifact_key}"
-    DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET                 = var.customer_execution_state_bucket
-    DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE                   = var.customer_execution_lock_table
-    DAVDEPLOY_NOVA_PLAN_REVIEWS_ENABLED                       = tostring(var.enable_nova_plan_reviews)
-    DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET                       = var.nova_plan_artifact_bucket
-    DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN                           = var.nova_plan_kms_key_arn
-    DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER                          = data.aws_caller_identity.current.account_id
-    DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER                         = var.enable_nova_exact_plan_apply_runner ? data.aws_caller_identity.current.account_id : ""
-    DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN                          = var.enable_nova_exact_plan_apply_runner ? var.nova_plan_kms_key_arn : ""
-    DAVDEPLOY_WORKER_QUEUE_URL                                = aws_sqs_queue.worker.id
-    DAVDEPLOY_GITHUB_APP_READ_ONLY                            = tostring(var.enable_github_app_read_only)
-    DAVDEPLOY_GITHUB_APP_ID                                   = var.github_app_id
-    DAVDEPLOY_GITHUB_APP_INSTALLATION_ID                      = var.github_app_installation_id
-    DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN                = var.github_app_credential_secret_arn
-  }
+  runtime_environment = merge(
+    {
+      DAVDEPLOY_HOSTED_MODE                                = "true"
+      DAVDEPLOY_AUTO_MIGRATE                               = "false"
+      DAVDEPLOY_AURORA_CLUSTER_ARN                         = aws_rds_cluster.control_plane.arn
+      DAVDEPLOY_DATABASE_SECRET_ARN                        = aws_rds_cluster.control_plane.master_user_secret[0].secret_arn
+      DAVDEPLOY_DATABASE_NAME                              = var.database_name
+      DAVDEPLOY_ALLOWED_FRONTEND_ORIGINS                   = var.frontend_origin
+      DAVDEPLOY_RATE_LIMIT_PER_MINUTE                      = tostring(var.application_rate_limit_per_minute)
+      DAVDEPLOY_OIDC_ISSUER                                = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.identity.id}"
+      DAVDEPLOY_OIDC_AUDIENCE                              = aws_cognito_user_pool_client.frontend.id
+      DAVDEPLOY_POLICY_FUNCTION_ARN                        = aws_lambda_function.policy.arn
+      DAVDEPLOY_MODEL_PROVIDER                             = "bedrock"
+      DAVDEPLOY_ENABLE_NOVA_MODEL                          = "true"
+      DAVDEPLOY_BEDROCK_MODEL_ID                           = var.nova_model_id
+      DAVDEPLOY_INTENT_SCHEMA_REPAIR_ATTEMPTS              = tostring(var.nova_intent_schema_repair_attempts)
+      DAVDEPLOY_EXECUTOR_MODE                              = "embedded_fixture"
+      DAVDEPLOY_EMAIL_PROVIDER                             = var.resend_invitation_parameter_name != "" ? "resend" : (var.ses_identity_arn == "" ? "disabled" : "ses")
+      DAVDEPLOY_SES_FROM_ADDRESS                           = var.ses_from_address
+      DAVDEPLOY_RESEND_API_KEY_SSM_PARAMETER               = var.resend_invitation_parameter_name
+      DAVDEPLOY_RESEND_FROM_ADDRESS                        = var.resend_invitation_parameter_name == "" ? "" : "DavDeploy <notify@davdeploy.tech>"
+      DAVDEPLOY_RESEND_REPLY_TO_ADDRESS                    = var.resend_invitation_parameter_name == "" ? "" : "support@davdeploy.tech"
+      DAVDEPLOY_EDGE_ORIGIN_TOKEN_SSM_PARAMETER            = var.edge_origin_token_parameter_name
+      DAVDEPLOY_FRONTEND_ORIGIN                            = var.frontend_origin
+      DAVDEPLOY_CONNECTION_SECRET_BACKEND                  = "aws_secrets_manager"
+      DAVDEPLOY_CONNECTION_SECRET_PREFIX                   = "davdeploy/customer-connections"
+      DAVDEPLOY_AWS_LIVE_DISCOVERY_ENABLED                 = "true"
+      DAVDEPLOY_DISCOVERY_BROKER_ROLE_ARN                  = aws_iam_role.api.arn
+      DAVDEPLOY_EXECUTION_BROKER_ROLE_ARN                  = aws_iam_role.customer_executor.arn
+      DAVDEPLOY_NOVA_PLAN_PROJECT                          = var.enable_nova_plan_only_runner ? aws_codebuild_project.nova_plan_only[0].name : ""
+      DAVDEPLOY_NOVA_PLAN_ONLY_ROLE_ARN                    = var.enable_nova_plan_only_runner ? aws_iam_role.nova_plan_only[0].arn : ""
+      DAVDEPLOY_TERRAFORM_STATE_ENABLED                    = tostring(var.enable_nova_terraform_state_api)
+      DAVDEPLOY_TERRAFORM_STATE_API_URL                    = var.enable_nova_terraform_state_api ? var.nova_terraform_state_api_url : ""
+      DAVDEPLOY_TERRAFORM_STATE_BUCKET                     = var.enable_nova_terraform_state_storage ? aws_s3_bucket.nova_terraform_state[0].bucket : ""
+      DAVDEPLOY_TERRAFORM_STATE_KMS_KEY_ARN                = var.enable_nova_terraform_state_storage ? aws_kms_key.nova_terraform_state[0].arn : ""
+      DAVDEPLOY_TERRAFORM_STATE_BUCKET_OWNER               = var.enable_nova_terraform_state_storage ? data.aws_caller_identity.current.account_id : ""
+      DAVDEPLOY_NOVA_PLAN_RUNNER_READY                     = tostring(var.enable_nova_plan_only_runner)
+      DAVDEPLOY_NOVA_PLAN_ROLE_VERIFY_ENABLED              = tostring(var.enable_nova_plan_role_verification)
+      DAVDEPLOY_NOVA_PLAN_CREDENTIAL_BROKER_ENABLED        = tostring(var.enable_nova_plan_credential_broker)
+      DAVDEPLOY_AWS_CONNECTION_TEMPLATE_URL                = var.aws_connection_template_url
+      DAVDEPLOY_CUSTOMER_EXECUTOR_PROJECT                  = aws_codebuild_project.customer_executor.name
+      DAVDEPLOY_CLOUD_EXECUTION_BACKEND                    = "codebuild"
+      DAVDEPLOY_CLOUD_EXECUTION_COMMAND_ENABLED            = tostring(var.enable_customer_cloud_execution)
+      DAVDEPLOY_ENABLE_APP_RUNNER_EXECUTION                = tostring(var.enable_customer_cloud_execution)
+      DAVDEPLOY_ENABLE_SERVERLESS_API_HOSTED_CERTIFICATION = tostring(var.enable_serverless_api_hosted_certification)
+      DAVDEPLOY_SERVERLESS_CERTIFICATION_WORKSPACE_IDS     = join(",", var.serverless_certification_workspace_ids)
+      ALLOW_CLOUD_PLAN                                     = tostring(var.enable_customer_cloud_execution)
+      ALLOW_CLOUD_APPLY                                    = tostring(var.enable_customer_cloud_execution)
+      DAVDEPLOY_CUSTOMER_EXECUTION_ARTIFACT_S3_URI         = "s3://${var.artifact_bucket}/${var.customer_execution_artifact_key}"
+      DAVDEPLOY_CUSTOMER_EXECUTION_STATE_BUCKET            = var.customer_execution_state_bucket
+      DAVDEPLOY_CUSTOMER_EXECUTION_LOCK_TABLE              = var.customer_execution_lock_table
+      DAVDEPLOY_NOVA_PLAN_REVIEWS_ENABLED                  = tostring(var.enable_nova_plan_reviews)
+      DAVDEPLOY_NOVA_PLAN_ARTIFACT_BUCKET                  = var.nova_plan_artifact_bucket
+      DAVDEPLOY_NOVA_PLAN_KMS_KEY_ARN                      = var.nova_plan_kms_key_arn
+      DAVDEPLOY_NOVA_PLAN_BUCKET_OWNER                     = data.aws_caller_identity.current.account_id
+      DAVDEPLOY_WORKER_QUEUE_URL                           = aws_sqs_queue.worker.id
+      DAVDEPLOY_GITHUB_APP_READ_ONLY                       = tostring(var.enable_github_app_read_only)
+      DAVDEPLOY_GITHUB_APP_ID                              = var.github_app_id
+      DAVDEPLOY_GITHUB_APP_INSTALLATION_ID                 = var.github_app_installation_id
+      DAVDEPLOY_GITHUB_APP_CREDENTIAL_SECRET_ARN           = var.github_app_credential_secret_arn
+    },
+    var.enable_nova_exact_plan_apply_runner ? {
+      DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_PROJECT                   = aws_codebuild_project.nova_exact_plan_apply[0].name
+      DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_ROLE_ARN                  = aws_iam_role.nova_exact_plan_apply[0].arn
+      DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY              = tostring(var.enable_nova_exact_plan_apply_runner && var.enable_nova_exact_plan_apply_credential_broker)
+      DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = tostring(var.enable_nova_exact_plan_apply_credential_broker)
+      DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER                         = data.aws_caller_identity.current.account_id
+      DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN                          = var.nova_plan_kms_key_arn
+    } : {},
+    var.enable_nova_apply_role_onboarding ? {
+      DAVDEPLOY_NOVA_APPLY_ROLE_SETUP_ENABLED = tostring(var.enable_nova_apply_role_onboarding)
+      DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL  = var.nova_apply_role_template_url
+      DAVDEPLOY_NOVA_APPLY_BROKER_ROLE_ARN    = aws_iam_role.api.arn
+    } : {},
+  )
+  runtime_environment_size_bytes = sum([
+    for key, value in local.runtime_environment : length(key) + length(value)
+  ])
 }
 
 resource "aws_lambda_function" "api" {
@@ -1632,6 +1640,12 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = local.runtime_environment
+  }
+  lifecycle {
+    precondition {
+      condition     = local.runtime_environment_size_bytes <= 4096
+      error_message = "The shared Lambda environment exceeds AWS's 4 KiB limit."
+    }
   }
   tags = local.common_tags
 }
@@ -1650,6 +1664,12 @@ resource "aws_lambda_function" "migrate" {
 
   environment {
     variables = local.runtime_environment
+  }
+  lifecycle {
+    precondition {
+      condition     = local.runtime_environment_size_bytes <= 4096
+      error_message = "The shared Lambda environment exceeds AWS's 4 KiB limit."
+    }
   }
   tags = local.common_tags
 }
@@ -2112,6 +2132,12 @@ resource "aws_lambda_function" "worker" {
 
   environment {
     variables = local.runtime_environment
+  }
+  lifecycle {
+    precondition {
+      condition     = local.runtime_environment_size_bytes <= 4096
+      error_message = "The shared Lambda environment exceeds AWS's 4 KiB limit."
+    }
   }
   tags = local.common_tags
 }
