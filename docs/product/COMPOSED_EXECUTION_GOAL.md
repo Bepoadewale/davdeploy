@@ -14,7 +14,13 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`c6b069037516610bd57cca877dfb52af1dfc71a6` (PR #514). PR #506 makes the
+`78cab9b943c2215826fd26fd3cf0d90376cf46a7` (PR #515). PR #515 adds
+source-only, fail-closed generated-plan bounds for selected VPC endpoints;
+all seven checks passed on final PR head `e917c30` in run
+[45776482608](https://github.com/Bepoadewale/davdeploy/actions/runs/45776482608),
+and all seven merged-main checks passed in run
+[45777351766](https://github.com/Bepoadewale/davdeploy/actions/runs/45777351766).
+This package changed no AWS workload or hosted control-plane resource. PR #506 makes the
 26-architecture / 30-root crosswalk machine-checkable without enabling runtime
 dispatch. PR #507 adds trusted usage assumptions and regional Fargate compute
 price lines for the bounded Batch job shape. Final-head CI passed all seven
@@ -51,23 +57,21 @@ and all seven checks passed on final PR head in run
 [45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719).
 Merged-main checks passed all seven in run
 [45697443528](https://github.com/Bepoadewale/davdeploy/actions/runs/45697443528).
-PR #515 is an open draft extending the generated-plan policy to those exact
-endpoint classes: interface endpoints are bound to same-plan private subnets, enabled VPC DNS,
-and a Batch security-group HTTPS path, and gateway endpoints to the private
-route table. Focused policy and pricing tests pass (794 tests); full local
-verification passes (1,970 tests, one upstream deprecation warning).
-Documentation checks and `git diff --check` pass. All seven checks passed on
-code head `dcb9c24` in
-[run 45775684796](https://github.com/Bepoadewale/davdeploy/actions/runs/45775684796).
-The isolated workstation clean-room sequence at `870ce27` passed through the
-full `verify` step (1,969 tests); the subsequent fail-closed rule-target
-regression passed full local verification (1,970 tests) and all seven final-head
-CI checks. The nine project containers, PostgreSQL volume, network, and
-generated `.venv` and `.local` were absent before cleanup. With the user's
-explicit approval in this conversation, the clean-room worktree
-`/private/tmp/davdeploy-pr515-cleanroom-20261126` was removed; no AWS resources
-or retained audit evidence were deleted. No GitHub review has been submitted,
-so the PR remains a draft. This package is source-only. AWS inventory was read-only
+Merged PR #515 adds source-only, fail-closed generated-plan policy for same-region ECR API,
+ECR Docker, and CloudWatch Logs interface endpoints bound to known private IPv4
+subnets, VPC DNS, and a Batch HTTPS security-group path, plus S3/DynamoDB gateway
+endpoints on the private route table. Its endpoint security-group rule check
+rejects unknown or unbound rules. All seven checks passed on final PR head
+`e917c30` in [run 45776482608](https://github.com/Bepoadewale/davdeploy/actions/runs/45776482608);
+all seven merged-main checks passed in
+[run 45777351766](https://github.com/Bepoadewale/davdeploy/actions/runs/45777351766).
+The clean-room sequence at `870ce27` predates the final rule-binding hardening;
+the hardening passed local full verification and fresh final-head CI. The
+approved clean-room worktree was removed after its containers, volume, network,
+and generated environments were confirmed absent. This package is source-only;
+it does not prove endpoint traffic, customer workload execution, or Nova dispatch.
+No AWS resource, hosted control-plane resource, state, or lock was changed.
+AWS inventory was read-only
 reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
 configuration, test role, and artifact bucket are absent; five tagged Batch
 test definitions are inactive and no matching Batch queues or compute
@@ -448,6 +452,17 @@ enable runtime dispatch. The accepted ECS evidence
 meets the general customer-side lifecycle gate for that ECS shape; it does not
 close other per-entry requirements or prove Nova-originated execution.
 
+## Next dependency-ready package
+
+Use the newly bounded Batch and VPC endpoint shapes for a fresh, isolated
+customer-side Batch Fargate lifecycle test. Before cloud mutation, verify current
+regional pricing and quota, set an explicit maximum cost and runtime, record the
+resource scope and teardown procedure, and use the Terraform run monitor. Prove
+private ECR image retrieval, job completion, log delivery, and independent
+absence after teardown. Keep the hosted control plane untouched and do not label
+a direct same-account test as Nova dispatch. If executed, record it in the
+PR-numbered `docs/test/test<PR>.md` file.
+
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 
 The following 2026-11-04 checklist preserves earlier implementation evidence.
@@ -473,9 +488,10 @@ execution strategy. Dated release details below remain historical records.
 
 ## Active implementation
 
-- Backend `main` is `ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only
-  public IPv4 pricing). PR #512 final-head and merged-main CI passed all seven
-  checks in runs `45680499414` and `45681334818`. The last
+- Backend `main` is `78cab9b943c2215826fd26fd3cf0d90376cf46a7` (PR #515).
+  PR #515 final-head CI passed all seven checks in run `45776482608`; merged-main
+  CI passed all seven in run `45777351766`. There were no other open backend PRs
+  when this handoff update began; documentation PR #516 is now open. The last
   recorded hosted release remains PR #420, applied by run `43982396577` after
   plan run `43981566184`; PR #399 has not been deployed to the control plane.
 - PR #507 merged as `2afd007`; final-head CI passed all seven checks in run
@@ -521,10 +537,10 @@ execution strategy. Dated release details below remain historical records.
 - PR #441 merged as `48911bf`; its seven checks passed in run `44608565238`.
   It requires known SQS-managed encryption in generated queue plans. The policy
   is source-only and has not been deployed to the hosted control plane.
-- The Terraform run monitor has no active runs and retains terminal history. The ECS test
+- The Terraform run monitor has 67 records and zero active runs. The ECS test
   left no Terraform-managed workload resources; AWS retains inactive service
-  history and an empty cluster record. Preserve the protected untracked files
-  and retained lineage evidence. Browser/CLI/MCP lifecycle parity and the full
+  history and an empty cluster record. Preserve the protected untracked files,
+  retained lineage evidence, and inactive Batch definitions. Browser/CLI/MCP lifecycle parity and the full
   per-entry capability matrix remain open.
 
 ## Verified boundary — historical detail, read with current status above
