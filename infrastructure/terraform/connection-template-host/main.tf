@@ -1,13 +1,17 @@
 locals {
-  template_source            = "${path.module}/../../cloudformation/customer-discovery-role.yaml"
-  template_hash              = filesha256(local.template_source)
-  template_key               = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"
-  nova_apply_template_source = "${path.module}/../../cloudformation/customer-nova-apply-role.yaml"
-  nova_apply_template_hash   = filesha256(local.nova_apply_template_source)
-  nova_apply_template_key    = "cloudformation/customer-nova-apply-role-${local.nova_apply_template_hash}.yaml"
+  template_source                   = "${path.module}/../../cloudformation/customer-discovery-role.yaml"
+  template_hash                     = filesha256(local.template_source)
+  template_key                      = "cloudformation/customer-discovery-role-${local.template_hash}.yaml"
+  nova_apply_template_source        = "${path.module}/../../cloudformation/customer-nova-apply-role.yaml"
+  nova_apply_template_hash          = filesha256(local.nova_apply_template_source)
+  nova_apply_template_key           = "cloudformation/customer-nova-apply-role-${local.nova_apply_template_hash}.yaml"
+  ecs_express_roles_template_source = "${path.module}/../../cloudformation/customer-ecs-express-roles.yaml"
+  ecs_express_roles_template_hash   = filesha256(local.ecs_express_roles_template_source)
+  ecs_express_roles_template_key    = "cloudformation/customer-ecs-express-roles-${local.ecs_express_roles_template_hash}.yaml"
   current_template_sources = {
-    (local.template_key)            = local.template_source
-    (local.nova_apply_template_key) = local.nova_apply_template_source
+    (local.template_key)                   = local.template_source
+    (local.nova_apply_template_key)        = local.nova_apply_template_source
+    (local.ecs_express_roles_template_key) = local.ecs_express_roles_template_source
   }
   published_keys = setunion(var.retained_template_keys, toset(keys(local.current_template_sources)))
   tags = {

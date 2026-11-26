@@ -24,13 +24,13 @@ output "customer_public_subnet_ids" {
 }
 
 output "execution_role_arn" {
-  value       = aws_iam_role.execution.arn
-  description = "Customer ECS task execution role for image pulls and logs."
+  value       = data.aws_iam_role.execution.arn
+  description = "Pre-provisioned connection-scoped ECS task execution role for image pulls and logs."
 }
 
 output "infrastructure_role_arn" {
-  value       = aws_iam_role.infrastructure.arn
-  description = "Customer role assumed by ECS to manage Express service infrastructure."
+  value       = data.aws_iam_role.infrastructure.arn
+  description = "Pre-provisioned connection-scoped role assumed by ECS to manage Express service infrastructure."
 }
 
 output "pilot_scope" {

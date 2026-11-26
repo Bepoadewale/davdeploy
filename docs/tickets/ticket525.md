@@ -68,38 +68,54 @@ renderer.
    append-only template publisher, without changing prior URLs or objects.
 3. Replace Terraform-managed IAM roles and attachments with lookups of the
    exact connection-scoped roles; keep the renderer disabled.
-4. Extend contract tests to reject role creation/attachment in this workload
+4. Add a read-only role-profile verifier and run it before Terraform operations;
+   bind its non-secret digest into plan/apply/observation results. Individual
+   project cleanup retains the connection-scoped role pair for other projects.
+5. Extend contract tests to reject role creation/attachment in this workload
    root, verify trust and policy ARNs, and verify template publication is
    append-only.
-5. Document role-bootstrap, plan, workload destroy, and role-stack cleanup
-   ordering. Do not run the customer CloudFormation template or any Terraform
-   mutation in AWS in this PR.
+6. Document role-bootstrap, plan, workload destroy, and role-stack cleanup
+   ordering. Detach legacy Terraform-managed roles and policy attachments from
+   state with `destroy = false`; make cleanup verification fail while legacy
+   role objects remain. Do not run the customer CloudFormation template or any
+   Terraform mutation in AWS in this PR.
 
 ## Acceptance criteria
 
-- [ ] The published template creates only the exact ECS task execution and
+- [x] The published template creates only the exact ECS task execution and
   infrastructure roles for a validated DavDeploy connection identifier.
-- [ ] Trust principals and AWS managed-policy ARNs match current AWS guidance.
-- [ ] The Terraform workload root no longer creates IAM roles or attaches
+- [x] Trust principals and AWS managed-policy ARNs match current AWS guidance.
+- [x] The Terraform workload root no longer creates IAM roles or attaches
   managed policies; it refers only to the two exact role names.
-- [ ] A new template uses a unique source-content SHA-256 S3 key and a stable
+- [x] A new template uses a unique source-content SHA-256 S3 key and a stable
   protected object address; existing template URLs remain unchanged.
-- [ ] Regression tests cover malformed identifiers, wrong trust, wrong
+- [x] Regression tests cover malformed identifiers, wrong trust, wrong
   managed-policy ARNs, role-creation regressions, and append-only hosting.
-- [ ] Documentation states the required bootstrap/teardown order and that
+- [x] Documentation states the required bootstrap/teardown order and that
   pre-provisioning does not prove effective runner-role permissions.
-- [ ] The ECS Express renderer remains disabled and no customer workload is
+- [x] Documentation warns against applying the new source to state with legacy
+  Terraform-managed role addresses without reviewing the saved plan; the
+  renderer remains disabled and the prior direct test used local state and was
+  destroyed.
+- [x] Terraform removes legacy role addresses from state without destroying
+  their AWS objects; independent cleanup verification refuses to certify
+  absence while those legacy roles remain.
+- [x] The ECS Express renderer remains disabled and no customer workload is
   applied or certified by this package.
 - [ ] Focused tests, Terraform validation, documentation conventions,
   `git diff --check`, and all final-head CI checks pass.
-- [ ] No AWS resources or hosted control-plane resources are mutated.
+- [x] No AWS resources or hosted control-plane resources are mutated.
 
 ## Acceptance status
 
-Implementation has not started. This ticket records the scoped change before
-code work. This PR cannot satisfy the remaining effective-permission review,
-approval-bound customer pricing, clean-room lifecycle, or authorized
-remote-state execution gates.
+The source changes are implemented and local validation passes. The connection
+service roles are provisioned from a customer-side CloudFormation template;
+the Terraform root now only reads those exact roles. The runner rejects role
+trust, tag, managed-policy, or inline-policy drift before Terraform and records
+a non-secret role-profile digest in its run result. Final-head CI is pending.
+Effective permissions of the customer execution role remain unreviewed, and
+this change does not enable the renderer or satisfy approval-bound pricing,
+clean-room lifecycle, or authorized remote-state execution gates.
 
 ## Tests / validation performed
 
@@ -108,6 +124,16 @@ remote-state execution gates.
   Terraform monitor run was found.
 - Official AWS service, managed-policy, and IAM PassRole documentation was
   reviewed; references are listed above.
+- Full Python suite: `pytest -q` (1988 passed; one existing Starlette
+  deprecation warning).
+- `ruff check` on the new role verifier and regression test passed.
+- Terraform `init -backend=false` and `validate` passed for the modified ECS
+  Express root; recursive `terraform fmt -check` passed.
+- AWS `cloudformation validate-template` accepted the new template and reported
+  its `ConnectionId` parameter and `CAPABILITY_NAMED_IAM` capability.
+- `scripts/check_doc_conventions.py` and `git diff --check` passed.
+- Final-head CI has not yet run; the open PR currently has only its earlier
+  ticket-only commit as its GitHub head.
 - No Terraform plan, apply, destroy, CloudFormation deployment, hosted
   control-plane mutation, or workload certification was performed.
 
@@ -116,8 +142,9 @@ remote-state execution gates.
 - Do not change or deploy the hosted control plane, runtime, Terraform state,
   or lock resources.
 - Do not use `AdministratorAccess` as the customer execution credential.
-- Do not grant the runner `iam:CreateRole` or managed-policy attachment rights
-  as part of this package.
+- This package does not grant the runner `iam:CreateRole` or managed-policy
+  attachment rights. Its effective permissions and exact `iam:PassRole` scope
+  remain a separate gate.
 - Do not run the CloudFormation bootstrap or a paid customer workload without
   the existing exact, bounded execution manifest and cost/cleanup gates.
 - Do not delete retained plans, evidence, worktrees, branches, lineage records,
@@ -132,8 +159,7 @@ package because it performs no customer workload test or AWS mutation.
 
 Review the exact permissions required by the runner's customer execution role
 and its per-plan session policy, including `iam:PassRole` on these two role
-ARNs with service conditions. Add an independent preflight that verifies the
-roles' trust and policy attachments before planning. Then bind pricing to a
+ARNs with the AWS-documented service conditions. Then bind pricing to a
 persisted customer revision and budget, pass clean-room and monitored remote
 state lifecycle evidence, and obtain explicit authorization before any AWS
 mutation. Keep the renderer disabled until all PR #519 gates are satisfied.

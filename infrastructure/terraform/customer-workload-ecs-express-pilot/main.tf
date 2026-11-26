@@ -56,42 +56,49 @@ resource "terraform_data" "account_guard" {
   }
 }
 
-resource "aws_iam_role" "execution" {
-  name = "${local.service_name}-execution"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs-tasks.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-  tags       = local.tags
+data "aws_iam_role" "execution" {
+  name       = "davdeployEcsExpressTask-${var.connection_id}"
   depends_on = [terraform_data.account_guard]
 }
 
-resource "aws_iam_role_policy_attachment" "execution" {
-  role       = aws_iam_role.execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role" "infrastructure" {
-  name = "${local.service_name}-infrastructure"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ecs.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-  tags       = local.tags
+data "aws_iam_role" "infrastructure" {
+  name       = "davdeployEcsExpressInfra-${var.connection_id}"
   depends_on = [terraform_data.account_guard]
 }
 
-resource "aws_iam_role_policy_attachment" "infrastructure" {
-  role       = aws_iam_role.infrastructure.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"
+# Preserve any state created by the earlier pilot root. The new connection-
+# scoped roles are provisioned separately; do not let this source revision
+# destroy legacy project-scoped roles during state reconciliation.
+removed {
+  from = aws_iam_role.execution
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_iam_role.infrastructure
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_iam_role_policy_attachment.execution
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_iam_role_policy_attachment.infrastructure
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_vpc" "customer" {
@@ -155,8 +162,8 @@ resource "aws_cloudwatch_log_group" "workload" {
 resource "aws_ecs_express_gateway_service" "workload" {
   count                   = var.enable_service ? 1 : 0
   service_name            = local.service_name
-  execution_role_arn      = aws_iam_role.execution.arn
-  infrastructure_role_arn = aws_iam_role.infrastructure.arn
+  execution_role_arn      = data.aws_iam_role.execution.arn
+  infrastructure_role_arn = data.aws_iam_role.infrastructure.arn
   cpu                     = "256"
   memory                  = "512"
   health_check_path       = "/healthz"
@@ -189,10 +196,4 @@ resource "aws_ecs_express_gateway_service" "workload" {
     max_task_count            = 1
   }
 
-  # AWS provider documentation requires these role policies to outlive service
-  # deletion so ECS can finish draining its managed infrastructure.
-  depends_on = [
-    aws_iam_role_policy_attachment.execution,
-    aws_iam_role_policy_attachment.infrastructure,
-  ]
 }
