@@ -1,14 +1,15 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`483b59c9adaa8fc6ba63fd6928b4a1b097669b27`, 2026-11-26. PR #520 merged
-with all seven final-head and merged-main checks passing. Draft PRs #519 and
-#522 remain review-required. PR #519 adds a default-off renderer and runner;
-PR #520 added source-only actual-plan checks; PR #522 adds source-only regional
-pricing, with two final-head checks still running at this snapshot. An actual
-provider-generated plan has been evaluated under merged PR #520 policy;
-effective role-permission review, complete cost review, and an isolated runner
-cycle remain open. PR #517
+`a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`, 2026-11-26. PR #520's exact-shape
+actual-plan policy and PR #522's regional ECS Express pricing model are merged;
+both final-head CI runs passed all seven checks. Draft PR #519 adds the
+default-off renderer and runner; draft PR #524 corrects the pricing ticket's
+approval-evidence wording. A provider-generated plan was evaluated under
+merged #520 policy, and live regional pricing covered 12 lines under synthetic
+usage assumptions. That pricing run is not tied to a persisted customer
+revision or budget and cannot authorize a customer apply. Effective
+role-permission review and an isolated runner cycle remain open. PR #517
 adds a backward-compatible private Batch Fargate network option and records
 one successful private endpoint job in direct same-account AWS evidence. Its
 predecessor cycle failed during a cleanup race; both exact stacks were removed
@@ -404,7 +405,7 @@ evidence.
 | `aws-static-web` | `web-application` | `aws-s3-private-storage`, `aws-cloudfront-delivery` | S3 public-access and merged PRs #434–#436 transport, encryption, and ownership checks apply. PRs #432/#433 cover viewer and custom-origin TLS only. No private-origin access, cache, or deployment policy suite | [`test253.md`](../test/test253.md) served HTTPS content | No Nova-hosted source-to-site build, update/rollback, or cleanup proof |
 | `aws-serverless-api` | `web-application` | `aws-api-gateway-http`, `aws-lambda-service` | Shared IAM/network rules only; no API auth, throttling, or Lambda runtime-specific plan policy | [`test268.md`](../test/test268.md) real isolated HTTP 200 and teardown through a separate serverless renderer root | No Nova-hosted plan/apply or composed API/data/queue health proof |
 | `aws-managed-application` | `saas-backend` | `aws-ecr-image` is an image prerequisite only; App Runner uses a separate renderer and has no root in the 30-entry registry | Shared IAM/network checks only; no App Runner-specific policy map | [`test42.md`](../test/test42.md) records a separate App Runner customer workload pilot | No Nova-generated App Runner plan evidence; the pilot does not prove composed Nova execution |
-| `aws-container-service` | `kubernetes` | `aws-ecr-image` (partial; ECS/Fargate and ALB roots are absent from the 30-root registry) | Shared IAM/network checks only; no container image, task role, or service deployment policy. Merged PR #520 adds a fail-closed exact-shape ECS Express plan policy; draft PR #522 adds plan-bound regional pricing. Provider-generated plan policy evaluation is recorded in ticket #520; effective-permission evidence and full cost coverage remain open before execution. | [`test255.md`](../test/test255.md) is EKS. [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437) records isolated ECS Express create, health, update, failed-revision rollback, and teardown; accepted for the general customer-side gate but not Nova execution. | No ECS/Fargate API-plus-worker behavior, Nova-generated plan, complete effective-permission evidence, or catalog-root binding proof |
+| `aws-container-service` | `kubernetes` | `aws-ecr-image` (partial; ECS/Fargate and ALB roots are absent from the 30-root registry) | Shared IAM/network checks only; no container image, task role, or service deployment policy. Merged PR #520 adds a fail-closed exact-shape ECS Express plan policy; merged PR #522 adds plan-bound regional pricing. The provider-generated plan policy evaluation and 12-line live-price evaluation are recorded in tickets #520/#522; pricing used synthetic customer context and is not customer-approval evidence. Effective-permission evidence remains open. | [`test255.md`](../test/test255.md) is EKS. [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437) records isolated ECS Express create, health, update, failed-revision rollback, and teardown; accepted for the general customer-side gate but not Nova execution. | No ECS/Fargate API-plus-worker behavior, Nova-generated plan, complete effective-permission evidence, or catalog-root binding proof |
 | `aws-virtual-machine-service` | — | `aws-ec2-autoscaling` | Merged source PR #402 checks IMDSv2 for planned EC2 shapes and requires regional metadata defaults to require tokens; PR #483 bounds one same-plan `t3.micro` Auto Scaling profile. | [`test244.md`](../test/test244.md) records the zero-capacity profile; merged PR #485 [`test485.md`](../test/test485.md) records direct same-account capacity 1→2→1 and EC2 system/instance checks; PR #486 [`test486.md`](../test/test486.md) records encrypted root-volume cycles and teardown. | No guest application health, image provenance, scoped instance-role evidence, update/recovery, complete cost, or Nova dispatch; metadata defaults can be overridden and are not account-wide enforcement |
 | `aws-kubernetes-platform` | `kubernetes` | `aws-eks-cluster`, `aws-ecr-image`, `aws-vpc-private-network` | Merged PR #499 adds source-only private endpoint, supported-version, control-plane log, same-plan cluster/role/template, and bounded managed-node checks. It does not cover Kubernetes RBAC, admission, image provenance, or workload identity. | [`test255.md`](../test/test255.md) deployed a workload and probed its service | No Nova-hosted cluster lifecycle, upgrade/failure recovery, or independent cleanup proof |
 | `aws-identity` | `web-application` | No Cognito or application-identity root | No customer-identity tenant/MFA/session policy in generated-plan policy | No customer workload identity probe mapped to this module | No Nova-hosted sign-up, authorization, revocation, or identity-recovery proof |

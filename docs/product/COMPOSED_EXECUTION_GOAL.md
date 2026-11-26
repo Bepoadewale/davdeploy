@@ -9,41 +9,41 @@ lifecycle coverage remain distinct.
 
 ### Reconciliation after PR #518
 
-The current backend `main` is `483b59c9adaa8fc6ba63fd6928b4a1b097669b27`.
-PR #520 is merged at `c9ece16291af2c6a659e47ca0bad2867b2fd16c3`; its
-final-head run [45899643291](https://github.com/Bepoadewale/davdeploy/actions/runs/45899643291)
-and merged-main checks passed all seven jobs. PR #521 remains part of the
-source baseline and keeps the Nova control-plane Lambda environment within its
-quota; it does not change customer workload acceptance evidence.
+The current backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`
+(merged PR #522). PR #520 is merged at
+`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`; its final-head and merged-main CI
+passed all seven checks in
+[45899643291](https://github.com/Bepoadewale/davdeploy/actions/runs/45899643291).
+PR #522's final-head run [45900573713](https://github.com/Bepoadewale/davdeploy/actions/runs/45900573713)
+also passed all seven checks. PR #521 remains in the source baseline and keeps
+the Nova control-plane Lambda environment within quota; it does not change
+customer-workload acceptance evidence.
 
-The remaining ECS Express implementation packages are:
+The ECS Express implementation and evidence stack is:
 
 - PR #519 (`403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`) adds a default-off,
   project-scoped ECS Express renderer and bounded runner. Its final-head CI
   run [45884741945](https://github.com/Bepoadewale/davdeploy/actions/runs/45884741945)
-  passed all seven checks. IAM/effective-permission review, provider-generated
-  actual-plan validation, complete cost review, and its isolated runner cycle
-  remain open.
+  passed all seven checks. Effective role-permission review and its isolated
+  runner cycle remain open.
 - PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged the
   source-only ECS Express actual-plan policy. An actual provider-generated
   saved-plan fixture was generated and evaluated under this policy, producing
   three review findings and no policy denials. Effective role-permission
   evidence remains open.
-- PR #522 (`5c934c014b50c476d16391d73f7e0e99eaf94dfc`), based on current
-  `main`, adds the ECS Express regional cost model and plan-bound usage
-  assumptions. Its current CI run
-  [45900205778](https://github.com/Bepoadewale/davdeploy/actions/runs/45900205778)
-  has five checks passed and two running (cloud-contracts and local-e2e). It
-  includes both target-tracking alarms. A fresh complete live regional pricing
-  evaluation is unavailable because ECR and ECS price lookups failed; cost
-  review remains open.
+- PR #522 (`a04c5909075bfe975ba1628aeef9851a7b317784`) merged the plan-bound
+  regional pricing model, including both target-tracking alarms. A live AWS
+  Price List evaluation covered 12 lines and returned a modeled range of USD
+  1.27–415.81/month under synthetic usage assumptions. Its context digest was
+  synthetic and no customer budget was supplied, so this is not customer
+  approval evidence. Draft PR #524 corrects the original ticket's
+  approval-eligibility wording.
 
-PR #519 and #522 remain drafts with no recorded GitHub review. PR #519 remains
-unmerged on its earlier source base; PR #522 is based on current `main` after
-#520 merged. Review the source stack before merging or enabling a renderer.
-PR #520's policy and tests are merged. The #519 worktree has untracked
-provider-plan stdout/stderr files; preserve them locally and do not publish
-their contents.
+PR #519 remains an open draft with no recorded GitHub review and is based on
+its earlier source revision. PR #524 is an open draft that corrects pricing
+evidence wording. Review the #519 source stack before merging or enabling a
+renderer. The #519 worktree has untracked provider-plan stdout/stderr files;
+preserve them locally and do not publish their contents.
 
 The Terraform run monitor currently has 75 terminal records and zero active
 runs; process inspection found no Terraform plan, apply, or destroy process.

@@ -25,37 +25,40 @@ complete.
 
 ## Current repo state
 
-- Backend `main` is `483b59c9adaa8fc6ba63fd6928b4a1b097669b27`.
+- Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba` (merged PR #522).
 - PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged; all seven
   final-head and merged-main checks passed in run `45899643291`.
 - PR #519 remains an open draft at `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`;
   its seven checks passed in run `45884741945`.
-- PR #522 remains a draft at `5c934c014b50c476d16391d73f7e0e99eaf94dfc`.
-  Run `45900205778` has five checks passed and two running; its watcher is
-  active. Its complete live cost evaluation remains unavailable.
+- PR #522 (`a04c5909075bfe975ba1628aeef9851a7b317784`) merged after all seven
+  checks passed in run `45900573713`.
+- PR #524 is an open draft correcting the merged #522 ticket's claim that a
+  synthetic-context price run is customer-approval-eligible.
 - The direct ECS Express lifecycle evidence in PR #437 and private Batch
   evidence in PR #517 satisfy the general customer-side lifecycle gate for
   those exact tested shapes; neither proves Nova dispatch.
 - The actual-plan policy is merged and has been exercised with a provider-
-  generated saved plan; effective IAM review, complete cost review, and the
-  isolated ECS Express runner lifecycle remain open.
+  generated saved plan; effective IAM review and the isolated ECS Express
+  runner lifecycle remain open.
 
 ## Evidence checked
 
-- Current backend `main`: `483b59c9adaa8fc6ba63fd6928b4a1b097669b27`.
+- Current backend `main`: `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`.
 - PR #519 head `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`, final-head run
   `45884741945`: seven checks passed.
 - PR #520 head `c9ece16291af2c6a659e47ca0bad2867b2fd16c3`, run
   `45899643291`: all seven final-head and merged-main checks passed; merged.
-- PR #522 head `5c934c014b50c476d16391d73f7e0e99eaf94dfc`, run
-  `45900205778`: five checks passed and two were running at this snapshot.
-  It includes pricing for both target-tracking alarms; a full fresh live price
-  evaluation is unavailable because ECR and ECS regional lookups failed.
-- PR #519 and #522 remain open drafts with no recorded reviews. PR #522 now
-  targets current `main`; #520's policy and tests are merged.
+- PR #522 head `a04c5909075bfe975ba1628aeef9851a7b317784`, run
+  `45900573713`: all seven checks passed and it merged.
+- PR #519 remains an open draft; PR #524 is an open draft correction. PR #520
+  and #522 are merged.
 - A provider-generated saved plan from the PR #519 root was evaluated under
   #520 policy. It yielded three review findings and no policy denials; this is
   plan-policy evidence only, not remote-state runner or lifecycle evidence.
+- A live Price List evaluation of the saved plan returned 12 modeled lines
+  and USD 1.27–415.81/month under synthetic usage assumptions. Its context
+  digest was synthetic and no customer budget was supplied; it is not
+  approval-bound customer pricing evidence.
 - The Terraform monitor reports 75 terminal records and no active operations;
   process inspection found no active Terraform plan, apply, or destroy.
 - Read-only AWS checks verified the customer-side account and found seven
@@ -93,7 +96,7 @@ complete.
 
 - [x] The handoff identifies the current `main` baseline and does not list the
   merged PR #518 documentation reconciliation as pending work.
-- [x] The current open PR stack, heads, passing final-head CI runs, dependencies,
+- [x] The current open PRs, merged #520/#522 heads, passing final-head CI,
   and unresolved review/evidence gates are recorded.
 - [x] Direct ECS Express and Batch evidence remains accepted for the exact
   customer-side shapes tested and is not represented as Nova dispatch.
@@ -106,9 +109,9 @@ complete.
 
 ## Acceptance status
 
-The handoff and matrix are reconciled to current `main`, merged PR #520, and
-the current open PR state. Documentation checks pass; final-head CI remains
-to be completed.
+The handoff and matrix are reconciled to current `main`, merged PRs #520/#522,
+and open PRs #519/#524. Documentation checks pass; final-head CI remains to
+be completed after this update.
 
 ## Tests / validation performed
 
