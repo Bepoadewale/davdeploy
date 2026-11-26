@@ -23,6 +23,9 @@ renderer or execute any AWS operation.
 - Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba` (merged PR #522).
 - PR #519 is an open draft at `00697d7b6b84ed7d0ff0fef7effb7cf0037392e7`; its
   seven final-head checks passed in run `45903656967`.
+- PR #523 is an open Nova handoff draft at
+  `869b52654d051d027ee7b6ee76027b0f1e10088e`; all seven checks passed in run
+  `45909631318`.
 - PR #524 is an open documentation draft at
   `75841d3ac80e8020b1b616fef07055167a8381c6`; all seven checks passed in run
   `45907870966`.
@@ -59,8 +62,11 @@ renderer or execute any AWS operation.
 - AWS [ECS service authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html): ECS Express create/update/delete actions and their resource/condition keys; create/update also require `iam:PassRole` for the ECS service roles.
 - AWS [ECS Gateway permission troubleshooting](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/gateway-troubleshooting.html): caller permissions and the ECS infrastructure role are separate permission paths; `iam:PassRole` must identify the exact role.
 - [Nova apply policy builder](../../apps/api/src/davdeploy/nova_apply_access.py) — the current supported plan-scoped resource profiles.
+- [ECS Express execution identity and permission boundary](../security/ECS_EXPRESS_EXECUTION_IAM.md) — findings and proposed role separation.
 
 ## Work planned for the PR
+
+The following review and documentation work is now complete in this draft PR.
 
 1. Document the existing ECS Express role-assumption flow and the verified
    `AdministratorAccess` path.
@@ -82,23 +88,23 @@ renderer or execute any AWS operation.
 
 ## Acceptance criteria
 
-- [ ] The actual runner credential path and current `AdministratorAccess`
+- [x] The actual runner credential path and current `AdministratorAccess`
   grant are documented with source references.
-- [ ] Role responsibilities remain separate for planning, state, apply or
+- [x] Role responsibilities remain separate for planning, state, apply or
   destroy, observation, and image publishing.
-- [ ] The proposed apply policy binds only supported resource changes from the
+- [x] The proposed apply policy binds only supported resource changes from the
   exact approved plan, and binds its policy digest to that plan and approval.
-- [ ] `iam:PassRole` is limited to exact connection-scoped task and
+- [x] `iam:PassRole` is limited to exact connection-scoped task and
   infrastructure role ARNs and the documented ECS service principals.
-- [ ] Unsupported resources, actions, unscopable identities, oversized
+- [x] Unsupported resources, actions, unscopable identities, oversized
   policies, missing role-profile evidence, and simulation mismatches fail
   closed.
-- [ ] The design does not rely only on implicit session-policy denies where a
+- [x] The design does not rely only on implicit session-policy denies where a
   resource policy may grant directly to the role session.
-- [ ] The customer runner, renderer, and hosted control plane remain disabled
+- [x] The customer runner, renderer, and hosted control plane remain disabled
   or unchanged; no AWS mutation is performed.
-- [ ] Documentation conventions, `git diff --check`, and all final-head CI
-  checks pass.
+- [x] Documentation conventions and `git diff --check` pass locally.
+- [ ] All final-head CI checks pass.
 
 ## Acceptance status
 
