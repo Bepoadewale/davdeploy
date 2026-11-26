@@ -14,7 +14,13 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`c6b069037516610bd57cca877dfb52af1dfc71a6` (PR #514). PR #506 makes the
+`78cab9b943c2215826fd26fd3cf0d90376cf46a7` (PR #515). PR #515 adds
+source-only, fail-closed generated-plan bounds for selected VPC endpoints;
+all seven checks passed on final PR head `e917c30` in run
+[45776482608](https://github.com/Bepoadewale/davdeploy/actions/runs/45776482608),
+and all seven merged-main checks passed in run
+[45777351766](https://github.com/Bepoadewale/davdeploy/actions/runs/45777351766).
+This package changed no AWS workload or hosted control-plane resource. PR #506 makes the
 26-architecture / 30-root crosswalk machine-checkable without enabling runtime
 dispatch. PR #507 adds trusted usage assumptions and regional Fargate compute
 price lines for the bounded Batch job shape. Final-head CI passed all seven
