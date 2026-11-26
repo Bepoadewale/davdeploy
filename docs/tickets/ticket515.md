@@ -75,6 +75,8 @@ in the endpoint plan must also bind to a known same-plan security group.
   [45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
 - [x] All seven documentation-head CI checks passed on `61db1e6` in run
   [45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900).
+- [ ] Fresh CI and clean-room evidence for the added unknown security-group
+  rule-binding regression are pending.
 - [ ] The PR is reviewed and merged.
 - [x] No AWS resources, Terraform state/locks, hosted control-plane resources,
   customer workloads, `--only-show-errors`, or `.venv-pr399/` are changed.
@@ -83,23 +85,27 @@ in the endpoint plan must also bind to a known same-plan security group.
 
 - [x] Draft PR opened before substantive implementation and matching ticket created.
 - [x] Implementation and endpoint regression coverage are complete locally.
-- [x] Full local verification and documentation validation are complete.
+- [x] Full local verification and documentation validation pass on current
+  worktree changes: `make VENV=... verify` reports 1,970 passed; docs checks
+  and Ruff pass.
 - [x] All seven checks passed in run `45774078900` on source commit `61db1e6`.
 - [ ] The subsequent fail-closed rule-target check and regression test require
   a fresh final-head CI run before merge.
-- [x] The isolated clean-room sequence, including final cleanup and independent
-  absence checks for generated files and project-scoped Docker resources, is
-  complete.
+- [x] The prior clean-room sequence and cleanup at code head `870ce27` are
+  complete. The new rule-binding regression still requires a fresh full clean-room
+  cycle before merge.
 - [ ] Review and merge remain pending.
 - [x] No customer workload or cloud mutation is in scope.
 
 ## Tests / validation performed
 
-- Focused `tests/test_generated_plan_policy.py` and `tests/test_generated_plan_pricing.py`: 794 passed.
+- Focused policy/pricing tests before the final rule-binding fix: 794 passed.
+- Current `tests/test_generated_plan_policy.py`: 638 passed after the
+  rule-binding regression was added.
 - Focused updated `tests/test_generated_plan_policy.py`: 638 passed.
 - Ruff check on the changed policy and test files passed.
 - `git diff --check` passed.
-- Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify`: 1,970 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
+- Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` on current worktree changes: 1,970 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
 - `GITHUB_PR_NUMBER=515 /Users/adewale/Projects/davdeploy/.venv/bin/python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - All seven GitHub final-head checks passed on source commit `61db1e6` in
@@ -112,7 +118,9 @@ in the endpoint plan must also bind to a known same-plan security group.
   `davdeploy-pr515-cleanroom_davdeploy-postgres`, network
   `davdeploy-pr515-cleanroom_default`, and generated `.venv` and `.local`.
   are absent. This agent performed no deletion; the worktree remains.
-- A final code review is in progress; no GitHub review has been submitted.
+- The final code review identified the need to reject unknown security-group
+  rule targets whenever an interface endpoint is present. The new regression
+  test and fail-closed check pass locally. No GitHub review has been submitted.
 
 
 ## Evidence files produced
