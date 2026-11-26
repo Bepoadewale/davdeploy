@@ -2,7 +2,7 @@
 
 Date: 2026-11-26.
 
-Execution type: Direct same-account AWS infrastructure validation. The PR #517 stack was provisioned and then destroyed. No Batch job was submitted; private image pull, CloudWatch job-log delivery, and application readiness are not proven.
+Execution type: Direct same-account AWS infrastructure validation. The PR #517 stack was provisioned and destroyed. One Batch job was submitted but failed with `JobQueue deleted` while a concurrent cleanup was removing the queue. Private image pull, CloudWatch job-log delivery, and application readiness are not proven.
 
 Customer repository: None; disposable DavDeploy test environment.
 
@@ -22,7 +22,7 @@ AWS region: `us-east-1`.
 
 The hosted control plane and its state/lock resources were not changed. The AWS work used only the exact PR #517 disposable test stack described below. The user explicitly approved cleanup of that exact test scope. No Nova dispatch or customer workload execution is claimed.
 
-The test was originally bounded to one hour and a USD $1.00 estimated-cost ceiling; this estimate is not an AWS billing cap. The actual AWS stack existed from the successful apply at `2026-11-26T14:39:36Z` through destroy completion at `2026-11-26T14:55:00Z` (about 16 minutes). No Batch job was submitted.
+The test was originally bounded to one hour and a USD $1.00 estimated-cost ceiling; this estimate is not an AWS billing cap. The actual AWS stack existed from the successful apply at `2026-11-26T14:39:36Z` through destroy completion at `2026-11-26T14:55:00Z` (about 16 minutes). One job was submitted and failed because its queue was deleted during cleanup.
 
 ## Resources created
 
@@ -44,6 +44,8 @@ The last tagged digest was a duplicate produced by a second image build. All fiv
 - `AWS_PROFILE=ai-platform-pilot-key aws ecr batch-delete-image --region us-east-1 --repository-name davdeploy-batch-private-endpoints-517-20261126a --image-ids <the five exact imageDigest values listed above>` — all five deleted, no failures.
 - `AWS_PROFILE=ai-platform-pilot-key python3 scripts/terraform_run_monitor.py start destroy infrastructure/terraform/module-validation/batch-private-endpoints --run-id nova-batch517-cleanup-approved-20261126 --terraform-arg=/private/tmp/davdeploy-batch-private-endpoints-517-20261126a/destroy-approved.tfplan` — Terraform rejected the command before changes because a saved destroy plan must be applied with `terraform apply`.
 - `AWS_PROFILE=ai-platform-pilot-key python3 scripts/terraform_run_monitor.py start apply infrastructure/terraform/module-validation/batch-private-endpoints --run-id nova-batch517-cleanup-approved-apply-20261126 --terraform-arg=/private/tmp/davdeploy-batch-private-endpoints-517-20261126a/destroy-approved.tfplan` — succeeded; 0 added, 0 changed, 23 destroyed.
+- `AWS_PROFILE=ai-platform-pilot-key aws batch submit-job --region us-east-1 --job-name davdeploy-private-batch-517-20261126a --job-queue davdeploy-batch-private-endpoints-517-20261126a --job-definition davdeploy-batch-private-endpoints-517-20261126a` — submitted job `3d1b3de1-0e7b-4a7f-8605-bb7f37777f2d`. It entered `STARTING` and then failed with status reason `JobQueue deleted`.
+- A concurrent monitored cleanup run `nova-batch517-cleanup-approved-apply-20261126` deleted the queue during the job startup. AWS CloudTrail records the exact `DeleteJobQueue` event under the expected account user at `2026-11-26T14:53:02+01:00`; no replacement job was submitted. The image pull and CloudWatch log path therefore remain unproven.
 - Independent AWS service-specific `describe` calls checked the exact VPC, subnets, route table, VPC endpoint IDs, security groups/rules, Batch environment and queue, ECR repository, log group, task role, service-linked role, and inactive job definition.
 
 ## Apply and cleanup evidence
@@ -59,7 +61,7 @@ The last tagged digest was a duplicate produced by a second image build. All fiv
 
 ## Observed result
 
-No Batch job was submitted. Therefore no claim is made that Fargate reached the image, downloaded it privately, started the container, sent CloudWatch logs, or reached application readiness. This run proves infrastructure provisioning and cleanup only.
+One Batch job was submitted, but it failed with `JobQueue deleted` during the concurrent Terraform cleanup. No claim is made that Fargate reached the image, downloaded it privately, started the container, sent CloudWatch logs, or reached application readiness. This run proves infrastructure provisioning and cleanup only.
 
 ## Teardown
 
