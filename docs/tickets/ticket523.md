@@ -146,8 +146,9 @@ complete.
 ## Acceptance status
 
 The handoff and matrix are reconciled to current `main`, merged PRs #520/#522,
-and open drafts #519/#524/#525/#526/#527. All recorded PR #527 heads passed
-final-head CI; this handoff update requires its own final-head CI.
+and open drafts #519/#524/#525/#526/#527. All recorded PR #527 heads and
+this handoff update passed final-head CI; a status-only follow-up records the
+current run.
 
 ## Tests / validation performed
 
@@ -156,6 +157,8 @@ final-head CI; this handoff update requires its own final-head CI.
 - Final-head run `45908603081` on `667de8be`: all seven checks passed.
 - Follow-up ticket-status commit `5b6fd18d` passed all seven checks in run
   `45909113939`.
+- Handoff head `9bddba795ea62eff0a7c07e7774057c1486a4f42` passed all seven
+  final-head checks in run `45912889818`.
 
 ## Boundaries
 
