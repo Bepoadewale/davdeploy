@@ -51,14 +51,14 @@ The ECS Express implementation and evidence stack is:
   passed all seven checks. It changed no cloud resources.
 - Draft PR #527 (`4ac9ab04`, based on #526) maps the AWS action/resource
   boundary for the ECS Express root. Current AWS references show a composite
-  ECS API path and the pilot's initial combined plan cannot bind the ECS
-  subnet condition to subnet IDs that do not yet exist. It records a required
-  foundation/service phase split and remains documentation-only. All seven
-  checks passed on content head `4ac9ab04` in run
-  [45911833917](https://github.com/Bepoadewale/davdeploy/actions/runs/45911833917),
-  and its ticket-status head `36fa7031` passed all seven checks in run
-  [45912427843](https://github.com/Bepoadewale/davdeploy/actions/runs/45912427843).
-  No AWS, hosted control-plane, state or lock mutation occurred.
+  ECS API path. It confirms the current runner already stages foundation
+  plan/apply, image publication, and a separate service plan/apply, while
+  warning that the phases still lack distinct least-privilege credentials.
+  The service plan must bind to verified subnet IDs from the applied
+  foundation state. Head `e5aff6f9` passed all seven checks in run
+  [45913543343](https://github.com/Bepoadewale/davdeploy/actions/runs/45913543343);
+  ticket-status head `fca8dd0b` is pending its own final-head checks. No AWS,
+  hosted control-plane, state or lock mutation occurred.
 
 PR #519 remains an open draft with no recorded GitHub review and is based on
 its earlier source revision. PR #524 is an open draft that corrects pricing

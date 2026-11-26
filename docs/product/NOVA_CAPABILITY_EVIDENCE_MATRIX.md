@@ -16,12 +16,12 @@ wording and its final-head CI passed all seven checks. PR #526's sourced
 security review found that the runner assumes its customer execution role
 without an STS session policy and that `administrator-pilot` can attach
 `AdministratorAccess`; its seven final-head checks passed in run
-`45910551656`. PR #527 adds a sourced AWS action/resource map and identifies
-the computed-subnet gap that requires foundation and ECS service to use
-separate approved plans; its final-head CI run `45911833917` is in progress.
-All seven checks passed on content head `4ac9ab04` in run `45911833917` and
-ticket-status head `36fa7031` in run `45912427843`. Both are documentation-
-only: the renderer remains disabled, and effective
+`45910551656`. PR #527 adds a sourced AWS action/resource map. It confirms the
+runner already stages foundation and service plans, but those phases still
+lack distinct least-privilege credentials and exact plan-bound policy. All
+seven checks passed on head `e5aff6f9` in run `45913543343`; ticket-status head
+`fca8dd0b` is pending its own CI. Both are documentation-only: the renderer
+remains disabled, and effective
 role permissions plus an isolated runner lifecycle remain open. PR #517
 adds a backward-compatible private Batch Fargate network option and records
 one successful private endpoint job in direct same-account AWS evidence. Its
