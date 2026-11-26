@@ -70,7 +70,9 @@ blockers. This is a source-only policy package.
 - [x] Existing VPC route and NAT policy remains unchanged for endpoint-free
   plans; the existing unsupported-route regression remains valid.
 - [x] Focused policy and pricing tests pass, documentation conventions pass, and `git diff --check` passes.
-- [ ] Final-head CI checks pass and the PR is reviewed/merged.
+- [x] All seven final-head CI checks passed on head `870ce271` in run
+  [45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+- [ ] The PR is reviewed and merged.
 - [x] No AWS resources, Terraform state/locks, hosted control-plane resources,
   customer workloads, `--only-show-errors`, or `.venv-pr399/` are changed.
 
@@ -79,7 +81,7 @@ blockers. This is a source-only policy package.
 - [x] Draft PR opened before substantive implementation and matching ticket created.
 - [x] Implementation and endpoint regression coverage are complete locally.
 - [x] Full local verification and documentation validation are complete.
-- [ ] Final-head CI, review, and merge remain pending.
+- [x] Final-head CI passes; review and merge remain pending.
 - [x] No customer workload or cloud mutation is in scope.
 
 ## Tests / validation performed
@@ -90,7 +92,10 @@ blockers. This is a source-only policy package.
 - Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify`: 1,969 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
 - `GITHUB_PR_NUMBER=515 /Users/adewale/Projects/davdeploy/.venv/bin/python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- GitHub final-head CI is pending.
+- All seven GitHub final-head checks passed in
+  [run 45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+- No GitHub review has been submitted yet; the PR remains a draft pending
+  review.
 
 ## Evidence files produced
 

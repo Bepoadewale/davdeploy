@@ -54,9 +54,13 @@ Merged-main checks passed all seven in run
 PR #515 is an open draft extending the generated-plan policy to those exact
 endpoint classes: interface endpoints are bound to same-plan private subnets
 and a Batch security-group HTTPS path, and gateway endpoints to the private
-route table. Focused policy and pricing tests pass (793 tests); full local verification
-passes (1,969 tests, one upstream deprecation warning). Documentation checks and
-`git diff --check` pass; final-head PR CI is pending. This package remains source-only. AWS inventory was read-only
+route table. Focused policy and pricing tests pass (793 tests); full local
+verification passes (1,969 tests, one upstream deprecation warning).
+Documentation checks and `git diff --check` pass. All seven checks passed on
+final head `870ce271` in
+[run 45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+No GitHub review has been submitted, so the PR remains a draft. This package is
+source-only. AWS inventory was read-only
 reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
 configuration, test role, and artifact bucket are absent; five tagged Batch
 test definitions are inactive and no matching Batch queues or compute
