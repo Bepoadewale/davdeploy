@@ -60,18 +60,21 @@ blockers. This is a source-only policy package.
   endpoints and S3/DynamoDB gateway endpoints can pass the VPC endpoint rule.
 - [x] Each interface endpoint is bound to the same planned VPC and one or more
   known private subnets, no more than one selected subnet per AZ, private DNS,
-  IPv4, and a narrowly reviewed HTTPS security-group path.
+  IPv4, and a narrowly reviewed HTTPS security-group path. Every security-group rule
+in the endpoint plan must also bind to a known same-plan security group.
 - [x] Each gateway endpoint is bound to the same planned VPC and supported
   same-plan private route tables; its plan shape has no unsupported endpoint
   arguments or route overrides.
 - [x] Unsupported services/types, missing or unknown bindings, cross-region
-  services, public/ambiguous subnet selection, broad ingress, and unreviewed
+  services, public/ambiguous subnet selection, broad ingress, unknown security-group rule bindings, and unreviewed
   endpoint/network paths fail closed or remain explicit review blockers.
 - [x] Existing VPC route and NAT policy remains unchanged for endpoint-free
   plans; the existing unsupported-route regression remains valid.
 - [x] Focused policy and pricing tests pass, documentation conventions pass, and `git diff --check` passes.
-- [x] All seven final-head CI checks passed on head `870ce271` in run
+- [x] All seven code-head CI checks passed on `870ce27` in run
   [45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+- [x] All seven documentation-head CI checks passed on `61db1e6` in run
+  [45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900).
 - [ ] The PR is reviewed and merged.
 - [x] No AWS resources, Terraform state/locks, hosted control-plane resources,
   customer workloads, `--only-show-errors`, or `.venv-pr399/` are changed.
@@ -81,51 +84,36 @@ blockers. This is a source-only policy package.
 - [x] Draft PR opened before substantive implementation and matching ticket created.
 - [x] Implementation and endpoint regression coverage are complete locally.
 - [x] Full local verification and documentation validation are complete.
-- [x] Final-head CI passed all seven checks in run `45724497158` on source
-  commit `b270717`.
-- [x] The isolated clean-room sequence passed through `verify`; its final
-  cleanup is pending approval for the temporary artifacts listed below.
+- [x] All seven checks passed in run `45774078900` on source commit `61db1e6`.
+- [ ] The subsequent fail-closed rule-target check and regression test require
+  a fresh final-head CI run before merge.
+- [x] The isolated clean-room sequence, including final cleanup and independent
+  absence checks for generated files and project-scoped Docker resources, is
+  complete.
 - [ ] Review and merge remain pending.
 - [x] No customer workload or cloud mutation is in scope.
 
 ## Tests / validation performed
 
-- Focused `tests/test_generated_plan_policy.py` and `tests/test_generated_plan_pricing.py`: 793 passed.
+- Focused `tests/test_generated_plan_policy.py` and `tests/test_generated_plan_pricing.py`: 794 passed.
+- Focused updated `tests/test_generated_plan_policy.py`: 638 passed.
 - Ruff check on the changed policy and test files passed.
 - `git diff --check` passed.
-- Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify`: 1,969 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
+- Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify`: 1,970 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
 - `GITHUB_PR_NUMBER=515 /Users/adewale/Projects/davdeploy/.venv/bin/python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- All seven GitHub final-head checks passed in
-  [run 45773403178](https://github.com/Bepoadewale/davdeploy/actions/runs/45773403178).
+- All seven GitHub final-head checks passed on source commit `61db1e6` in
+  [run 45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900).
 - Isolated local clean-room worktree `/private/tmp/davdeploy-pr515-cleanroom-20261126`
   at `870ce27` passed initial clean from an empty project, bootstrap, smoke,
   simple/complex/degraded/Day-2/failure/readiness demos, trace check, and full
-  verification (1,969 passed). Its final `clean-local` has not run.
-- No GitHub review has been submitted yet; the PR remains a draft pending
-  review.
+  verification (1,969 passed). A later read-only inventory confirmed the nine
+  `davdeploy-pr515-cleanroom` containers, volume
+  `davdeploy-pr515-cleanroom_davdeploy-postgres`, network
+  `davdeploy-pr515-cleanroom_default`, and generated `.venv` and `.local`.
+  are absent. This agent performed no deletion; the worktree remains.
+- A final code review is in progress; no GitHub review has been submitted.
 
-### Exact local cleanup awaiting approval
-
-The final project-scoped `make clean-local` would remove only:
-
-- Nine containers: `davdeploy-pr515-cleanroom-api-1`,
-  `davdeploy-pr515-cleanroom-fixture-executor-1`,
-  `davdeploy-pr515-cleanroom-grafana-1`,
-  `davdeploy-pr515-cleanroom-opa-1`,
-  `davdeploy-pr515-cleanroom-otel-collector-1`,
-  `davdeploy-pr515-cleanroom-postgres-1`,
-  `davdeploy-pr515-cleanroom-prometheus-1`,
-  `davdeploy-pr515-cleanroom-tempo-1`, and
-  `davdeploy-pr515-cleanroom-worker-1`.
-- Docker volume `davdeploy-pr515-cleanroom_davdeploy-postgres` and network
-  `davdeploy-pr515-cleanroom_default`.
-- Generated `/private/tmp/davdeploy-pr515-cleanroom-20261126/.venv` (170 MB)
-  and `.local` (1.2 MB).
-
-The worktree itself will remain for source/evidence review. No other Docker
-project, local file, AWS resource, Terraform state/lock, or hosted control-plane
-resource is in the cleanup scope.
 
 ## Evidence files produced
 

@@ -2257,6 +2257,23 @@ def _check_vpc_topology(
                     if group.get("address") == group_address
                     and references_only_targets(group, "vpc_id", vpc_candidates, {vpc_address})
                 }
+                for rule in resources:
+                    if rule.get("type") not in {
+                        "aws_vpc_security_group_ingress_rule",
+                        "aws_vpc_security_group_egress_rule",
+                        "aws_security_group_rule",
+                    }:
+                        continue
+                    if not endpoint_bound_targets(
+                        rule.get("address"), "security_group_id", security_groups
+                    ):
+                        _deny(
+                            findings,
+                            "vpc_interface_endpoint_rule_binding_unknown",
+                            address,
+                            "Every security-group rule in an interface-endpoint plan must bind to a known same-plan security group.",
+                        )
+                        break
                 valid_endpoint_groups: set[str] = set()
                 for group in security_groups:
                     group_address = group.get("address")

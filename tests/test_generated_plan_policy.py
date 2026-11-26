@@ -562,6 +562,34 @@ def test_vpc_plan_rejects_interface_ingress_from_unbound_security_group():
     assert "vpc_interface_endpoint_ingress_invalid" in {item.code for item in findings}
 
 
+def test_vpc_plan_rejects_unbound_security_group_rule_when_interface_endpoint_exists():
+    resources, configuration = vpc_endpoint_case()
+    egress = resource(
+        "aws_vpc_security_group_egress_rule.unknown",
+        "aws_vpc_security_group_egress_rule",
+        {
+            "security_group_id": None,
+            "ip_protocol": "-1",
+            "from_port": None,
+            "to_port": None,
+            "cidr_ipv4": "0.0.0.0/0",
+            "cidr_ipv6": None,
+            "prefix_list_id": None,
+        },
+    )
+    resources.append(egress)
+    configuration["configuration"]["root_module"]["resources"].append(
+        {
+            "address": "aws_vpc_security_group_egress_rule.unknown",
+            "expressions": {"security_group_id": {"references": ["var.unknown_group_id"]}},
+        }
+    )
+
+    findings = vpc_findings(resources, configuration)
+
+    assert "vpc_interface_endpoint_rule_binding_unknown" in {item.code for item in findings}
+
+
 @pytest.mark.parametrize(
     ("service", "mutation", "finding"),
     [

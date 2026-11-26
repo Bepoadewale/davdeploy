@@ -1,11 +1,11 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-25. This handoff tracks the Nova-led infrastructure goal
+Updated: 2026-11-26. This handoff tracks the Nova-led infrastructure goal
 without claiming launch readiness. Source, hosted control-plane state,
 customer-side AWS evidence, Nova execution, application behavior, and per-entry
 lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-25
+## Current source and acceptance status — 2026-11-26
 
 The next major engineering goal is registered in the
 [AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
@@ -52,17 +52,19 @@ and all seven checks passed on final PR head in run
 Merged-main checks passed all seven in run
 [45697443528](https://github.com/Bepoadewale/davdeploy/actions/runs/45697443528).
 PR #515 is an open draft extending the generated-plan policy to those exact
-endpoint classes: interface endpoints are bound to same-plan private subnets
+endpoint classes: interface endpoints are bound to same-plan private subnets, enabled VPC DNS,
 and a Batch security-group HTTPS path, and gateway endpoints to the private
-route table. Focused policy and pricing tests pass (793 tests); full local
-verification passes (1,969 tests, one upstream deprecation warning).
+route table. Focused policy and pricing tests pass (794 tests); full local
+verification passes (1,970 tests, one upstream deprecation warning).
 Documentation checks and `git diff --check` pass. All seven checks passed on
-final head `b270717` in
-[run 45773403178](https://github.com/Bepoadewale/davdeploy/actions/runs/45773403178).
-The isolated workstation clean-room sequence at that head passed through the
-full `verify` step (1,969 tests); its final `clean-local` is pending approval
-for removal of the exact generated local artifacts recorded in ticket #515.
-The nine project-scoped containers have been stopped. No GitHub review has been
+code head `61db1e6` in
+[run 45774078900](https://github.com/Bepoadewale/davdeploy/actions/runs/45774078900); a subsequent policy hardening requires a fresh final-head CI run before merge.
+The isolated workstation clean-room sequence at `870ce27` passed through the
+full `verify` step (1,969 tests); the later fail-closed policy refinement passed
+full local verification (1,970 tests) and awaits the final-head PR CI result.
+A read-only inventory confirmed the nine project containers, PostgreSQL volume,
+network, and generated `.venv` and `.local` are absent; this agent performed no
+deletion. The clean-room worktree remains for evidence review. No GitHub review has been
 submitted, so the PR remains a draft. This package is source-only. AWS inventory was read-only
 reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
 configuration, test role, and artifact bucket are absent; five tagged Batch
@@ -88,9 +90,13 @@ hosted backend release remains PR #420 commit
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
 [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
-This reconciliation did not access or change the hosted control plane. The
-recorded health observation belongs to the earlier deployment check and was
-not repeated here.
+Read-only AWS Lambda inspection confirmed the API and worker functions remain
+`Active`, last modified `2026-11-16T23:53:32Z`, with matching code hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; a fresh read-only
+`GET /healthz` returned `{"status":"ok","product":"davdeploy"}`. This
+confirms the recorded PR #420 deployment is healthy; it does not prove that
+source changes after PR #420 are deployed. No hosted-control-plane mutation
+occurred.
 
 Merged PR #510 binds a digest-pinned, same-region Batch image to exactly one
 same-plan private ECR repository, requiring its registry account to be known in
