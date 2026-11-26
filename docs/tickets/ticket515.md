@@ -81,7 +81,11 @@ blockers. This is a source-only policy package.
 - [x] Draft PR opened before substantive implementation and matching ticket created.
 - [x] Implementation and endpoint regression coverage are complete locally.
 - [x] Full local verification and documentation validation are complete.
-- [x] Final-head CI passes; review and merge remain pending.
+- [x] Final-head CI passed all seven checks in run `45724497158` on source
+  commit `870ce27`.
+- [x] The isolated clean-room sequence passed through `verify`; its final
+  cleanup is pending approval for the temporary artifacts listed below.
+- [ ] Review and merge remain pending.
 - [x] No customer workload or cloud mutation is in scope.
 
 ## Tests / validation performed
@@ -94,8 +98,34 @@ blockers. This is a source-only policy package.
 - `git diff --check`: passed.
 - All seven GitHub final-head checks passed in
   [run 45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+- Isolated local clean-room worktree `/private/tmp/davdeploy-pr515-cleanroom-20261126`
+  at `870ce27` passed initial clean from an empty project, bootstrap, smoke,
+  simple/complex/degraded/Day-2/failure/readiness demos, trace check, and full
+  verification (1,969 passed). Its final `clean-local` has not run.
 - No GitHub review has been submitted yet; the PR remains a draft pending
   review.
+
+### Exact local cleanup awaiting approval
+
+The final project-scoped `make clean-local` would remove only:
+
+- Nine containers: `davdeploy-pr515-cleanroom-api-1`,
+  `davdeploy-pr515-cleanroom-fixture-executor-1`,
+  `davdeploy-pr515-cleanroom-grafana-1`,
+  `davdeploy-pr515-cleanroom-opa-1`,
+  `davdeploy-pr515-cleanroom-otel-collector-1`,
+  `davdeploy-pr515-cleanroom-postgres-1`,
+  `davdeploy-pr515-cleanroom-prometheus-1`,
+  `davdeploy-pr515-cleanroom-tempo-1`, and
+  `davdeploy-pr515-cleanroom-worker-1`.
+- Docker volume `davdeploy-pr515-cleanroom_davdeploy-postgres` and network
+  `davdeploy-pr515-cleanroom_default`.
+- Generated `/private/tmp/davdeploy-pr515-cleanroom-20261126/.venv` (170 MB)
+  and `.local` (1.2 MB).
+
+The worktree itself will remain for source/evidence review. No other Docker
+project, local file, AWS resource, Terraform state/lock, or hosted control-plane
+resource is in the cleanup scope.
 
 ## Evidence files produced
 
