@@ -46,7 +46,7 @@ and trusted usage bounds.
 
 ## Work planned for the PR
 
-1. Add a strict, versioned trusted ECS Express usage-assumptions model keyed
+1. Add a strict, versioned trusted ECS Express usage-assumptions model bound
    to the exact service address. Include task starts/runtime, Application Load
    Balancer hours and LCU-hours, task and load-balancer public IPv4 address
    seconds, log ingestion/storage, internet egress, and cross-AZ transfer.
@@ -55,7 +55,8 @@ and trusted usage bounds.
 3. Price the one-service fresh-VPC pilot using exact regional AWS Price List
    matches for Fargate, Application Load Balancer, LCU, public IPv4, CloudWatch
    Logs, CloudWatch alarm, ECR storage, and data transfer.
-4. Reuse existing ECR and log-group pricing lines without double counting.
+4. Reuse existing ECR storage and CloudWatch Logs price catalog methods without
+   double counting.
    Treat ACM, VPC, route tables, IAM, service-linked roles, and ECS orchestration
    as no-direct-charge only where official documentation supports that claim.
 5. Keep pricing `INCOMPLETE` for missing, stale, mismatched, unsupported, or
@@ -68,30 +69,30 @@ and trusted usage bounds.
 
 ## Acceptance criteria
 
-- [ ] The price model accepts only the exact single ECS Express pilot shape and
+- [x] The price model accepts only the exact single ECS Express pilot shape and
   binds all usage assumptions to its exact planned service, log group, and
   ECR repository.
-- [ ] Every material billable supporting resource and variable usage dimension
+- [x] Every material billable supporting resource and variable usage dimension
   listed in the design document has a separate regional price line or causes
   an explicit incomplete finding.
-- [ ] Fargate minimum billing duration, partial ALB hours, hourly LCU usage,
+- [x] Fargate minimum billing duration, partial ALB hours, hourly LCU usage,
   IPv4 address duration, CloudWatch log volume, transfer bounds, and ALB
   sharing behavior are represented correctly.
-- [ ] Price evidence includes exact regional SKU, product digest, published
+- [x] Price evidence includes exact regional SKU, product digest, published
   and effective timestamps, and remains bound to the trusted persisted
   assumptions and exact plan digest.
-- [ ] Missing or stale catalog evidence, stale assumptions, unknown resources,
+- [x] Missing or stale catalog evidence, stale assumptions, unknown resources,
   unsupported sharing, and malformed input cannot produce `COMPLETE` pricing.
-- [ ] Existing pricing manifest versions remain readable and canonical; new
+- [x] Existing pricing manifest versions remain readable and canonical; new
   evidence uses a versioned strict shape.
-- [ ] Focused and full relevant tests, lint, docs conventions, clean-room
-  validation, and final-head CI pass.
-- [ ] No AWS workload, hosted control plane, Terraform state, or lock resource
-  is accessed or changed.
+- [ ] Focused and full relevant tests, lint, docs conventions, and final-head CI
+  pass. A full clean-room run is not applicable to this pricing-only change.
+- [x] No AWS workload or hosted control-plane resource is changed; no Terraform
+  plan/apply/destroy or state/lock operation is run.
 
 ## Acceptance status
 
-Design and research recorded. Implementation and validation are pending.
+Implementation and all local validation are complete. Final-head CI is pending.
 
 ## Tests / validation performed
 
@@ -102,7 +103,13 @@ Design and research recorded. Implementation and validation are pending.
 - AWS Price List API product metadata was queried read-only for current
   `us-east-1` Application Load Balancer/LCU and standard CloudWatch alarm
   product families.
-- No code tests or Terraform/cloud operations have been run for this PR yet.
+- `python -m pytest tests/test_generated_plan_pricing.py -q`: 167 passed.
+- `python -m pytest tests -q`: 1,985 passed, with one existing Starlette/httpx
+  deprecation warning.
+- Ruff checks on changed Python files: passed.
+- `python scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- No Terraform plan or AWS/control-plane operation was run for this PR.
 
 ## Evidence files produced
 

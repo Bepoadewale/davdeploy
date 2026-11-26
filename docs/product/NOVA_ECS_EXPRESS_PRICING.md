@@ -34,7 +34,8 @@ The exact pilot creates a VPC, subnets, an internet gateway, routes,
 associations, IAM roles and service-linked roles, an ACM certificate, and ECS
 orchestration resources. These have no direct hourly charge under the cited
 AWS pricing guidance; their billable companions above remain separately
-priced. Basic ECR image scanning is included in the profile. Enhanced scanning,
+priced. AWS native ECR basic scanning is included at no additional charge.
+Enhanced scanning,
 other ECR features, NAT gateways, endpoints, extra load balancers, or other
 unmodeled services are unsupported and must prevent complete pricing.
 
@@ -46,6 +47,9 @@ context digest and evidence manifest. Each quantity has a minimum and maximum;
 prices, SKUs, and rate values always come from the regional AWS Price List.
 
 Task runtime and start counts include canary deployments and replacement tasks.
+Task public-IPv4 duration must cover the full billed task runtime, including the
+one-minute minimum; load-balancer public IPv4 bounds must cover both subnet AZs
+for every bounded ALB hour.
 The load balancer's public IPv4 and LCU usage can vary with traffic and AWS
 scaling, so those quantities require explicit upper bounds. Missing or stale
 assumptions keep pricing `INCOMPLETE`. A usage estimate is not an AWS-enforced
@@ -78,4 +82,6 @@ pricing remain separate approval gates.
 - [Application Load Balancer pricing](https://aws.amazon.com/elasticloadbalancing/pricing/)
 - [Public IPv4 pricing](https://aws.amazon.com/vpc/pricing/)
 - [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/)
+- [ECR basic scanning pricing](https://aws.amazon.com/about-aws/whats-new/2024/08/new-version-amazon-ecr-basic-scanning/)
+- [ECR data transfer pricing](https://aws.amazon.com/ecr/pricing/)
 - [AWS data-transfer billing categories](https://docs.aws.amazon.com/cur/latest/userguide/cur-data-transfers-charges.html)

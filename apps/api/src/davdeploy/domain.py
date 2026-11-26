@@ -532,6 +532,62 @@ class BatchPricingUsageAssumptions(BaseModel):
         return self
 
 
+class EcsExpressPricingUsageAssumptions(BaseModel):
+    """Bounded monthly quantities for one ECS Express service and its hidden resources."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    monthly_task_starts: MonthlyUsageRange
+    average_billed_task_runtime_seconds: MonthlyUsageRange
+    average_task_public_ipv4_address_seconds: MonthlyUsageRange
+    monthly_alb_billed_hours: MonthlyUsageRange
+    monthly_alb_lcu_hours: MonthlyUsageRange
+    monthly_alb_public_ipv4_address_seconds: MonthlyUsageRange
+    cloudwatch_logs: BatchCloudWatchLogPricingUsageAssumptions
+    monthly_internet_egress_gb: MonthlyUsageRange
+    monthly_cross_az_transfer_gb: MonthlyUsageRange
+
+    @model_validator(mode="after")
+    def validate_usage_bounds(self) -> EcsExpressPricingUsageAssumptions:
+        if self.monthly_task_starts.maximum < 1 or self.monthly_task_starts.maximum > 100_000:
+            raise ValueError("ECS Express task-start usage is outside the supported bound")
+        max_task_seconds = self.average_billed_task_runtime_seconds.maximum
+        if max_task_seconds > 2_678_400:
+            raise ValueError("ECS Express task runtime exceeds the supported monthly bound")
+        if (
+            self.average_task_public_ipv4_address_seconds.minimum
+            != max(60, self.average_billed_task_runtime_seconds.minimum)
+            or self.average_task_public_ipv4_address_seconds.maximum
+            != max(60, max_task_seconds)
+        ):
+            raise ValueError("ECS Express task public IPv4 duration must cover its billed runtime")
+        if (
+            self.monthly_alb_billed_hours.minimum < 1
+            or self.monthly_alb_billed_hours.maximum > 744
+        ):
+            raise ValueError("ECS Express ALB hours must fit within a calendar month")
+        if self.monthly_alb_lcu_hours.maximum > 744_000_000:
+            raise ValueError("ECS Express ALB LCU usage exceeds the supported bound")
+        min_alb_ip_seconds = self.monthly_alb_billed_hours.minimum * 2 * 3_600
+        required_max_alb_ip_seconds = self.monthly_alb_billed_hours.maximum * 2 * 3_600
+        max_alb_ip_seconds = 2_678_400 * 100
+        if (
+            self.monthly_alb_public_ipv4_address_seconds.minimum < min_alb_ip_seconds
+            or self.monthly_alb_public_ipv4_address_seconds.maximum < required_max_alb_ip_seconds
+            or self.monthly_alb_public_ipv4_address_seconds.maximum > max_alb_ip_seconds
+        ):
+            raise ValueError("ECS Express ALB IPv4 usage must cover two AZ addresses within the supported bound")
+        if any(
+            value.maximum > 500_000
+            for value in (
+                self.monthly_internet_egress_gb,
+                self.monthly_cross_az_transfer_gb,
+            )
+        ):
+            raise ValueError("ECS Express transfer usage exceeds the supported bound")
+        return self
+
+
 class WorkloadSpec(BaseModel):
     workload_type: str
     source_repository: str | None = None
@@ -548,6 +604,7 @@ class WorkloadSpec(BaseModel):
     vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
     batch_pricing_usage_assumptions: BatchPricingUsageAssumptions | None = None
     ecr_pricing_usage_assumptions: EcrPricingUsageAssumptions | None = None
+    ecs_express_pricing_usage_assumptions: EcsExpressPricingUsageAssumptions | None = None
     environments: list[EnvironmentName] = Field(default_factory=list)
     availability_target: str | None = None
     region_constraints: list[str] = Field(default_factory=list)
@@ -978,6 +1035,7 @@ class InfrastructurePlanConstraintUpdateRequest(BaseModel):
     vpc_pricing_usage_assumptions: VpcPricingUsageAssumptions | None = None
     batch_pricing_usage_assumptions: BatchPricingUsageAssumptions | None = None
     ecr_pricing_usage_assumptions: EcrPricingUsageAssumptions | None = None
+    ecs_express_pricing_usage_assumptions: EcsExpressPricingUsageAssumptions | None = None
 
 
 class LocalLoginRequest(BaseModel):
