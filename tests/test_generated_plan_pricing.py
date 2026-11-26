@@ -1098,11 +1098,17 @@ def test_ecs_express_pilot_prices_its_hidden_resources_and_variable_usage():
         "AWS ECS Express load-balancer public IPv4 addresses",
         "AWS ECS Express CloudWatch Logs ingestion",
         "AWS ECS Express CloudWatch Logs storage",
-        "AWS ECS Express standard deployment alarm",
+        "AWS ECS Express target-tracking CloudWatch alarms",
         "AWS ECS Express internet data transfer out",
         "AWS ECS Express cross-AZ data transfer in and out",
     }
     assert all(line.catalog_product_sha256 for line in result.lines)
+    alarm_line = next(
+        line for line in result.lines
+        if line.description == "AWS ECS Express target-tracking CloudWatch alarms"
+    )
+    assert alarm_line.quantity == 2
+    assert alarm_line.monthly_cost_minor == 20
     assert result.ecs_express_usage_assumptions == assumptions
     assert not any("unpriced" in item.code for item in result.findings)
     assert {call["ServiceCode"] for call in client.calls} >= {

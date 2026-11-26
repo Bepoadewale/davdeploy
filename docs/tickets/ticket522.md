@@ -41,6 +41,10 @@ and trusted usage bounds.
   https://aws.amazon.com/cloudwatch/pricing/
 - AWS data-transfer categories:
   https://docs.aws.amazon.com/cur/latest/userguide/cur-data-transfers-charges.html
+- Application Auto Scaling target tracking creates and manages alarms:
+  https://docs.aws.amazon.com/autoscaling/application/userguide/target-tracking-scaling-policy-overview.html
+- CloudWatch documents target tracking's high and low alarms:
+  https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/alarm-actions.html
 - Current regional Price List products will be matched through the existing
   `AwsPriceListCatalog`; no customer-provided prices are accepted.
 
@@ -55,7 +59,7 @@ and trusted usage bounds.
    expose it through constraint updates and the versioned OpenAPI contract.
 3. Price the one-service fresh-VPC pilot using exact regional AWS Price List
    matches for Fargate, Application Load Balancer, LCU, public IPv4, CloudWatch
-   Logs, CloudWatch alarm, ECR storage, and data transfer.
+  Logs, both target-tracking CloudWatch alarms, ECR storage, and data transfer.
 4. Reuse existing ECR storage and CloudWatch Logs price catalog methods without
    double counting.
    Treat ACM, VPC, route tables, IAM, service-linked roles, and ECS orchestration
@@ -77,8 +81,8 @@ and trusted usage bounds.
   listed in the design document has a separate regional price line or causes
   an explicit incomplete finding.
 - [x] Fargate minimum billing duration, partial ALB hours, hourly LCU usage,
-  IPv4 address duration, CloudWatch log volume, transfer bounds, and ALB
-  sharing behavior are represented correctly.
+  IPv4 address duration, CloudWatch log volume, both target-tracking alarms,
+  transfer bounds, and ALB sharing behavior are represented correctly.
 - [x] Price evidence includes exact regional SKU, product digest, published
   and effective timestamps, and remains bound to the trusted persisted
   assumptions and exact plan digest.
@@ -99,10 +103,11 @@ and trusted usage bounds.
 
 ## Acceptance status
 
-Implementation and prior local validation are complete. The current revision
-adds field-specific reference binding. Full local verification passes; final-
-head CI is pending. Earlier CI run `45894761342` passed all seven checks for
-its then-current head. The PR remains a draft, stacked on PR #520.
+The current revision prices the high and low alarms for the pilot's one
+target-tracking scaling policy. Focused tests, lint, documentation conventions,
+and whitespace validation pass; final-head CI is pending. The latest full local
+verification passed 2,001 tests before this alarm-count correction. The PR
+remains a draft, stacked on PR #520.
 
 ## Tests / validation performed
 
@@ -114,26 +119,33 @@ its then-current head. The PR remains a draft, stacked on PR #520.
   `us-east-1` Application Load Balancer/LCU and standard CloudWatch alarm
   product families.
 - `make PY=/private/tmp/davdeploy-private-batch-endpoints-517/.venv/bin/python openapi-check`: passed.
-- Focused pricing and lifecycle tests: 188 passed.
-- Current `make verify` after rebasing on PR #520 and main commit `4cc177c`:
-  2,001 passed, with one existing Starlette/httpx
+- Focused pricing and lifecycle tests before the alarm correction: 188 passed.
+- `make verify` after rebasing on PR #520 and main commit `4cc177c`, before the
+  alarm correction: 2,001 passed, with one existing Starlette/httpx
   deprecation warning; Ruff, OpenAPI snapshot, actions configuration, and
   Compose checks passed.
 - Ruff checks on changed Python files: passed.
 - `python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
+- After the alarm correction, `tests/test_generated_plan_pricing.py`:
+  175 passed; Ruff, documentation conventions, and `git diff --check` passed.
 - Initial final-head CI run `45893810916` exposed an OpenAPI snapshot mismatch;
   after regenerating the contract snapshot, CI run `45894761342` passed all
   seven checks.
 - Focused pricing tests cover accepted and rejected computed-ID bindings,
   including references placed in an unrelated field or mixed with an
   untrusted reference in the same field.
-- The isolated local provider-generated plan from PR #519 is costed through the
-  evaluator with live regional Price List data: `COMPLETE`, approval-eligible,
-  12 cost lines, and a range of 117 to 41,571 USD cents per month under the
-  documented usage assumptions. Catalog publication dates span
-  `2026-11-19T10:58:41Z` through `2026-11-25T18:58:32Z`. No
-  workload/control-plane mutation or remote state/lock access occurred.
+- The previous live provider-plan estimate priced one alarm at 117 to 41,571
+  USD cents per month. A current `us-east-1` AWS Price List lookup confirms USD
+  0.10 per standard alarm-month (SKU `EVETVUGEN3MUTMXM`, published
+  `2026-11-25T15:02:40Z`); pricing the second target-tracking alarm adds 10
+  cents at each bound, for a corrected modeled range of 127 to 41,581 cents.
+  This arithmetic correction is not a fresh complete pricing-evidence run.
+- A fresh full evaluator attempt for the isolated provider plan returned
+  `UNAVAILABLE` because ECR and ECS regional price lookups were unavailable.
+  Do not treat the corrected range as fresh or approval-eligible until the full
+  live evaluation succeeds again. No workload/control-plane mutation or remote
+  state/lock access occurred.
 
 ## Evidence files produced
 

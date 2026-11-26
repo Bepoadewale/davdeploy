@@ -1863,9 +1863,9 @@ def evaluate_generated_plan_pricing(
                             1,
                         ),
                         (
-                            "AWS ECS Express standard deployment alarm",
-                            1,
-                            1,
+                            "AWS ECS Express target-tracking CloudWatch alarms",
+                            2,
+                            2,
                             "Alarms",
                             pricing_catalog.cloudwatch_standard_alarm_metric_rate(region),
                             1,

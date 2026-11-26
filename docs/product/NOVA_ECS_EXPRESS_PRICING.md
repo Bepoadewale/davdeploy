@@ -25,7 +25,7 @@ resource, or unknown price-bearing value keeps pricing incomplete.
 | Application Load Balancer | Billed ALB hours, rounded up, and monthly LCU-hours | AWS Price List, `AWSELB` Application Load Balancer hour and LCU-hour products |
 | Public IPv4 | Separate task and load-balancer address-seconds, including the 60-second minimum | AWS Price List, in-use public IPv4 address-hour product |
 | CloudWatch Logs | Ingested GB and retained GB-month for the exact log group | AWS Price List, Standard log ingestion and storage products |
-| Deployment alarm | One standard-resolution metric alarm created by Express Mode | AWS Price List, standard alarm metric-month product |
+| Target-tracking alarms | Two standard-resolution metric alarms (high and low) for the pilot's one target-tracking scaling policy | AWS Price List, standard alarm metric-month product |
 | ECR storage | Stored GB-month for the exact private ECR repository | Existing ECR storage assumptions and price line, counted once |
 | Internet egress | Total bounded outbound GB from the service VPC | Existing AWS outbound data-transfer product |
 | Cross-AZ transfer | Bounded bytes transferred between ALB nodes and Fargate tasks across AZs | Existing regional data-transfer product |
@@ -83,6 +83,8 @@ pricing remain separate approval gates.
 - [Application Load Balancer pricing](https://aws.amazon.com/elasticloadbalancing/pricing/)
 - [Public IPv4 pricing](https://aws.amazon.com/vpc/pricing/)
 - [CloudWatch pricing](https://aws.amazon.com/cloudwatch/pricing/)
+- [Application Auto Scaling target tracking](https://docs.aws.amazon.com/autoscaling/application/userguide/target-tracking-scaling-policy-overview.html)
+- [CloudWatch Auto Scaling alarm behavior](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/alarm-actions.html)
 - [ECR basic scanning pricing](https://aws.amazon.com/about-aws/whats-new/2024/08/new-version-amazon-ecr-basic-scanning/)
 - [ECR data transfer pricing](https://aws.amazon.com/ecr/pricing/)
 - [AWS data-transfer billing categories](https://docs.aws.amazon.com/cur/latest/userguide/cur-data-transfers-charges.html)
