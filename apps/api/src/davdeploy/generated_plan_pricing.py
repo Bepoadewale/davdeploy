@@ -3737,17 +3737,37 @@ def _validate_ecs_express_pricing_shape(
     """Accept only the reviewed single-service pilot inventory and bindings."""
     configured_references = _pricing_configured_resource_references(document)
 
-    def references_resource(source: str, target: str, field: str) -> bool:
+    def references_resource(
+        source: str,
+        target: str,
+        field: str,
+        *,
+        allow_count_index: bool = False,
+    ) -> bool:
         source = source.split("[", maxsplit=1)[0]
-        return any(
-            reference == target or reference.startswith(f"{target}.")
-            for reference in configured_references.get(source, {}).get(field, ())
+        references = configured_references.get(source, {}).get(field, ())
+        target_references = tuple(
+            reference for reference in references
+            if reference == target or reference.startswith(f"{target}.")
+        )
+        return bool(target_references) and all(
+            reference in target_references
+            or (allow_count_index and reference == "count.index")
+            for reference in references
         )
 
     def matches_or_references(
-        value: Any, expected: Any, source: str, target: str, field: str
+        value: Any,
+        expected: Any,
+        source: str,
+        target: str,
+        field: str,
+        *,
+        allow_count_index: bool = False,
     ) -> bool:
-        return value == expected if value is not None else references_resource(source, target, field)
+        return value == expected if value is not None else references_resource(
+            source, target, field, allow_count_index=allow_count_index
+        )
 
     expected_counts = {
         "terraform_data": 1,
@@ -3969,6 +3989,7 @@ def _validate_ecs_express_pricing_shape(
                 f"aws_route_table_association.public[{index}]",
                 "aws_subnet.public",
                 "subnet_id",
+                allow_count_index=True,
             )
             and matches_or_references(
                 next(

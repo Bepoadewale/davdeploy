@@ -1164,6 +1164,28 @@ def test_ecs_express_create_plan_does_not_accept_vpc_reference_in_unrelated_fiel
     assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
 
 
+def test_ecs_express_create_plan_rejects_mixed_same_field_vpc_references():
+    document = ecs_express_plan(unknown_create_ids=True, variable_region=True)
+    subnet = next(
+        item for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_subnet.public"
+    )
+    subnet["expressions"] = {
+        "vpc_id": {"references": ["aws_vpc.customer.id", "var.untrusted_vpc"]},
+    }
+    result, _ = evaluate(
+        document,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
+
+
 def test_ecs_express_pricing_fails_closed_for_missing_usage_or_extra_resources():
     missing, _ = evaluate(ecs_express_plan(), catalog_client=FakeBatchPriceList())
     assert missing.status == PlanPricingStatus.INCOMPLETE

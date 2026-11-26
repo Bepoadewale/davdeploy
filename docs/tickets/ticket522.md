@@ -88,8 +88,8 @@ and trusted usage bounds.
   evidence uses a versioned strict shape.
 - [x] A provider-generated create plan may contain computed resource IDs and
   variable-bound region values only when the exact same-plan resource
-  references and the trusted `var.region` value are present; missing bindings
-  remain incomplete.
+  references and the trusted `var.region` value are present; unrelated or
+  mixed references and missing bindings remain incomplete.
 - [ ] Focused and full relevant tests, lint, docs conventions, and final-head CI
   pass. A full clean-room run is not applicable to this pricing-only change.
 - [x] No AWS workload or hosted control-plane resource is changed, and no
@@ -115,7 +115,7 @@ its then-current head. The PR remains a draft, stacked on PR #520.
   product families.
 - `make PY=/private/tmp/davdeploy-private-batch-endpoints-517/.venv/bin/python openapi-check`: passed.
 - Focused pricing and lifecycle tests: 188 passed.
-- Current `make verify`: 1,993 passed, with one existing Starlette/httpx
+- Current `make verify`: 1,994 passed, with one existing Starlette/httpx
   deprecation warning; Ruff, OpenAPI snapshot, actions configuration, and
   Compose checks passed.
 - Ruff checks on changed Python files: passed.
@@ -125,7 +125,8 @@ its then-current head. The PR remains a draft, stacked on PR #520.
   after regenerating the contract snapshot, CI run `45894761342` passed all
   seven checks.
 - Focused pricing tests cover accepted and rejected computed-ID bindings,
-  including a reference placed in an unrelated field.
+  including references placed in an unrelated field or mixed with an
+  untrusted reference in the same field.
 - The isolated local provider-generated plan from PR #519 is costed through the
   evaluator with live regional Price List data: `COMPLETE`, approval-eligible,
   12 cost lines, and a range of 117 to 41,571 USD cents per month under the
