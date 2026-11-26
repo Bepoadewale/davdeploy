@@ -51,7 +51,8 @@ and trusted usage bounds.
    Balancer hours and LCU-hours, task and load-balancer public IPv4 address
    seconds, log ingestion/storage, internet egress, and cross-AZ transfer.
 2. Carry the model through the persisted-revision boundary, pricing-context
-   digest, evidence manifest and parser without invalidating older manifests.
+   digest, evidence manifest and parser without invalidating older manifests;
+   expose it through constraint updates and the versioned OpenAPI contract.
 3. Price the one-service fresh-VPC pilot using exact regional AWS Price List
    matches for Fargate, Application Load Balancer, LCU, public IPv4, CloudWatch
    Logs, CloudWatch alarm, ECR storage, and data transfer.
@@ -103,12 +104,16 @@ Implementation and all local validation are complete. Final-head CI is pending.
 - AWS Price List API product metadata was queried read-only for current
   `us-east-1` Application Load Balancer/LCU and standard CloudWatch alarm
   product families.
-- `python -m pytest tests/test_generated_plan_pricing.py -q`: 167 passed.
-- `python -m pytest tests -q`: 1,985 passed, with one existing Starlette/httpx
+- `make PY=/private/tmp/davdeploy-private-batch-endpoints-517/.venv/bin/python openapi-check`: passed.
+- Focused pricing and lifecycle tests: 188 passed.
+- `python -m pytest tests -q`: 1,990 passed, with one existing Starlette/httpx
   deprecation warning.
 - Ruff checks on changed Python files: passed.
 - `python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
+- Initial final-head CI run `45893810916` exposed an OpenAPI snapshot mismatch;
+  the contract snapshot has been regenerated and now matches the app. CI rerun
+  on the refreshed head is pending.
 - No Terraform plan or AWS/control-plane operation was run for this PR.
 
 ## Evidence files produced

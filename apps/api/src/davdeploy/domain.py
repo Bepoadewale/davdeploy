@@ -537,6 +537,8 @@ class EcsExpressPricingUsageAssumptions(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
+    service_address: Literal["aws_ecs_express_gateway_service.workload[0]"]
+    log_group_address: Literal["aws_cloudwatch_log_group.workload"]
     monthly_task_starts: MonthlyUsageRange
     average_billed_task_runtime_seconds: MonthlyUsageRange
     average_task_public_ipv4_address_seconds: MonthlyUsageRange

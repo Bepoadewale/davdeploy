@@ -42,8 +42,9 @@ unmodeled services are unsupported and must prevent complete pricing.
 ## Trusted assumptions and limits
 
 Usage assumptions must come from the integrity-checked persisted customer
-revision, not from Nova output or plan text. They are included in the pricing
-context digest and evidence manifest. Each quantity has a minimum and maximum;
+revision, not from Nova output or plan text. They identify the fixed service
+and log-group addresses and are included in the pricing context digest and
+evidence manifest. Each quantity has a minimum and maximum;
 prices, SKUs, and rate values always come from the regional AWS Price List.
 
 Task runtime and start counts include canary deployments and replacement tasks.

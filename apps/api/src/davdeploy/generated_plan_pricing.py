@@ -1220,7 +1220,7 @@ class AwsPriceListCatalog:
             "regionCode": region,
             attribute: value,
         }
-        rate = _parse_regional_product(matches[0][0], "AmazonECS", expected, "Hrs")
+        rate = _parse_regional_product(matches[0][0], "AmazonECS", expected, "hours")
         with self._cache_lock:
             self._cache[cache_key] = (now + self.cache_ttl_seconds, rate)
         return rate
@@ -1662,7 +1662,6 @@ def evaluate_generated_plan_pricing(
             )
         )
 
-    ecs_express_shape_valid = False
     ecs_express_shape_valid = False
     if ecs_express_services:
         ecs_express_shape_valid = _validate_ecs_express_pricing_shape(

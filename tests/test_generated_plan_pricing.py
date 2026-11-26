@@ -32,6 +32,8 @@ ECR_REPOSITORY_NAME = "davdeploy-test-images"
 CAPTURED_AT = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
 PERSISTED_CONTEXT_SHA256 = "a" * 64
 ECS_EXPRESS_USAGE = {
+    "service_address": "aws_ecs_express_gateway_service.workload[0]",
+    "log_group_address": "aws_cloudwatch_log_group.workload",
     "monthly_task_starts": {"minimum": 1, "maximum": 100},
     "average_billed_task_runtime_seconds": {"minimum": 60, "maximum": 3_600},
     "average_task_public_ipv4_address_seconds": {"minimum": 60, "maximum": 3_600},
@@ -356,7 +358,7 @@ class FakeBatchPriceList:
             }
             return {"PriceList": [json.dumps(product)]}
         dimension = "vcpu" if "cputype" in filters else "memory"
-        unit = "Hrs"
+        unit = "hours"
         price = "0.04048" if dimension == "vcpu" else "0.004445"
         attrs = {
             "productFamily": "Compute",
@@ -960,6 +962,8 @@ def test_ecs_express_usage_is_validated_and_bound_to_persisted_context():
 @pytest.mark.parametrize(
     "override",
     [
+        {"service_address": "aws_ecs_express_gateway_service.other[0]"},
+        {"log_group_address": "aws_cloudwatch_log_group.other"},
         {"average_billed_task_runtime_seconds": {"minimum": 60, "maximum": 2_678_401}},
         {"average_task_public_ipv4_address_seconds": {"minimum": 60, "maximum": 3_601}},
         {"monthly_alb_billed_hours": {"minimum": 0, "maximum": 744}},
@@ -969,6 +973,18 @@ def test_ecs_express_usage_is_validated_and_bound_to_persisted_context():
     ],
 )
 def test_ecs_express_usage_rejects_unbounded_or_inconsistent_quantities(override):
+    with pytest.raises(ValueError):
+        EcsExpressPricingUsageAssumptions.model_validate({**ECS_EXPRESS_USAGE, **override})
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"service_address": "aws_ecs_express_gateway_service.other[0]"},
+        {"log_group_address": "aws_cloudwatch_log_group.other"},
+    ],
+)
+def test_ecs_express_usage_is_bound_to_the_exact_pilot_addresses(override):
     with pytest.raises(ValueError):
         EcsExpressPricingUsageAssumptions.model_validate({**ECS_EXPRESS_USAGE, **override})
 
