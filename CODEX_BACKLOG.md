@@ -1,39 +1,30 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-25
+## Nova status snapshot — 2026-11-26
 
 Backend `main` is
-`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only Batch public
-IPv4 pricing).
-Merged PR #506 validates the architecture-to-Terraform crosswalk but does not
-enable Nova dispatch. PR #507 adds trusted-usage, regional Linux/x86 Fargate
-compute price lines for bounded Batch plans; the estimate remains incomplete
-and approval-ineligible until material supporting costs are priced. Its
-final-head CI passed all seven checks in
-[run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-PR #509 adds source-only, trusted-usage-bound CloudWatch Logs ingestion/storage
-prices for explicitly configured Batch `awslogs`; its final-head and merged-main
-CI passed. Merged PRs #510 and #511 bind digest-pinned same-region private ECR
-images to priced planned repositories without double-counting storage. Merged
-PR #512 prices explicit Batch Fargate public IPv4 use with separate trusted
-per-attempt address-duration and maximum-attempt assumptions. Final-head CI
-passed in run `45680499414`, and merged-main CI passed in run `45681334818`.
-Network paths, NAT/endpoints, egress, and other material costs remain
-approval-blocking. PR #513 is the current draft for status reconciliation. The
-Terraform run monitor has 67
-records and zero active operations. AWS identity was rechecked as account
-`654654474502`; this documentation and pricing work made no AWS or
-hosted-control-plane change.
+`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517).
+PRs #507–#514 add source-only bounded Batch prices; PR #515 adds source-only
+private endpoint policy. PR #517 adds backward-compatible private Fargate
+networking and records a direct same-account lifecycle test: suffix `a` failed
+during a queue-cleanup race, while suffix `b` ran once to `SUCCEEDED`, exit
+code 0, and emitted the expected CloudWatch marker. Both exact test stacks
+were destroyed and independently checked absent. AWS retains both Batch job
+definitions as inactive history; the tag index still reports stale deleted
+resource ARNs. This evidence covers only the recorded private Batch shape, not
+Nova dispatch, cross-account execution, or a general customer workload.
+See `docs/test/test517.md`.
 
-The hosted control plane remains at PR #420 commit
-`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
-[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
-and exact saved-plan apply
-[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-The recorded deployment passed database migrations; all six Lambda packages
-shared code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz`
-returned HTTP 200. These checks describe the hosted control plane, not a
-customer workload. PR #430 refreshed the 26-capability/30-root evidence map.
+The Batch estimate remains approval-ineligible for unsupported material cost
+paths and assumptions. The hosted runtime is still PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`. A read-only check on 2026-11-26
+verified the Lambda package hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` HTTP 200.
+The Terraform monitor has 75 records and no active operations. No authenticated
+workspace administrator session, verified customer connection, or hosted
+Nova-generated plan exists; no Nova customer workload has been applied,
+operated, or certified. The control plane was not changed for PR #517.
+
 
 PR #493 merged with all seven checks passing in final-head run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).

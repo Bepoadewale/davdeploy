@@ -2,31 +2,37 @@
 
 ## Current state
 
-**As of 2026-11-25, backend `main` is
-`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only Batch public
-IPv4 pricing). The hosted control plane
-remains deployed from PR #420 commit `9951caa9244128b1551fea3af66b1bdbf884c800`,
-using plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
-and exact saved-plan apply [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-Both jobs succeeded, including database migrations. Read-only checks found all
-six backend Lambdas on code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`
-and `/healthz` returned HTTP 200 in account `654654474502`, region
-`us-east-1`. This is control-plane deployment evidence only. This status
-refresh did not access or change the hosted control plane. The older runtime
-health observation above is historical and was not rechecked here.**
+**As of 2026-11-26, backend `main` is
+`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (PR #517). The hosted control
+plane remains deployed from PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`, using protected plan
+[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+and exact saved-plan apply
+[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
+A read-only check in account `654654474502`, region `us-east-1`, found the
+Lambda package hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; public
+`/healthz` returned HTTP 200. This is control-plane health evidence only;
+the merged source through PR #517 is not deployed. No authenticated workspace
+administrator session, verified customer connection, or hosted Nova plan has
+been established. No Nova customer workload has been applied, operated, or
+certified.**
 
-PR #506 makes the 26-architecture / 30-root candidate crosswalk machine-
-checkable without enabling runtime dispatch. Merged PRs #507–#512 add source-
-only bounded Batch Fargate compute, CloudWatch Logs, ECR storage and private
-image binding, and public IPv4 pricing. PR #512's final-head CI passed all
-seven checks in run
-[45680499414](https://github.com/Bepoadewale/davdeploy/actions/runs/45680499414);
-merged-main CI passed in run
-[45681334818](https://github.com/Bepoadewale/davdeploy/actions/runs/45681334818).
-The Batch estimate remains incomplete and approval-ineligible while NAT,
-endpoints, image/network paths, egress, and other material costs remain
-unpriced. These PRs do not enable Nova dispatch or change AWS resources or
-hosted-control-plane infrastructure.
+PR #517 adds a backward-compatible Batch Fargate public-IP switch and a
+private endpoint validation root. Its direct same-account suffix-`b` Batch
+job succeeded with exit code 0 using a digest-pinned ECR image, private IP,
+and expected CloudWatch marker. Suffix-`a` failed because cleanup deleted its
+queue during job startup. Both exact stacks were destroyed and independently
+checked absent; AWS retains the two job definitions as inactive history, and
+the Resource Groups Tagging API still reports stale deleted-resource ARNs.
+See `docs/test/test517.md`. Final-head CI passed all seven checks in run
+[45863379689](https://github.com/Bepoadewale/davdeploy/actions/runs/45863379689);
+merged-main CI passed all seven in run
+[45864105035](https://github.com/Bepoadewale/davdeploy/actions/runs/45864105035).
+The control plane and its state/locks were not changed. This direct test does
+not prove Nova dispatch, cross-account execution, or a general customer
+workload. Batch cost coverage remains incomplete and unsupported material
+resources continue to block approval.
+
 
 PR #493 merged with all seven CI checks passing in run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).
