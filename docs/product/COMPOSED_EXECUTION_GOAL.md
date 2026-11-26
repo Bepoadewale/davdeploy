@@ -475,14 +475,16 @@ general customer-side lifecycle gate for those tested shapes. It does not prove
 Nova authorization/dispatch, cross-account trust, or support for other shapes.
 
 PR #518 reconciles the source/deployed snapshots, evidence matrix, and
-backlog through PR #517. Complete that documentation handoff first. Then
-prioritize a narrowly scoped source-and-isolated-test package for Nova's
-customer authorization and exact-plan lifecycle interfaces. The explicit user
-boundary remains: do not log into, mutate, or run customer tests through the
-hosted control plane. Direct tests may use fresh, project-scoped customer-side
-resources only, with a new exact manifest, current cost/quota preflight,
-explicit cost/runtime bounds, monitored Terraform operations, and independent
-cleanup checks. Keep each lifecycle claim limited to its tested resource shape.
+backlog through PR #517. Complete that documentation handoff first. The first hosted acceptance gate
+remains an authenticated workspace administrator, a verified isolated customer
+connection and role, and a successful hosted generated plan. The selected
+account's latest DavDeploy TOTP attempt was rejected, so no authenticated
+session or customer plan exists. Preserve MFA and tenant controls; continue
+independent source work while that login dependency is unresolved. Any direct
+customer-side lifecycle test must use fresh, project-scoped resources, a new
+exact manifest, current cost/quota preflight, explicit cost/runtime bounds,
+monitored Terraform operations, and independent cleanup checks. Deploy
+control-plane code only through its protected, reviewed Terraform workflow.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 

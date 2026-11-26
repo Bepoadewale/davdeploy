@@ -263,11 +263,11 @@ the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
 ## Nova deployment workflow next gates
 
-1. Continue source-only Nova authorization and exact-plan improvements with deterministic policy and isolated tests; keep hosted apply and credential gates disabled.
-2. Define and verify customer-owned least-privilege role scopes and service limits for supported shapes; keep role trust, account verification, and effective permissions as separate evidence.
-3. Use fresh, explicitly bounded AWS environments and direct Terraform for any further customer-side lifecycle evidence. PRs #437 and #517 meet the general lifecycle gate only for the ECS and private Batch shapes tested.
-4. Preserve the current boundary: do not log into, mutate, or run customer tests through the hosted control plane. Nova authorization, dispatch, customer credential issuance, broader policy/cost coverage, and support for additional shapes remain open.
-5. Extend composition and renderer coverage and align browser, CLI, and MCP behavior. No Nova-dispatched customer workload has been applied or certified.
+1. The first hosted gate is an authenticated workspace administrator, a verified isolated customer connection and role, and a successful hosted generated plan. The latest DavDeploy TOTP attempt for the selected account was rejected; no authenticated session or customer plan exists. Preserve MFA and tenant controls.
+2. Continue the shared authorization and exact-plan implementation; the generic Nova exact-plan apply runner is not ready. Do not enable customer apply or credentials until the saved-plan approval, policy, worker, and lifecycle gates are evidenced.
+3. Define and verify customer-owned least-privilege role scopes and service limits for supported shapes; keep role trust, account verification, and effective permissions as separate evidence.
+4. Use fresh, explicitly bounded AWS environments and direct Terraform for any further customer-side lifecycle evidence. PRs #437 and #517 meet the general lifecycle gate only for the ECS and private Batch shapes tested.
+5. Extend composition and renderer coverage and align browser, CLI, and MCP behavior. No Nova-dispatched customer workload has been applied or certified. Control-plane code releases must use the protected, reviewed Terraform plan/apply workflows; no direct/manual control-plane mutation is authorized by this status entry.
 
 ## Clean-room reproducibility
 
