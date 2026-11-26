@@ -40,7 +40,7 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - [x] No broad caller permission for ELB/Auto Scaling is inferred from ECS-managed side effects.
 - [ ] Every provider API call and internal ECS resource ARN is verified against the pinned provider and represented in tested policy code; deferred to a follow-up implementation package.
 - [x] Renderer, hosted control plane, customer resources, state and locks remain untouched.
-- [x] Final-head GitHub CI run `45911833917` passed all seven checks.
+- [x] Final-head GitHub CI run `45913543343` passed all seven checks on head `e5aff6f9`.
 
 ## Acceptance status
 
@@ -49,7 +49,7 @@ The sourced authorization mapping and implementation blocker are recorded. This 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=527 python3 scripts/check_doc_conventions.py`: passed.
-- Final-head GitHub Actions run `45911833917`: all seven checks passed.
+- Final-head GitHub Actions run `45913543343` on `e5aff6f9`: all seven checks passed.
 - `git diff --check`: passed.
 - No code tests apply to this documentation-only package. No cloud call, Terraform plan/apply/destroy, role assumption, or hosted control-plane operation was performed.
 
