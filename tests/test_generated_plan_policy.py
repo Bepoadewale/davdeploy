@@ -2468,14 +2468,14 @@ def ecs_express_pilot_resources(*, network_subnets=None, unknown_create_ids=Fals
 
 
 def ecs_express_configuration_references():
-    def configured(address, resource_type, *references):
+    def configured(address, resource_type, **references_by_field):
         return {
             "address": address,
             "mode": "managed",
             "type": resource_type,
             "expressions": {
-                f"reference_{index}": {"references": [reference]}
-                for index, reference in enumerate(references)
+                field: {"references": references}
+                for field, references in references_by_field.items()
             },
         }
 
@@ -2483,20 +2483,22 @@ def ecs_express_configuration_references():
         configured(
             "aws_ecs_express_gateway_service.workload",
             "aws_ecs_express_gateway_service",
-            "aws_iam_role.execution.arn",
-            "aws_iam_role.infrastructure.arn",
-            "aws_subnet.public",
+            execution_role_arn=["aws_iam_role.execution.arn"],
+            infrastructure_role_arn=["aws_iam_role.infrastructure.arn"],
+            network_configuration=["aws_subnet.public"],
         ),
-        configured("aws_internet_gateway.customer", "aws_internet_gateway", "aws_vpc.customer.id"),
+        configured("aws_internet_gateway.customer", "aws_internet_gateway", vpc_id=["aws_vpc.customer.id"]),
         configured(
             "aws_route_table.public", "aws_route_table",
-            "aws_vpc.customer.id", "aws_internet_gateway.customer.id",
+            vpc_id=["aws_vpc.customer.id"],
+            route=["aws_internet_gateway.customer.id"],
         ),
         configured(
             "aws_route_table_association.public", "aws_route_table_association",
-            "aws_subnet.public", "count.index", "aws_route_table.public.id",
+            subnet_id=["aws_subnet.public", "count.index"],
+            route_table_id=["aws_route_table.public.id"],
         ),
-        configured("aws_subnet.public", "aws_subnet", "aws_vpc.customer.id"),
+        configured("aws_subnet.public", "aws_subnet", vpc_id=["aws_vpc.customer.id"]),
     ]
 
 
@@ -2533,6 +2535,26 @@ def test_ecs_express_create_plan_binds_unknown_ids_through_configuration_referen
         "ecs_express_public_task_ip_review",
         "ecs_express_managed_policy_review",
     }
+
+
+def test_ecs_express_unknown_vpc_id_rejects_reference_in_unrelated_field():
+    findings = []
+    config = ecs_express_configuration_references()
+    subnet_config = next(item for item in config if item["address"] == "aws_subnet.public")
+    subnet_config["expressions"] = {
+        "vpc_id": {"references": ["var.untrusted_vpc"]},
+        "tags": {"references": ["aws_vpc.customer.id"]},
+    }
+    document = {"configuration": {"root_module": {"resources": config}}}
+    _check_ecs_express_pilot(
+        document,
+        ecs_express_pilot_resources(unknown_create_ids=True),
+        findings,
+        ACCOUNT,
+        REGION,
+    )
+
+    assert "ecs_express_subnet_invalid" in {item.code for item in findings}
 
 
 def test_plan_region_accepts_only_the_expected_explicit_region_variable():

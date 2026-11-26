@@ -3759,19 +3759,25 @@ def _check_ecs_express_pilot(
     def deny(code: str, address: Any, message: str) -> None:
         _deny(findings, code, address, message)
 
-    configured_references = _configured_resource_references(document)
+    configured_resources = _configured_resources(document)
 
-    def references_for(resource: dict[str, Any]) -> tuple[str, ...]:
+    def references_for(resource: dict[str, Any], field: str) -> tuple[str, ...]:
         resource_address = resource.get("address")
         if not isinstance(resource_address, str):
             return ()
-        return configured_references.get(resource_address.split("[", maxsplit=1)[0], ())
+        configured = configured_resources.get(resource_address.split("[", maxsplit=1)[0])
+        expressions = configured.get("expressions") if isinstance(configured, dict) else None
+        expression = expressions.get(field) if isinstance(expressions, dict) else None
+        references = expression.get("references") if isinstance(expression, dict) else None
+        return tuple(item for item in references if isinstance(item, str)) if isinstance(references, list) else ()
 
-    def references_resource(resource: dict[str, Any], address: str) -> bool:
-        return _references_resource(references_for(resource), address)
+    def references_resource(resource: dict[str, Any], address: str, field: str) -> bool:
+        return _references_resource(references_for(resource, field), address)
 
-    def matches_or_references(value: Any, expected: Any, resource: dict[str, Any], target: str) -> bool:
-        return value == expected if value is not None else references_resource(resource, target)
+    def matches_or_references(
+        value: Any, expected: Any, resource: dict[str, Any], target: str, field: str
+    ) -> bool:
+        return value == expected if value is not None else references_resource(resource, target, field)
 
     allowed_types = {
         "terraform_data", "aws_ecs_express_gateway_service", "aws_iam_role",
@@ -3971,7 +3977,7 @@ def _check_ecs_express_pilot(
         if (
             not isinstance(subnet_values, dict)
             or not matches_or_references(
-                subnet_vpc_id, vpc_id, subnet, "aws_vpc.customer"
+                subnet_vpc_id, vpc_id, subnet, "aws_vpc.customer", "vpc_id"
             )
             or subnet_values.get("map_public_ip_on_launch") is not True
             or subnet_values.get("assign_ipv6_address_on_creation") is True
@@ -4018,17 +4024,17 @@ def _check_ecs_express_pilot(
         gateways[0].get("address") != "aws_internet_gateway.customer"
         or not isinstance(gateway_values, dict)
         or not matches_or_references(
-            gateway_values.get("vpc_id"), vpc_id, gateways[0], "aws_vpc.customer"
+            gateway_values.get("vpc_id"), vpc_id, gateways[0], "aws_vpc.customer", "vpc_id"
         )
         or tables[0].get("address") != "aws_route_table.public"
         or not isinstance(table_values, dict)
         or not matches_or_references(
-            table_values.get("vpc_id"), vpc_id, tables[0], "aws_vpc.customer"
+            table_values.get("vpc_id"), vpc_id, tables[0], "aws_vpc.customer", "vpc_id"
         )
         or not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict)
         or routes[0].get("cidr_block") != "0.0.0.0/0"
         or not matches_or_references(
-            routes[0].get("gateway_id"), gateway_id, tables[0], "aws_internet_gateway.customer"
+            routes[0].get("gateway_id"), gateway_id, tables[0], "aws_internet_gateway.customer", "route"
         )
         or routes[0].get("nat_gateway_id") not in (None, "")
     ):
@@ -4049,10 +4055,11 @@ def _check_ecs_express_pilot(
                 table_id,
                 association,
                 "aws_route_table.public",
+                "route_table_id",
             )
             or (
                 association_values.get("subnet_id") is None
-                and not references_resource(association, "aws_subnet.public")
+                and not references_resource(association, "aws_subnet.public", "subnet_id")
             )
             or (
                 association_values.get("subnet_id") is not None
@@ -4099,7 +4106,7 @@ def _check_ecs_express_pilot(
             not network_subnets_match
             and not (
                 (network_subnets_unknown or not network_subnets)
-                and references_resource(service, "aws_subnet.public")
+                and references_resource(service, "aws_subnet.public", "network_configuration")
             )
         )
         or network_groups not in (None, [])
@@ -4185,6 +4192,7 @@ def _check_ecs_express_pilot(
         role_arns.get(f"{service_name}-execution"),
         service,
         "aws_iam_role.execution",
+        "execution_role_arn",
     ):
         deny("ecs_express_execution_role_binding_invalid", address, "The service must use its exact planned task execution role.")
     if not matches_or_references(
@@ -4192,6 +4200,7 @@ def _check_ecs_express_pilot(
         role_arns.get(f"{service_name}-infrastructure"),
         service,
         "aws_iam_role.infrastructure",
+        "infrastructure_role_arn",
     ):
         deny("ecs_express_infrastructure_role_binding_invalid", address, "The service must use its exact planned infrastructure role.")
 
