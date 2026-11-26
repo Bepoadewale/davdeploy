@@ -32,7 +32,10 @@ changing hosted behavior beyond deriving Cognito's standard JWKS URL.
 
 - AWS Lambda environment variable quota:
   https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html
-- Cognito issuer/JWKS URL construction: `apps/api/src/davdeploy/security.py`
+- Cognito original and updated issuer formats, and JWKS path:
+  https://docs.aws.amazon.com/cognito/latest/developerguide/federation-endpoints.html
+- Cognito token verification and JWKS guidance:
+  https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html
 - Lambda environment map and default-off Terraform gates:
   `infrastructure/terraform/serverless-control-plane/main.tf` and
   `variables.tf`
@@ -43,9 +46,9 @@ changing hosted behavior beyond deriving Cognito's standard JWKS URL.
 1. Build the shared Lambda environment map with conditionally merged Nova
    exact-apply and apply-role onboarding settings, so disabled capabilities do
    not consume environment bytes or accidentally become enabled.
-2. Derive the standard Cognito JWKS endpoint from the configured issuer when
-   no explicit JWKS URL is supplied; keep explicit JWKS URLs supported for
-   other identity providers.
+2. Derive the standard Cognito JWKS endpoint from original or updated Cognito
+   issuer formats when no explicit URL is supplied; keep explicit URLs
+   supported for other identity providers.
 3. Add tests for disabled-feature omission and Cognito derivation, while
    retaining checks that apply features remain disabled by default.
 4. Run focused tests, full verification, Terraform format/validation, docs
@@ -76,14 +79,15 @@ hosted apply is recorded above; its saved plan will not be reused.
 - `GITHUB_PR_NUMBER=521 python3 scripts/check_doc_conventions.py`: passed.
 - Focused tests: `test_security_identity.py`,
   `test_nova_exact_plan_apply_infra.py`, and `test_terraform_plan_summary.py`;
-  39 passed.
+  40 passed, including original and updated Cognito issuer formats.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
-  passed, 1,973 tests; one existing Starlette/httpx deprecation warning.
+  passed, 1,974 tests; one existing Starlette/httpx deprecation warning.
 - Terraform format check, backend-free initialization, and validation passed.
 - `make local-proof`: clean-room bootstrap, smoke, API contract, customer-plan
   E2E, data seeding, trace check, and full verify passed. `make clean-local`
-  removed only this worktree's project-prefixed Compose services, network,
-  volume, and generated `.venv`/`.local` artifacts.
+  passed after the Cognito issuer update. `make clean-local` removed only this
+  worktree's project-prefixed Compose services, network, volume, and generated
+  `.venv`/`.local` artifacts.
 - `git diff --check`: passed.
 
 ## Evidence files produced

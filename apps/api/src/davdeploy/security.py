@@ -175,7 +175,7 @@ def configured_verifier() -> IdentityVerifier:
         if (
             parsed_issuer.scheme == "https"
             and cognito_host.endswith((".amazonaws.com", ".amazonaws.com.cn"))
-            and cognito_host.startswith("cognito-idp.")
+            and cognito_host.startswith(("cognito-idp.", "issuer-cognito-idp."))
             and parsed_issuer.path
             and not parsed_issuer.query
             and not parsed_issuer.fragment
