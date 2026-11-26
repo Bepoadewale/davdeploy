@@ -82,7 +82,7 @@ blockers. This is a source-only policy package.
 - [x] Implementation and endpoint regression coverage are complete locally.
 - [x] Full local verification and documentation validation are complete.
 - [x] Final-head CI passed all seven checks in run `45724497158` on source
-  commit `870ce27`.
+  commit `b270717`.
 - [x] The isolated clean-room sequence passed through `verify`; its final
   cleanup is pending approval for the temporary artifacts listed below.
 - [ ] Review and merge remain pending.
@@ -97,7 +97,7 @@ blockers. This is a source-only policy package.
 - `GITHUB_PR_NUMBER=515 /Users/adewale/Projects/davdeploy/.venv/bin/python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - All seven GitHub final-head checks passed in
-  [run 45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+  [run 45773403178](https://github.com/Bepoadewale/davdeploy/actions/runs/45773403178).
 - Isolated local clean-room worktree `/private/tmp/davdeploy-pr515-cleanroom-20261126`
   at `870ce27` passed initial clean from an empty project, bootstrap, smoke,
   simple/complex/degraded/Day-2/failure/readiness demos, trace check, and full

@@ -57,8 +57,8 @@ and a Batch security-group HTTPS path, and gateway endpoints to the private
 route table. Focused policy and pricing tests pass (793 tests); full local
 verification passes (1,969 tests, one upstream deprecation warning).
 Documentation checks and `git diff --check` pass. All seven checks passed on
-final head `870ce271` in
-[run 45724497158](https://github.com/Bepoadewale/davdeploy/actions/runs/45724497158).
+final head `b270717` in
+[run 45773403178](https://github.com/Bepoadewale/davdeploy/actions/runs/45773403178).
 The isolated workstation clean-room sequence at that head passed through the
 full `verify` step (1,969 tests); its final `clean-local` is pending approval
 for removal of the exact generated local artifacts recorded in ticket #515.
