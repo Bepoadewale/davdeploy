@@ -76,7 +76,9 @@ can authorize a customer workload.
 ## Acceptance status
 
 The evidence correction is recorded. Local documentation validation passed;
-final-head CI remains pending.
+final-head CI remains pending. `COMPLETE` describes coverage of the modeled
+price lines for this test plan and synthetic assumptions; it does not pass
+customer approval or permit execution.
 
 ## Tests / validation performed
 
