@@ -60,6 +60,31 @@ _RENDERERS: dict[str, ModuleRenderer] = {
             ("build_artifact", "build-artifact"),
         ),
     ),
+    "aws-container-service": ModuleRenderer(
+        module_id="aws-container-service",
+        terraform_root="infrastructure/terraform/customer-workload-ecs-express-pilot",
+        runner_script="scripts/customer-workload-ecs-express-pilot.sh",
+        supported_operations=(
+            "plan",
+            "apply",
+            "observe",
+            "destroy_plan",
+            "destroy",
+            "verify_cleanup",
+            "build_artifact",
+        ),
+        certification="direct same-account lifecycle evidenced; hosted dispatch remains unverified",
+        execution_enabled=False,
+        operation_commands=(
+            ("plan", "plan"),
+            ("apply", "apply-saved-plan"),
+            ("observe", "observe"),
+            ("destroy_plan", "destroy-plan"),
+            ("destroy", "destroy-saved-plan"),
+            ("verify_cleanup", "verify-cleanup"),
+            ("build_artifact", "build-artifact"),
+        ),
+    ),
     "aws-file-storage": ModuleRenderer(
         module_id="aws-file-storage",
         terraform_root="infrastructure/terraform/customer-workload-private-s3",
@@ -124,6 +149,7 @@ def renderer_for_profile(
     module_id = {
         "aws-app-runner": "aws-managed-application",
         "aws-lambda-api": "aws-serverless-api",
+        "aws-ecs-express-pilot": "aws-container-service",
     }.get(profile)
     if module_id is None:
         raise ValueError(f"profile {profile} has no registered execution renderer")

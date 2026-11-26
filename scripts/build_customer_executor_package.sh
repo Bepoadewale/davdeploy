@@ -27,6 +27,8 @@ cp -R "${repo_root}/infrastructure/terraform/customer-workload-private-s3" \
   "${build_root}/package/infrastructure/terraform/"
 cp -R "${repo_root}/infrastructure/terraform/customer-workload-dynamodb" \
   "${build_root}/package/infrastructure/terraform/"
+cp -R "${repo_root}/infrastructure/terraform/customer-workload-ecs-express-pilot" \
+  "${build_root}/package/infrastructure/terraform/"
 rm -rf "${build_root}/package/infrastructure/terraform/customer-workload-app-runner-pilot/.terraform"
 rm -f "${build_root}/package/infrastructure/terraform/customer-workload-app-runner-pilot/.terraform.lock.hcl"
 rm -rf "${build_root}/package/infrastructure/terraform/customer-workload-serverless-api/.terraform"
@@ -34,10 +36,12 @@ rm -f "${build_root}/package/infrastructure/terraform/customer-workload-serverle
 rm -rf "${build_root}/package/infrastructure/terraform/customer-workload-private-s3/.terraform"
 rm -f "${build_root}/package/infrastructure/terraform/customer-workload-private-s3/.terraform.lock.hcl"
 rm -rf "${build_root}/package/infrastructure/terraform/customer-workload-dynamodb/.terraform"
+rm -rf "${build_root}/package/infrastructure/terraform/customer-workload-ecs-express-pilot/.terraform"
 cp "${repo_root}/scripts/customer-workload-app-runner-pilot.sh" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-workload-serverless-api.sh" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-workload-private-s3.sh" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-workload-dynamodb.sh" "${build_root}/package/scripts/"
+cp "${repo_root}/scripts/customer-workload-ecs-express-pilot.sh" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-serverless-artifact-build.py" "${build_root}/package/scripts/"
 cp "${repo_root}/scripts/customer-workload-dispatcher.sh" "${build_root}/package/scripts/"
 (

@@ -575,5 +575,7 @@ def test_codebuild_archive_contains_the_dispatcher_and_invoked_renderer():
     assert "scripts/customer-workload-private-s3.sh" in package_builder
     assert "infrastructure/terraform/customer-workload-dynamodb" in package_builder
     assert "scripts/customer-workload-dynamodb.sh" in package_builder
+    assert "infrastructure/terraform/customer-workload-ecs-express-pilot" in package_builder
+    assert "scripts/customer-workload-ecs-express-pilot.sh" in package_builder
     assert "scripts/customer-serverless-artifact-build.py" in package_builder
     assert "bash scripts/customer-workload-dispatcher.sh" in buildspec

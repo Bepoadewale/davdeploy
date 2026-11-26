@@ -7,10 +7,16 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs          = slice(data.aws_availability_zones.available.names, 0, 2)
-  service_name = "davdeploy-ecs-${var.connection_id}"
+  azs = slice(data.aws_availability_zones.available.names, 0, 2)
+  project_service_id = substr(
+    sha256("${var.connection_id}:${var.project_id}:${var.region}"),
+    0,
+    24,
+  )
+  service_name = "davdeploy-ecs-${local.project_service_id}"
   tags = {
     Project               = "davdeploy"
+    ProjectId             = var.project_id
     ManagedBy             = "davdeploy"
     Scope                 = var.deployment_scope
     Placement             = "customer-sandbox"

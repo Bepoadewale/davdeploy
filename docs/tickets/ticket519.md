@@ -16,13 +16,18 @@ execution.
 - Backend `main` is `dbbf7c135b7be97c832927d5c1758bc1faab805d`, merged PR #518;
   its PR and merged-main CI passed all seven checks.
 - `infrastructure/terraform/customer-workload-ecs-express-pilot` is an
-  isolated single-service ECS Express root. It currently uses local state and
-  does not integrate with the product's project-scoped saved-plan runner.
+  isolated single-service ECS Express root. This PR adds an optional S3
+  backend, project/region-scoped names and tags, and an explicit customer
+  provider profile. The backend path is configured with customer-owned state
+  resources; direct tests continue to initialize with `-backend=false`.
 - `docs/test/test437.md` records direct same-account AWS create, health,
   in-place update, failed-health rollback, recovery, and cleanup. It does not
   prove Nova dispatch or cross-account isolation.
-- `module_renderers.py` currently has no `aws-container-service` renderer and
-  `renderer_for_profile` does not map `aws-ecs-fargate` to a renderer.
+- `module_renderers.py` now has a disabled `aws-container-service` renderer
+  bound to the ECS Express root and maps only `aws-ecs-express-pilot` to it.
+  The broader `aws-ecs-fargate` planning profile does not resolve to this
+  single-container pilot. The renderer remains unavailable for customer
+  execution pending IAM, pricing/policy, and isolated runner certification.
 - Current cloud-execution gates and hosted control-plane configuration must
   remain untouched by this PR.
 
@@ -34,54 +39,72 @@ execution.
   https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-create-full.html
 - HashiCorp AWS provider resource contract:
   https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_express_gateway_service
+- HashiCorp S3 backend (SSE-KMS, versioning, and S3-native lockfile contract):
+  https://developer.hashicorp.com/terraform/language/backend/s3
 - Existing direct AWS evidence: `docs/test/test437.md`
 - Existing renderer contract: `apps/api/src/davdeploy/module_renderers.py`
 
 ## Work planned for the PR
 
-1. Add a fixed ECS Express renderer root and command mapping without enabling
-   customer execution by default.
-2. Define a remote-state configuration path scoped to customer connection,
-   project, and region while preserving the root's isolated local-test path.
-3. Implement bounded plan, saved-plan apply, observe/readiness,
-   destroy-plan, saved-plan destroy, and cleanup-verification operations.
-4. Pin images by digest; validate account, region, tenant/run identifiers,
-   artifact paths, plan digest, and returned resource identifiers.
-5. Bind outputs and health evidence to the immutable run and avoid emitting
-   credentials, environment values, or unbounded AWS responses.
-6. Keep the renderer disabled until the new contract has passed focused tests,
-   clean-room CI, cost/policy review, and an authorized isolated cloud cycle.
-7. Record any cloud run in `docs/test/test519.md`; no cloud run is authorized by
-   this source-only package itself.
+1. Add a fixed ECS Express renderer root and command map for the narrow pilot
+   profile while leaving customer execution disabled.
+2. Scope remote state in a customer-owned bucket, and generated resource names,
+   to connection, project, and region. Use S3-native locking and require
+   versioning, public-access blocks, bucket-owner enforcement, and SSE-KMS;
+   preserve `-backend=false` local validation.
+3. Implement bounded plan, saved-plan apply, observe/readiness, artifact build,
+   destroy-plan, saved-plan destroy, and independent cleanup verification.
+4. Pin images by digest and use a separate customer image-publisher role for
+   ECR writes; validate account, region, project/run identifiers, artifact
+   paths, and plan digest.
+5. Bind outputs and health evidence to the run and bound HTTP response size.
+6. Keep the renderer disabled until IAM policy, cost coverage, focused tests,
+   clean-room validation, and an authorized isolated cloud cycle are reviewed.
+7. Record any future cloud run in `docs/test/test519.md`; no AWS workload was
+   created by this PR.
 
 ## Acceptance criteria
 
-- [ ] Renderer catalogue has one fixed ECS Express root and exact command map.
-- [ ] Unknown operations and malformed tenant/run/artifact bindings fail closed.
-- [ ] Saved-plan apply and destroy verify the approved SHA-256 digest before
+- [x] Renderer catalogue has one fixed ECS Express root and exact command map,
+  with customer execution disabled.
+- [x] Unknown operations and malformed tenant/run/artifact bindings fail closed.
+- [x] Saved-plan apply and destroy verify the approved SHA-256 digest before
   Terraform execution.
-- [ ] Service readiness is verified through an independent bounded HTTP check
-  against the planned service endpoint and expected health response.
-- [ ] Cleanup verification checks service and all owned resources and does not
-  claim absence when an AWS read fails.
-- [ ] Customer execution remains disabled until all prerequisites are met.
-- [ ] Focused regression tests, documentation conventions, Terraform
-  validation, and all required PR CI checks pass.
-- [ ] No hosted control-plane, runtime, Terraform state, or lock resource is
-  accessed or mutated.
+- [x] Service readiness uses a bounded HTTP request to the Terraform-recorded
+  HTTPS endpoint and checks the expected health response.
+- [x] Cleanup verification checks service, VPC, ECR, IAM roles, and log group;
+  failed AWS reads do not produce an absence claim.
+- [x] Customer execution remains disabled until external prerequisites pass.
+- [x] Focused tests, documentation conventions, and Terraform validation pass.
+- [x] Customer remote-state bucket preflight requires versioning, complete
+  public-access blocking, bucket-owner enforcement, and the configured KMS key.
+- [ ] IAM permissions, actual-plan policy, and complete regional cost coverage
+  are reviewed and tied to the exact ECS Express plan.
+- [ ] The renderer passes a clean-room local lifecycle cycle and an authorized
+  isolated cloud cycle using project-scoped remote state.
+- [ ] Final-head GitHub Actions checks pass.
+- [x] No hosted control-plane, runtime, Terraform state, or lock resource was
+  accessed or mutated by this PR.
 
 ## Acceptance status
 
-Bootstrap design is recorded. Implementation and validation remain pending.
+The project-scoped Terraform contract, disabled renderer binding, and bounded
+runner source are implemented. Local focused tests and Terraform validation
+pass. IAM policy, cost coverage, clean-room validation, isolated cloud evidence,
+and final-head CI remain open; the renderer is not enabled for customer
+execution.
 
 ## Tests / validation performed
 
-- Read-only `git status` confirmed a clean `main` before branching.
+- `bash -n scripts/customer-workload-ecs-express-pilot.sh`: passed.
+- `.venv/bin/python -m pytest tests/test_module_renderers.py tests/test_ecs_express_renderer_contract.py -q`: 12 passed.
+- `terraform -chdir=infrastructure/terraform/customer-workload-ecs-express-pilot init -backend=false -input=false`: passed.
+- `terraform -chdir=infrastructure/terraform/customer-workload-ecs-express-pilot validate`: passed.
+- `GITHUB_PR_NUMBER=519 .venv/bin/python scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
 - Terraform monitor snapshot: 75 terminal records, zero active operations.
-- Existing AWS evidence is `docs/test/test437.md`; it will not be relabeled as
-  Nova-run evidence.
-- No new AWS resources or hosted control-plane changes are part of the current
-  bootstrap commit.
+- Existing AWS evidence remains `docs/test/test437.md`; it is not relabeled as
+  Nova-run evidence. No AWS or hosted-control-plane resource was changed.
 
 ## Boundaries
 
@@ -95,7 +118,8 @@ Bootstrap design is recorded. Implementation and validation remain pending.
 
 ## Evidence files produced
 
-- No new customer-workload evidence file exists in this bootstrap commit.
+- No new customer-workload evidence file exists because this PR performed no
+  cloud workload test.
 - Existing direct evidence remains `docs/test/test437.md`.
 
 ## Follow-up work

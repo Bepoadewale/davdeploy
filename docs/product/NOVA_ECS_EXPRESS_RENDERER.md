@@ -11,6 +11,8 @@ evidence in `docs/test/test437.md`.
 ## Boundaries
 
 - This package is limited to the existing single-service ECS Express profile.
+- The broad `aws-ecs-fargate` planning profile must not be routed to this
+  single-container pilot renderer. The pilot has its own catalogue identifier.
 - It must use the exact saved plan and project-scoped remote-state paths used by
   the execution runner; the direct pilot's local state remains an isolated test
   mode.

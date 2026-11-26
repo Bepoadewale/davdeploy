@@ -6,9 +6,12 @@ Express Mode for new containerized web workloads. See the
 [AWS availability notice](https://docs.aws.amazon.com/apprunner/latest/dg/apprunner-availability-change.html)
 and the [ECS Express Mode overview](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-overview.html).
 
-**State: design only until an authorized account-side run is recorded in the
-linked test evidence. This root uses local Terraform state and does not use the
-DavDeploy platform state bucket, lock table, hosted API, worker, or runtime.**
+**State: direct same-account pilot evidence is recorded in
+`docs/test/test437.md`; Nova renderer execution is not enabled.** This root
+supports an empty S3 backend for a project-scoped state bucket in the customer
+account, with S3-native lock files. The direct pilot uses `terraform init -backend=false`
+and local state. Neither mode uses the DavDeploy control-plane state bucket,
+lock table, hosted API, worker, or runtime.
 
 The root creates a dedicated customer VPC, two public subnets, an internet
 gateway, a private ECR repository, an ECS task execution role, and an ECS
@@ -29,7 +32,8 @@ Use the verified customer AWS profile and keep input variables outside Git.
 The exact account and Region are checked before any resources are created.
 
 1. Create a temporary tfvars file with `region`, `expected_account_id`,
-   `connection_id`, `source_repository`, `source_commit`, and `plan_digest`.
+   `connection_id`, `project_id`, `source_repository`, `source_commit`, and
+   `plan_digest`.
    Do not put credentials or secret values in it.
 2. Run `terraform init -backend=false`, review a saved foundation plan, and
    apply it through `scripts/terraform_run_monitor.py`. This creates the ECR
@@ -53,6 +57,17 @@ the load balancer, the one running Fargate task, public IPv4 addresses, logs,
 and data transfer. ECS Express Mode itself has no separate service fee; see
 [Fargate pricing](https://aws.amazon.com/fargate/pricing/) and
 [Elastic Load Balancing pricing](https://aws.amazon.com/elasticloadbalancing/pricing/).
+
+Resources are named from a hash of the connection, project, and region and
+tagged with the project ID, source commit, and plan digest. A future renderer
+runner uses the customer-owned S3 bucket supplied for that customer. It
+requires bucket versioning, all S3 public-access blocks,
+bucket-owner enforcement, and SSE-KMS with a customer key in the selected
+account and Region. The project-scoped state key is:
+`davdeploy/customer/<connection>/projects/<project>/regions/<region>/ecs-express.tfstate`.
+Saved plans and run results use the separately configured artifact store.
+Saved plans may contain sensitive configuration and require restricted,
+encrypted storage; temporary credential files are not uploaded.
 
 Run static checks with `make terraform-validate`. See
 [the same-account boundary](../../../docs/architecture/same-account-pilot.md).
