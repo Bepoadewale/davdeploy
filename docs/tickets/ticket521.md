@@ -53,32 +53,43 @@ changing hosted behavior beyond deriving Cognito's standard JWKS URL.
 
 ## Acceptance criteria
 
-- [ ] Disabled apply runner and apply-role onboarding settings are omitted
+- [x] Disabled apply runner and apply-role onboarding settings are omitted
   from the Lambda map; runtime defaults remain false/empty.
-- [ ] Enabling either feature includes all settings required by that feature.
-- [ ] Cognito issuer produces the exact standard JWKS URL; an explicit JWKS
+- [x] Enabling either feature includes all settings required by that feature.
+- [x] Cognito issuer produces the exact standard JWKS URL; an explicit JWKS
   URL remains authoritative for non-Cognito providers.
 - [ ] The resulting hosted environment fits within Lambda's 4 KiB limit with
   measured margin in a fresh protected plan.
-- [ ] Focused tests, full verification, Terraform validation, docs checks,
-  clean-room proof, and required CI pass.
+- [x] Focused tests, full verification, Terraform validation, docs checks,
+  and clean-room proof pass locally; required CI remains pending.
 - [ ] A fresh exact saved plan has no unexpected destroys and passes review
   before a new protected apply attempt.
 
 ## Acceptance status
 
-Implementation and verification are pending. The failed hosted apply is
-recorded above; no retry will use its saved plan.
+Source implementation is complete and locally verified. A fresh protected
+plan must confirm the measured environment size before apply. The failed
+hosted apply is recorded above; its saved plan will not be reused.
 
 ## Tests / validation performed
 
-- Initial docs convention check correctly rejected the ticket until it used
-  the repository's required section markers; rerun after this correction.
-- No implementation tests have run yet.
+- `GITHUB_PR_NUMBER=521 python3 scripts/check_doc_conventions.py`: passed.
+- Focused tests: `test_security_identity.py`,
+  `test_nova_exact_plan_apply_infra.py`, and `test_terraform_plan_summary.py`;
+  39 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python`:
+  passed, 1,973 tests; one existing Starlette/httpx deprecation warning.
+- Terraform format check, backend-free initialization, and validation passed.
+- `make local-proof`: clean-room bootstrap, smoke, API contract, customer-plan
+  E2E, data seeding, trace check, and full verify passed. `make clean-local`
+  removed only this worktree's project-prefixed Compose services, network,
+  volume, and generated `.venv`/`.local` artifacts.
+- `git diff --check`: passed.
 
 ## Evidence files produced
 
 - Protected workflow run `45886527901` is the current failure evidence.
+- No workload test or fresh post-fix protected plan has run yet.
 - `docs/test/test521.md` will record a later fresh plan/apply and deployment
   health verification if that workflow is completed.
 
