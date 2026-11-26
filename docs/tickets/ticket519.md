@@ -82,7 +82,8 @@ execution.
   are reviewed and tied to the exact ECS Express plan.
 - [ ] The renderer passes a clean-room local lifecycle cycle and an authorized
   isolated cloud cycle using project-scoped remote state.
-- [ ] Final-head GitHub Actions checks pass.
+- [x] Final-head GitHub Actions run 45874597927 passed all seven checks; rerun
+  required after this ticket update is pushed.
 - [x] No hosted control-plane, runtime, Terraform state, or lock resource was
   accessed or mutated by this PR.
 
@@ -97,7 +98,7 @@ execution.
 ## Tests / validation performed
 
 - `bash -n scripts/customer-workload-ecs-express-pilot.sh`: passed.
-- `.venv/bin/python -m pytest tests/test_module_renderers.py tests/test_ecs_express_renderer_contract.py -q`: 12 passed.
+- `.venv/bin/python -m pytest tests/test_adapter_catalogue.py tests/test_module_renderers.py tests/test_ecs_express_renderer_contract.py tests/test_renderer_dispatcher.py -q`: 25 passed.
 - `terraform -chdir=infrastructure/terraform/customer-workload-ecs-express-pilot init -backend=false -input=false`: passed.
 - `terraform -chdir=infrastructure/terraform/customer-workload-ecs-express-pilot validate`: passed.
 - `GITHUB_PR_NUMBER=519 .venv/bin/python scripts/check_doc_conventions.py`: passed.
