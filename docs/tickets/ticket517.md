@@ -34,18 +34,18 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 3. Add tests that verify the private/public IP input changes the generated Batch job definition as expected; run Terraform format/validation and required CI.
 4. Before AWS apply, verify current us-east-1 Price List prices, Batch/Fargate quotas and availability, review an exact saved plan, and record a maximum of one hour and USD $1.00 estimated total spend. AWS Budgets are not a hard cap.
 5. Run one job, prove it reaches `SUCCEEDED`, verify private image retrieval and CloudWatch logs, then use the Terraform run monitor and independently check the exact resources absent after cleanup.
-6. No AWS apply or deletion occurs from this PR until exact resource cleanup approval is recorded. If the test is not run, keep test evidence explicitly marked not executed.
+6. The ECR bootstrap repository and images already exist under the exact TestId. Do not apply the remaining VPC/Batch stack or delete AWS resources until the user explicitly approves the exact current AWS cleanup inventory. If the test is not run, keep evidence explicit about the partial state.
 
 ## Acceptance criteria
 
 - [x] Existing module callers retain their current public-IP behavior by default; private networking is an explicit opt-in.
 - [x] The test root declares same-plan private subnets without NAT/public IP resources, endpoint bindings, and endpoint SG ingress limited to TCP/443 from the Batch SG; the Batch SG egress is limited to those endpoints and the S3 gateway prefix list.
-- [x] The test root sets public-IP assignment to `DISABLED` and requires a SHA256-pinned private ECR image; the private image digest is recorded in `docs/test/test517.md`.
+- [x] The test root sets public-IP assignment to `DISABLED`, requires a SHA256-pinned private ECR image, and constructs a plan-known task-role ARN so the full saved plan exposes the exact job configuration; the private image digest is recorded in `docs/test/test517.md`.
 - [x] Focused policy and Terraform-validation tests (641 passed), Terraform formatting/validation, docs conventions, and diff checks pass locally.
 - [x] Fargate uses an explicitly managed, untaggable `AWSServiceRoleForBatch`; preflight found it absent and no existing Batch compute environments in 17 enabled regions, defining the exact cleanup boundary.
 - [ ] Final-head CI passes.
-- [ ] Before AWS apply, current pricing/quota/capacity and exact resource inventory are recorded; maximum runtime is one hour and estimated maximum spend is USD $1.00.
-- [ ] Within the previously authorized exact test manifest, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
+- [x] Current public pricing, account, quota, AZ availability, exact TestId inventory, and a saved full plan are recorded. The saved plan is scoped to 22 creates and one ECR tag update, with zero deletes. Maximum runtime is one hour and estimated maximum spend is USD $1.00.
+- [ ] With explicit approval for the exact AWS cleanup inventory, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
 - [ ] Exact test resources are destroyed through the run monitor and independently verified absent; AWS-retained inactive job-definition history is listed separately.
 - [ ] No hosted control-plane or control-plane state/lock resource is changed; no Nova dispatch claim is made.
 
@@ -68,11 +68,13 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - Focused Terraform tests, full `make terraform-validate`, docs conventions and diff checks passed after the Fargate service-role change. The Batch service-linked role is owned at exact resource address `aws_iam_service_linked_role.batch`; it has no tags.
 - Read-only AWS preflight: expected account confirmed, two AZs available, Fargate quota 64 vCPUs, and no pre-existing resources with the test purpose tag.
 - Exact targeted ECR plan apply `nova-batch517-ecr-apply-20261126a` succeeded through the Terraform run monitor (supervisor PID `92773`, Terraform PID `92774`); the test image was pushed to the exact new repository and its digest is recorded in `docs/test/test517.md`.
+- A second image build/push added a duplicate manifest set to the same test repository; all five exact ECR manifest digests are recorded in `docs/test/test517.md` and require exact cleanup approval.
+- Full saved plan `/tmp/davdeploy-batch-private-517-reviewed.tfplan` uses the updated Fargate service-linked-role design and contains 22 creates, one ECR expiry-tag update, zero deletes. The first monitored full-plan apply failed before creating resources because `AWS_PROFILE` was not passed; state reconciliation found no partial VPC/Batch resources.
 - `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - GitHub CI: pending on final head.
 - Full isolated local clean-room cycle: bootstrap, smoke, API contract, customer-plan E2E, all five canonical demos, seed/restart persistence, trace check, and `make verify`; 1,971 tests passed with one Starlette/httpx deprecation warning. No AWS resources were used. Project containers were removed; local `.venv/`, `.local/`, and `davdeploy-pr517-cleanroom_davdeploy-postgres` were retained because cleanup of those non-container resources needs explicit approval.
-- AWS planning/apply: not started.
+- AWS planning: complete. The ECR bootstrap apply and image push are recorded above. Full Batch/VPC apply awaits explicit AWS cleanup approval for the current exact resource inventory.
 
 ## Evidence files produced
 
@@ -80,7 +82,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 
 ## Boundaries
 
-Do not modify hosted control-plane runtime, Terraform state, or lock resources. Before any customer-side apply, verify AWS account `654654474502`, region `us-east-1`, current prices and quotas, and the exact reviewed plan. Do not exceed one hour or the USD $1.00 estimated-cost bound. Keep secrets out of logs. Only resources listed in this PR's exact disposable test manifest are in the authorized cleanup scope. Preserve inactive Batch definition records and all SageMaker lineage evidence.
+Do not modify hosted control-plane runtime, Terraform state, or lock resources. Before any customer-side apply, verify AWS account `654654474502`, region `us-east-1`, current prices and quotas, and the exact reviewed plan. Do not exceed one hour or the USD $1.00 estimated-cost bound. Keep secrets out of logs. The cleanup approval currently on record covers the PR #515 clean-room worktree only; obtain explicit approval for this AWS test's exact cleanup scope before deleting any AWS resource. Preserve unrelated resources, inactive Batch definition history unless separately authorized, and all SageMaker lineage evidence.
 
 ## Follow-up work
 

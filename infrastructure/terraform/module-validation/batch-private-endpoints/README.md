@@ -33,6 +33,11 @@ interface-endpoint AZ-hours ($0.06) and one 0.25 vCPU/0.5 GiB Fargate job hour
 allows bounded data processing, logging, and transfer. It is an estimate, not a
 hard AWS spending cap. AWS rounds partial endpoint-hours up.
 
+The test constructs the execution-role ARN from the verified account,
+partition, and configured role name so Terraform's saved plan can expose the
+exact digest-pinned image and `assignPublicIp = DISABLED` job configuration
+before apply.
+
 Do not apply until the exact plan, maximum runtime, cost assumptions, and exact
 cleanup authorization are recorded in `docs/test/test517.md`. Use the PID-based
 Terraform run monitor for each apply/destroy. On teardown, delete only the

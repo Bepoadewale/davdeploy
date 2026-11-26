@@ -64,9 +64,11 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
 
 locals {
-  name = "davdeploy-${var.test_id}"
+  name                     = "davdeploy-${var.test_id}"
+  task_execution_role_name = "${local.name}-execution"
   tags = {
     ManagedBy = "terraform"
     Purpose   = "davdeploy-private-batch-endpoints-517"
@@ -125,7 +127,7 @@ resource "aws_iam_service_linked_role" "batch" {
 }
 
 resource "aws_iam_role" "task_execution" {
-  name               = "${local.name}-execution"
+  name               = local.task_execution_role_name
   assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
   tags               = local.tags
 }
@@ -211,7 +213,7 @@ resource "aws_cloudwatch_log_group" "batch" {
 module "batch" {
   source             = "../../modules/batch-compute"
   name               = local.name
-  instance_role_arn  = aws_iam_role.task_execution.arn
+  instance_role_arn  = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.task_execution_role_name}"
   subnet_ids         = values(aws_subnet.private)[*].id
   security_group_ids = [aws_security_group.batch.id]
   image              = "${module.ecr.repository_url}@${var.image_digest}"
