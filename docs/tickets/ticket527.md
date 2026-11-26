@@ -1,54 +1,66 @@
-# ticket527 — Add fail-closed plan-scoped permissions for ECS Express
+# ticket527 — Map the ECS Express plan permission boundary
 
-PR: #527 (draft; implementation package)
+PR: #527 (draft; sourced design review)
 Branch: `feat/ecs-express-plan-scope-527`
 Base: PR #526 (`docs/ecs-express-iam-boundary-526`)
 
-## Goal
+## Problem / goal
 
-Implement deterministic permission-policy generation for the exact ECS Express pilot Terraform plan, without enabling its renderer or making cloud calls. The policy must bind to trusted plan data, scope actions and resources, include only exact connection-scoped `iam:PassRole`, and reject any operation the code cannot safely scope.
+Complete the AWS action, resource, and condition mapping needed before deterministic plan-scoped permission code can safely authorize the ECS Express pilot. Record verified composite API behavior and identify where the current root must be phased. Do not enable the renderer or make cloud calls.
 
-## Current repository and dependency state
+## Current repo state
 
 - Backend main is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba` (PR #522).
-- PR #519 is the disabled ECS Express renderer; PR #525 adds the separately provisioned ECS service-role pair; PR #526 records the verified unbounded-role issue and the required security contract. All are open drafts.
-- Existing `nova_apply_access.py` supports S3, SQS, and DynamoDB only. The pilot root also contains VPC, internet gateway, subnet, route table, route-table association, ECR, CloudWatch Logs, ECS Express and `iam:PassRole` operations.
-- The current ECS runner assumes one role without an STS session policy. Its configured role may be the `administrator-pilot` role with AWS `AdministratorAccess`. The renderer remains disabled.
+- PR #519 is the disabled ECS Express renderer; PR #525 adds the separately provisioned ECS service-role pair; PR #526 records the verified unbounded-role issue and the required security contract. These PRs remain open drafts.
+- Existing `nova_apply_access.py` supports S3, SQS, and DynamoDB only. The ECS Express pilot root includes EC2 networking, ECR, CloudWatch Logs and an ECS Express API resource.
+- The current runner assumes one role without an STS session policy. Its configured role may be the `administrator-pilot` role with AWS `AdministratorAccess`. The renderer remains disabled.
 - No AWS, Terraform, hosted control-plane, state or lock mutation is in scope.
 
-## Research and references
+## Research / references used
 
-- PR #526: `docs/security/ECS_EXPRESS_EXECUTION_IAM.md` defines role separation, exact-plan policy binding, fail-closed behavior and service-role pass constraints.
+- PR #526: `docs/security/ECS_EXPRESS_EXECUTION_IAM.md` records the runner flaw and required security contract.
 - AWS [STS session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-api.html).
 - AWS [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html), including resource-based grants to role sessions.
-- AWS service authorization references: [EC2](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonec2.html), [ECR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonelasticcontainerregistry.html), [CloudWatch Logs](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazoncloudwatchlogs.html), [ECS](https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonelasticcontainerservice.html), and [IAM](https://docs.aws.amazon.com/service-authorization/latest/reference/list_awsidentityandaccessmanagementiam.html). Validate exact action/resource/condition keys against current primary documentation before coding.
+- AWS service authorization references: [EC2](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html), [ECR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecr.html), [CloudWatch Logs](https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html), [ECS](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html), and [IAM](https://docs.aws.amazon.com/service-authorization/latest/reference/list_iam.html).
+- ECS APIs: [CreateExpressGatewayService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateExpressGatewayService.html) and [DeleteExpressGatewayService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteExpressGatewayService.html).
 
-## Planned work
+## Work planned for the PR
 
-1. Map every Terraform resource/action in the current pilot root to AWS actions and resource/condition scope; do not add a profile until every action is safely bounded.
-2. Add deterministic policy construction from the approved saved-plan JSON and the exact account, region, connection, project, task role and infrastructure role identities.
-3. Bind canonical policy digest to the saved-plan digest and run authorization; reject unsupported resources/actions, unknown IDs, untagged creations, replacements that cannot be constrained, policy-size overflow and missing role evidence.
-4. Restrict `iam:PassRole` to the two exact roles and verified service principals; reject role management actions.
-5. Add unit tests for actions, ARNs, request/resource tag conditions, create/update/delete/replacement, policy digest, pass-role, malformed plans and every fail-closed path.
-6. Do not wire credentials or enable the renderer in this package unless separation of plan/state/apply/observe credentials is proven as part of the same review. No cloud execution is allowed.
+- Inspect the pilot Terraform resource inventory and current AWS service authorization references.
+- Document EC2 relationship/tag scope, exact ECR/log-group resources, Terraform data-source reads, ECS Express composite API actions, and exact-role `iam:PassRole` requirements in `docs/security/ECS_EXPRESS_EXECUTION_IAM.md`.
+- Identify computed resource IDs and ECS Express API side effects that are not represented as Terraform-managed resources in the approved plan.
+- Keep permission code, credential wiring and cloud execution deferred wherever exact scoping is not proven.
 
 ## Acceptance criteria
 
-- [ ] A reviewed mapping covers every action/resource in the current ECS Express pilot root using current AWS documentation.
-- [ ] Policy generation is deterministic and only accepts an exact supported saved plan with trusted account/region/project/role identities.
-- [ ] `iam:PassRole` is limited to the exact ECS task execution and infrastructure roles with service conditions.
-- [ ] Unsupported/unscopable plans, wildcard escalation, oversized policy, unknown action/resource, role drift, and identity mismatch fail closed.
-- [ ] Regression tests cover all supported and rejected cases; no AWS credentials are required.
-- [ ] The runner and renderer remain disabled; hosted control plane, customer resources, state and locks remain untouched.
-- [ ] Focused tests, required full clean-room validation for authorization/lifecycle changes, docs conventions, diff checks and all final-head CI checks pass.
-- [ ] Claims distinguish implemented source and local tests from AWS execution evidence.
+- [x] Current AWS authorization references cover relevant service actions and condition keys.
+- [x] ECS Express composite actions and the distinct ECS infrastructure-role responsibility are documented.
+- [x] The same-plan computed-subnet scope gap and phased-plan dependency are explicit.
+- [x] No broad caller permission for ELB/Auto Scaling is inferred from ECS-managed side effects.
+- [ ] Every provider API call and internal ECS resource ARN is verified against the pinned provider and represented in tested policy code; deferred to a follow-up implementation package.
+- [x] Renderer, hosted control plane, customer resources, state and locks remain untouched.
+- [ ] Final-head GitHub CI checks pass.
 
-## Validation and evidence
+## Acceptance status
 
-Validation is pending implementation. If no cloud workload is run, no `docs/test/test527.md` is required. If cloud testing becomes necessary, stop and obtain explicit authorization for an exact bounded experiment before any mutation, then add `docs/test/test527.md`.
+The sourced authorization mapping and implementation blocker are recorded. This PR does not implement or enable ECS permissions. The pilot remains ineligible for any apply until the deferred criteria and later lifecycle gates are met.
 
-## Boundaries and follow-up
+## Tests / validation performed
+
+- `GITHUB_PR_NUMBER=527 python3 scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- No code tests apply to this documentation-only package. No cloud call, Terraform plan/apply/destroy, role assumption, or hosted control-plane operation was performed.
+
+## Evidence files produced
+
+- `docs/security/ECS_EXPRESS_EXECUTION_IAM.md` — sourced action map and remaining authorization questions.
+- No `docs/test/test527.md`; no customer workload test was run.
+
+## Boundaries
 
 - No Terraform apply/destroy, AWS role assumption, AWS resource mutation, hosted control-plane operation, state/lock access, renderer enablement or customer-workload claim.
 - Preserve audit evidence and protected local files.
-- This permission builder alone cannot make the runner executable. Follow-up must separately scope plan/state/apply/observe/image-publish identities, prevent role resource-policy escalation, verify IAM profile and policy simulation, and complete an authorized isolated lifecycle before enabling the renderer.
+
+## Follow-up work
+
+Verify exact AWS provider API behavior and internal resource ARNs; split network foundation and ECS service into separately approved plan phases; implement tested plan-bound policy generation and phase-specific identities; then pass clean-room and CI gates before any bounded AWS pilot.
