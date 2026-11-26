@@ -461,7 +461,7 @@ def _evaluate(
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
     _check_autoscaling_groups(document, resources, findings)
-    _check_vpc_topology(document, resources, findings)
+    _check_vpc_topology(document, resources, findings, expected_region)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -1687,6 +1687,7 @@ def _check_vpc_topology(
     document: dict[str, Any],
     resources: tuple[dict[str, Any], ...],
     findings: list[PlanPolicyFinding],
+    expected_region: str,
 ) -> None:
     """Check the small VPC topology produced by modules/vpc, including egress bindings."""
     supported_types = {
@@ -1697,6 +1698,7 @@ def _check_vpc_topology(
         "aws_route_table_association",
         "aws_eip",
         "aws_nat_gateway",
+        "aws_vpc_endpoint",
     }
     route_resource_types = {
         "aws_route",
@@ -1704,7 +1706,6 @@ def _check_vpc_topology(
         "aws_default_route_table",
         "aws_internet_gateway_attachment",
         "aws_main_route_table_association",
-        "aws_vpc_endpoint",
         "aws_vpc_peering_connection",
         "aws_vpc_peering_connection_accepter",
         "aws_vpc_dhcp_options",
@@ -2129,6 +2130,223 @@ def _check_vpc_topology(
         for address in public_addresses
     ):
         _deny(findings, "vpc_nat_subnet_not_public", nat.get("address"), "The NAT gateway must attach to a subnet associated with the public route table.")
+
+    # Endpoint support is limited to the exact services priced by
+    # generated_plan_pricing and the already classified private path.
+    endpoints = by_type["aws_vpc_endpoint"]
+    if endpoints:
+        configured = _configured_resources(document)
+
+        def nested_references(address: Any, path: tuple[str, ...]) -> tuple[str, ...]:
+            item = configured.get(address) if isinstance(address, str) else None
+            current: list[Any] = [item.get("expressions") if isinstance(item, dict) else None]
+            for part in path:
+                next_values: list[Any] = []
+                for value in current:
+                    if isinstance(value, dict) and part in value:
+                        next_values.append(value[part])
+                    elif isinstance(value, list):
+                        next_values.extend(
+                            child[part] for child in value
+                            if isinstance(child, dict) and part in child
+                        )
+                current = next_values
+            return tuple(
+                reference
+                for expression in current
+                for reference in _expression_references(expression)
+            )
+
+        security_groups = [item for item in resources if item.get("type") == "aws_security_group"]
+        batch_environments = [
+            item for item in resources
+            if item.get("type") == "aws_batch_compute_environment"
+        ]
+
+        def endpoint_bound_targets(
+            address: Any,
+            attribute: str,
+            candidates: list[dict[str, Any]],
+            nested_path: tuple[str, ...] | None = None,
+        ) -> set[str]:
+            refs = (
+                nested_references(address, nested_path)
+                if nested_path is not None
+                else attribute_references(address, attribute)
+            )
+            matched = {
+                candidate["address"]
+                for candidate in candidates
+                if isinstance(candidate.get("address"), str)
+                and any(reference_matches(ref, candidate) for ref in refs)
+            }
+            configured_item = configured.get(address) if isinstance(address, str) else None
+            planned = next(
+                (item for item in resources if item.get("address") == address), None
+            )
+            values = planned.get("values") if isinstance(planned, dict) else None
+            identifiers = values.get(attribute) if isinstance(values, dict) else None
+            identifiers = identifiers if isinstance(identifiers, list) else [identifiers]
+            if isinstance(configured_item, dict) and isinstance(values, dict):
+                for candidate in candidates:
+                    candidate_values = candidate.get("values")
+                    candidate_id = candidate_values.get("id") if isinstance(candidate_values, dict) else None
+                    if isinstance(candidate_id, str) and candidate_id in identifiers:
+                        matched.add(candidate["address"])
+            return matched
+
+        for endpoint in endpoints:
+            address = endpoint.get("address")
+            values = endpoint.get("values")
+            if not isinstance(address, str) or not isinstance(values, dict):
+                _deny(findings, "vpc_endpoint_values_unknown", address, "Required VPC endpoint settings are unknown.")
+                continue
+            endpoint_type = values.get("vpc_endpoint_type")
+            service_name = values.get("service_name")
+            service_suffix = (
+                service_name.removeprefix(f"com.amazonaws.{expected_region}.")
+                if isinstance(service_name, str)
+                else None
+            )
+            if not references_only_targets(endpoint, "vpc_id", vpc_candidates, {vpc_address}):
+                _deny(findings, "vpc_endpoint_vpc_binding_invalid", address, "A VPC endpoint must bind to the same planned VPC.")
+            if values.get("policy") not in (None, ""):
+                _deny(findings, "vpc_endpoint_policy_unsupported", address, "Custom VPC endpoint policies require separate deterministic review.")
+            if endpoint_type == "Interface":
+                if service_suffix not in {"ecr.api", "ecr.dkr", "logs"}:
+                    _deny(findings, "vpc_interface_endpoint_unsupported", address, "Only same-region ECR API, ECR Docker, and CloudWatch Logs interface endpoints are supported.")
+                if (
+                    values.get("private_dns_enabled") is not True
+                    or values.get("ip_address_type") != "ipv4"
+                    or values.get("dns_options") not in (None, [], [{}])
+                    or not isinstance(values.get("subnet_ids"), list)
+                    or not values.get("subnet_ids")
+                ):
+                    _deny(findings, "vpc_interface_endpoint_configuration_invalid", address, "Interface endpoints require private DNS, IPv4, known private subnet IDs, and default DNS options.")
+                endpoint_subnet_ids = values.get("subnet_ids")
+                endpoint_subnet_ids = endpoint_subnet_ids if isinstance(endpoint_subnet_ids, list) else []
+                selected_subnets = endpoint_bound_targets(address, "subnet_ids", subnets)
+                if (
+                    not references_only_targets(endpoint, "subnet_ids", subnets, selected_subnets)
+                    or not selected_subnets
+                    or not selected_subnets.issubset(private_addresses)
+                    or len(selected_subnets) != len(endpoint_subnet_ids)
+                    or len({subnet_by_address[item].get("values", {}).get("availability_zone") for item in selected_subnets}) != len(selected_subnets)
+                ):
+                    _deny(findings, "vpc_interface_endpoint_subnet_binding_invalid", address, "Interface endpoint ENIs must bind to one known same-plan private subnet per distinct Availability Zone.")
+
+                endpoint_groups = endpoint_bound_targets(address, "security_group_ids", security_groups)
+                if (
+                    not isinstance(values.get("security_group_ids"), list)
+                    or not values.get("security_group_ids")
+                    or len(endpoint_groups) != len(values.get("security_group_ids", []))
+                    or not references_only_targets(endpoint, "security_group_ids", security_groups, endpoint_groups)
+                ):
+                    _deny(findings, "vpc_interface_endpoint_security_group_binding_invalid", address, "Interface endpoints must bind only known same-plan security groups.")
+                    continue
+                batch_sources: set[str] = set()
+                for environment in batch_environments:
+                    batch_sources.update(endpoint_bound_targets(
+                        environment.get("address"), "security_group_ids", security_groups,
+                        ("compute_resources", "security_group_ids"),
+                    ))
+                batch_sources = {
+                    group_address
+                    for group_address in batch_sources
+                    for group in security_groups
+                    if group.get("address") == group_address
+                    and references_only_targets(group, "vpc_id", vpc_candidates, {vpc_address})
+                }
+                for rule in resources:
+                    if rule.get("type") not in {
+                        "aws_vpc_security_group_ingress_rule",
+                        "aws_vpc_security_group_egress_rule",
+                        "aws_security_group_rule",
+                    }:
+                        continue
+                    if not endpoint_bound_targets(
+                        rule.get("address"), "security_group_id", security_groups
+                    ):
+                        _deny(
+                            findings,
+                            "vpc_interface_endpoint_rule_binding_unknown",
+                            address,
+                            "Every security-group rule in an interface-endpoint plan must bind to a known same-plan security group.",
+                        )
+                        break
+                valid_endpoint_groups: set[str] = set()
+                for group in security_groups:
+                    group_address = group.get("address")
+                    group_values = group.get("values")
+                    if group_address not in endpoint_groups or not isinstance(group_values, dict):
+                        continue
+                    if (
+                        not references_only_targets(group, "vpc_id", vpc_candidates, {vpc_address})
+                        or group_values.get("ingress") != []
+                        or group_values.get("egress") != []
+                    ):
+                        continue
+                    matching_rules = []
+                    unsafe_rules = False
+                    for rule in resources:
+                        kind = rule.get("type")
+                        if kind not in {"aws_vpc_security_group_ingress_rule", "aws_security_group_rule"}:
+                            continue
+                        rule_address = rule.get("address")
+                        if group_address not in endpoint_bound_targets(rule_address, "security_group_id", security_groups):
+                            continue
+                        rule_values = rule.get("values")
+                        if kind == "aws_security_group_rule":
+                            # The legacy combined rule resource is not admitted
+                            # for endpoint groups because it can mix broad
+                            # ingress/egress settings in one planned object.
+                            unsafe_rules = True
+                            continue
+                        matching_rules.append(rule)
+                        if (
+                            not isinstance(rule_values, dict)
+                            or rule_values.get("ip_protocol") != "tcp"
+                            or rule_values.get("from_port") != 443
+                            or rule_values.get("to_port") != 443
+                            or any(rule_values.get(key) not in (None, "") for key in ("cidr_ipv4", "cidr_ipv6", "prefix_list_id"))
+                        ):
+                            unsafe_rules = True
+                            continue
+                        sources = endpoint_bound_targets(rule_address, "referenced_security_group_id", security_groups)
+                        if not sources or not sources.issubset(batch_sources):
+                            unsafe_rules = True
+                    has_egress_rule = any(
+                        rule.get("type") in {"aws_vpc_security_group_egress_rule", "aws_security_group_rule"}
+                        and group_address in endpoint_bound_targets(rule.get("address"), "security_group_id", security_groups)
+                        for rule in resources
+                    )
+                    if matching_rules and not unsafe_rules and not has_egress_rule:
+                        valid_endpoint_groups.add(group_address)
+                if not endpoint_groups.issubset(valid_endpoint_groups) or len(batch_environments) != 1:
+                    _deny(findings, "vpc_interface_endpoint_ingress_invalid", address, "Endpoint security groups must allow only TCP/443 from a same-plan AWS Batch workload security group, with no unrestricted egress rules.")
+            elif endpoint_type == "Gateway":
+                if (
+                    service_suffix not in {"s3", "dynamodb"}
+                    or values.get("ip_address_type") != "ipv4"
+                    or values.get("private_dns_enabled") not in (None, False)
+                    or values.get("subnet_ids") not in (None, [])
+                    or values.get("security_group_ids") not in (None, [])
+                    or not isinstance(values.get("route_table_ids"), list)
+                    or not values.get("route_table_ids")
+                ):
+                    _deny(findings, "vpc_gateway_endpoint_configuration_invalid", address, "Gateway endpoints support only same-region S3 or DynamoDB with IPv4, private route-table associations, and no interface-only settings.")
+                endpoint_route_table_ids = values.get("route_table_ids")
+                endpoint_route_table_ids = endpoint_route_table_ids if isinstance(endpoint_route_table_ids, list) else []
+                selected_tables = endpoint_bound_targets(address, "route_table_ids", route_tables)
+                if (
+                    not references_only_targets(endpoint, "route_table_ids", route_tables, selected_tables)
+                    or not selected_tables
+                    or selected_tables != {private_table.get("address")}
+                    or len(selected_tables) != len(endpoint_route_table_ids)
+                ):
+                    _deny(findings, "vpc_gateway_endpoint_route_table_binding_invalid", address, "Gateway endpoints must bind only to the planned private NAT route table.")
+            else:
+                _deny(findings, "vpc_endpoint_type_unsupported", address, "Only the specifically bounded interface and gateway endpoint types are supported.")
     _review(
         findings,
         "vpc_nat_egress_cost_review",

@@ -1,11 +1,11 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-25. This handoff tracks the Nova-led infrastructure goal
+Updated: 2026-11-26. This handoff tracks the Nova-led infrastructure goal
 without claiming launch readiness. Source, hosted control-plane state,
 customer-side AWS evidence, Nova execution, application behavior, and per-entry
 lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-25
+## Current source and acceptance status — 2026-11-26
 
 The next major engineering goal is registered in the
 [AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
@@ -14,7 +14,7 @@ the active priority and are not reduced or replaced. Start the queued goal only
 after this handoff records genuine completion with its required evidence.
 
 The source baseline for this reconciliation is backend `main` at
-`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512). PR #506 makes the
+`c6b069037516610bd57cca877dfb52af1dfc71a6` (PR #514). PR #506 makes the
 26-architecture / 30-root crosswalk machine-checkable without enabling runtime
 dispatch. PR #507 adds trusted usage assumptions and regional Fargate compute
 price lines for the bounded Batch job shape. Final-head CI passed all seven
@@ -41,20 +41,41 @@ per-address minimum. Its final-head checks passed in run
 [45680499414](https://github.com/Bepoadewale/davdeploy/actions/runs/45680499414);
 merged-main checks passed in run
 [45681334818](https://github.com/Bepoadewale/davdeploy/actions/runs/45681334818).
-Batch/ECR estimates remain incomplete and approval-ineligible while network
-paths, NAT/endpoints, egress, and other material costs remain unpriced. PRs
-#507 and #509–#512 changed no AWS workloads or hosted runtime.
-Draft PR #514 adds source-only regional price lines for same-region ECR API,
+Merged PR #514 adds source-only regional price lines for same-region ECR API,
 ECR Docker, and CloudWatch Logs interface endpoint hours and processed data,
 bound to trusted monthly usage and known same-plan subnet IDs/AZs. Exact
 S3/DynamoDB gateway endpoints have no endpoint charge; other interface service
 names, endpoint variants, and unmodeled network costs remain blockers. Focused
-pricing tests pass (156 tests), full local verification passes (1,956 tests),
-and all seven checks passed on final PR head `4112269` in run
+pricing tests passed (156 tests), full local verification passed (1,956 tests),
+and all seven checks passed on final PR head in run
 [45695787719](https://github.com/Bepoadewale/davdeploy/actions/runs/45695787719).
-The ticket/handoff status update is documentation-only; current-head checks
-remain the merge gate. No AWS resource, Terraform state/lock, hosted control
-plane, or customer workload was changed.
+Merged-main checks passed all seven in run
+[45697443528](https://github.com/Bepoadewale/davdeploy/actions/runs/45697443528).
+PR #515 is an open draft extending the generated-plan policy to those exact
+endpoint classes: interface endpoints are bound to same-plan private subnets, enabled VPC DNS,
+and a Batch security-group HTTPS path, and gateway endpoints to the private
+route table. Focused policy and pricing tests pass (794 tests); full local
+verification passes (1,970 tests, one upstream deprecation warning).
+Documentation checks and `git diff --check` pass. All seven checks passed on
+code head `dcb9c24` in
+[run 45775684796](https://github.com/Bepoadewale/davdeploy/actions/runs/45775684796).
+The isolated workstation clean-room sequence at `870ce27` passed through the
+full `verify` step (1,969 tests); the subsequent fail-closed rule-target
+regression passed full local verification (1,970 tests) and all seven final-head
+CI checks. The nine project containers, PostgreSQL volume, network, and
+generated `.venv` and `.local` were absent before cleanup. With the user's
+explicit approval in this conversation, the clean-room worktree
+`/private/tmp/davdeploy-pr515-cleanroom-20261126` was removed; no AWS resources
+or retained audit evidence were deleted. No GitHub review has been submitted,
+so the PR remains a draft. This package is source-only. AWS inventory was read-only
+reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
+configuration, test role, and artifact bucket are absent; five tagged Batch
+test definitions are inactive and no matching Batch queues or compute
+environments exist. The retained SageMaker lineage action still has its
+association to the retained context. The Terraform monitor has zero active
+operations. No AWS resource, state/lock,
+hosted control plane, protected local file, or customer workload was changed.
+PRs #507 and #509–#512 also changed no AWS workloads or hosted runtime.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
 passed on head `86b4b89` in run
@@ -71,9 +92,13 @@ hosted backend release remains PR #420 commit
 [run 43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577)
 after plan
 [run 43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184).
-This reconciliation did not access or change the hosted control plane. The
-recorded health observation belongs to the earlier deployment check and was
-not repeated here.
+Read-only AWS Lambda inspection confirmed the API and worker functions remain
+`Active`, last modified `2026-11-16T23:53:32Z`, with matching code hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; a fresh read-only
+`GET /healthz` returned `{"status":"ok","product":"davdeploy"}`. This
+confirms the recorded PR #420 deployment is healthy; it does not prove that
+source changes after PR #420 are deployed. No hosted-control-plane mutation
+occurred.
 
 Merged PR #510 binds a digest-pinned, same-region Batch image to exactly one
 same-plan private ECR repository, requiring its registry account to be known in
