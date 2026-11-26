@@ -136,7 +136,8 @@ this documentation update still requires its own final-head CI.
 - `GITHUB_PR_NUMBER=523 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - Final-head run `45908603081` on `667de8be`: all seven checks passed.
-- CI for the resulting ticket status-record update is pending.
+- Follow-up ticket-status commit `5b6fd18d` passed all seven checks in run
+  `45909113939`.
 
 ## Boundaries
 
