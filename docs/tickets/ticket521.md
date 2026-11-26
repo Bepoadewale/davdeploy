@@ -64,7 +64,7 @@ changing hosted behavior beyond deriving Cognito's standard JWKS URL.
 - [ ] The resulting hosted environment fits within Lambda's 4 KiB limit with
   measured margin in a fresh protected plan.
 - [x] Focused tests, full verification, Terraform validation, docs checks,
-  and clean-room proof pass locally; required CI remains pending.
+  clean-room proof, and all seven CI checks pass (CI run `45891611590`).
 - [ ] A fresh exact saved plan has no unexpected destroys and passes review
   before a new protected apply attempt.
 
@@ -89,6 +89,8 @@ hosted apply is recorded above; its saved plan will not be reused.
   worktree's project-prefixed Compose services, network, volume, and generated
   `.venv`/`.local` artifacts.
 - `git diff --check`: passed.
+- CI run `45891611590` passed all seven required checks for implementation
+  commit `42ad0516583bc0882bcb1ed5b64f7d6944e30a3a`.
 
 ## Evidence files produced
 
