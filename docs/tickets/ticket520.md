@@ -45,7 +45,7 @@ remote-state lifecycle, and Nova-originated execution remain separate gates.
 - Existing pilot Terraform root:
   `infrastructure/terraform/customer-workload-ecs-express-pilot`
 
-## Work planned
+## Work planned for the PR
 
 1. Add an exact ECS Express plan contract with strict resource inventory and
    same-plan reference binding for service, VPC/subnets, ECR, log group, and
@@ -92,7 +92,7 @@ Implemented as a source-only actual-plan policy and regression tests. The draft
 remains review-required: pricing, effective role permissions, Nova dispatch,
 and a real provider-generated saved-plan fixture remain separate gates.
 
-## Validation performed
+## Tests / validation performed
 
 - `tests/test_generated_plan_policy.py`: 642 passed.
 - Ruff on the changed policy and test files: passed.
@@ -112,12 +112,12 @@ and a real provider-generated saved-plan fixture remain separate gates.
 - Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
   retained SageMaker lineage evidence.
 
-## Evidence files
+## Evidence files produced
 
 - No `docs/test/test520.md` is required because this PR performs no customer
   workload test or cloud mutation.
 
-## Follow-up
+## Follow-up work
 
 Complete the separate regional cost model, effective execution permission
 review, isolated remote-state runner lifecycle, and hosted Nova authorization
