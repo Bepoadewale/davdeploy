@@ -102,7 +102,6 @@ in the endpoint plan must also bind to a known same-plan security group.
 - Focused policy/pricing tests before the final rule-binding fix: 794 passed.
 - Current `tests/test_generated_plan_policy.py`: 638 passed after the
   rule-binding regression was added.
-- Focused updated `tests/test_generated_plan_policy.py`: 638 passed.
 - Ruff check on the changed policy and test files passed.
 - `git diff --check` passed.
 - Full repository `make VENV=/Users/adewale/Projects/davdeploy/.venv verify` on current worktree changes: 1,970 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose configuration passed. One upstream Starlette/httpx deprecation warning was emitted.
@@ -116,8 +115,9 @@ in the endpoint plan must also bind to a known same-plan security group.
   verification (1,969 passed). A later read-only inventory confirmed the nine
   `davdeploy-pr515-cleanroom` containers, volume
   `davdeploy-pr515-cleanroom_davdeploy-postgres`, network
-  `davdeploy-pr515-cleanroom_default`, and generated `.venv` and `.local`.
-  are absent. This agent performed no deletion; the worktree remains.
+  `davdeploy-pr515-cleanroom_default`, and generated `.venv` and `.local` are
+  absent after the scoped cleanup. Independent checks confirmed this; the
+  worktree remains.
 - The final code review identified the need to reject unknown security-group
   rule targets whenever an interface endpoint is present. The new regression
   test and fail-closed check pass locally. No GitHub review has been submitted.
