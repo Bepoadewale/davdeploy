@@ -460,7 +460,7 @@ def plan(
     }
 
 
-def ecs_express_plan():
+def ecs_express_plan(*, unknown_create_ids=False, variable_region=False):
     account = ECR_ACCOUNT_ID
     name = "davdeploy-ecs-0123456789abcdef01234567"
     repo_url = f"{account}.dkr.ecr.{REGION}.amazonaws.com/{name}"
@@ -524,11 +524,65 @@ def ecs_express_plan():
             "name": f"/aws/ecs/{name}", "retention_in_days": 3,
         }),
     ]
+    configuration = {
+        "provider_config": {
+            "aws": {
+                "expressions": {
+                    "region": (
+                        {"references": ["var.region"]}
+                        if variable_region
+                        else {"constant_value": REGION}
+                    )
+                }
+            }
+        }
+    }
+    variables = {"region": {"value": REGION}} if variable_region else {}
+    if unknown_create_ids:
+        by_address = {item["address"]: item["values"] for item in resources}
+        for address, fields in {
+            "aws_vpc.customer": ("id",),
+            "aws_internet_gateway.customer": ("id", "vpc_id"),
+            "aws_subnet.public[0]": ("id", "vpc_id"),
+            "aws_subnet.public[1]": ("id", "vpc_id"),
+            "aws_route_table.public": ("id", "vpc_id"),
+            "aws_route_table_association.public[0]": ("route_table_id", "subnet_id"),
+            "aws_route_table_association.public[1]": ("route_table_id", "subnet_id"),
+            "aws_ecr_repository.workload": ("registry_id", "repository_url"),
+        }.items():
+            for field in fields:
+                by_address[address][field] = None
+        by_address["aws_route_table.public"]["route"][0]["gateway_id"] = None
+        by_address["aws_ecs_express_gateway_service.workload[0]"]["network_configuration"][0]["subnets"] = [None, None]
+
+        def configured(address, **references_by_field):
+            return {
+                "address": address,
+                "mode": "managed",
+                "type": address.split(".", maxsplit=1)[0],
+                "expressions": {
+                    field: {"references": references}
+                    for field, references in references_by_field.items()
+                },
+            }
+
+        configuration["root_module"] = {
+            "resources": [
+                configured("aws_ecs_express_gateway_service.workload", network_configuration=["aws_subnet.public"]),
+                configured("aws_internet_gateway.customer", vpc_id=["aws_vpc.customer.id"]),
+                configured("aws_route_table.public", vpc_id=["aws_vpc.customer.id"], route=["aws_internet_gateway.customer.id"]),
+                configured("aws_route_table_association.public", subnet_id=["aws_subnet.public", "count.index"], route_table_id=["aws_route_table.public.id"]),
+                configured("aws_subnet.public", vpc_id=["aws_vpc.customer.id"]),
+            ]
+        }
+    else:
+        configuration = {**configuration, "root_module": {"resources": []}}
     return {
         "format_version": "1.2",
         "applyable": True,
         "errored": False,
-        "configuration": {"provider_config": {"aws": {"expressions": {"region": {"constant_value": REGION}}}}},
+        "configuration": configuration,
+        "variables": variables,
         "planned_values": {"root_module": {"resources": resources}},
         "resource_changes": [change(item["address"], item["type"], item["values"]) for item in resources],
     }
@@ -1055,6 +1109,59 @@ def test_ecs_express_pilot_prices_its_hidden_resources_and_variable_usage():
         "AmazonECS", "AWSELB", "AmazonVPC", "AmazonCloudWatch",
         "AmazonECR", "AWSDataTransfer",
     }
+
+
+def test_ecs_express_create_plan_with_unknown_ids_is_costed_from_same_plan_references():
+    result, _ = evaluate(
+        ecs_express_plan(unknown_create_ids=True, variable_region=True),
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.COMPLETE
+    assert result.approval_eligible is True
+
+
+def test_ecs_express_create_plan_unknown_ids_without_exact_references_is_unpriced():
+    document = ecs_express_plan(unknown_create_ids=True, variable_region=True)
+    document["configuration"]["root_module"]["resources"] = []
+    result, _ = evaluate(
+        document,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
+
+
+def test_ecs_express_create_plan_does_not_accept_vpc_reference_in_unrelated_field():
+    document = ecs_express_plan(unknown_create_ids=True, variable_region=True)
+    subnet = next(
+        item for item in document["configuration"]["root_module"]["resources"]
+        if item["address"] == "aws_subnet.public"
+    )
+    subnet["expressions"] = {
+        "vpc_id": {"references": ["var.untrusted_vpc"]},
+        "tags": {"references": ["aws_vpc.customer.id"]},
+    }
+    result, _ = evaluate(
+        document,
+        ecs_express_usage_assumptions=ECS_EXPRESS_USAGE,
+        ecr_usage_assumptions={"repositories": {
+            "aws_ecr_repository.workload": {"monthly_stored_gb": {"minimum": 1, "maximum": 2}}
+        }},
+        catalog_client=FakeBatchPriceList(),
+    )
+
+    assert result.status == PlanPricingStatus.INCOMPLETE
+    assert "ecs_express_pricing_shape_unsupported" in {item.code for item in result.findings}
 
 
 def test_ecs_express_pricing_fails_closed_for_missing_usage_or_extra_resources():

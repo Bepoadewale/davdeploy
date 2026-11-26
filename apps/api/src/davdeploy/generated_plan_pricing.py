@@ -1665,6 +1665,7 @@ def evaluate_generated_plan_pricing(
     ecs_express_shape_valid = False
     if ecs_express_services:
         ecs_express_shape_valid = _validate_ecs_express_pricing_shape(
+            document,
             resources,
             ecs_express_services,
             ecr_repositories,
@@ -3726,6 +3727,7 @@ def pricing_evidence_document_is_valid(document: Any) -> bool:
 
 
 def _validate_ecs_express_pricing_shape(
+    document: dict[str, Any],
     resources: tuple[dict[str, Any], ...],
     services: list[dict[str, Any]],
     repositories: list[dict[str, Any]],
@@ -3733,6 +3735,20 @@ def _validate_ecs_express_pricing_shape(
     region: str,
 ) -> bool:
     """Accept only the reviewed single-service pilot inventory and bindings."""
+    configured_references = _pricing_configured_resource_references(document)
+
+    def references_resource(source: str, target: str, field: str) -> bool:
+        source = source.split("[", maxsplit=1)[0]
+        return any(
+            reference == target or reference.startswith(f"{target}.")
+            for reference in configured_references.get(source, {}).get(field, ())
+        )
+
+    def matches_or_references(
+        value: Any, expected: Any, source: str, target: str, field: str
+    ) -> bool:
+        return value == expected if value is not None else references_resource(source, target, field)
+
     expected_counts = {
         "terraform_data": 1,
         "aws_ecs_express_gateway_service": 1,
@@ -3801,26 +3817,39 @@ def _validate_ecs_express_pricing_shape(
     registry = repo_values.get("registry_id")
     repo_url = repo_values.get("repository_url")
     image = container.get("image")
+    account_guard = next(
+        item for item in resources if item["address"] == "terraform_data.account_guard"
+    )["values"].get("input")
+    expected_repository_url = (
+        f"{account_guard}.dkr.ecr.{region}.amazonaws.com/{name}"
+        if isinstance(account_guard, str) and re.fullmatch(r"\d{12}", account_guard)
+        else None
+    )
     image_pattern = (
-        rf"^{re.escape(registry)}\.dkr\.ecr\.{re.escape(region)}\.amazonaws\.com/"
+        rf"^{re.escape(account_guard)}\.dkr\.ecr\.{re.escape(region)}\.amazonaws\.com/"
         rf"{re.escape(name)}@sha256:[a-f0-9]{{64}}$"
-        if isinstance(registry, str) and re.fullmatch(r"\d{12}", registry)
+        if isinstance(account_guard, str) and re.fullmatch(r"\d{12}", account_guard)
         else r"(?!)"
     )
     if (
         repo_address != "aws_ecr_repository.workload"
         or repo_values.get("name") != name
-        or repo_url != f"{registry}.dkr.ecr.{region}.amazonaws.com/{name}"
-        or repo_values.get("encryption_configuration") != [{"encryption_type": "AES256", "kms_key": None}]
+        or not isinstance(expected_repository_url, str)
+        or (repo_url is not None and repo_url != expected_repository_url)
+        or (registry is not None and registry != account_guard)
+        or repo_values.get("encryption_configuration") not in (
+            [{"encryption_type": "AES256", "kms_key": None}],
+            [{"encryption_type": "AES256"}],
+        )
         or not isinstance(image, str)
         or re.fullmatch(image_pattern, image) is None
-        or not image.startswith(f"{repo_url}@sha256:")
+        or not image.startswith(f"{expected_repository_url}@sha256:")
         or log_address != "aws_cloudwatch_log_group.workload"
         or log_values.get("name") != f"/aws/ecs/{name}"
         or log_values.get("retention_in_days") != 3
         or log_values.get("log_group_class") not in (None, "STANDARD")
         or log_values.get("kms_key_id") not in (None, "")
-        or next(item for item in resources if item["address"] == "terraform_data.account_guard")["values"].get("input") != registry
+        or account_guard is None
     ):
         return False
     logs = container.get("aws_logs_configuration")
@@ -3867,7 +3896,10 @@ def _validate_ecs_express_pricing_shape(
         "aws_subnet.public[1]": "10.84.11.0/24",
     }
     subnets_valid = all(
-        item["values"].get("vpc_id") == vpc.get("id")
+        matches_or_references(
+            item["values"].get("vpc_id"), vpc.get("id"),
+            item["address"], "aws_vpc.customer", "vpc_id",
+        )
         and item["values"].get("map_public_ip_on_launch") is True
         and item["values"].get("assign_ipv6_address_on_creation") is not True
         and item["values"].get("cidr_block") == expected_subnets[item["address"]]
@@ -3882,28 +3914,98 @@ def _validate_ecs_express_pricing_shape(
         and len(routes) == 1
         and isinstance(routes[0], dict)
         and routes[0].get("cidr_block") == "0.0.0.0/0"
-        and routes[0].get("gateway_id") == gateway.get("id")
+        and matches_or_references(
+            routes[0].get("gateway_id"), gateway.get("id"),
+            "aws_route_table.public", "aws_internet_gateway.customer", "route",
+        )
     )
     subnet_ids_by_address = {item["address"]: item["values"].get("id") for item in subnets}
     return (
         isinstance(network_subnets, list)
-        and all(isinstance(item, str) for item in network_subnets)
-        and set(network_subnets) == subnet_ids
+        and (
+            (
+                all(isinstance(item, str) for item in network_subnets)
+                and set(network_subnets) == subnet_ids
+            )
+            or (
+                len(network_subnets) == 2
+                and all(item is None for item in network_subnets)
+                and references_resource(
+                    "aws_ecs_express_gateway_service.workload",
+                    "aws_subnet.public",
+                    "network_configuration",
+                )
+            )
+        )
         and network[0].get("security_groups") in (None, [])
-        and len(subnet_ids) == 2
+        and len(subnets) == 2
+        and (
+            (all(isinstance(value, str) for value in subnet_ids) and len(subnet_ids) == 2)
+            or all(value is None for value in subnet_ids)
+        )
         and vpc.get("cidr_block") == "10.84.0.0/16"
         and vpc.get("enable_dns_support") is True
         and vpc.get("enable_dns_hostnames") is True
         and vpc.get("assign_generated_ipv6_cidr_block") is not True
-        and gateway.get("vpc_id") == vpc.get("id")
-        and route_table.get("vpc_id") == vpc.get("id")
+        and matches_or_references(
+            gateway.get("vpc_id"), vpc.get("id"),
+            "aws_internet_gateway.customer", "aws_vpc.customer", "vpc_id",
+        )
+        and matches_or_references(
+            route_table.get("vpc_id"), vpc.get("id"),
+            "aws_route_table.public", "aws_vpc.customer", "vpc_id",
+        )
         and route_valid
         and subnets_valid
         and len(availability_zones) == 2
         and len(associations) == 2
-        and {item.get("subnet_id") for item in associations} == set(subnet_ids_by_address.values())
-        and all(item.get("route_table_id") == route_table.get("id") for item in associations)
+        and all(
+            matches_or_references(
+                next(
+                    item["values"] for item in resources
+                    if item["address"] == f"aws_route_table_association.public[{index}]"
+                ).get("subnet_id"),
+                subnet_ids_by_address.get(f"aws_subnet.public[{index}]"),
+                f"aws_route_table_association.public[{index}]",
+                "aws_subnet.public",
+                "subnet_id",
+            )
+            and matches_or_references(
+                next(
+                    item["values"] for item in resources
+                    if item["address"] == f"aws_route_table_association.public[{index}]"
+                ).get("route_table_id"),
+                route_table.get("id"),
+                f"aws_route_table_association.public[{index}]",
+                "aws_route_table.public",
+                "route_table_id",
+            )
+            for index in range(2)
+        )
     )
+
+
+def _pricing_configured_resource_references(
+    document: dict[str, Any],
+) -> dict[str, dict[str, tuple[str, ...]]]:
+    configuration = document.get("configuration")
+    root = configuration.get("root_module") if isinstance(configuration, dict) else None
+    resources = root.get("resources") if isinstance(root, dict) else None
+    if not isinstance(resources, list):
+        return {}
+    result: dict[str, dict[str, tuple[str, ...]]] = {}
+    for resource in resources:
+        if not isinstance(resource, dict) or not isinstance(resource.get("address"), str):
+            continue
+        expressions = resource.get("expressions")
+        if not isinstance(expressions, dict):
+            continue
+        result[resource["address"].split("[", maxsplit=1)[0]] = {
+            field: tuple(reference for reference in expression.get("references", []) if isinstance(reference, str))
+            for field, expression in expressions.items()
+            if isinstance(expression, dict) and isinstance(expression.get("references", []), list)
+        }
+    return result
 
 
 def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
@@ -5130,7 +5232,17 @@ def _plan_region_matches(document: dict[str, Any], region: str) -> bool:
     aws = providers.get("aws") if isinstance(providers, dict) else None
     expressions = aws.get("expressions") if isinstance(aws, dict) else None
     region_expression = expressions.get("region") if isinstance(expressions, dict) else None
-    return isinstance(region_expression, dict) and region_expression.get("constant_value") == region
+    if not isinstance(region_expression, dict):
+        return False
+    if region_expression.get("constant_value") == region:
+        return True
+    variables = document.get("variables")
+    region_variable = variables.get("region") if isinstance(variables, dict) else None
+    return (
+        region_expression.get("references") == ["var.region"]
+        and isinstance(region_variable, dict)
+        and region_variable.get("value") == region
+    )
 
 
 def _planned_managed_resources(document: dict[str, Any]) -> tuple[dict[str, Any], ...]:

@@ -86,16 +86,23 @@ and trusted usage bounds.
   unsupported sharing, and malformed input cannot produce `COMPLETE` pricing.
 - [x] Existing pricing manifest versions remain readable and canonical; new
   evidence uses a versioned strict shape.
-- [x] Focused and full relevant tests, lint, docs conventions, and final-head CI
+- [x] A provider-generated create plan may contain computed resource IDs and
+  variable-bound region values only when the exact same-plan resource
+  references and the trusted `var.region` value are present; missing bindings
+  remain incomplete.
+- [ ] Focused and full relevant tests, lint, docs conventions, and final-head CI
   pass. A full clean-room run is not applicable to this pricing-only change.
-- [x] No AWS workload or hosted control-plane resource is changed; no Terraform
-  plan/apply/destroy or state/lock operation is run.
+- [x] No AWS workload or hosted control-plane resource is changed, and no
+  remote Terraform state or lock is accessed. The retained isolated local
+  provider-generated plan from PR #519 was evaluated using read-only AWS
+  discovery and current AWS Price List data; no apply or destroy was run.
 
 ## Acceptance status
 
-Implementation and local validation are complete. Final-head CI run
-`45894761342` passed all seven checks. The PR remains a draft, stacked on PR
-#520.
+Implementation and prior local validation are complete. The current revision
+adds field-specific reference binding. Full local verification passes; final-
+head CI is pending. Earlier CI run `45894761342` passed all seven checks for
+its then-current head. The PR remains a draft, stacked on PR #520.
 
 ## Tests / validation performed
 
@@ -108,15 +115,23 @@ Implementation and local validation are complete. Final-head CI run
   product families.
 - `make PY=/private/tmp/davdeploy-private-batch-endpoints-517/.venv/bin/python openapi-check`: passed.
 - Focused pricing and lifecycle tests: 188 passed.
-- `python -m pytest tests -q`: 1,990 passed, with one existing Starlette/httpx
-  deprecation warning.
+- Current `make verify`: 1,993 passed, with one existing Starlette/httpx
+  deprecation warning; Ruff, OpenAPI snapshot, actions configuration, and
+  Compose checks passed.
 - Ruff checks on changed Python files: passed.
 - `python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - Initial final-head CI run `45893810916` exposed an OpenAPI snapshot mismatch;
   after regenerating the contract snapshot, CI run `45894761342` passed all
   seven checks.
-- No Terraform plan or AWS/control-plane operation was run for this PR.
+- Focused pricing tests cover accepted and rejected computed-ID bindings,
+  including a reference placed in an unrelated field.
+- The isolated local provider-generated plan from PR #519 is costed through the
+  evaluator with live regional Price List data: `COMPLETE`, approval-eligible,
+  12 cost lines, and a range of 117 to 41,571 USD cents per month under the
+  documented usage assumptions. Catalog publication dates span
+  `2026-11-19T10:58:41Z` through `2026-11-25T18:58:32Z`. No
+  workload/control-plane mutation or remote state/lock access occurred.
 
 ## Evidence files produced
 
