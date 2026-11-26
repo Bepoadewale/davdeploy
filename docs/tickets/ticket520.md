@@ -88,11 +88,20 @@ remote-state lifecycle, and Nova-originated execution remain separate gates.
 
 ## Acceptance status
 
-Bootstrap design only. Implementation and validation are pending.
+Implemented as a source-only actual-plan policy and regression tests. The draft
+remains review-required: pricing, effective role permissions, Nova dispatch,
+and a real provider-generated saved-plan fixture remain separate gates.
 
 ## Validation performed
 
-- No code tests or AWS operations have been run for this PR yet.
+- `tests/test_generated_plan_policy.py`: 642 passed.
+- Ruff on the changed policy and test files: passed.
+- `git diff --check`: passed.
+- Synthetic policy tests verify the exact pilot inventory, ECR binding,
+  fail-closed network binding, and that ECR force deletion requires the
+  exact-pilot allowlist entry and remains reviewable.
+- No AWS operations, Terraform plans, or hosted control-plane operations were
+  run.
 - Official AWS and HashiCorp documentation was reviewed as listed above.
 
 ## Boundaries

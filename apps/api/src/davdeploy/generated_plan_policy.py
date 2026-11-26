@@ -50,7 +50,7 @@ class GeneratedPlanPolicyResult:
     human_approval_required: bool = True
 
 
-POLICY_VERSION = "nova-generated-plan-2026-11-25.8"
+POLICY_VERSION = "nova-generated-plan-2026-11-26.1"
 TRUSTED_GUARD_ADDRESS = "terraform_data.account_guard"
 LAMBDA_SUPPORTED_RUNTIME_IDS = frozenset(
     {
@@ -123,6 +123,19 @@ POLICY_CRITICAL_UNKNOWN_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {
         ("image_scanning_configuration", "scan_on_push"),
         ("encryption_configuration", "encryption_type"),
         ("force_delete",),
+    ),
+    "aws_ecs_express_gateway_service": (
+        ("service_name",),
+        ("execution_role_arn",),
+        ("infrastructure_role_arn",),
+        ("task_role_arn",),
+        ("cpu",),
+        ("memory",),
+        ("health_check_path",),
+        ("primary_container",),
+        ("network_configuration",),
+        ("scaling_target",),
+        ("wait_for_steady_state",),
     ),
     "aws_sqs_queue_policy": (("policy",),),
     "aws_sqs_queue": (
@@ -418,7 +431,12 @@ def _evaluate(
     _check_s3(document, resources, expected_region, findings, expected_account_id)
     _check_cloudfront_viewer_tls(resources, findings)
     _check_cloudfront_origin_tls(resources, findings)
-    _check_ecr_repositories(resources, findings)
+    ecs_express_ecr_addresses = _check_ecs_express_pilot(
+        document, resources, findings, expected_account_id, expected_region
+    )
+    _check_ecr_repositories(
+        resources, findings, allowed_force_delete_addresses=ecs_express_ecr_addresses
+    )
     _check_kms_keys(resources, findings)
     _check_ssm_parameters(resources, findings)
     _check_opensearch_domains(resources, findings)
@@ -461,7 +479,8 @@ def _evaluate(
     _check_ebs_volumes(resources, findings)
     _check_instance_metadata(document, resources, findings)
     _check_autoscaling_groups(document, resources, findings)
-    _check_vpc_topology(document, resources, findings, expected_region)
+    if not any(item.get("type") == "aws_ecs_express_gateway_service" for item in resources):
+        _check_vpc_topology(document, resources, findings, expected_region)
 
     if summary.delete_count or summary.replacement_count:
         findings.append(
@@ -3704,6 +3723,384 @@ def _check_kinesis_streams(
             )
 
 
+def _check_ecs_express_pilot(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    expected_account_id: str,
+    expected_region: str,
+) -> frozenset[str]:
+    """Validate the single checked-in ECS Express smoke-test root.
+
+    ECS Express creates supporting resources that are not separate
+    Terraform resources in this root, so a valid plan remains subject to
+    mandatory human review.
+    """
+    services = [item for item in resources if item.get("type") == "aws_ecs_express_gateway_service"]
+    if not services:
+        return frozenset()
+    service_address = services[0].get("address")
+    force_delete_ecr_addresses: set[str] = set()
+
+    def deny(code: str, address: Any, message: str) -> None:
+        _deny(findings, code, address, message)
+
+    allowed_types = {
+        "terraform_data", "aws_ecs_express_gateway_service", "aws_iam_role",
+        "aws_iam_role_policy_attachment", "aws_vpc", "aws_internet_gateway",
+        "aws_subnet", "aws_route_table", "aws_route_table_association",
+        "aws_ecr_repository", "aws_cloudwatch_log_group",
+    }
+    by_type = {
+        kind: [item for item in resources if item.get("type") == kind]
+        for kind in allowed_types
+    }
+    expected_counts = {
+        "terraform_data": 1,
+        "aws_ecs_express_gateway_service": 1,
+        "aws_iam_role": 2,
+        "aws_iam_role_policy_attachment": 2,
+        "aws_vpc": 1,
+        "aws_internet_gateway": 1,
+        "aws_subnet": 2,
+        "aws_route_table": 1,
+        "aws_route_table_association": 2,
+        "aws_ecr_repository": 1,
+        "aws_cloudwatch_log_group": 1,
+    }
+    actual_counts = {
+        kind: sum(1 for item in resources if item.get("type") == kind)
+        for kind in expected_counts
+    }
+    if (
+        any(item.get("type") not in allowed_types for item in resources)
+        or actual_counts != expected_counts
+        or len(services) != 1
+    ):
+        deny(
+            "ecs_express_inventory_unsupported", service_address,
+            "ECS Express supports only the exact single-service pilot inventory; extra or missing resources are not supported.",
+        )
+        return frozenset()
+
+    guards = by_type["terraform_data"]
+    if (
+        guards[0].get("address") != "terraform_data.account_guard"
+        or not isinstance(guards[0].get("values"), dict)
+        or guards[0]["values"].get("input") != expected_account_id
+    ):
+        deny(
+            "ecs_express_account_guard_invalid", guards[0].get("address"),
+            "The pilot plan must retain its exact expected-account guard resource.",
+        )
+
+    service = services[0]
+    address = service.get("address")
+    values = service.get("values")
+    if address != "aws_ecs_express_gateway_service.workload[0]" or not isinstance(values, dict):
+        deny(
+            "ecs_express_address_or_values_invalid", address,
+            "ECS Express must use the fixed pilot resource address with fully visible planned values.",
+        )
+        return frozenset()
+
+    service_name = values.get("service_name")
+    if (
+        not isinstance(service_name, str)
+        or re.fullmatch(r"davdeploy-ecs-[a-f0-9]{24}", service_name) is None
+        or values.get("cpu") not in ("256", 256)
+        or values.get("memory") not in ("512", 512)
+        or values.get("health_check_path") != "/healthz"
+        or values.get("wait_for_steady_state") is not True
+        or values.get("task_role_arn") not in (None, "")
+        or values.get("cluster") not in (None, "default")
+        or values.get("region") not in (None, expected_region)
+    ):
+        deny(
+            "ecs_express_service_configuration_invalid", address,
+            "ECS Express must use the fixed 256 CPU, 512 MiB, /healthz, no-task-role pilot settings and wait for steady state.",
+        )
+
+    containers = values.get("primary_container")
+    if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
+        deny("ecs_express_container_shape_invalid", address, "The pilot requires exactly one primary container.")
+        containers = []
+    container = containers[0] if containers else {}
+    image = container.get("image")
+    image_service_name = service_name if isinstance(service_name, str) else ""
+    image_pattern = (
+        rf"^{re.escape(expected_account_id)}\.dkr\.ecr\.{re.escape(expected_region)}\.amazonaws\.com/"
+        rf"{re.escape(image_service_name)}@sha256:[a-f0-9]{{64}}$"
+    )
+    if not isinstance(image, str) or re.fullmatch(image_pattern, image) is None:
+        deny(
+            "ecs_express_image_invalid", address,
+            "The pilot requires a digest-pinned image in the same-account, same-region repository.",
+        )
+
+    environment = container.get("environment")
+    if (
+        container.get("container_port") not in (8000, "8000")
+        or environment != [{"name": "DAVDEPLOY_TEST_SCOPE", "value": "same-account-customer-sandbox"}]
+        or container.get("secret") not in (None, [])
+        or container.get("repository_credentials") not in (None, [])
+        or container.get("command") not in (None, [])
+    ):
+        deny(
+            "ecs_express_container_configuration_invalid", address,
+            "The pilot permits only its fixed health fixture, port, and non-secret environment value.",
+        )
+
+    scaling = values.get("scaling_target")
+    if (
+        not isinstance(scaling, list) or len(scaling) != 1 or not isinstance(scaling[0], dict)
+        or scaling[0].get("min_task_count") != 1
+        or scaling[0].get("max_task_count") != 1
+        or scaling[0].get("auto_scaling_metric") != "AVERAGE_CPU"
+        or scaling[0].get("auto_scaling_target_value") != 70
+    ):
+        deny(
+            "ecs_express_scaling_invalid", address,
+            "The pilot must remain at exactly one task with the fixed CPU scaling target.",
+        )
+
+    log_config = container.get("aws_logs_configuration")
+    log_groups = by_type["aws_cloudwatch_log_group"]
+    expected_log_group = f"/aws/ecs/{service_name}" if isinstance(service_name, str) else None
+    log_values = log_groups[0].get("values", {})
+    if (
+        log_groups[0].get("address") != "aws_cloudwatch_log_group.workload"
+        or
+        not isinstance(log_config, list) or len(log_config) != 1 or not isinstance(log_config[0], dict)
+        or log_config[0].get("log_group") != expected_log_group
+        or log_config[0].get("log_stream_prefix") != "customer-test"
+        or not isinstance(log_values, dict)
+        or log_values.get("name") != expected_log_group
+        or log_values.get("retention_in_days") != 3
+    ):
+        deny(
+            "ecs_express_log_binding_invalid", address,
+            "The container must use only the exact three-day pilot log group.",
+        )
+
+    repositories = by_type["aws_ecr_repository"]
+    repository_values = repositories[0].get("values", {})
+    repository_name = repository_values.get("name") if isinstance(repository_values, dict) else None
+    repository_url = repository_values.get("repository_url") if isinstance(repository_values, dict) else None
+    if (
+        repositories[0].get("address") != "aws_ecr_repository.workload"
+        or repository_name != service_name
+        or not isinstance(repository_url, str)
+        or not isinstance(image, str)
+        or not image.startswith(f"{repository_url}@sha256:")
+        or repository_values.get("registry_id") != expected_account_id
+    ):
+        deny(
+            "ecs_express_repository_binding_invalid", repositories[0].get("address"),
+            "The image must use the one same-account repository created for this pilot.",
+        )
+    elif repository_values.get("force_delete") is True:
+        force_delete_ecr_addresses.add(repositories[0]["address"])
+
+    vpcs = by_type["aws_vpc"]
+    subnets = by_type["aws_subnet"]
+    gateways = by_type["aws_internet_gateway"]
+    tables = by_type["aws_route_table"]
+    associations = by_type["aws_route_table_association"]
+    vpc_values = vpcs[0].get("values", {})
+    vpc_id = vpc_values.get("id") if isinstance(vpc_values, dict) else None
+    if (
+        vpcs[0].get("address") != "aws_vpc.customer"
+        or not isinstance(vpc_values, dict)
+        or vpc_values.get("cidr_block") != "10.84.0.0/16"
+        or vpc_values.get("enable_dns_support") is not True
+        or vpc_values.get("enable_dns_hostnames") is not True
+        or vpc_values.get("assign_generated_ipv6_cidr_block") is True
+        or any(vpc_values.get(key) for key in ("ipv6_cidr_block", "ipv6_ipam_pool_id", "ipv6_netmask_length"))
+    ):
+        deny(
+            "ecs_express_vpc_invalid", vpcs[0].get("address"),
+            "The pilot requires its fixed IPv4 VPC with DNS enabled and no IPv6 allocation.",
+        )
+
+    subnet_ids: set[str] = set()
+    zones: set[str] = set()
+    cidrs: set[str] = set()
+    expected_cidrs = {"10.84.10.0/24", "10.84.11.0/24"}
+    for subnet in subnets:
+        subnet_values = subnet.get("values", {})
+        if (
+            not isinstance(subnet_values, dict)
+            or subnet_values.get("vpc_id") != vpc_id
+            or subnet_values.get("map_public_ip_on_launch") is not True
+            or subnet_values.get("assign_ipv6_address_on_creation") is True
+            or not isinstance(subnet_values.get("cidr_block"), str)
+            or not isinstance(subnet_values.get("availability_zone"), str)
+            or not subnet_values.get("availability_zone", "").startswith(expected_region)
+            or not isinstance(subnet_values.get("id"), str)
+        ):
+            deny(
+                "ecs_express_subnet_invalid", subnet.get("address"),
+                "Pilot subnets must be the fixed public subnets in the selected Region and VPC.",
+            )
+            continue
+        subnet_ids.add(subnet_values["id"])
+        zones.add(subnet_values["availability_zone"])
+        cidrs.add(subnet_values["cidr_block"])
+    if len(subnet_ids) != 2 or len(zones) != 2 or cidrs != expected_cidrs:
+        deny(
+            "ecs_express_subnet_set_invalid", address,
+            "The pilot must use exactly two public subnets in distinct Availability Zones.",
+        )
+    if {item.get("address") for item in subnets} != {
+        "aws_subnet.public[0]", "aws_subnet.public[1]"
+    }:
+        deny("ecs_express_subnet_addresses_invalid", address, "The pilot requires the two fixed subnet resource addresses.")
+
+    gateway_values = gateways[0].get("values", {})
+    table_values = tables[0].get("values", {})
+    gateway_id = gateway_values.get("id") if isinstance(gateway_values, dict) else None
+    routes = table_values.get("route") if isinstance(table_values, dict) else None
+    if (
+        gateways[0].get("address") != "aws_internet_gateway.customer"
+        or not isinstance(gateway_values, dict)
+        or gateway_values.get("vpc_id") != vpc_id
+        or tables[0].get("address") != "aws_route_table.public"
+        or not isinstance(table_values, dict)
+        or table_values.get("vpc_id") != vpc_id
+        or not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict)
+        or routes[0].get("cidr_block") != "0.0.0.0/0"
+        or routes[0].get("gateway_id") != gateway_id
+        or routes[0].get("nat_gateway_id") not in (None, "")
+    ):
+        deny(
+            "ecs_express_public_route_invalid", tables[0].get("address"),
+            "The pilot must use only its public IPv4 route through the same-plan internet gateway.",
+        )
+
+    associated_subnets: set[str] = set()
+    table_id = table_values.get("id") if isinstance(table_values, dict) else None
+    for association in associations:
+        association_values = association.get("values", {})
+        if (
+            not isinstance(association_values, dict)
+            or association_values.get("route_table_id") != table_id
+            or association_values.get("subnet_id") not in subnet_ids
+        ):
+            deny(
+                "ecs_express_route_association_invalid", association.get("address"),
+                "Every pilot subnet must use the same-plan public route table.",
+            )
+        else:
+            associated_subnets.add(association_values["subnet_id"])
+    if associated_subnets != subnet_ids:
+        deny(
+            "ecs_express_route_association_incomplete", address,
+            "The pilot route table must associate exactly the two approved public subnets.",
+        )
+    if {item.get("address") for item in associations} != {
+        "aws_route_table_association.public[0]", "aws_route_table_association.public[1]"
+    }:
+        deny("ecs_express_route_association_addresses_invalid", address, "The pilot requires the two fixed route-association addresses.")
+
+    network = values.get("network_configuration")
+    network_subnets = network[0].get("subnets") if isinstance(network, list) and len(network) == 1 and isinstance(network[0], dict) else None
+    network_groups = network[0].get("security_groups") if isinstance(network, list) and len(network) == 1 and isinstance(network[0], dict) else None
+    if (
+        not isinstance(network_subnets, list)
+        or any(not isinstance(item, str) for item in network_subnets)
+        or set(network_subnets) != subnet_ids
+        or network_groups not in (None, [])
+    ):
+        deny(
+            "ecs_express_network_binding_invalid", address,
+            "The service must bind to both exact pilot subnets without unreviewed security groups.",
+        )
+
+    roles = by_type["aws_iam_role"]
+    roles_by_name = {
+        item.get("values", {}).get("name"): item
+        for item in roles if isinstance(item.get("values"), dict)
+    }
+    expected_roles = {
+        f"{service_name}-execution": "ecs-tasks.amazonaws.com",
+        f"{service_name}-infrastructure": "ecs.amazonaws.com",
+    }
+    role_arns: dict[str, str] = {}
+    if {item.get("address") for item in roles} != {
+        "aws_iam_role.execution", "aws_iam_role.infrastructure"
+    }:
+        deny("ecs_express_role_addresses_invalid", address, "The pilot requires the two fixed role resource addresses.")
+    for role_name, principal in expected_roles.items():
+        role = roles_by_name.get(role_name)
+        role_values = role.get("values") if isinstance(role, dict) else None
+        role_arn = role_values.get("arn") if isinstance(role_values, dict) else None
+        if (
+            not isinstance(role_arn, str)
+            or not _aws_arn_matches(role_arn, "iam", "", expected_account_id, "role/")
+            or role_arn.rsplit("/", maxsplit=1)[-1] != role_name
+        ):
+            deny(
+                "ecs_express_role_scope_invalid", role.get("address") if isinstance(role, dict) else address,
+                "ECS Express roles must be the exact same-account project roles from the pilot plan.",
+            )
+        else:
+            role_arns[role_name] = role_arn
+        try:
+            trust = json.loads(role_values.get("assume_role_policy")) if isinstance(role_values, dict) else None
+        except (json.JSONDecodeError, TypeError, RecursionError):
+            trust = None
+        statements = _statements(trust, require_resource=False) if isinstance(trust, dict) else []
+        if (
+            len(statements) != 1
+            or statements[0].get("Effect") != "Allow"
+            or _string_list(statements[0].get("Action")) != ("sts:AssumeRole",)
+            or not isinstance(statements[0].get("Principal"), dict)
+            or _string_list(statements[0]["Principal"].get("Service")) != (principal,)
+        ):
+            deny(
+                "ecs_express_role_trust_invalid", role.get("address") if isinstance(role, dict) else address,
+                "Each pilot role must trust only its expected ECS service principal.",
+            )
+
+    expected_attachments = {
+        (f"{service_name}-execution", "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"),
+        (f"{service_name}-infrastructure", "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"),
+    }
+    attachments = {
+        (item.get("values", {}).get("role"), item.get("values", {}).get("policy_arn"))
+        for item in by_type["aws_iam_role_policy_attachment"]
+        if isinstance(item.get("values"), dict)
+    }
+    if attachments != expected_attachments:
+        deny(
+            "ecs_express_managed_policies_invalid", address,
+            "Only the two documented managed policies may be attached to the pilot roles.",
+        )
+    if {item.get("address") for item in by_type["aws_iam_role_policy_attachment"]} != {
+        "aws_iam_role_policy_attachment.execution", "aws_iam_role_policy_attachment.infrastructure"
+    }:
+        deny("ecs_express_policy_attachment_addresses_invalid", address, "The pilot requires the two fixed role-policy attachment addresses.")
+    if values.get("execution_role_arn") != role_arns.get(f"{service_name}-execution"):
+        deny("ecs_express_execution_role_binding_invalid", address, "The service must use its exact planned task execution role.")
+    if values.get("infrastructure_role_arn") != role_arns.get(f"{service_name}-infrastructure"):
+        deny("ecs_express_infrastructure_role_binding_invalid", address, "The service must use its exact planned infrastructure role.")
+
+    _review(
+        findings, "ecs_express_managed_resources_review", address,
+        "ECS Express creates load balancing, security groups, certificates, scaling, and service-linked resources that are not separate Terraform resources in this plan; verify ownership and cleanup behavior.",
+    )
+    _review(
+        findings, "ecs_express_public_task_ip_review", address,
+        "The pilot uses public subnets, so ECS Express assigns public task IPs and creates an internet-facing HTTPS load balancer; review egress and exposure duration.",
+    )
+    _review(
+        findings, "ecs_express_managed_policy_review", address,
+        "The two AWS-managed role policies can change independently of this plan; inspect their effective permissions before approval.",
+    )
+    return frozenset(force_delete_ecr_addresses)
+
+
 def _check_batch_fargate(
     document: dict[str, Any],
     resources: tuple[dict[str, Any], ...],
@@ -5582,7 +5979,10 @@ def _check_sqs_queue_encryption(
 
 
 def _check_ecr_repositories(
-    resources: tuple[dict[str, Any], ...], findings: list[PlanPolicyFinding]
+    resources: tuple[dict[str, Any], ...],
+    findings: list[PlanPolicyFinding],
+    *,
+    allowed_force_delete_addresses: frozenset[str] = frozenset(),
 ) -> None:
     for item in resources:
         if item.get("type") != "aws_ecr_repository":
@@ -5634,7 +6034,14 @@ def _check_ecr_repositories(
                 "Only ECR AES256 repository encryption is currently supported by this policy.",
             )
 
-        if values.get("force_delete") is not False:
+        if values.get("force_delete") is True and address in allowed_force_delete_addresses:
+            _review(
+                findings,
+                "ecr_force_delete_pilot_review",
+                address,
+                "This exact disposable pilot repository can be force-deleted only after verifying its tagged scope and cleanup evidence.",
+            )
+        elif values.get("force_delete") is not False:
             _deny(
                 findings,
                 "ecr_force_delete_denied",

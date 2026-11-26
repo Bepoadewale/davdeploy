@@ -9,6 +9,8 @@ from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResou
 from davdeploy.generated_plan_policy import (
     PlanPolicyVerdict,
     _check_appconfig_bindings,
+    _check_ecr_repositories,
+    _check_ecs_express_pilot,
     _check_rds_final_snapshot_changes,
     _check_vpc_topology,
     _configured_resources,
@@ -2347,6 +2349,119 @@ def test_ecr_repository_denies_unknown_scanning_encryption_or_force_delete(
     assert result.verdict == PlanPolicyVerdict.DENY
     assert "policy_critical_value_unknown" in codes(result)
     assert expected_code in codes(result)
+
+
+def test_ecr_force_delete_needs_an_exact_pilot_allowlist_entry():
+    repository = resource(
+        "aws_ecr_repository.workload", "aws_ecr_repository",
+        {
+            "name": "davdeploy-ecs-0123456789abcdef01234567",
+            "image_tag_mutability": "IMMUTABLE",
+            "image_scanning_configuration": [{"scan_on_push": True}],
+            "encryption_configuration": [{"encryption_type": "AES256"}],
+            "force_delete": True,
+        },
+    )
+    findings = []
+    _check_ecr_repositories((repository,), findings)
+    assert "ecr_force_delete_denied" in {item.code for item in findings}
+
+    findings = []
+    _check_ecr_repositories(
+        (repository,), findings,
+        allowed_force_delete_addresses=frozenset({"aws_ecr_repository.workload"}),
+    )
+    assert "ecr_force_delete_denied" not in {item.code for item in findings}
+    assert "ecr_force_delete_pilot_review" in {item.code for item in findings}
+
+
+def ecs_express_pilot_resources(*, network_subnets=None):
+    name = "davdeploy-ecs-0123456789abcdef01234567"
+    execution = f"arn:aws:iam::{ACCOUNT}:role/{name}-execution"
+    infrastructure = f"arn:aws:iam::{ACCOUNT}:role/{name}-infrastructure"
+    repo = f"{ACCOUNT}.dkr.ecr.{REGION}.amazonaws.com/{name}"
+    vpc, igw, rtb = "vpc-0123456789abcdef0", "igw-0123456789abcdef0", "rtb-0123456789abcdef0"
+    subnets = [
+        {"id": "subnet-0123456789abcdef0", "cidr_block": "10.84.10.0/24", "availability_zone": "us-east-1a"},
+        {"id": "subnet-1123456789abcdef0", "cidr_block": "10.84.11.0/24", "availability_zone": "us-east-1b"},
+    ]
+    role = lambda suffix, arn, principal: resource(
+        f"aws_iam_role.{suffix}", "aws_iam_role", {
+            "name": f"{name}-{suffix}", "arn": arn,
+            "assume_role_policy": json.dumps({"Statement": [{
+                "Effect": "Allow", "Action": "sts:AssumeRole",
+                "Principal": {"Service": principal},
+            }]}),
+        },
+    )
+    resources = [
+        resource("terraform_data.account_guard", "terraform_data", {"input": ACCOUNT}),
+        resource("aws_ecs_express_gateway_service.workload[0]", "aws_ecs_express_gateway_service", {
+            "service_name": name, "cpu": "256", "memory": "512", "health_check_path": "/healthz",
+            "wait_for_steady_state": True, "task_role_arn": None, "cluster": "default", "region": REGION,
+            "execution_role_arn": execution, "infrastructure_role_arn": infrastructure,
+            "primary_container": [{
+                "image": f"{repo}@sha256:{'a' * 64}", "container_port": 8000,
+                "environment": [{"name": "DAVDEPLOY_TEST_SCOPE", "value": "same-account-customer-sandbox"}],
+                "secret": [], "repository_credentials": [], "command": [],
+                "aws_logs_configuration": [{"log_group": f"/aws/ecs/{name}", "log_stream_prefix": "customer-test"}],
+            }],
+            "network_configuration": [{"subnets": network_subnets or [item["id"] for item in subnets], "security_groups": []}],
+            "scaling_target": [{"min_task_count": 1, "max_task_count": 1, "auto_scaling_metric": "AVERAGE_CPU", "auto_scaling_target_value": 70}],
+        }),
+        role("execution", execution, "ecs-tasks.amazonaws.com"),
+        role("infrastructure", infrastructure, "ecs.amazonaws.com"),
+        resource("aws_iam_role_policy_attachment.execution", "aws_iam_role_policy_attachment", {
+            "role": f"{name}-execution", "policy_arn": "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+        }),
+        resource("aws_iam_role_policy_attachment.infrastructure", "aws_iam_role_policy_attachment", {
+            "role": f"{name}-infrastructure", "policy_arn": "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices",
+        }),
+        resource("aws_vpc.customer", "aws_vpc", {
+            "id": vpc, "cidr_block": "10.84.0.0/16", "enable_dns_support": True,
+            "enable_dns_hostnames": True, "assign_generated_ipv6_cidr_block": False,
+        }),
+        resource("aws_internet_gateway.customer", "aws_internet_gateway", {"id": igw, "vpc_id": vpc}),
+        *[resource(f"aws_subnet.public[{i}]", "aws_subnet", {
+            **item, "vpc_id": vpc, "map_public_ip_on_launch": True,
+            "assign_ipv6_address_on_creation": False,
+        }) for i, item in enumerate(subnets)],
+        resource("aws_route_table.public", "aws_route_table", {
+            "id": rtb, "vpc_id": vpc, "route": [{"cidr_block": "0.0.0.0/0", "gateway_id": igw}],
+        }),
+        *[resource(f"aws_route_table_association.public[{i}]", "aws_route_table_association", {
+            "route_table_id": rtb, "subnet_id": item["id"],
+        }) for i, item in enumerate(subnets)],
+        resource("aws_ecr_repository.workload", "aws_ecr_repository", {
+            "name": name, "repository_url": repo, "registry_id": ACCOUNT, "force_delete": True,
+        }),
+        resource("aws_cloudwatch_log_group.workload", "aws_cloudwatch_log_group", {
+            "name": f"/aws/ecs/{name}", "retention_in_days": 3,
+        }),
+    ]
+    return tuple(resources)
+
+
+def test_ecs_express_exact_plan_shape_is_reviewable_and_binds_ecr():
+    findings = []
+    allowed = _check_ecs_express_pilot(
+        {}, ecs_express_pilot_resources(), findings, ACCOUNT, REGION,
+    )
+    assert allowed == frozenset({"aws_ecr_repository.workload"})
+    assert {item.code for item in findings} == {
+        "ecs_express_managed_resources_review",
+        "ecs_express_public_task_ip_review",
+        "ecs_express_managed_policy_review",
+    }
+
+
+def test_ecs_express_rejects_network_subnets_outside_its_plan():
+    findings = []
+    _check_ecs_express_pilot(
+        {}, ecs_express_pilot_resources(network_subnets=["subnet-unrelated"]),
+        findings, ACCOUNT, REGION,
+    )
+    assert "ecs_express_network_binding_invalid" in {item.code for item in findings}
 
 
 def test_kms_key_with_supported_safety_settings_is_reviewable():

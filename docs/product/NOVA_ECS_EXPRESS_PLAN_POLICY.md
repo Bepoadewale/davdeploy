@@ -10,9 +10,9 @@ This is separate from `aws-ecs-fargate`, which remains a broad planning profile
 for multi-container and API-worker services. The pilot is one single-container
 HTTPS service with fixed compute, scaling, network, and fixture-image bounds.
 
-## Proposed policy boundary
+## Implemented policy boundary
 
-The evaluator should apply a narrow profile contract only when an
+The evaluator applies a narrow profile contract only when an
 `aws_ecs_express_gateway_service` resource occurs. It must validate the exact
 resource inventory and configuration references rather than trusting labels
 or Terraform addresses alone. Unsupported dependencies, unknown critical
@@ -27,6 +27,15 @@ profile as private networking. Cost approval remains incomplete until Fargate,
 load balancer and capacity units, public IPv4, logs, ECR storage, data transfer,
 and any other material supporting charges are modeled from current regional
 prices and trusted usage bounds.
+
+The ECS Express plan remains eligible for human review only after deterministic
+checks pass. Human review is required for AWS-managed supporting resources,
+public task IP and internet egress, and the contents of AWS-managed role
+policies. The ECR force-delete exception applies only to the exact same-plan
+repository bound to the pilot service and still produces a review finding.
+This source change does not prove provider-generated plan compatibility,
+effective `iam:PassRole` scope, complete cost coverage, Nova dispatch, or cloud
+lifecycle behavior.
 
 ## Safety boundary
 
