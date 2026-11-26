@@ -20,6 +20,10 @@ variable "region" {
   type        = string
   description = "AWS region for the disposable validation stack."
   default     = "us-east-1"
+  validation {
+    condition     = var.region == "us-east-1"
+    error_message = "This disposable validation root is restricted to us-east-1."
+  }
 }
 
 variable "availability_zones" {
@@ -52,7 +56,8 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region              = var.region
+  allowed_account_ids = ["654654474502"]
   default_tags {
     tags = local.tags
   }
@@ -71,12 +76,31 @@ locals {
   interface_services = toset(["ecr.api", "ecr.dkr", "logs"])
 }
 
-module "network" {
-  source = "../../modules/vpc"
-  name   = local.name
-  cidr   = "10.241.0.0/16"
-  azs    = var.availability_zones
-  tags   = local.tags
+resource "aws_vpc" "test" {
+  cidr_block           = "10.241.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  tags                 = merge(local.tags, { Name = local.name })
+}
+
+resource "aws_subnet" "private" {
+  for_each                = { for index, az in var.availability_zones : index => az }
+  vpc_id                  = aws_vpc.test.id
+  cidr_block              = cidrsubnet(aws_vpc.test.cidr_block, 4, each.key)
+  availability_zone       = each.value
+  map_public_ip_on_launch = false
+  tags                    = merge(local.tags, { Name = "${local.name}-private-${each.key}" })
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.test.id
+  tags   = merge(local.tags, { Name = "${local.name}-private" })
+}
+
+resource "aws_route_table_association" "private" {
+  for_each       = aws_subnet.private
+  subnet_id      = each.value.id
+  route_table_id = aws_route_table.private.id
 }
 
 module "ecr" {
@@ -130,7 +154,7 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
 resource "aws_security_group" "batch" {
   name        = "${local.name}-batch"
   description = "Private Batch test task egress to required AWS endpoints only."
-  vpc_id      = module.network.vpc_id
+  vpc_id      = aws_vpc.test.id
   egress      = []
   tags        = local.tags
 }
@@ -138,7 +162,7 @@ resource "aws_security_group" "batch" {
 resource "aws_security_group" "endpoints" {
   name        = "${local.name}-endpoints"
   description = "HTTPS ingress from the test Batch security group."
-  vpc_id      = module.network.vpc_id
+  vpc_id      = aws_vpc.test.id
   egress      = []
   tags        = local.tags
 }
@@ -175,22 +199,22 @@ resource "aws_vpc_security_group_ingress_rule" "endpoint_from_batch" {
 
 resource "aws_vpc_endpoint" "interface" {
   for_each            = local.interface_services
-  vpc_id              = module.network.vpc_id
+  vpc_id              = aws_vpc.test.id
   service_name        = "com.amazonaws.${var.region}.${each.key}"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
   ip_address_type     = "ipv4"
-  subnet_ids          = module.network.private_subnet_ids
+  subnet_ids          = values(aws_subnet.private)[*].id
   security_group_ids  = [aws_security_group.endpoints.id]
   tags                = merge(local.tags, { Name = "${local.name}-${replace(each.key, ".", "-")}" })
 }
 
 resource "aws_vpc_endpoint" "s3" {
-  vpc_id            = module.network.vpc_id
+  vpc_id            = aws_vpc.test.id
   service_name      = "com.amazonaws.${var.region}.s3"
   vpc_endpoint_type = "Gateway"
   ip_address_type   = "ipv4"
-  route_table_ids   = [module.network.private_route_table_id]
+  route_table_ids   = [aws_route_table.private.id]
   tags              = merge(local.tags, { Name = "${local.name}-s3" })
 }
 
@@ -205,7 +229,7 @@ module "batch" {
   name               = local.name
   service_role_arn   = aws_iam_role.batch_service.arn
   instance_role_arn  = aws_iam_role.task_execution.arn
-  subnet_ids         = module.network.private_subnet_ids
+  subnet_ids         = values(aws_subnet.private)[*].id
   security_group_ids = [aws_security_group.batch.id]
   image              = "${module.ecr.repository_url}@${var.image_digest}"
   log_group_name     = aws_cloudwatch_log_group.batch.name
@@ -225,7 +249,5 @@ output "batch_job_queue_name" { value = local.name }
 output "image_repository_url" { value = module.ecr.repository_url }
 output "interface_endpoint_ids" { value = { for service, endpoint in aws_vpc_endpoint.interface : service => endpoint.id } }
 output "log_group_name" { value = aws_cloudwatch_log_group.batch.name }
-output "nat_gateway_id" { value = module.network.nat_gateway_id }
-output "nat_public_ipv4" { value = module.network.nat_public_ipv4 }
-output "network_id" { value = module.network.vpc_id }
+output "network_id" { value = aws_vpc.test.id }
 output "s3_endpoint_id" { value = aws_vpc_endpoint.s3.id }

@@ -16,7 +16,7 @@ AWS region: `us-east-1`.
 
 ## Resources created
 
-None. Planned resources: one temporary VPC with two public/private AZ pairs, one NAT gateway and Elastic IP, one ECR repository and digest-pinned image, one Batch Fargate compute environment/queue/job definition, two IAM roles, one log group, Batch and endpoint security groups, three interface endpoints (`ecr.api`, `ecr.dkr`, `logs`) across two AZs, and one S3 gateway endpoint on the private route table.
+None. Planned resources: one temporary private-only VPC with two private subnets and no internet gateway, NAT gateway, or public IPv4 address; one ECR repository and digest-pinned image; one Batch Fargate compute environment/queue/job definition; two IAM roles; one log group; Batch and endpoint security groups; three interface endpoints (`ecr.api`, `ecr.dkr`, `logs`) across two AZs; and one S3 gateway endpoint on the private route table.
 
 ## Commands executed
 

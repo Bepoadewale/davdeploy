@@ -27,7 +27,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 ## Work planned for the PR
 
 1. Add an `assign_public_ip` input to `modules/batch-compute`, defaulting to current behavior for backwards compatibility.
-2. Add a focused Terraform validation root with a fresh two-AZ VPC, private subnets, one NAT, ECR API/Docker/Logs endpoints, an S3 gateway endpoint, restricted endpoint SG ingress from the Batch SG, an ECR image, and one bounded Fargate job with public-IP assignment disabled.
+2. Add a focused Terraform validation root with a fresh two-AZ private-only VPC (no NAT or public IP), ECR API/Docker/Logs endpoints, an S3 gateway endpoint, restricted endpoint SG ingress from the Batch SG, an ECR image, and one bounded Fargate job with public-IP assignment disabled.
 3. Add tests that verify the private/public IP input changes the generated Batch job definition as expected; run Terraform format/validation and required CI.
 4. Before AWS apply, verify current us-east-1 Price List prices, Batch/Fargate quotas and availability, review an exact saved plan, and record a maximum of one hour and USD $1.00 estimated total spend. AWS Budgets are not a hard cap.
 5. Run one job, prove it reaches `SUCCEEDED`, verify private image retrieval and CloudWatch logs, then use the Terraform run monitor and independently check the exact resources absent after cleanup.
@@ -36,9 +36,9 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 ## Acceptance criteria
 
 - [x] Existing module callers retain their current public-IP behavior by default; private networking is an explicit opt-in.
-- [x] The test root declares same-plan private subnets, endpoint bindings, and endpoint SG ingress limited to TCP/443 from the Batch SG; the Batch SG egress is limited to those endpoints and the S3 gateway prefix list.
+- [x] The test root declares same-plan private subnets without NAT/public IP resources, endpoint bindings, and endpoint SG ingress limited to TCP/443 from the Batch SG; the Batch SG egress is limited to those endpoints and the S3 gateway prefix list.
 - [x] The test root sets public-IP assignment to `DISABLED` and requires a SHA256-pinned private ECR image; an authenticated plan and image digest are not yet recorded.
-- [x] Focused policy tests (639 passed), Terraform formatting/validation, docs conventions, and diff checks pass locally.
+- [x] Focused policy and Terraform-validation tests (641 passed), Terraform formatting/validation, docs conventions, and diff checks pass locally.
 - [ ] Final-head CI passes.
 - [ ] Before AWS apply, current pricing/quota/capacity and exact resource inventory are recorded; maximum runtime is one hour and estimated maximum spend is USD $1.00.
 - [ ] With explicit cleanup authorization, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
@@ -57,8 +57,8 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 
 ## Tests / validation performed
 
-- `pytest tests/test_generated_plan_policy.py -q`: 639 passed.
-- `ruff check tests/test_generated_plan_policy.py`: passed.
+- `pytest tests/test_generated_plan_policy.py tests/test_terraform_validation.py -q`: 641 passed.
+- `ruff check tests/test_generated_plan_policy.py tests/test_terraform_validation.py`: passed.
 - `terraform fmt -recursive` on the changed roots/modules: passed.
 - `make terraform-validate`: passed, including the new private-endpoint test root.
 - `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.

@@ -16,16 +16,28 @@ variable "retry_attempts" {
   type        = number
   default     = null
   description = "Optional bounded retry count for the Batch job definition."
+  validation {
+    condition     = var.retry_attempts == null || (var.retry_attempts >= 1 && var.retry_attempts <= 10)
+    error_message = "retry_attempts must be omitted or between 1 and 10."
+  }
 }
 variable "timeout_seconds" {
   type        = number
   default     = null
   description = "Optional per-attempt job timeout in seconds."
+  validation {
+    condition     = var.timeout_seconds == null || (var.timeout_seconds >= 60 && var.timeout_seconds <= 86400)
+    error_message = "timeout_seconds must be omitted or between 60 and 86400."
+  }
 }
 variable "max_vcpus" {
   type        = number
   default     = 16
   description = "Maximum vCPU capacity for the managed Fargate compute environment."
+  validation {
+    condition     = var.max_vcpus >= 1 && var.max_vcpus <= 16
+    error_message = "max_vcpus must be between 1 and the module's 16-vCPU bound."
+  }
 }
 
 resource "aws_batch_compute_environment" "this" {
