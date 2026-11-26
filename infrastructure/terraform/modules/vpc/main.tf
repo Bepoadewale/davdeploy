@@ -77,5 +77,8 @@ resource "aws_route_table_association" "private" {
 }
 
 output "vpc_id" { value = aws_vpc.this.id }
+output "nat_gateway_id" { value = aws_nat_gateway.this.id }
+output "nat_public_ipv4" { value = aws_eip.nat.public_ip }
 output "private_subnet_ids" { value = values(aws_subnet.private)[*].id }
 output "public_subnet_ids" { value = values(aws_subnet.public)[*].id }
+output "private_route_table_id" { value = aws_route_table.private.id }

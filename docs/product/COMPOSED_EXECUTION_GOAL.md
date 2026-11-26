@@ -73,12 +73,11 @@ it does not prove endpoint traffic, customer workload execution, or Nova dispatc
 No AWS resource, hosted control-plane resource, state, or lock was changed.
 AWS inventory was read-only
 reconciled in account `654654474502`; the SageMaker endpoint, model, endpoint
-configuration, test role, and artifact bucket are absent; five tagged Batch
-test definitions are inactive and no matching Batch queues or compute
-environments exist. The retained SageMaker lineage action still has its
-association to the retained context. The Terraform monitor has zero active
-operations. No AWS resource, state/lock,
-hosted control plane, protected local file, or customer workload was changed.
+configuration, test role, and artifact bucket are absent. Five earlier tagged
+Batch test definitions were inactive at this snapshot. The retained SageMaker
+lineage action still has its association to the retained context. The Terraform
+monitor had zero active operations. No AWS resource, state/lock, hosted control
+plane, protected local file, or customer workload was changed.
 PRs #507 and #509–#512 also changed no AWS workloads or hosted runtime.
 PR #502 adds
 assumption-bound NAT/network pricing and is merged after all seven checks
@@ -423,14 +422,16 @@ application. It does not create or deploy configuration profiles or flags,
 and no AppConfig workload or lifecycle was tested; see
 [`ticket471`](../tickets/ticket471.md).
 
-The tested ECR repository and local Terraform state are absent. The Terraform
-monitor has 62 records and no active operations. A read-only 2026-11-25 AWS
-check found no Parameter Store parameter under PR #493's test prefix, no
-SageMaker endpoints, models, or endpoint configurations, and five inactive
-DavDeploy-named Batch job definitions. The SageMaker lineage action/context
-and associated evidence remain preserved. The PR #489 Lambda test function,
-role, and log group are absent. Persistent control-plane roles and buckets
-remain present and untouched.
+The PR #517 private Batch test repositories and local Terraform state are
+absent. At the 2026-11-26 reconciliation, the Terraform monitor had 75
+terminal records and zero active operations. AWS Batch retains seven inactive
+DavDeploy-named test job definitions (five earlier definitions plus the
+suffix-`a` and suffix-`b` PR #517 definitions). A read-only check found no
+Parameter Store parameter under PR #493's test prefix and no SageMaker
+endpoints, models, or endpoint configurations. The SageMaker lineage
+action/context and associated evidence remain preserved. The PR #489 Lambda
+test function, role, and log group are absent. Persistent control-plane roles
+and buckets remain present and untouched.
 Preserve the protected untracked `--only-show-errors`, `.venv-pr399/`, and
 lineage evidence.
 
@@ -454,14 +455,22 @@ close other per-entry requirements or prove Nova-originated execution.
 
 ## Next dependency-ready package
 
-Use the newly bounded Batch and VPC endpoint shapes for a fresh, isolated
-customer-side Batch Fargate lifecycle test. Before cloud mutation, verify current
-regional pricing and quota, set an explicit maximum cost and runtime, record the
-resource scope and teardown procedure, and use the Terraform run monitor. Prove
-private ECR image retrieval, job completion, log delivery, and independent
-absence after teardown. Keep the hosted control plane untouched and do not label
-a direct same-account test as Nova dispatch. If executed, record it in the
-PR-numbered `docs/test/test<PR>.md` file.
+PR #517 implements a configurable private-IP path for Batch Fargate and
+records direct same-account evidence for one private ECR image and CloudWatch
+logging shape. Suffix `a` failed during a cleanup race; isolated suffix `b`
+completed successfully and both exact stacks were cleaned. Review and merge
+PR #517 only after its current final-head CI and review requirements pass.
+Evidence is in [`test517.md`](../test/test517.md) and [`ticket517.md`](../tickets/ticket517.md).
+
+After that package, prioritize Nova-specific authorization, customer-role
+credential issuance, and dispatch for a supported workload shape. Reuse the
+already demonstrated Batch private path where appropriate; do not repeat a
+direct lifecycle test merely to claim Nova integration. Preserve the distinction
+between direct same-account lifecycle evidence and Nova-originated execution.
+Any cloud test requires a new exact resource manifest, current cost/quota
+preflight, explicit cost/runtime bounds, monitored Terraform operations, and
+independent cleanup checks. Keep the hosted control plane untouched unless a
+separate approved scope explicitly requires a change.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 
