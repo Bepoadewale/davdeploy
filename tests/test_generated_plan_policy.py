@@ -7,11 +7,13 @@ import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.generated_plan_ownership import PlanOwnershipScope, UntaggedResourceOwnershipRecord
 from davdeploy.generated_plan_policy import (
+    GeneratedPlanPolicyError,
     PlanPolicyVerdict,
     _check_appconfig_bindings,
     _check_ecr_repositories,
     _check_ecs_express_pilot,
     _check_rds_final_snapshot_changes,
+    _check_region,
     _check_vpc_topology,
     _configured_resources,
     _path_contains_unknown,
@@ -2375,7 +2377,7 @@ def test_ecr_force_delete_needs_an_exact_pilot_allowlist_entry():
     assert "ecr_force_delete_pilot_review" in {item.code for item in findings}
 
 
-def ecs_express_pilot_resources(*, network_subnets=None):
+def ecs_express_pilot_resources(*, network_subnets=None, unknown_create_ids=False):
     name = "davdeploy-ecs-0123456789abcdef01234567"
     execution = f"arn:aws:iam::{ACCOUNT}:role/{name}-execution"
     infrastructure = f"arn:aws:iam::{ACCOUNT}:role/{name}-infrastructure"
@@ -2439,7 +2441,63 @@ def ecs_express_pilot_resources(*, network_subnets=None):
             "name": f"/aws/ecs/{name}", "retention_in_days": 3,
         }),
     ]
+    if unknown_create_ids:
+        by_address = {item["address"]: item for item in resources}
+        for address, fields in {
+            "aws_vpc.customer": ("id",),
+            "aws_internet_gateway.customer": ("id", "vpc_id"),
+            "aws_subnet.public[0]": ("id", "vpc_id"),
+            "aws_subnet.public[1]": ("id", "vpc_id"),
+            "aws_route_table.public": ("id", "vpc_id"),
+            "aws_route_table_association.public[0]": ("route_table_id", "subnet_id"),
+            "aws_route_table_association.public[1]": ("route_table_id", "subnet_id"),
+            "aws_iam_role.execution": ("arn",),
+            "aws_iam_role.infrastructure": ("arn",),
+            "aws_ecr_repository.workload": ("registry_id", "repository_url"),
+        }.items():
+            for field in fields:
+                by_address[address]["values"][field] = None
+        by_address["aws_route_table.public"]["values"]["route"][0]["gateway_id"] = None
+        service_values = by_address[
+            "aws_ecs_express_gateway_service.workload[0]"
+        ]["values"]
+        service_values["execution_role_arn"] = None
+        service_values["infrastructure_role_arn"] = None
+        service_values["network_configuration"][0]["subnets"] = [None, None]
     return tuple(resources)
+
+
+def ecs_express_configuration_references():
+    def configured(address, resource_type, *references):
+        return {
+            "address": address,
+            "mode": "managed",
+            "type": resource_type,
+            "expressions": {
+                f"reference_{index}": {"references": [reference]}
+                for index, reference in enumerate(references)
+            },
+        }
+
+    return [
+        configured(
+            "aws_ecs_express_gateway_service.workload",
+            "aws_ecs_express_gateway_service",
+            "aws_iam_role.execution.arn",
+            "aws_iam_role.infrastructure.arn",
+            "aws_subnet.public",
+        ),
+        configured("aws_internet_gateway.customer", "aws_internet_gateway", "aws_vpc.customer.id"),
+        configured(
+            "aws_route_table.public", "aws_route_table",
+            "aws_vpc.customer.id", "aws_internet_gateway.customer.id",
+        ),
+        configured(
+            "aws_route_table_association.public", "aws_route_table_association",
+            "aws_subnet.public", "count.index", "aws_route_table.public.id",
+        ),
+        configured("aws_subnet.public", "aws_subnet", "aws_vpc.customer.id"),
+    ]
 
 
 def test_ecs_express_exact_plan_shape_is_reviewable_and_binds_ecr():
@@ -2453,6 +2511,43 @@ def test_ecs_express_exact_plan_shape_is_reviewable_and_binds_ecr():
         "ecs_express_public_task_ip_review",
         "ecs_express_managed_policy_review",
     }
+
+
+def test_ecs_express_create_plan_binds_unknown_ids_through_configuration_references():
+    findings = []
+    document = {
+        "configuration": {
+            "root_module": {"resources": ecs_express_configuration_references()}
+        }
+    }
+    allowed = _check_ecs_express_pilot(
+        document,
+        ecs_express_pilot_resources(unknown_create_ids=True),
+        findings,
+        ACCOUNT,
+        REGION,
+    )
+    assert allowed == frozenset({"aws_ecr_repository.workload"})
+    assert {item.code for item in findings} == {
+        "ecs_express_managed_resources_review",
+        "ecs_express_public_task_ip_review",
+        "ecs_express_managed_policy_review",
+    }
+
+
+def test_plan_region_accepts_only_the_expected_explicit_region_variable():
+    document = {
+        "configuration": {
+            "provider_config": {
+                "aws": {"expressions": {"region": {"references": ["var.region"]}}}
+            }
+        },
+        "variables": {"region": {"value": REGION}},
+    }
+    _check_region(document, REGION)
+    document["variables"]["region"]["value"] = "eu-west-1"
+    with pytest.raises(GeneratedPlanPolicyError):
+        _check_region(document, REGION)
 
 
 def test_ecs_express_rejects_network_subnets_outside_its_plan():

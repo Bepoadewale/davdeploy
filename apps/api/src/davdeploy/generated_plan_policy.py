@@ -816,7 +816,21 @@ def _check_region(document: dict[str, Any], expected_region: str) -> None:
     actual_region = (
         region_expression.get("constant_value") if isinstance(region_expression, dict) else None
     )
-    if actual_region != expected_region:
+    variables = document.get("variables")
+    region_variable = variables.get("region") if isinstance(variables, dict) else None
+    variable_region = (
+        region_variable.get("value") if isinstance(region_variable, dict) else None
+    )
+    region_references = (
+        region_expression.get("references")
+        if isinstance(region_expression, dict)
+        else None
+    )
+    constant_match = actual_region == expected_region
+    trusted_variable_match = (
+        region_references == ["var.region"] and variable_region == expected_region
+    )
+    if not constant_match and not trusted_variable_match:
         raise GeneratedPlanPolicyError("AWS plan region is unknown or does not match trusted scope")
 
 
@@ -3745,6 +3759,20 @@ def _check_ecs_express_pilot(
     def deny(code: str, address: Any, message: str) -> None:
         _deny(findings, code, address, message)
 
+    configured_references = _configured_resource_references(document)
+
+    def references_for(resource: dict[str, Any]) -> tuple[str, ...]:
+        resource_address = resource.get("address")
+        if not isinstance(resource_address, str):
+            return ()
+        return configured_references.get(resource_address.split("[", maxsplit=1)[0], ())
+
+    def references_resource(resource: dict[str, Any], address: str) -> bool:
+        return _references_resource(references_for(resource), address)
+
+    def matches_or_references(value: Any, expected: Any, resource: dict[str, Any], target: str) -> bool:
+        return value == expected if value is not None else references_resource(resource, target)
+
     allowed_types = {
         "terraform_data", "aws_ecs_express_gateway_service", "aws_iam_role",
         "aws_iam_role_policy_attachment", "aws_vpc", "aws_internet_gateway",
@@ -3887,13 +3915,22 @@ def _check_ecs_express_pilot(
     repository_values = repositories[0].get("values", {})
     repository_name = repository_values.get("name") if isinstance(repository_values, dict) else None
     repository_url = repository_values.get("repository_url") if isinstance(repository_values, dict) else None
+    expected_repository_url = (
+        f"{expected_account_id}.dkr.ecr.{expected_region}.amazonaws.com/{service_name}"
+        if isinstance(service_name, str)
+        else None
+    )
     if (
         repositories[0].get("address") != "aws_ecr_repository.workload"
         or repository_name != service_name
-        or not isinstance(repository_url, str)
         or not isinstance(image, str)
-        or not image.startswith(f"{repository_url}@sha256:")
-        or repository_values.get("registry_id") != expected_account_id
+        or not isinstance(expected_repository_url, str)
+        or not image.startswith(f"{expected_repository_url}@sha256:")
+        or (
+            isinstance(repository_url, str)
+            and repository_url != expected_repository_url
+        )
+        or repository_values.get("registry_id") not in (None, expected_account_id)
     ):
         deny(
             "ecs_express_repository_binding_invalid", repositories[0].get("address"),
@@ -3924,30 +3961,46 @@ def _check_ecs_express_pilot(
         )
 
     subnet_ids: set[str] = set()
+    subnet_ids_unknown = False
     zones: set[str] = set()
     cidrs: set[str] = set()
     expected_cidrs = {"10.84.10.0/24", "10.84.11.0/24"}
     for subnet in subnets:
         subnet_values = subnet.get("values", {})
+        subnet_vpc_id = subnet_values.get("vpc_id") if isinstance(subnet_values, dict) else None
         if (
             not isinstance(subnet_values, dict)
-            or subnet_values.get("vpc_id") != vpc_id
+            or not matches_or_references(
+                subnet_vpc_id, vpc_id, subnet, "aws_vpc.customer"
+            )
             or subnet_values.get("map_public_ip_on_launch") is not True
             or subnet_values.get("assign_ipv6_address_on_creation") is True
             or not isinstance(subnet_values.get("cidr_block"), str)
             or not isinstance(subnet_values.get("availability_zone"), str)
             or not subnet_values.get("availability_zone", "").startswith(expected_region)
-            or not isinstance(subnet_values.get("id"), str)
+            or (
+                subnet_values.get("id") is not None
+                and not isinstance(subnet_values.get("id"), str)
+            )
         ):
             deny(
                 "ecs_express_subnet_invalid", subnet.get("address"),
                 "Pilot subnets must be the fixed public subnets in the selected Region and VPC.",
             )
             continue
-        subnet_ids.add(subnet_values["id"])
+        if isinstance(subnet_values.get("id"), str):
+            subnet_ids.add(subnet_values["id"])
+        else:
+            subnet_ids_unknown = True
         zones.add(subnet_values["availability_zone"])
         cidrs.add(subnet_values["cidr_block"])
-    if len(subnet_ids) != 2 or len(zones) != 2 or cidrs != expected_cidrs:
+    if (
+        len(subnets) != 2
+        or len(zones) != 2
+        or cidrs != expected_cidrs
+        or (subnet_ids_unknown and subnet_ids)
+        or (not subnet_ids_unknown and len(subnet_ids) != 2)
+    ):
         deny(
             "ecs_express_subnet_set_invalid", address,
             "The pilot must use exactly two public subnets in distinct Availability Zones.",
@@ -3964,13 +4017,19 @@ def _check_ecs_express_pilot(
     if (
         gateways[0].get("address") != "aws_internet_gateway.customer"
         or not isinstance(gateway_values, dict)
-        or gateway_values.get("vpc_id") != vpc_id
+        or not matches_or_references(
+            gateway_values.get("vpc_id"), vpc_id, gateways[0], "aws_vpc.customer"
+        )
         or tables[0].get("address") != "aws_route_table.public"
         or not isinstance(table_values, dict)
-        or table_values.get("vpc_id") != vpc_id
+        or not matches_or_references(
+            table_values.get("vpc_id"), vpc_id, tables[0], "aws_vpc.customer"
+        )
         or not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict)
         or routes[0].get("cidr_block") != "0.0.0.0/0"
-        or routes[0].get("gateway_id") != gateway_id
+        or not matches_or_references(
+            routes[0].get("gateway_id"), gateway_id, tables[0], "aws_internet_gateway.customer"
+        )
         or routes[0].get("nat_gateway_id") not in (None, "")
     ):
         deny(
@@ -3979,21 +4038,40 @@ def _check_ecs_express_pilot(
         )
 
     associated_subnets: set[str] = set()
+    association_targets_unknown = False
     table_id = table_values.get("id") if isinstance(table_values, dict) else None
     for association in associations:
         association_values = association.get("values", {})
         if (
             not isinstance(association_values, dict)
-            or association_values.get("route_table_id") != table_id
-            or association_values.get("subnet_id") not in subnet_ids
+            or not matches_or_references(
+                association_values.get("route_table_id"),
+                table_id,
+                association,
+                "aws_route_table.public",
+            )
+            or (
+                association_values.get("subnet_id") is None
+                and not references_resource(association, "aws_subnet.public")
+            )
+            or (
+                association_values.get("subnet_id") is not None
+                and subnet_ids
+                and association_values.get("subnet_id") not in subnet_ids
+            )
         ):
             deny(
                 "ecs_express_route_association_invalid", association.get("address"),
                 "Every pilot subnet must use the same-plan public route table.",
             )
         else:
-            associated_subnets.add(association_values["subnet_id"])
-    if associated_subnets != subnet_ids:
+            if isinstance(association_values.get("subnet_id"), str):
+                associated_subnets.add(association_values["subnet_id"])
+            else:
+                association_targets_unknown = True
+    if (
+        not association_targets_unknown and associated_subnets != subnet_ids
+    ) or (association_targets_unknown and associated_subnets):
         deny(
             "ecs_express_route_association_incomplete", address,
             "The pilot route table must associate exactly the two approved public subnets.",
@@ -4006,10 +4084,24 @@ def _check_ecs_express_pilot(
     network = values.get("network_configuration")
     network_subnets = network[0].get("subnets") if isinstance(network, list) and len(network) == 1 and isinstance(network[0], dict) else None
     network_groups = network[0].get("security_groups") if isinstance(network, list) and len(network) == 1 and isinstance(network[0], dict) else None
+    network_subnets_unknown = (
+        isinstance(network_subnets, list)
+        and any(item is None for item in network_subnets)
+    )
+    network_subnets_match = (
+        isinstance(network_subnets, list)
+        and all(isinstance(item, str) for item in network_subnets)
+        and set(network_subnets) == subnet_ids
+    )
     if (
         not isinstance(network_subnets, list)
-        or any(not isinstance(item, str) for item in network_subnets)
-        or set(network_subnets) != subnet_ids
+        or (
+            not network_subnets_match
+            and not (
+                (network_subnets_unknown or not network_subnets)
+                and references_resource(service, "aws_subnet.public")
+            )
+        )
         or network_groups not in (None, [])
     ):
         deny(
@@ -4036,9 +4128,16 @@ def _check_ecs_express_pilot(
         role_values = role.get("values") if isinstance(role, dict) else None
         role_arn = role_values.get("arn") if isinstance(role_values, dict) else None
         if (
-            not isinstance(role_arn, str)
-            or not _aws_arn_matches(role_arn, "iam", "", expected_account_id, "role/")
-            or role_arn.rsplit("/", maxsplit=1)[-1] != role_name
+            (
+                role_arn is not None
+                and (
+                    not isinstance(role_arn, str)
+                    or not _aws_arn_matches(role_arn, "iam", "", expected_account_id, "role/")
+                    or role_arn.rsplit("/", maxsplit=1)[-1] != role_name
+                )
+            )
+            or role.get("address")
+            != ("aws_iam_role.execution" if principal == "ecs-tasks.amazonaws.com" else "aws_iam_role.infrastructure")
         ):
             deny(
                 "ecs_express_role_scope_invalid", role.get("address") if isinstance(role, dict) else address,
@@ -4081,9 +4180,19 @@ def _check_ecs_express_pilot(
         "aws_iam_role_policy_attachment.execution", "aws_iam_role_policy_attachment.infrastructure"
     }:
         deny("ecs_express_policy_attachment_addresses_invalid", address, "The pilot requires the two fixed role-policy attachment addresses.")
-    if values.get("execution_role_arn") != role_arns.get(f"{service_name}-execution"):
+    if not matches_or_references(
+        values.get("execution_role_arn"),
+        role_arns.get(f"{service_name}-execution"),
+        service,
+        "aws_iam_role.execution",
+    ):
         deny("ecs_express_execution_role_binding_invalid", address, "The service must use its exact planned task execution role.")
-    if values.get("infrastructure_role_arn") != role_arns.get(f"{service_name}-infrastructure"):
+    if not matches_or_references(
+        values.get("infrastructure_role_arn"),
+        role_arns.get(f"{service_name}-infrastructure"),
+        service,
+        "aws_iam_role.infrastructure",
+    ):
         deny("ecs_express_infrastructure_role_binding_invalid", address, "The service must use its exact planned infrastructure role.")
 
     _review(

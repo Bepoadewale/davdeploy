@@ -81,6 +81,10 @@ remote-state lifecycle, and Nova-originated execution remain separate gates.
   linked to the pilot service and remains subject to destructive-change review.
 - [ ] Unsupported plans remain denied or review-required; this policy does not
   mark the plan cost-complete or enable dispatch.
+- [x] The provider-generated pilot create plan's computed IDs are accepted only
+  when configuration binds them to the exact same-plan VPC, subnet set,
+  internet gateway, and route table; region is a constant or the exact trusted
+  `var.region` value.
 - [ ] Focused tests, full relevant CI checks, doc conventions, lint, and
   `git diff --check` pass.
 - [ ] No AWS workload, hosted control plane, Terraform state, or lock resource
@@ -88,20 +92,26 @@ remote-state lifecycle, and Nova-originated execution remain separate gates.
 
 ## Acceptance status
 
-Implemented as a source-only actual-plan policy and regression tests. The draft
-remains review-required: pricing, effective role permissions, Nova dispatch,
-and a real provider-generated saved-plan fixture remain separate gates.
+Implemented as a source-only actual-plan policy and regression tests. The
+provider-generated saved plan from PR #519 passes structural checks with only
+the three intended human-review findings for AWS-managed policies, managed
+resources, and public task IP exposure. The draft remains review-required:
+pricing, effective role permissions, Nova dispatch, and hosted customer
+execution remain separate gates.
 
 ## Tests / validation performed
 
-- `tests/test_generated_plan_policy.py`: 642 passed.
+- `tests/test_generated_plan_policy.py`: 644 passed.
 - Ruff on the changed policy and test files: passed.
 - `git diff --check`: passed.
 - Synthetic policy tests verify the exact pilot inventory, ECR binding,
   fail-closed network binding, and that ECR force deletion requires the
   exact-pilot allowlist entry and remains reviewable.
-- No AWS operations, Terraform plans, or hosted control-plane operations were
-  run.
+- An isolated local-backend Terraform plan for the PR #519 pilot was evaluated
+  against the policy. Its provider data sources used read-only AWS discovery;
+  no workload resources, hosted control-plane resources, remote Terraform
+  state, or lock were changed or accessed. No apply or destroy was run. The
+  saved plan remains outside the repository.
 - Official AWS and HashiCorp documentation was reviewed as listed above.
 
 ## Boundaries
