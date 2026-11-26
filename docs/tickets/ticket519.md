@@ -13,8 +13,10 @@ execution.
 
 ## Current repo state
 
-- Backend `main` is `dbbf7c135b7be97c832927d5c1758bc1faab805d`, merged PR #518;
-  its PR and merged-main CI passed all seven checks.
+- Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`, after merged
+  PRs #520 and #522. This PR branch remains at
+  `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`; its final-head run
+  `45884741945` passed all seven checks.
 - `infrastructure/terraform/customer-workload-ecs-express-pilot` is an
   isolated single-service ECS Express root. This PR adds an optional S3
   backend, project/region-scoped names and tags, and an explicit customer
@@ -27,8 +29,15 @@ execution.
   `aws-ecs-express-pilot` renderer bound to the ECS Express root. It does not
   reuse the broad `aws-container-service` module contract. The broader
   `aws-ecs-fargate` planning profile does not resolve to this single-container
-  pilot. Customer execution remains unavailable pending IAM, pricing/policy,
+  pilot. Customer execution remains unavailable pending effective IAM review
   and isolated runner certification.
+- Merged PR #520 added the exact-shape actual-plan policy and evaluated the
+  provider-generated pilot plan with three human-review findings and no
+  policy denials. Merged PR #522 added the regional pricing model, including
+  both target-tracking alarms. Its fresh 12-line price evaluation used
+  synthetic persisted context and no customer budget, so it is not
+  approval-bound customer pricing evidence; draft PR #524 corrects the
+  existing ticket wording.
 - Current cloud-execution gates and hosted control-plane configuration must
   remain untouched by this PR.
 
@@ -42,6 +51,10 @@ execution.
   https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecs_express_gateway_service
 - HashiCorp S3 backend (SSE-KMS, versioning, and S3-native lockfile contract):
   https://developer.hashicorp.com/terraform/language/backend/s3
+- AWS ECS infrastructure IAM role and `iam:PassRole` guidance:
+  https://docs.aws.amazon.com/AmazonECS/latest/developerguide/infrastructure_IAM_role.html
+- AWS-managed ECS Express infrastructure policy:
+  https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonECSInfrastructureRoleforExpressGatewayServices.html
 - Existing direct AWS evidence: `docs/test/test437.md`
 - Existing renderer contract: `apps/api/src/davdeploy/module_renderers.py`
 
@@ -79,11 +92,14 @@ execution.
 - [x] Focused tests, documentation conventions, and Terraform validation pass.
 - [x] Customer remote-state bucket preflight requires versioning, complete
   public-access blocking, bucket-owner enforcement, and the configured KMS key.
-- [ ] IAM permissions, actual-plan policy, and complete regional cost coverage
-  are reviewed and tied to the exact ECS Express plan.
+- [x] The source actual-plan policy and regional pricing model are merged and
+  evaluated against a provider-generated pilot plan.
+- [ ] Effective customer execution-role permissions are independently
+  reviewed, and approval-bound pricing is tied to an integrity-checked customer
+  revision and budget.
 - [ ] The renderer passes a clean-room local lifecycle cycle and an authorized
   isolated cloud cycle using project-scoped remote state.
-- [x] Final-head GitHub Actions run 45874597927 passed all seven checks; rerun
+- [x] Final-head GitHub Actions run 45884741945 passed all seven checks; rerun
   required after this ticket update is pushed.
 - [x] No hosted control-plane, runtime, Terraform state, or lock resource was
   accessed or mutated by this PR.
@@ -91,10 +107,11 @@ execution.
 ## Acceptance status
 
 The project-scoped Terraform contract, disabled renderer binding, and bounded
-runner source are implemented. Local focused tests and Terraform validation
-pass. IAM policy, cost coverage, clean-room validation, isolated cloud evidence,
-and final-head CI remain open; the renderer is not enabled for customer
-execution.
+runner source are implemented. The provider-generated plan policy and price
+model are merged and exercised. Effective execution-role permissions,
+customer-context approval evidence, clean-room validation, the isolated
+remote-state runner cycle, and this PR's refreshed final-head CI remain open;
+the renderer is not enabled for customer execution.
 
 ## Tests / validation performed
 
