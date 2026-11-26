@@ -104,10 +104,9 @@ and trusted usage bounds.
 ## Acceptance status
 
 The current revision prices the high and low alarms for the pilot's one
-target-tracking scaling policy. Focused tests, lint, documentation conventions,
-and whitespace validation pass; final-head CI is pending. The latest full local
-verification passed 2,001 tests before this alarm-count correction. The PR
-remains a draft, stacked on PR #520.
+target-tracking scaling policy. The full local verification after this
+correction is running; final-head CI is pending. PR #520 has merged, and this
+draft now targets `main`.
 
 ## Tests / validation performed
 
@@ -119,11 +118,9 @@ remains a draft, stacked on PR #520.
   `us-east-1` Application Load Balancer/LCU and standard CloudWatch alarm
   product families.
 - `make PY=/private/tmp/davdeploy-private-batch-endpoints-517/.venv/bin/python openapi-check`: passed.
-- Focused pricing and lifecycle tests before the alarm correction: 188 passed.
-- `make verify` after rebasing on PR #520 and main commit `4cc177c`, before the
-  alarm correction: 2,001 passed, with one existing Starlette/httpx
-  deprecation warning; Ruff, OpenAPI snapshot, actions configuration, and
-  Compose checks passed.
+- `make verify` after rebasing on merged PR #520 and adding the second alarm:
+  2,001 passed, with one existing Starlette/httpx deprecation warning; Ruff,
+  OpenAPI snapshot, actions configuration, and Compose checks passed.
 - Ruff checks on changed Python files: passed.
 - `python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
@@ -135,17 +132,13 @@ remains a draft, stacked on PR #520.
 - Focused pricing tests cover accepted and rejected computed-ID bindings,
   including references placed in an unrelated field or mixed with an
   untrusted reference in the same field.
-- The previous live provider-plan estimate priced one alarm at 117 to 41,571
-  USD cents per month. A current `us-east-1` AWS Price List lookup confirms USD
-  0.10 per standard alarm-month (SKU `EVETVUGEN3MUTMXM`, published
-  `2026-11-25T15:02:40Z`); pricing the second target-tracking alarm adds 10
-  cents at each bound, for a corrected modeled range of 127 to 41,581 cents.
-  This arithmetic correction is not a fresh complete pricing-evidence run.
-- A fresh full evaluator attempt for the isolated provider plan returned
-  `UNAVAILABLE` because ECR and ECS regional price lookups were unavailable.
-  Do not treat the corrected range as fresh or approval-eligible until the full
-  live evaluation succeeds again. No workload/control-plane mutation or remote
-  state/lock access occurred.
+- Fresh evaluation of the retained provider-generated create plan with live
+  regional AWS Price List data returned `COMPLETE`, approval-eligible, 12 cost
+  lines, and 127 to 41,581 USD cents per month under the documented synthetic
+  usage bounds. The two target-tracking alarms are each priced at USD 0.10 per
+  alarm-month (SKU `EVETVUGEN3MUTMXM`, published `2026-11-25T15:02:40Z`). These
+  are planning bounds, not measured customer spend or a billing cap. No
+  workload/control-plane mutation or remote state/lock access occurred.
 
 ## Evidence files produced
 
