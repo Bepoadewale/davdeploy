@@ -9,13 +9,14 @@ lifecycle coverage remain distinct.
 
 ### Reconciliation after PR #518
 
-The current backend `main` is `4cc177c2605c2ee313c161fe83b9eac02fc83aa0`
-(merged PR #521), not the earlier PR #517 baseline recorded below. PR #521
-keeps the Nova control-plane Lambda environment within its quota; it does not
-change the customer workload acceptance evidence.
+The current backend `main` is `483b59c9adaa8fc6ba63fd6928b4a1b097669b27`.
+PR #520 is merged at `c9ece16291af2c6a659e47ca0bad2867b2fd16c3`; its
+final-head run [45899643291](https://github.com/Bepoadewale/davdeploy/actions/runs/45899643291)
+and merged-main checks passed all seven jobs. PR #521 remains part of the
+source baseline and keeps the Nova control-plane Lambda environment within its
+quota; it does not change customer workload acceptance evidence.
 
-The open ECS Express implementation stack is still draft and has not been
-merged:
+The remaining ECS Express implementation packages are:
 
 - PR #519 (`403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`) adds a default-off,
   project-scoped ECS Express renderer and bounded runner. Its final-head CI
@@ -23,26 +24,26 @@ merged:
   passed all seven checks. IAM/effective-permission review, provider-generated
   actual-plan validation, complete cost review, and its isolated runner cycle
   remain open.
-- PR #520 (`3be5a9e59f919e19bf18233c5c4b65bcb57aafe4`) adds the source-only
-  ECS Express actual-plan policy. Its final-head CI run
-  [45888420911](https://github.com/Bepoadewale/davdeploy/actions/runs/45888420911)
-  passed all seven checks. A real provider-generated saved-plan fixture and
-  effective role-permission evidence remain open.
-- PR #522 (`38fd230b2f13211237b96a07d1dd26fee4d76fc1`), stacked on #520,
-  adds the ECS Express regional cost model and plan-bound usage assumptions.
-  Its final-head CI run
-  [45895348910](https://github.com/Bepoadewale/davdeploy/actions/runs/45895348910)
-  passed all seven checks. Review whether the model covers every billed
-  service-managed resource and usage path before treating the profile as
-  cost-complete.
+- PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged the
+  source-only ECS Express actual-plan policy. An actual provider-generated
+  saved-plan fixture was generated and evaluated under this policy, producing
+  three review findings and no policy denials. Effective role-permission
+  evidence remains open.
+- PR #522 (`5c934c014b50c476d16391d73f7e0e99eaf94dfc`), based on current
+  `main`, adds the ECS Express regional cost model and plan-bound usage
+  assumptions. Its current CI run
+  [45900205778](https://github.com/Bepoadewale/davdeploy/actions/runs/45900205778)
+  has five checks passed and two running (cloud-contracts and local-e2e). It
+  includes both target-tracking alarms. A fresh complete live regional pricing
+  evaluation is unavailable because ECR and ECS price lookups failed; cost
+  review remains open.
 
-All three PRs remain drafts with no recorded GitHub review. PRs #519 and #520
-are based on `dbbf7c1`; PR #522 is stacked on #520's head, so the stack
-predates #521. Reconcile their bases and review the stack before merging or
-enabling any renderer. The #520 worktree also has
-uncommitted changes to its policy and tests; preserve and review those changes
-before syncing that worktree. The #519 worktree has untracked provider-plan
-stdout/stderr files; preserve them locally and do not publish their contents.
+PR #519 and #522 remain drafts with no recorded GitHub review. PR #519 remains
+unmerged on its earlier source base; PR #522 is based on current `main` after
+#520 merged. Review the source stack before merging or enabling a renderer.
+PR #520's policy and tests are merged. The #519 worktree has untracked
+provider-plan stdout/stderr files; preserve them locally and do not publish
+their contents.
 
 The Terraform run monitor currently has 75 terminal records and zero active
 runs; process inspection found no Terraform plan, apply, or destroy process.

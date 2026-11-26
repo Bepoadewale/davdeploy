@@ -6,11 +6,12 @@ Branch: `docs/nova-handoff-523`
 ## Problem / goal
 
 The active Nova goal handoff still identifies merged PR #518 as the next step
-and uses a stale `main` baseline. The current implementation path is the open,
-stacked ECS Express renderer, actual-plan policy, and pricing work in PRs #519,
-#520, and #522. Keep the acceptance distinctions accurate and give the next
-session a verified starting point without claiming the ECS Express runner or
-Nova-originated execution is complete.
+and uses a stale `main` baseline. The current implementation path is the
+default-off ECS Express renderer and runner in PR #519, merged actual-plan
+policy in PR #520, and pricing work in PR #522. Keep the acceptance
+distinctions accurate and give the next session a verified starting point
+without claiming the ECS Express runner or Nova-originated execution is
+complete.
 
 ## Scope
 
@@ -24,33 +25,44 @@ Nova-originated execution is complete.
 
 ## Current repo state
 
-- Backend `main` is `4cc177c2605c2ee313c161fe83b9eac02fc83aa0` after merged PR
-  #521.
-- PRs #519, #520, and #522 are open drafts. All have passing final-head CI,
-  but no recorded reviews. PR #522 depends on #520.
+- Backend `main` is `483b59c9adaa8fc6ba63fd6928b4a1b097669b27`.
+- PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged; all seven
+  final-head and merged-main checks passed in run `45899643291`.
+- PR #519 remains an open draft at `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`;
+  its seven checks passed in run `45884741945`.
+- PR #522 remains a draft at `5c934c014b50c476d16391d73f7e0e99eaf94dfc`.
+  Run `45900205778` has five checks passed and two running; its watcher is
+  active. Its complete live cost evaluation remains unavailable.
 - The direct ECS Express lifecycle evidence in PR #437 and private Batch
   evidence in PR #517 satisfy the general customer-side lifecycle gate for
   those exact tested shapes; neither proves Nova dispatch.
-- The actual-plan policy, effective IAM review, complete cost review, and
+- The actual-plan policy is merged and has been exercised with a provider-
+  generated saved plan; effective IAM review, complete cost review, and the
   isolated ECS Express runner lifecycle remain open.
 
 ## Evidence checked
 
-- Current backend `main`: `4cc177c2605c2ee313c161fe83b9eac02fc83aa0`, merged PR
-  #521.
+- Current backend `main`: `483b59c9adaa8fc6ba63fd6928b4a1b097669b27`.
 - PR #519 head `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`, final-head run
   `45884741945`: seven checks passed.
-- PR #520 head `3be5a9e59f919e19bf18233c5c4b65bcb57aafe4`, final-head run
-  `45888420911`: seven checks passed.
-- PR #522 head `38fd230b2f13211237b96a07d1dd26fee4d76fc1`, final-head run
-  `45895348910`: seven checks passed.
-- The three ECS Express PRs are open drafts with no recorded reviews. PRs #519
-  and #520 are based on `dbbf7c1`; PR #522 is stacked on #520.
+- PR #520 head `c9ece16291af2c6a659e47ca0bad2867b2fd16c3`, run
+  `45899643291`: all seven final-head and merged-main checks passed; merged.
+- PR #522 head `5c934c014b50c476d16391d73f7e0e99eaf94dfc`, run
+  `45900205778`: five checks passed and two were running at this snapshot.
+  It includes pricing for both target-tracking alarms; a full fresh live price
+  evaluation is unavailable because ECR and ECS regional lookups failed.
+- PR #519 and #522 remain open drafts with no recorded reviews. PR #522 now
+  targets current `main`; #520's policy and tests are merged.
+- A provider-generated saved plan from the PR #519 root was evaluated under
+  #520 policy. It yielded three review findings and no policy denials; this is
+  plan-policy evidence only, not remote-state runner or lifecycle evidence.
 - The Terraform monitor reports 75 terminal records and no active operations;
   process inspection found no active Terraform plan, apply, or destroy.
 - Read-only AWS checks verified the customer-side account and found seven
   DavDeploy Batch job definitions in inactive status. The tested Batch stacks
-  are already absent. No AWS mutation was performed.
+  are already absent. One SageMaker test lineage action/context and its
+  artifact association remain as retained evidence; no lineage records were
+  deleted. No AWS mutation was performed.
 - The control plane was not inspected or changed for this documentation
   reconciliation. Previously recorded SageMaker lineage evidence remains
   protected.
@@ -90,12 +102,13 @@ Nova-originated execution is complete.
 - [x] The next action is actionable and does not enable the renderer, mutate
   AWS, or alter the hosted control plane.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head GitHub Actions checks pass.
+- [ ] Final-head GitHub Actions checks pass after this handoff update.
 
 ## Acceptance status
 
-The handoff and matrix are reconciled to current `main` and the open PR state.
-Documentation checks and final-head CI remain to be completed.
+The handoff and matrix are reconciled to current `main`, merged PR #520, and
+the current open PR state. Documentation checks pass; final-head CI remains
+to be completed.
 
 ## Tests / validation performed
 
@@ -107,11 +120,12 @@ Documentation checks and final-head CI remain to be completed.
 
 - Do not mutate the hosted control plane, runtime, state, or lock resources.
 - Do not delete AWS resources, inactive Batch history, retained lineage
-  evidence, local worktrees, or protected local files.
+  evidence, local worktrees, or protected local files. The prior request to
+  approve cleanup did not identify a target set; no cleanup scope is authorized
+  by this ticket.
 - Do not enable customer execution or claim a Nova-dispatched workload.
-- Preserve uncommitted changes found in the PR #520 worktree and untracked
-  provider-plan output files found in the PR #519 worktree; review them before
-  any worktree synchronization.
+- Preserve untracked provider-plan output files found in the PR #519 worktree;
+  do not publish their contents.
 
 ## Validation plan
 
@@ -126,6 +140,7 @@ reconciliation and performs no customer workload test or cloud mutation.
 
 ## Follow-up work
 
-Review PRs #519/#520/#522, validate their provider-generated actual-plan
-contract, effective IAM permissions, full costs, and isolated customer-side
-renderer lifecycle. Do not enable execution until those gates pass.
+Continue with PR #519/#522 review, effective IAM permissions, full costs, and
+an isolated customer-side renderer lifecycle. The actual-plan policy in #520
+is merged and has been evaluated against a provider-generated plan. Do not
+enable execution until the remaining gates pass.
