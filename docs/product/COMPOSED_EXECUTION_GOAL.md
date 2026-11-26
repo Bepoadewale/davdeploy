@@ -7,6 +7,27 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-26
 
+The latest backend main commit is `dbbf7c135b7be97c832927d5c1758bc1faab805d`
+(merged PR #518). Draft PR #519, branch `feat/ecs-express-renderer-519`, is at
+`a384bd9a335bcb6e5fc186da637c6a2a68d9b2d3`; final-head run
+[45876400922](https://github.com/Bepoadewale/davdeploy/actions/runs/45876400922)
+passed all seven checks before the current handoff refresh. It adds a disabled,
+pilot-specific ECS Express renderer, project-scoped customer state, and a
+bounded runner. It does not
+reuse the broad multi-service ECS module contract, enable customer dispatch,
+prove hosted Nova execution, or change AWS resources or the hosted control
+plane. IAM and actual-plan policy, full cost coverage, and an authorized
+project-scoped remote-state lifecycle remain unverified; see
+[`ticket519`](../tickets/ticket519.md).
+
+Read-only AWS reconciliation on 2026-11-26 verified account `654654474502`,
+no SageMaker endpoints, and seven inactive DavDeploy test Batch definitions.
+The retained SageMaker test action is associated with its context. No workload,
+lineage record, control-plane resource, state, or lock was changed. The local
+Terraform monitor has 75 terminal records and zero active operations. Preserve
+the protected untracked `--only-show-errors`, `.venv-pr399/`, and lineage
+evidence.
+
 The next major engineering goal is registered in the
 [AI infrastructure and operations platform goal](AI_INFRASTRUCTURE_PLATFORM_GOAL.md).
 It is queued only: this handoff and its existing Nova acceptance gates remain
@@ -474,17 +495,25 @@ Together with the accepted direct ECS lifecycle in PR #437, this satisfies the
 general customer-side lifecycle gate for those tested shapes. It does not prove
 Nova authorization/dispatch, cross-account trust, or support for other shapes.
 
-PR #518 reconciles the source/deployed snapshots, evidence matrix, and
-backlog through PR #517. Complete that documentation handoff first. The first hosted acceptance gate
-remains an authenticated workspace administrator, a verified isolated customer
-connection and role, and a successful hosted generated plan. The selected
-account's latest DavDeploy TOTP attempt was rejected, so no authenticated
-session or customer plan exists. Preserve MFA and tenant controls; continue
-independent source work while that login dependency is unresolved. Any direct
-customer-side lifecycle test must use fresh, project-scoped resources, a new
-exact manifest, current cost/quota preflight, explicit cost/runtime bounds,
-monitored Terraform operations, and independent cleanup checks. Deploy
-control-plane code only through its protected, reviewed Terraform workflow.
+PR #518's documentation handoff is merged. PR #519 is the current source
+package; keep it gated while completing its exact ECS Express plan policy,
+least-privilege permission review, complete regional cost model, and isolated
+remote-state runner lifecycle. The CI clean-runner check is not cloud lifecycle
+evidence. The older direct Terraform evidence in `test437.md` remains valid for
+its exact same-account shape, but does not prove this runner or Nova dispatch.
+
+The first hosted Nova acceptance gate remains an authenticated workspace
+administrator, a verified isolated customer connection and role, and a
+successful hosted generated plan. The recorded DavDeploy TOTP attempt was
+rejected, so there is no authenticated workspace-admin session or hosted
+customer plan. Preserve MFA and tenant controls; continue independent source
+work while authentication is unresolved. Any new direct customer-side
+lifecycle test needs fresh project-scoped resources, an exact manifest,
+current cost/quota preflight, explicit cost/runtime bounds, a monitored
+Terraform operation, and independent cleanup verification. Cleanup of the
+retained inactive Batch definitions or SageMaker lineage evidence is not
+authorized until the exact targets are confirmed. Deploy control-plane code
+only through its protected, reviewed Terraform workflow.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 
