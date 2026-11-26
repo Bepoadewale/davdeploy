@@ -2,7 +2,7 @@
 
 Date: 2026-11-26.
 
-Execution type: Direct same-account AWS infrastructure validation. The PR #517 stack was provisioned and destroyed. One Batch job was submitted but failed with `JobQueue deleted` while a concurrent cleanup was removing the queue. Private image pull, CloudWatch job-log delivery, and application readiness are not proven.
+Execution type: Direct same-account AWS validation. Two isolated PR #517 test cycles were provisioned and destroyed. Suffix `a` had a Batch job fail with `JobQueue deleted` during cleanup. Suffix `b` ran one Batch job to `SUCCEEDED` with exit code 0, verified the digest-pinned private ECR image and CloudWatch log output, and was then destroyed. No Nova dispatch or general customer workload certification is claimed.
 
 Customer repository: None; disposable DavDeploy test environment.
 
@@ -10,7 +10,7 @@ PR: [#517](https://github.com/Bepoadewale/davdeploy/pull/517).
 
 Commit: `37b4be1fb330c66bb72791804181d43bcd5bc308`.
 
-This is the tested implementation commit. Final-head CI run `45839400505` passed all seven checks. The cleanup update is documentation-only and does not change the tested implementation.
+This is the tested implementation commit. Final-head CI run `45839400505` passed all seven checks. Documentation head `348b42183f326cf09814941c66ab638bec3321a9` also passed all seven checks in run `45857313067`; later lifecycle evidence changes are documentation-only.
 
 Exact test ID: `batch-private-endpoints-517-20261126a`.
 
@@ -20,9 +20,9 @@ AWS account: `654654474502`.
 
 AWS region: `us-east-1`.
 
-The hosted control plane and its state/lock resources were not changed. The AWS work used only the exact PR #517 disposable test stack described below. The user explicitly approved cleanup of that exact test scope. No Nova dispatch or customer workload execution is claimed.
+The hosted control plane and its state/lock resources were not changed. Both AWS cycles used separate exact PR #517 test IDs and isolated Terraform state. Cleanup was limited to those test manifests. No Nova dispatch or customer workload execution is claimed.
 
-The test was originally bounded to one hour and a USD $1.00 estimated-cost ceiling; this estimate is not an AWS billing cap. The actual AWS stack existed from the successful apply at `2026-11-26T14:39:36Z` through destroy completion at `2026-11-26T14:55:00Z` (about 16 minutes). One job was submitted and failed because its queue was deleted during cleanup.
+Each cycle was bounded to one hour and an estimated USD $1.00 maximum; this is not an AWS billing cap. Suffix `a` existed from `2026-11-26T14:39:36Z` to `14:55:00Z`. Suffix `b`'s ECR repository was created at `16:22:22Z`, its full stack completed at `16:34:20Z`, and teardown completed at `16:45:23Z`. Suffix `a`'s job failed during queue deletion; suffix `b`'s single job succeeded and was stopped before teardown.
 
 ## Resources created
 
@@ -38,6 +38,16 @@ The ECR repository contained these five exact manifests before cleanup:
 
 The last tagged digest was a duplicate produced by a second image build. All five digests were explicitly removed before Terraform deleted the repository.
 
+Suffix `b` used the checked-in echo-container behavior. Its immutable tag
+`20261126b` resolved to
+`sha256:fa6dd10e24e4401dca9523ffdde8e6a311d7004d4e7fa5d0ed38123af2c7248b`.
+The ECR repository also contained three untagged OCI manifests:
+`sha256:4571584eada62151bd518d2200e2527edb64dd3f9e714c54597b0fa19217440a`,
+`sha256:0255782e783c64793bc082d327bfed55aaca468ff85dc52de9e73c19f15af609`,
+and
+`sha256:9e0fc38dcaa34bddbf825f9f26fd216bb091221318a1c4a677e7e93e8af2863f`.
+All four exact suffix-`b` digests were deleted before repository teardown.
+
 ## Commands executed
 
 - `AWS_PROFILE=ai-platform-pilot-key python3 scripts/terraform_run_monitor.py start apply infrastructure/terraform/module-validation/batch-private-endpoints --run-id batch-private-517-full-apply-20261126b --terraform-arg=/private/tmp/davdeploy-batch-private-endpoints-517-20261126a/full-v3.tfplan` — succeeded; 22 added, one changed, zero destroyed.
@@ -47,6 +57,11 @@ The last tagged digest was a duplicate produced by a second image build. All fiv
 - `AWS_PROFILE=ai-platform-pilot-key aws batch submit-job --region us-east-1 --job-name davdeploy-private-batch-517-20261126a --job-queue davdeploy-batch-private-endpoints-517-20261126a --job-definition davdeploy-batch-private-endpoints-517-20261126a` — submitted job `3d1b3de1-0e7b-4a7f-8605-bb7f37777f2d`. It entered `STARTING` and then failed with status reason `JobQueue deleted`.
 - A concurrent monitored cleanup run `nova-batch517-cleanup-approved-apply-20261126` deleted the queue during the job startup. AWS CloudTrail records the exact `DeleteJobQueue` event under the expected account user at `2026-11-26T14:53:02+01:00`; no replacement job was submitted. The image pull and CloudWatch log path therefore remain unproven.
 - Independent AWS service-specific `describe` calls checked the exact VPC, subnets, route table, VPC endpoint IDs, security groups/rules, Batch environment and queue, ECR repository, log group, task role, service-linked role, and inactive job definition.
+- Suffix-`b` targeted ECR apply `nova-batch517-ecr-apply-20261126b` succeeded; the repository was tagged immutable. A later `docker push ...:20261126b` was rejected because that tag already existed; ECR confirmed the existing digest `sha256:fa6dd10e24e4401dca9523ffdde8e6a311d7004d4e7fa5d0ed38123af2c7248b`, and no overwrite occurred.
+- Suffix-`b` full apply `batch-private-517-cycle-b-full-apply-20261126` succeeded at `2026-11-26T16:34:20Z`: 22 added, zero changed, zero destroyed. It created VPC `vpc-03062d08c6e5072e5`, private subnets `subnet-0c07d141bbb9c3bc9` and `subnet-0dc9fa3a6d12b07ac`, interface endpoints `vpce-03a2d7d3bcca8470c` (ECR API), `vpce-0d891c1f0787bf070` (ECR Docker), and `vpce-0ab35bb76c19318c4` (Logs), plus S3 endpoint `vpce-01a8804ed3719c6ab` and the scoped Batch/IAM/logging resources.
+- Before submission, AWS reported the compute environment and queue `ENABLED`/`VALID`. Job `62db6ef3-0b17-4d40-8116-078b2dc186ab` used `654654474502.dkr.ecr.us-east-1.amazonaws.com/davdeploy-batch-private-endpoints-517-20261126b@sha256:fa6dd10e24e4401dca9523ffdde8e6a311d7004d4e7fa5d0ed38123af2c7248b`, ran from `2026-11-26T16:39:42Z` to `16:40:09Z`, and completed `SUCCEEDED`, exit code `0`. AWS reports `assignPublicIp=DISABLED` and only private IP `10.241.5.193`.
+- The CloudWatch stream `davdeploy/default/4100583bfd2246b8b32763198c068d96` in `/davdeploy/batch-private-endpoints-517-20261126b/batch` returned `DAVDEPLOY_PRIVATE_BATCH_ENDPOINTS_517_OK`. Direct EC2 checks found no internet or NAT gateway in the test VPC; its routes were VPC-local plus the S3 gateway endpoint.
+- All four suffix-`b` ECR digests were deleted. Fresh destroy plan contained exactly 23 deletes, zero adds, and zero changes. Monitored saved-plan apply `batch-private-517-cycle-b-destroy-20261126` succeeded at `2026-11-26T16:45:23Z` (supervisor PID `26205`, Terraform PID `26206`, exit code `0`); Terraform reported 0 added, 0 changed, 23 destroyed. Independent service-specific AWS checks confirmed the live stack absent.
 
 ## Apply and cleanup evidence
 
@@ -58,14 +73,16 @@ The last tagged digest was a duplicate produced by a second image build. All fiv
 - Independent checks in the same verified AWS account found the ECR repository absent; VPC, subnets, route table, four VPC endpoints, security groups and three security-group rules absent; Batch compute environment and queue absent; CloudWatch log group absent; task execution role and `AWSServiceRoleForBatch` absent. The Terraform state contains no managed resources and the run monitor has no active Terraform operations.
 - AWS Batch retains the test job definition as inactive history: `arn:aws:batch:us-east-1:654654474502:job-definition/davdeploy-batch-private-endpoints-517-20261126a:1`. This is not an active workload and was preserved as audit evidence.
 - At the time of the independent checks, the Resource Groups Tagging API still returned stale ARN entries for the four deleted VPC endpoints and three deleted security-group rules, despite their service-specific Describe APIs returning not-found/empty results. Its response also listed the retained inactive Batch job definition. Treat those tag-index entries as a reconciliation caveat; the direct service APIs verified the live resources absent.
+- Suffix `b` fresh destroy plan `/private/tmp/davdeploy-batch-private-endpoints-517-20261126b/destroy.tfplan` contained 23 deletes, zero adds, and zero changes. Monitored apply `batch-private-517-cycle-b-destroy-20261126` succeeded with 0 added, 0 changed, and 23 destroyed. Independent service-specific checks found the suffix-`b` VPC, subnets, route table, four endpoints, security groups/rules, Batch environment/queue, ECR repository, log group, execution role, and service-linked role absent. Terraform state contains no managed resources and no Terraform operation is active.
+- AWS retains suffix-`b` job definition `arn:aws:batch:us-east-1:654654474502:job-definition/davdeploy-batch-private-endpoints-517-20261126b:1` as inactive history. The Resource Groups Tagging API returned stale endpoint/rule/subnet ARNs after teardown, including subnet `subnet-0b4e677b12619be39`; direct EC2 descriptions returned not-found/empty for those IDs. Its response also listed the retained inactive job definition.
 
 ## Observed result
 
-One Batch job was submitted, but it failed with `JobQueue deleted` during the concurrent Terraform cleanup. No claim is made that Fargate reached the image, downloaded it privately, started the container, sent CloudWatch logs, or reached application readiness. This run proves infrastructure provisioning and cleanup only.
+Suffix `a`'s job failed because a concurrent cleanup removed its queue during startup. On suffix `b`, Batch reports `SUCCEEDED`, exit code 0, and public-IP assignment disabled; its private subnet had no internet/NAT route, and CloudWatch returned the expected marker. This proves the bounded private ECR and logging path for this exact same-account Batch shape. It does not prove Nova dispatch or cross-account operation.
 
 ## Teardown
 
-The user approved cleanup of this exact test environment. All five ECR image digests were deleted, then the reviewed 23-resource Terraform destroy plan succeeded through the PID-based monitor. Independent service-specific AWS APIs verified the live resources absent. The inactive Batch job-definition record remains under AWS retention, and the Resource Groups Tagging API returned stale endpoint/rule ARNs at verification time; see the cleanup evidence above.
+Both exact test environments were cleaned. Suffix `a`: five ECR digests and 23 managed resources removed. Suffix `b`: four ECR digests and 23 managed resources removed. Both saved destroy plans succeeded through the PID-based monitor; service-specific APIs confirmed live resources absent. AWS retains both job definitions as inactive history. The Resource Groups Tagging API returned stale endpoint/rule/subnet entries as recorded above.
 
 ## Local clean-room validation
 
@@ -73,44 +90,32 @@ In an isolated worktree using Compose project `davdeploy-pr517-cleanroom`, ran b
 
 ## Limits
 
-This is direct same-account AWS infrastructure evidence. It does not prove a successful private Batch job, private ECR pull, CloudWatch job-log delivery, Nova dispatch, cross-account operation, all Batch images, general private internet egress, or any other workload family. The inactive job definition is retained by AWS; the Resource Groups Tagging API had stale entries as recorded above. The hosted control plane remained untouched.
+This proves one successful direct same-account private Batch Fargate job with an immutable ECR digest, private networking, and expected CloudWatch output. It does not prove Nova dispatch, cross-account operation, other Batch image families, general private internet egress, or any other workload family. AWS retains inactive job-definition history; the Resource Groups Tagging API had stale entries as recorded above. The hosted control plane remained untouched.
 
 ## Final boundary
 
-The hosted control plane and its state/lock resources were not changed. The evidence is limited to this disposable same-account AWS infrastructure apply and cleanup; no workload execution or Nova dispatch is claimed.
+The hosted control plane and its state/lock resources were not changed. The evidence is limited to the two disposable same-account AWS Batch cycles above. Suffix `b`'s workload completed successfully, but no Nova dispatch or hosted control-plane lifecycle is claimed.
 
-## Retry cycle b — exact manifest before apply
+## Retry cycle b — completed lifecycle evidence
 
-This separate retry uses test ID `batch-private-endpoints-517-20261126b` and
-ECR repository `davdeploy-batch-private-endpoints-517-20261126b` in account
-`654654474502`, region `us-east-1`. Its `ExpiresAt` tag is
-`2026-11-26T17:15:00Z`; the maximum runtime is one hour. Fresh preflight at
-2026-11-26 confirmed the expected account, no AWS resources tagged with this
-TestId, no repository with this name, no `AWSServiceRoleForBatch`, no Batch
-compute environment in `us-east-1`, an empty Terraform test state, and no
-active monitored Terraform operation. The exact prior stack-a resources are
-absent; the retained inactive job definition belongs only to suffix `a`.
+Suffix `b` used test ID `batch-private-endpoints-517-20261126b` and ECR
+repository `davdeploy-batch-private-endpoints-517-20261126b` in account
+`654654474502`, region `us-east-1`. Its manifest expiry was
+`2026-11-26T17:15:00Z`. Preflight verified the account, six available AZs, a
+64-vCPU Fargate quota against a one-vCPU ceiling, no pre-existing resources
+with this test ID, no Batch environment in `us-east-1`, and no Batch
+service-linked role. The targeted ECR apply created one repository; a
+digest-pinned full plan then created exactly 22 additional resources.
 
-The authorized manifest is limited to one ECR repository and one immutable
-Linux/x86 test image; one private two-AZ VPC with two private subnets and no
-internet gateway, NAT, or public IPv4; one route table and associations; two
-security groups and three scoped security-group rules; three interface
-endpoints (`ecr.api`, `ecr.dkr`, `logs`) across the two AZs; one S3 gateway
-endpoint; one CloudWatch log group; one ECS task execution role and policy
-attachment; one explicitly owned AWS Batch service-linked role; and one Batch
-Fargate compute environment, queue, and job definition capped at one vCPU. One
-job will be submitted once with a five-minute timeout. It must reach
-`SUCCEEDED`; the exact digest-pinned image and CloudWatch stream must be
-verified before teardown.
+The single five-minute-bounded job reached `SUCCEEDED`, exit code 0, and
+CloudWatch returned the expected echo marker. The task had only private IP
+`10.241.5.193` and `assignPublicIp=DISABLED`; direct VPC queries found no
+internet gateway or NAT gateway and only local/S3 gateway routes. These
+observations prove the private ECR and logging path for this bounded image.
 
-The estimated fixed charges remain approximately $0.0724 for one endpoint
-hour plus one hour of 0.25-vCPU/0.5-GiB Fargate, before data processing,
-logging, and ECR storage. The estimated spend is bounded at $1.00 by prompt
-cleanup; this is not an AWS billing cap. The test has not started: no ECR
-repository, image, VPC, endpoint, IAM role, Batch environment, queue, or log
-group exists for suffix `b`. Generate the targeted ECR plan and full saved
-plan in a private `0700` artifact directory with plans/logs mode `0600`,
-review their exact resources and actions, then apply through the Terraform
-monitor. Destroy only the exact suffix-`b` state and image digests, then
-independently verify resource absence. No control-plane resource or retained
-suffix-`a` audit history is in this retry's cleanup scope.
+Teardown removed all four exact ECR digests and applied a fresh saved plan
+containing exactly 23 deletes. The monitor reports success; independent AWS
+service-specific checks confirm the live stack absent. AWS retains the
+suffix-`b` job definition as inactive history, and the Resource Groups
+Tagging API response still includes stale endpoint/rule/subnet ARNs. No
+control-plane resource or retained suffix-`a` audit history was changed.
