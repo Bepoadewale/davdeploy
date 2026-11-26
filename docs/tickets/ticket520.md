@@ -105,7 +105,8 @@ execution remain separate gates.
 ## Tests / validation performed
 
 - `tests/test_generated_plan_policy.py`: 646 passed.
-- Current `make verify`: 1,978 passed, with one existing Starlette/httpx
+- Current `make verify` after rebasing on main commit `4cc177c`: 1,981 passed,
+  with one existing Starlette/httpx
   deprecation warning; lint, OpenAPI snapshot, actions configuration, and
   Compose checks passed.
 - Ruff on the changed policy and test files: passed.
