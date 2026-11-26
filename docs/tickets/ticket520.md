@@ -86,7 +86,8 @@ remote-state lifecycle, and Nova-originated execution remain separate gates.
   internet gateway, and route table; region is a constant or the exact trusted
   `var.region` value.
 - [x] Each computed value is bound through its own Terraform configuration
-  field; a reference in an unrelated field such as `tags` does not qualify.
+  field, and every reference must be within the approved target; an unrelated
+  field or mixed target and untrusted references do not qualify.
 - [ ] Focused tests, full relevant CI checks, doc conventions, lint, and
   `git diff --check` pass.
 - [ ] No AWS workload, hosted control plane, Terraform state, or lock resource
@@ -103,8 +104,8 @@ execution remain separate gates.
 
 ## Tests / validation performed
 
-- `tests/test_generated_plan_policy.py`: 645 passed.
-- Current `make verify`: 1,977 passed, with one existing Starlette/httpx
+- `tests/test_generated_plan_policy.py`: 646 passed.
+- Current `make verify`: 1,978 passed, with one existing Starlette/httpx
   deprecation warning; lint, OpenAPI snapshot, actions configuration, and
   Compose checks passed.
 - Ruff on the changed policy and test files: passed.

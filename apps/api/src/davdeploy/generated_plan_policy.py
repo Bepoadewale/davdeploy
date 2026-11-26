@@ -3771,13 +3771,36 @@ def _check_ecs_express_pilot(
         references = expression.get("references") if isinstance(expression, dict) else None
         return tuple(item for item in references if isinstance(item, str)) if isinstance(references, list) else ()
 
-    def references_resource(resource: dict[str, Any], address: str, field: str) -> bool:
-        return _references_resource(references_for(resource, field), address)
+    def references_resource(
+        resource: dict[str, Any],
+        address: str,
+        field: str,
+        *,
+        allow_count_index: bool = False,
+    ) -> bool:
+        references = references_for(resource, field)
+        target_references = tuple(
+            reference for reference in references
+            if reference == address or reference.startswith(f"{address}.")
+        )
+        return bool(target_references) and all(
+            reference in target_references
+            or (allow_count_index and reference == "count.index")
+            for reference in references
+        )
 
     def matches_or_references(
-        value: Any, expected: Any, resource: dict[str, Any], target: str, field: str
+        value: Any,
+        expected: Any,
+        resource: dict[str, Any],
+        target: str,
+        field: str,
+        *,
+        allow_count_index: bool = False,
     ) -> bool:
-        return value == expected if value is not None else references_resource(resource, target, field)
+        return value == expected if value is not None else references_resource(
+            resource, target, field, allow_count_index=allow_count_index
+        )
 
     allowed_types = {
         "terraform_data", "aws_ecs_express_gateway_service", "aws_iam_role",
@@ -4059,7 +4082,9 @@ def _check_ecs_express_pilot(
             )
             or (
                 association_values.get("subnet_id") is None
-                and not references_resource(association, "aws_subnet.public", "subnet_id")
+                and not references_resource(
+                    association, "aws_subnet.public", "subnet_id", allow_count_index=True
+                )
             )
             or (
                 association_values.get("subnet_id") is not None

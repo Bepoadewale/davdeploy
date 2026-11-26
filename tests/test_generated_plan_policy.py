@@ -2557,6 +2557,25 @@ def test_ecs_express_unknown_vpc_id_rejects_reference_in_unrelated_field():
     assert "ecs_express_subnet_invalid" in {item.code for item in findings}
 
 
+def test_ecs_express_unknown_vpc_id_rejects_mixed_same_field_references():
+    findings = []
+    config = ecs_express_configuration_references()
+    subnet_config = next(item for item in config if item["address"] == "aws_subnet.public")
+    subnet_config["expressions"] = {
+        "vpc_id": {"references": ["aws_vpc.customer.id", "var.untrusted_vpc"]},
+    }
+    document = {"configuration": {"root_module": {"resources": config}}}
+    _check_ecs_express_pilot(
+        document,
+        ecs_express_pilot_resources(unknown_create_ids=True),
+        findings,
+        ACCOUNT,
+        REGION,
+    )
+
+    assert "ecs_express_subnet_invalid" in {item.code for item in findings}
+
+
 def test_plan_region_accepts_only_the_expected_explicit_region_variable():
     document = {
         "configuration": {
