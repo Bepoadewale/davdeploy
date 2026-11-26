@@ -23,6 +23,8 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - AWS [PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/): interface endpoints incur hourly per-AZ charges and processed-data fees; partial endpoint-hours are rounded up.
 - AWS [VPC pricing](https://aws.amazon.com/vpc/pricing/): NAT gateway hourly/data-processing and public IPv4 charges apply to the current bounded VPC module shape.
 - AWS [Fargate pricing](https://aws.amazon.com/fargate/pricing/): task compute is metered by vCPU, memory, and runtime, with per-second billing and a one-minute minimum for Linux/x86.
+- Preflight refreshed 2026-11-26: AWS public rates indicate about $0.01 per interface endpoint ENI-hour and $0.01235 per hour for the 0.25-vCPU/0.5-GB test task; six endpoint ENIs plus the task are about $0.07235 for the first hour before processing/logging. Recheck immediately before apply.
+- AWS Fargate On-Demand quota in `us-east-1` is 64 vCPUs; the proposed Batch environment is capped at 1 vCPU. Two selected AZs are available, and no resource carries the test purpose tag.
 
 ## Work planned for the PR
 
@@ -61,6 +63,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - `ruff check tests/test_generated_plan_policy.py tests/test_terraform_validation.py`: passed.
 - `terraform fmt -recursive` on the changed roots/modules: passed.
 - `make terraform-validate`: passed, including the new private-endpoint test root.
+- Read-only AWS preflight: expected account confirmed, two AZs available, Fargate quota 64 vCPUs, and no pre-existing resources with the test purpose tag.
 - `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - GitHub CI: pending on final head.
