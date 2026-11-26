@@ -135,7 +135,7 @@ pinned Terraform AWS provider version before any role is authorized.
 | Route-table association | `ec2:AssociateRouteTable`, `ec2:DisassociateRouteTable` | These operations act on existing subnet and route-table identities, so the create-network and create-service work should be split into separate approved plans. Both referenced resources need verified connection/project/plan tags. |
 | ECR repository | ECR repository resource actions and tag operations | Repository name in this root is deterministic; use its exact same-account, same-region repository ARN. `ecr:GetAuthorizationToken` is separate and resource `*`; it belongs only to the image-publisher identity, not Terraform apply. |
 | CloudWatch log group | Log-group resource actions and tag operations | The log-group name is deterministic; use its exact ARN including the `:*` form only where the action requires log streams. Keep log reads in observation credentials. |
-| ECS Express service create/update | `ecs:CreateExpressGatewayService` or `ecs:UpdateExpressGatewayService`, plus `ecs:AssociateGatewayWithCluster`, `ecs:CreateCluster`, `ecs:CreateGateway`, `ecs:RegisterTaskDefinition`, `ecs:TagResource`, and exact `iam:PassRole` as listed by AWS | AWS documents service/resource tags, `ecs:cluster`, `ecs:subnet`, CPU/memory and task-definition condition keys. A first plan that creates the VPC/subnets has unknown subnet IDs, so it cannot satisfy a trusted `ecs:subnet` allowlist. Apply network/ECR/log foundation under one approved plan, then create/update the ECS service under a separate plan after the subnet IDs and service-role ARNs are read and verified. The ECS API internally creates or associates several resources that do not appear as separate Terraform resource changes; their resource ARNs and condition behavior still need explicit policy tests. |
+| ECS Express service create/update | `ecs:CreateExpressGatewayService` or `ecs:UpdateExpressGatewayService`, plus `ecs:AssociateGatewayWithCluster`, `ecs:CreateCluster`, `ecs:CreateGateway`, `ecs:RegisterTaskDefinition`, `ecs:TagResource`, and exact `iam:PassRole` as listed by AWS | AWS documents service/resource tags, `ecs:cluster`, `ecs:subnet`, CPU/memory and task-definition condition keys. The current runner already has a staged path: a foundation plan/apply with `enable_service=false`, then image publication, then a separate service plan/apply with `enable_service=true`. The service plan can use subnet IDs from the already-applied foundation state. The IAM design must prove these are distinct, exact plan digests and must scope the service plan to verified subnet and service-role ARNs. The ECS API internally creates or associates several resources that do not appear as separate Terraform resource changes; their resource ARNs and condition behavior still need explicit policy tests. |
 | ECS Express service deletion | `ecs:DeleteExpressGatewayService` on the exact service ARN | AWS says this action stops tasks and removes its associated load balancer, target groups, security groups, scaling policies and managed components. It requires a separately approved destroy plan; no broad ELB or Auto Scaling caller access should be inferred from the deletion side effect. |
 | Terraform data-source and account/region checks | Read-only EC2 availability-zone, IAM role and STS identity actions | These reads are not necessarily represented as managed resource changes. The plan-role profile must cover them separately; they must not be added to apply permissions without exact resource/action justification. |
 
@@ -147,13 +147,13 @@ must receive only ECS API permissions and exact `iam:PassRole`, not the
 infrastructure role's ELB/EC2/Auto Scaling policy.
 
 The AWS ECS authorization table lists the composite create/update dependent
-actions and supports tag, cluster and subnet conditions. Because the current
-Terraform root creates network resources and the service in one root, the
-initial saved plan cannot bind the ECS `ecs:subnet` condition to IDs that do
-not yet exist. A phased plan is therefore a prerequisite. A phase split alone
-is not sufficient: tests must verify the provider's exact API calls, names,
-resource ARNs, condition context, and `iam:PassedToService` values for the two
-connection-scoped roles.
+actions and supports tag, cluster and subnet conditions. A single saved plan
+that creates the VPC/subnets and ECS service cannot bind `ecs:subnet` to IDs
+that do not yet exist. The existing runner avoids that by applying the
+foundation stage first and planning service creation afterward. This sequencing
+must be bound to separately approved plan digests and phase credentials. Tests
+must verify the provider's exact API calls, names, resource ARNs, condition
+context, and `iam:PassedToService` values for the two connection-scoped roles.
 
 No ECS policy builder or role was changed by this review. The renderer remains
 disabled until the action map is complete, tested against the pinned provider,

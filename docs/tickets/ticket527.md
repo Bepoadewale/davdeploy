@@ -28,14 +28,15 @@ Complete the AWS action, resource, and condition mapping needed before determini
 
 - Inspect the pilot Terraform resource inventory and current AWS service authorization references.
 - Document EC2 relationship/tag scope, exact ECR/log-group resources, Terraform data-source reads, ECS Express composite API actions, and exact-role `iam:PassRole` requirements in `docs/security/ECS_EXPRESS_EXECUTION_IAM.md`.
-- Identify computed resource IDs and ECS Express API side effects that are not represented as Terraform-managed resources in the approved plan.
+- Verify the runner's existing staged flow: foundation plan/apply with the service disabled, image publication, then a separate service plan/apply after subnet IDs exist.
+- Identify ECS Express API side effects that are not represented as Terraform-managed resources in the approved plan.
 - Keep permission code, credential wiring and cloud execution deferred wherever exact scoping is not proven.
 
 ## Acceptance criteria
 
 - [x] Current AWS authorization references cover relevant service actions and condition keys.
 - [x] ECS Express composite actions and the distinct ECS infrastructure-role responsibility are documented.
-- [x] The same-plan computed-subnet scope gap and phased-plan dependency are explicit.
+- [x] A single combined plan's computed-subnet limitation is explicit, and the existing staged runner flow is identified as a way to supply known subnet IDs to the later service plan.
 - [x] No broad caller permission for ELB/Auto Scaling is inferred from ECS-managed side effects.
 - [ ] Every provider API call and internal ECS resource ARN is verified against the pinned provider and represented in tested policy code; deferred to a follow-up implementation package.
 - [x] Renderer, hosted control plane, customer resources, state and locks remain untouched.
@@ -64,4 +65,4 @@ The sourced authorization mapping and implementation blocker are recorded. This 
 
 ## Follow-up work
 
-Verify exact AWS provider API behavior and internal resource ARNs; split network foundation and ECS service into separately approved plan phases; implement tested plan-bound policy generation and phase-specific identities; then pass clean-room and CI gates before any bounded AWS pilot.
+Verify exact AWS provider API behavior and internal resource ARNs; bind the existing foundation and service stages to separate approved plan digests and phase-specific identities; implement tested plan-bound policy generation; then pass clean-room and CI gates before any bounded AWS pilot.
