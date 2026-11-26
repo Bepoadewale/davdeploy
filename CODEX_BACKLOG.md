@@ -24,7 +24,7 @@ The Terraform monitor has 75 records and no active operations. No authenticated
 workspace administrator session, verified customer connection, or hosted
 Nova-generated plan exists; no Nova customer workload has been applied,
 operated, or certified. The control plane was not changed for PR #517.
-Draft PR #518 reconciles the source/deployed snapshot, private Batch evidence,
+PR #518 reconciles the source/deployed snapshot, private Batch evidence,
 26/30 capability map, and next-step boundaries through PR #517. It changes no
 application code, AWS resource, or hosted control-plane configuration.
 

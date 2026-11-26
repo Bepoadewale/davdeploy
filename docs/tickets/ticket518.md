@@ -36,12 +36,12 @@ Refresh the durable Nova status, backlog, and capability-evidence crosswalk agai
 - [x] The 26 architecture entries and 30 Terraform roots remain intact; unsupported capabilities remain explicitly unmet.
 - [x] Status docs distinguish direct customer-side lifecycle evidence from Nova authorization/dispatch, and record the explicit no-hosted-control-plane boundary.
 - [x] Documentation conventions, `git diff --check`, and 26/30 crosswalk counts pass locally.
-- [ ] All seven required PR checks pass on the final head after the latest documentation edits.
+- [ ] All seven required PR checks pass on the final head after the latest ticket/status wording edits.
 - [x] This PR changes documentation only; no application code, AWS resource, hosted-control-plane configuration, or Terraform state was changed as part of this PR.
 
 ## Acceptance status
 
-The source/deployed snapshots and PR #517 evidence crosswalk are updated. Local documentation conventions and `git diff --check` pass; the architecture and Terraform-root crosswalks still contain exactly 26 and 30 entries. The previous PR head passed all seven checks in run `45865782751`; final-head CI is required for the latest edits. Keep the PR draft until final-head checks pass. No hosted Nova plan or workload is claimed.
+The source/deployed snapshots and PR #517 evidence crosswalk are updated. Local documentation conventions and `git diff --check` pass; the architecture and Terraform-root crosswalks still contain exactly 26 and 30 entries. The previous head `940d0055a44b388a33dbb3bad7dfc9c33d16bd25` passed all seven checks in run `45866769708`; the latest docs-only wording edits need a final-head rerun. No hosted Nova plan or workload is claimed.
 
 ## Tests / validation performed
 
@@ -50,7 +50,7 @@ The source/deployed snapshots and PR #517 evidence crosswalk are updated. Local 
 - `GITHUB_PR_NUMBER=518 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - The matrix retains 26 architecture entries and 30 Terraform roots, counted between its named section boundaries.
-- Previous PR head `a7ee8af3263a27621d324eed7c6417cb05889615` passed all seven checks in CI run `45865782751`; latest local edits require a new final-head run.
+- Previous PR head `940d0055a44b388a33dbb3bad7dfc9c33d16bd25` passed all seven checks in CI run `45866769708`; latest docs-only edits await a final-head run.
 - No runtime test was needed for this documentation-only PR.
 
 ## Evidence files produced

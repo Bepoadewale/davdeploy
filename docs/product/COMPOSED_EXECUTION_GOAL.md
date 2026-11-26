@@ -474,7 +474,7 @@ Together with the accepted direct ECS lifecycle in PR #437, this satisfies the
 general customer-side lifecycle gate for those tested shapes. It does not prove
 Nova authorization/dispatch, cross-account trust, or support for other shapes.
 
-Draft PR #518 reconciles the source/deployed snapshots, evidence matrix, and
+PR #518 reconciles the source/deployed snapshots, evidence matrix, and
 backlog through PR #517. Complete that documentation handoff first. Then
 prioritize a narrowly scoped source-and-isolated-test package for Nova's
 customer authorization and exact-plan lifecycle interfaces. The explicit user
