@@ -122,7 +122,8 @@ complete.
 - [x] The next action is actionable and does not enable the renderer, mutate
   AWS, or alter the hosted control plane.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head GitHub Actions checks pass after this handoff update.
+- [x] Final-head GitHub Actions run `45908603081` passed all seven checks for
+  handoff commit `667de8be`; this status-record update receives a fresh run.
 
 ## Acceptance status
 
@@ -134,7 +135,8 @@ this documentation update still requires its own final-head CI.
 
 - `GITHUB_PR_NUMBER=523 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Final-head GitHub Actions checks for this handoff update are pending.
+- Final-head run `45908603081` on `667de8be`: all seven checks passed.
+- CI for the resulting ticket status-record update is pending.
 
 ## Boundaries
 
