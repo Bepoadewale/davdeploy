@@ -13,7 +13,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - PR #515 source policy bounds ECR API, ECR Docker, and CloudWatch Logs interface endpoints and S3/DynamoDB gateway endpoints. It has no endpoint-traffic lifecycle evidence.
 - PR #458 and #252 provide direct Batch lifecycle examples, but neither validates this private endpoint path.
 - The hosted control plane must remain untouched. Test resources, if authorized and executed, will be fresh and project-scoped in account `654654474502`, region `us-east-1`.
-- Terraform monitor currently has 76 records and zero active runs.
+- Terraform monitor currently has 75 records and zero active runs.
 
 ## Research / references used
 

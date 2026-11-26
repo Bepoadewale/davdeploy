@@ -8,11 +8,11 @@ Customer repository: None; disposable DavDeploy test environment.
 
 PR: [#517](https://github.com/Bepoadewale/davdeploy/pull/517).
 
-Commit: `37b4be1fb330c66bb72791804181d43bcd5bc308`.
+Commit: implementation `37b4be1fb330c66bb72791804181d43bcd5bc308`.
 
-This is the tested implementation commit. Final-head CI run `45839400505` passed all seven checks. Documentation head `348b42183f326cf09814941c66ab638bec3321a9` also passed all seven checks in run `45857313067`; later lifecycle evidence changes are documentation-only.
+This is the tested implementation commit. Final-head CI run `45839400505` passed all seven checks. Subsequent documentation-only head `348b42183f326cf09814941c66ab638bec3321a9` passed all seven checks in run `45857313067`. The current PR head also updates lifecycle evidence and the Nova handoff; its final-head CI is pending.
 
-Exact test ID: `batch-private-endpoints-517-20261126a`.
+Test IDs: `batch-private-endpoints-517-20261126a` and `batch-private-endpoints-517-20261126b`.
 
 ## Scope and authorization
 
@@ -22,7 +22,7 @@ AWS region: `us-east-1`.
 
 The hosted control plane and its state/lock resources were not changed. Both AWS cycles used separate exact PR #517 test IDs and isolated Terraform state. Cleanup was limited to those test manifests. No Nova dispatch or customer workload execution is claimed.
 
-Each cycle was bounded to one hour and an estimated USD $1.00 maximum; this is not an AWS billing cap. Suffix `a` existed from `2026-11-26T14:39:36Z` to `14:55:00Z`. Suffix `b`'s ECR repository was created at `16:22:22Z`, its full stack completed at `16:34:20Z`, and teardown completed at `16:45:23Z`. Suffix `a`'s job failed during queue deletion; suffix `b`'s single job succeeded and was stopped before teardown.
+Each cycle was bounded to one hour and an estimated USD $1.00 maximum; this is not an AWS billing cap. Suffix `a` existed from `2026-11-26T14:39:36Z` to `14:55:00Z`. Suffix `b`'s ECR repository was created at `16:22:22Z`, its full stack completed at `16:34:20Z`, and teardown completed at `16:45:23Z`. Suffix `a`'s job failed during queue deletion; suffix `b`'s single job completed successfully before teardown.
 
 ## Resources created
 
@@ -82,7 +82,7 @@ Suffix `a`'s job failed because a concurrent cleanup removed its queue during st
 
 ## Teardown
 
-Both exact test environments were cleaned. Suffix `a`: five ECR digests and 23 managed resources removed. Suffix `b`: four ECR digests and 23 managed resources removed. Both saved destroy plans succeeded through the PID-based monitor; service-specific APIs confirmed live resources absent. AWS retains both job definitions as inactive history. The Resource Groups Tagging API returned stale endpoint/rule/subnet entries as recorded above.
+Both exact test environments were cleaned. Suffix `a`: five ECR digests and 23 managed resources removed. Suffix `b`: four ECR digests and 23 managed resources removed. Both saved destroy plans succeeded through the PID-based monitor; service-specific APIs confirmed live resources absent. AWS retains both job definitions as inactive history. The Resource Groups Tagging API returned stale endpoint/rule/subnet entries as recorded above. The monitor registry has 75 terminal records and zero active runs at this reconciliation.
 
 ## Local clean-room validation
 
