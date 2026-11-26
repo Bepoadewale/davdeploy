@@ -39,17 +39,18 @@ Bring the active Nova infrastructure goal handoff and capability matrix up to da
 - [x] Next evidence package is bounded and requires current pricing/quota review, maximum cost/runtime, monitored Terraform execution, and PR-numbered evidence.
 - [x] Protected files, hosted control plane, cloud resources, and retained audit evidence remain untouched.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head CI passes.
+- [x] All seven final-head CI checks passed on validation head `27f82f1` in run [45778995844](https://github.com/Bepoadewale/davdeploy/actions/runs/45778995844).
 - [ ] PR reviewed and merged.
 
 ## Acceptance status
 
-Documentation is updated locally. Documentation convention checks and `git diff --check` pass. No cloud test is run by this documentation PR. Final-head CI and merge are pending.
+Documentation convention checks and `git diff --check` pass. All seven checks passed on validation head `27f82f1` in run [45778995844](https://github.com/Bepoadewale/davdeploy/actions/runs/45778995844). No cloud test is run by this documentation PR. PR review and merge are pending.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=516 /Users/adewale/Projects/davdeploy/.venv/bin/python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
+- `gh pr checks 516 --watch --interval 120`: all seven checks passed on head `27f82f1` in run `45778995844`.
 
 ## Evidence files produced
 
