@@ -28,7 +28,7 @@ remote-state lifecycle, and Nova-originated execution remain separate gates.
   is a material egress/security and cost boundary that the policy must expose.
 - No AWS resources or hosted control-plane resources are changed by this PR.
 
-## Research / references
+## Research / references used
 
 - AWS ECS Express resource provisioning and defaults:
   https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html
