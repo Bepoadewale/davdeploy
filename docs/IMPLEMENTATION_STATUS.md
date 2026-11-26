@@ -1,77 +1,34 @@
 # Implementation Status
 
-Status snapshot: 2026-11-25. Backend `main` is
-`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only Batch public
-IPv4 pricing). Merged PR #511 adds source-only regional ECR storage pricing.
-Hosted
-runtime remains
-at `9951caa9244128b1551fea3af66b1bdbf884c800` (PR #420), deployed by protected
-plan [43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
+Status snapshot: 2026-11-26. Backend `main` is
+`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517). The hosted
+runtime remains PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
+[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
 and exact saved-plan apply
 [43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-Both workflow jobs succeeded, including database migrations. Read-only checks
-found all six `davdeploy-*` Lambda packages on code hash
-`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and public `/healthz` returned
-HTTP 200. This is deployed control-plane evidence only.
+A read-only check in account `654654474502`, region `us-east-1`, found
+Lambda package hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; public
+`/healthz` returned HTTP 200. This is control-plane evidence only; source
+through PR #517 has not been deployed. No authenticated workspace admin session
+or verified customer connection has produced a hosted Nova plan; no Nova
+customer workload has been applied, operated, or certified.
 
-PR #506 makes the 26-architecture / 30-root candidate crosswalk
-machine-checkable; it does not enable Nova dispatch. PR #507 adds source-only
-AWS Batch Fargate Linux/x86 vCPU and memory cost lines with trusted job usage
-assumptions and a 60-second per-job minimum. Merged PR #509 adds explicit
-CloudWatch Logs ingestion/storage prices for one bounded Batch job and its
-managed same-region Standard log group. Its final-head CI passed all seven
-checks in run
-[45658404335](https://github.com/Bepoadewale/davdeploy/actions/runs/45658404335),
-and merged-main CI passed in run
-[45659294372](https://github.com/Bepoadewale/davdeploy/actions/runs/45659294372).
-Merged PR #511 adds a bounded standard-storage price for each explicitly
-addressed private ECR repository; merged PR #510 binds a digest-pinned,
-same-region Batch image to exactly one same-plan repository and reuses the #511
-storage line without double-counting. Merged PR #512 prices explicitly enabled
-Batch Fargate public IPv4 assignment with trusted job-count, separate
-per-attempt address-duration, and 1–10 maximum-attempt bounds including
-submission-time overrides. All seven final-head checks passed in run
-`45680499414`, and merged-main CI passed in run `45681334818`. Unsupported
-network paths, NAT/endpoints, egress, archival, signing, replication, and other
-material costs still block approval.
-No AWS workload or hosted-control-plane resource changed. Read-only inventory
-on 2026-11-25 verified account `654654474502`,
-five `davdeploy-*` inactive Batch test definitions, and the retained SageMaker test
-action and context; the Terraform monitor had 67 terminal records and no active
-runs.
+Merged PR #517 adds backward-compatible private-IP configuration to the
+shared Batch Fargate module and a private endpoint validation root. Its
+suffix-`b` same-account Batch job succeeded with exit code 0, a private
+digest-pinned ECR image, public-IP assignment disabled, and the expected
+CloudWatch marker. Suffix-`a`'s job failed during a queue-cleanup race. Both
+exact test stacks were destroyed and independently checked absent; AWS retains
+inactive job-definition history and the Resource Groups Tagging API retains
+stale deleted-resource entries. Final-head CI passed all seven checks in run
+[45863379689](https://github.com/Bepoadewale/davdeploy/actions/runs/45863379689);
+merged-main CI passed all seven checks in run
+[45864105035](https://github.com/Bepoadewale/davdeploy/actions/runs/45864105035).
+This direct same-account test does not prove Nova dispatch, cross-account
+execution, or hosted customer readiness. Costs for unsupported Batch images,
+network paths, egress, and other material resources remain approval blockers.
 
-Merged PR #502 adds assumption-bound NAT/network pricing and passed all seven
-final-head checks in run
-[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-Merged PR #503 adds source-only generated Lambda function bounds. Final PR head
-`08ace0b` passed all seven checks in run
-[45582032631](https://github.com/Bepoadewale/davdeploy/actions/runs/45582032631),
-and automated review completed with no findings on code head `fac74e4`. Neither
-package changes AWS resources or hosted runtime.
-
-Merged PRs #498–#500 add source-only AWS Batch Fargate, EKS, and VPC
-generated-plan bounds. PR #500's final head passed all seven checks in
-[run 45552193668](https://github.com/Bepoadewale/davdeploy/actions/runs/45552193668).
-These changes do not alter the hosted runtime or AWS workloads. The last
-recorded hosted release and health observation above remain the PR #420
-deployment; they were not repeated for this source reconciliation.
-
-Merged PR #502 adds source-only, assumption-bound NAT Gateway pricing to the
-generated-plan evaluator. Focused pricing and revision-lifecycle tests pass
-locally, and all seven checks passed on final PR head `86b4b89` in CI run
-[45578164764](https://github.com/Bepoadewale/davdeploy/actions/runs/45578164764).
-It changes neither the hosted runtime nor AWS resources.
-
-Merged PR #486 as commit `ee3a407`; its final head `a2c2d29` passed all seven
-checks in run `45603699112`, and merged-main CI passed all seven in
-`45604774427`. Its two isolated Auto Scaling cycles and clean-room full cycle
-passed; approved clean-room artifacts are absent. PR #495 merged as `526d4e1`.
-Its final head `3563ead` passed all seven checks in run `45631497386`. The
-direct AppConfig disabled → progressive enabled → reverted lifecycle and
-approved exact cleanup are recorded in `docs/test/test495.md`; independent
-checks confirmed the test resources absent. The local Terraform state, saved
-plans, verifier outputs, and run logs remain retained. The hosted control plane
-and its state and locks were not accessed or changed.
 
 PR #493's final-head CI run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315)

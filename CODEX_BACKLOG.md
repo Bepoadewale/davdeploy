@@ -1,39 +1,33 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-25
+## Nova status snapshot — 2026-11-26
 
 Backend `main` is
-`ef94983898cad92c8bd884725baec3c1cb072caf` (PR #512, source-only Batch public
-IPv4 pricing).
-Merged PR #506 validates the architecture-to-Terraform crosswalk but does not
-enable Nova dispatch. PR #507 adds trusted-usage, regional Linux/x86 Fargate
-compute price lines for bounded Batch plans; the estimate remains incomplete
-and approval-ineligible until material supporting costs are priced. Its
-final-head CI passed all seven checks in
-[run 45646721435](https://github.com/Bepoadewale/davdeploy/actions/runs/45646721435).
-PR #509 adds source-only, trusted-usage-bound CloudWatch Logs ingestion/storage
-prices for explicitly configured Batch `awslogs`; its final-head and merged-main
-CI passed. Merged PRs #510 and #511 bind digest-pinned same-region private ECR
-images to priced planned repositories without double-counting storage. Merged
-PR #512 prices explicit Batch Fargate public IPv4 use with separate trusted
-per-attempt address-duration and maximum-attempt assumptions. Final-head CI
-passed in run `45680499414`, and merged-main CI passed in run `45681334818`.
-Network paths, NAT/endpoints, egress, and other material costs remain
-approval-blocking. PR #513 is the current draft for status reconciliation. The
-Terraform run monitor has 67
-records and zero active operations. AWS identity was rechecked as account
-`654654474502`; this documentation and pricing work made no AWS or
-hosted-control-plane change.
+`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517).
+PRs #507–#514 add source-only bounded Batch prices; PR #515 adds source-only
+private endpoint policy. PR #517 adds backward-compatible private Fargate
+networking and records a direct same-account lifecycle test: suffix `a` failed
+during a queue-cleanup race, while suffix `b` ran once to `SUCCEEDED`, exit
+code 0, and emitted the expected CloudWatch marker. Both exact test stacks
+were destroyed and independently checked absent. AWS retains both Batch job
+definitions as inactive history; the tag index still reports stale deleted
+resource ARNs. This evidence covers only the recorded private Batch shape, not
+Nova dispatch, cross-account execution, or a general customer workload.
+See `docs/test/test517.md`.
 
-The hosted control plane remains at PR #420 commit
-`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
-[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
-and exact saved-plan apply
-[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-The recorded deployment passed database migrations; all six Lambda packages
-shared code hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`, and `/healthz`
-returned HTTP 200. These checks describe the hosted control plane, not a
-customer workload. PR #430 refreshed the 26-capability/30-root evidence map.
+The Batch estimate remains approval-ineligible for unsupported material cost
+paths and assumptions. The hosted runtime is still PR #420 commit
+`9951caa9244128b1551fea3af66b1bdbf884c800`. A read-only check on 2026-11-26
+verified the Lambda package hash
+`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` HTTP 200.
+The Terraform monitor has 75 records and no active operations. No authenticated
+workspace administrator session, verified customer connection, or hosted
+Nova-generated plan exists; no Nova customer workload has been applied,
+operated, or certified. The control plane was not changed for PR #517.
+PR #518 reconciles the source/deployed snapshot, private Batch evidence,
+26/30 capability map, and next-step boundaries through PR #517. It changes no
+application code, AWS resource, or hosted control-plane configuration.
+
 
 PR #493 merged with all seven checks passing in final-head run
 [45515203315](https://github.com/Bepoadewale/davdeploy/actions/runs/45515203315).
@@ -304,7 +298,7 @@ behaviors, teardown, and independent absence checks are recorded.
 - [x] PR #377 adds typed Nova intent scope handling: unrelated requests receive a fixed refusal and do not create workload intents. It is deployed by protected plan [43191437865](https://github.com/Bepoadewale/davdeploy/actions/runs/43191437865) and exact saved-plan apply [43192601048](https://github.com/Bepoadewale/davdeploy/actions/runs/43192601048); no authenticated customer intent journey was exercised. See `docs/test/test378.md`.
 - [x] PR #379 adds proposal-gated, region-bounded read metadata access for proposed VPCs, subnets, and security groups; this control-plane source is now deployed in the PR #381 release. PR #381 separately published the customer role template, but it has not been installed in a customer account and effective permissions are unverified. Routes, internet gateways, NAT, and VPC endpoints remain unsupported by this profile. Evidence: `docs/test/test379.md` and `docs/test/test382.md`.
 - [x] PR #381 preserves the prior immutable customer plan-role template URL and publishes the content-hash template. PR #392 validates a disposable plan-only role's trust/policy shape and selected IAM simulator decisions, then deletes its exact stack. No persistent customer connection or role was verified; real broker assumption and account-effective permissions remain unproven. Evidence: `docs/test/test382.md` and `docs/test/test392.md`.
-- [ ] Finish the hosted Nova plan-only customer journey and tenant-scoped remote-state path. The isolated runner, plan review, credential broker and state API are deployed, but no authenticated customer request has produced a hosted plan. A disposable IAM policy simulation is evidence only; real customer-role assumption, effective permissions, and service-limit checks remain incomplete. PRs #371/#372 add RDS planner metadata access and PR #379 adds bounded VPC/subnet/security-group metadata reads. No Nova-generated customer plan has been applied.
+- [ ] Complete the first hosted Nova plan. The deployed plan runner, plan review, credential broker, and state API need an authenticated workspace administrator, verified customer connection/role, and durable plan evidence. As of 2026-11-26, the latest DavDeploy TOTP attempt for the selected account was rejected and no authenticated session or hosted plan exists. Continue independent source work; preserve MFA/tenant authorization and do not issue customer execution credentials or enable generic apply before their exact-plan gates pass. PRs #371/#372 add RDS planner metadata access and PR #379 adds bounded VPC/subnet/security-group metadata reads. PRs #437 and #517 provide direct lifecycle evidence for ECS and private Batch shapes, but do not prove Nova dispatch or cross-account trust.
 - [ ] Extend the deployed regional pricing evaluator and usage contracts to cover all material supported resources and supporting costs. PRs #407–#416 add bounded evidence for selected families; PR #424 adds source-only pricing for one Aurora PostgreSQL Serverless v2 writer shape and is merged but not deployed. Unsupported or unpriced material resources continue to block approval. PR #318 remains closed and is not used as current pricing evidence.
 - [ ] Define and implement tenant-scoped secret references: bind customer-approved secret identifiers to the trusted deployment context, keep secret values out of Nova prompts and Terraform state, scope runtime reads, and cover rotation/revocation. PRs #365/#367 constrain generated literals and a narrow RDS ARN-reference path; PR #374 denies runtime secret-value grants until policy permissions can be bound to a verified typed reference. Runtime reads remain unavailable.
 - [ ] Prove worker restart/reconciliation, bounded retries, partial-failure recovery, typed output binding, and reverse graph cleanup in the hosted worker. PR #399 supplies source tests for the fixed apply worker, but no hosted customer build has exercised it.
