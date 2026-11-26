@@ -28,30 +28,45 @@ complete.
 - Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba` (merged PR #522).
 - PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged; all seven
   final-head and merged-main checks passed in run `45899643291`.
-- PR #519 remains an open draft at `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`;
-  its seven checks passed in run `45884741945`.
+- PR #519 remains an open draft at `00697d7b6b84ed7d0ff0fef7effb7cf0037392e7`;
+  its seven checks passed in run `45903656967`.
 - PR #522 (`a04c5909075bfe975ba1628aeef9851a7b317784`) merged after all seven
   checks passed in run `45900573713`.
-- PR #524 is an open draft correcting the merged #522 ticket's claim that a
-  synthetic-context price run is customer-approval-eligible.
+- PR #524 remains an open draft correcting the merged #522 ticket's pricing
+  evidence wording. Its diff is now two documentation files against `main`;
+  head `75841d3ac80e8020b1b616fef07055167a8381c6` passed all seven checks in
+  run `45907870966`.
+- PR #525 remains an open draft stacked on #519. It pre-provisions
+  connection-scoped ECS Express roles in a customer-side CloudFormation
+  template and verifies their trust, tags, and policy attachments before
+  runner operations. Final-head `bf876fe155a7fe946a457b6d61d74c25696893e0`
+  passed all seven checks in run `45907548159`. This does not prove the
+  runner's effective permissions or enable the renderer.
 - The direct ECS Express lifecycle evidence in PR #437 and private Batch
   evidence in PR #517 satisfy the general customer-side lifecycle gate for
   those exact tested shapes; neither proves Nova dispatch.
 - The actual-plan policy is merged and has been exercised with a provider-
   generated saved plan; effective IAM review and the isolated ECS Express
-  runner lifecycle remain open.
+  runner lifecycle remain open. PR #525's role bootstrap and preflight
+  verifier are source-only, and the customer execution-role policy still
+  requires independent review.
 
 ## Evidence checked
 
 - Current backend `main`: `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`.
-- PR #519 head `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`, final-head run
-  `45884741945`: seven checks passed.
+- PR #519 head `00697d7b6b84ed7d0ff0fef7effb7cf0037392e7`, final-head run
+  `45903656967`: seven checks passed.
 - PR #520 head `c9ece16291af2c6a659e47ca0bad2867b2fd16c3`, run
   `45899643291`: all seven final-head and merged-main checks passed; merged.
 - PR #522 head `a04c5909075bfe975ba1628aeef9851a7b317784`, run
   `45900573713`: all seven checks passed and it merged.
-- PR #519 remains an open draft; PR #524 is an open draft correction. PR #520
-  and #522 are merged.
+- PRs #519, #524, and #525 remain drafts; PRs #520 and #522 are merged.
+- PR #524 head `75841d3ac80e8020b1b616fef07055167a8381c6` passed all seven
+  checks in run `45907870966`. Its merge-base correction leaves only
+  `ticket522.md` and `ticket524.md` changed against current `main`.
+- PR #525 head `bf876fe155a7fe946a457b6d61d74c25696893e0` passed all seven
+  checks in run `45907548159`; it is source-only and keeps the renderer
+  disabled.
 - A provider-generated saved plan from the PR #519 root was evaluated under
   #520 policy. It yielded three review findings and no policy denials; this is
   plan-policy evidence only, not remote-state runner or lifecycle evidence.
@@ -102,6 +117,8 @@ complete.
   customer-side shapes tested and is not represented as Nova dispatch.
 - [x] Current Terraform monitor and Batch inventory status are stated without
   claiming the inactive job definitions were deleted.
+- [x] PR #525's connection-scoped role bootstrap is classified as
+  source-only, and effective runner-role permissions remain an open gate.
 - [x] The next action is actionable and does not enable the renderer, mutate
   AWS, or alter the hosted control plane.
 - [x] Documentation conventions and `git diff --check` pass.
@@ -110,14 +127,14 @@ complete.
 ## Acceptance status
 
 The handoff and matrix are reconciled to current `main`, merged PRs #520/#522,
-and open PRs #519/#524. Documentation checks pass; final-head CI remains to
-be completed after this update.
+and open drafts #519/#524/#525. PRs #524 and #525 final-head CI are verified;
+this documentation update still requires its own final-head CI.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=523 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Final-head GitHub Actions checks are pending.
+- Final-head GitHub Actions checks for this handoff update are pending.
 
 ## Boundaries
 
@@ -143,7 +160,9 @@ reconciliation and performs no customer workload test or cloud mutation.
 
 ## Follow-up work
 
-Continue with PR #519/#522 review, effective IAM permissions, full costs, and
-an isolated customer-side renderer lifecycle. The actual-plan policy in #520
-is merged and has been evaluated against a provider-generated plan. Do not
-enable execution until the remaining gates pass.
+Continue review of the #519/#524/#525 dependency stack, independently review
+the runner's effective permissions and pass-role scope, then complete
+approval-bound pricing and the authorized isolated remote-state renderer
+lifecycle. The actual-plan policy in #520 is merged and has been evaluated
+against a provider-generated plan. Keep the renderer disabled until the
+remaining gates pass.

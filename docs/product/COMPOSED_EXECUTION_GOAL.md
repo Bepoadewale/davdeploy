@@ -1,11 +1,11 @@
 # Composed AWS execution goal handoff
 
-Updated: 2026-11-26. This handoff tracks the Nova-led infrastructure goal
+Updated: 2026-11-27. This handoff tracks the Nova-led infrastructure goal
 without claiming launch readiness. Source, hosted control-plane state,
 customer-side AWS evidence, Nova execution, application behavior, and per-entry
 lifecycle coverage remain distinct.
 
-## Current source and acceptance status — 2026-11-26
+## Current source and acceptance status — 2026-11-27
 
 ### Reconciliation after PR #518
 
@@ -21,9 +21,9 @@ customer-workload acceptance evidence.
 
 The ECS Express implementation and evidence stack is:
 
-- PR #519 (`403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`) adds a default-off,
+- PR #519 (`00697d7b6b84ed7d0ff0fef7effb7cf0037392e7`) adds a default-off,
   project-scoped ECS Express renderer and bounded runner. Its final-head CI
-  run [45884741945](https://github.com/Bepoadewale/davdeploy/actions/runs/45884741945)
+  run [45903656967](https://github.com/Bepoadewale/davdeploy/actions/runs/45903656967)
   passed all seven checks. Effective role-permission review and its isolated
   runner cycle remain open.
 - PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged the
@@ -38,12 +38,21 @@ The ECS Express implementation and evidence stack is:
   synthetic and no customer budget was supplied, so this is not customer
   approval evidence. Draft PR #524 corrects the original ticket's
   approval-eligibility wording.
+- Draft PR #525 (`bf876fe155a7fe946a457b6d61d74c25696893e0`) adds a
+  customer-side CloudFormation bootstrap for connection-scoped ECS Express
+  roles and a fail-closed preflight verifier. Its final-head CI run
+  [45907548159](https://github.com/Bepoadewale/davdeploy/actions/runs/45907548159)
+  passed all seven checks. This is source-only; effective runner permissions
+  remain unreviewed and the renderer remains disabled.
 
 PR #519 remains an open draft with no recorded GitHub review and is based on
 its earlier source revision. PR #524 is an open draft that corrects pricing
-evidence wording. Review the #519 source stack before merging or enabling a
-renderer. The #519 worktree has untracked provider-plan stdout/stderr files;
-preserve them locally and do not publish their contents.
+evidence wording; its two-file documentation diff passed all seven checks in
+run [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966).
+PR #525 is also an open draft stacked on #519. Review the current
+#519/#524/#525 stack before merging or enabling a renderer. The #519 worktree
+has untracked provider-plan stdout/stderr files; preserve them locally and do
+not publish their contents.
 
 The Terraform run monitor currently has 75 terminal records and zero active
 runs; process inspection found no Terraform plan, apply, or destroy process.
@@ -522,11 +531,12 @@ general customer-side lifecycle gate for those tested shapes. It does not prove
 Nova authorization/dispatch, cross-account trust, or support for other shapes.
 
 PR #518's documentation handoff is merged. Continue with the ECS Express stack
-in dependency order: review/reconcile #519, #520, and #522 against current
-`main`; verify the actual provider-generated plan contract and full supported
-cost model; complete effective IAM review; then run the isolated, authorized
-customer-side renderer lifecycle with project-scoped state and independent
-cleanup checks. The direct ECS Express lifecycle in PR #437 and the direct
+in dependency order: review/reconcile #519, #524, and #525 against current
+`main`; independently review the customer runner's effective permissions and
+exact `iam:PassRole` scope; bind pricing to a persisted customer revision and
+budget; then run the isolated, authorized customer-side renderer lifecycle
+with project-scoped state and independent cleanup checks. The direct ECS
+Express lifecycle in PR #437 and the direct
 private Batch lifecycle in PR #517 satisfy the general customer-side
 plan/apply/lifecycle gate for their exact tested shapes. They do not prove
 Nova-originated dispatch, credential-path behavior, or cross-account trust.
