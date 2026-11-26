@@ -55,9 +55,10 @@ The ECS Express implementation and evidence stack is:
   subnet condition to subnet IDs that do not yet exist. It records a required
   foundation/service phase split and remains documentation-only. All seven
   checks passed on content head `4ac9ab04` in run
-  [45911833917](https://github.com/Bepoadewale/davdeploy/actions/runs/45911833917).
-  A subsequent ticket-status commit `36fa7031` is pending its own final-head
-  checks. No AWS, hosted control-plane, state or lock mutation occurred.
+  [45911833917](https://github.com/Bepoadewale/davdeploy/actions/runs/45911833917),
+  and its ticket-status head `36fa7031` passed all seven checks in run
+  [45912427843](https://github.com/Bepoadewale/davdeploy/actions/runs/45912427843).
+  No AWS, hosted control-plane, state or lock mutation occurred.
 
 PR #519 remains an open draft with no recorded GitHub review and is based on
 its earlier source revision. PR #524 is an open draft that corrects pricing

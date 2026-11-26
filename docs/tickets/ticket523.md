@@ -48,9 +48,9 @@ complete.
   role can carry `AdministratorAccess`.
 - PR #527 is an open draft stacked on #526. It documents AWS action/resource
   mapping and the computed-subnet scope gap for the ECS Express root. Its
-  content head `4ac9ab04` passed all seven checks in run `45911833917`; a
-  subsequent ticket-status commit `36fa7031` is pending final-head CI. It
-  contains no policy code or cloud execution.
+  content head `4ac9ab04` passed all seven checks in run `45911833917`, and
+  ticket-status head `36fa7031` passed all seven checks in run `45912427843`.
+  It contains no policy code or cloud execution.
 - The direct ECS Express lifecycle evidence in PR #437 and private Batch
   evidence in PR #517 satisfy the general customer-side lifecycle gate for
   those exact tested shapes; neither proves Nova dispatch.
@@ -80,8 +80,9 @@ complete.
   checks in run `45910551656`; it records the unbounded execution-role path.
 - PR #527 head `4ac9ab04` records a sourced AWS permission map and the need to
   separate network foundation from ECS service creation. All seven checks
-  passed in run `45911833917`; ticket-status head `36fa7031` is now pending
-  CI. No AWS mutation or Terraform operation occurred.
+  passed on head `4ac9ab04` in run `45911833917` and on ticket-status head
+  `36fa7031` in run `45912427843`. No AWS mutation or Terraform operation
+  occurred.
 - A provider-generated saved plan from the PR #519 root was evaluated under
   #520 policy. It yielded three review findings and no policy denials; this is
   plan-policy evidence only, not remote-state runner or lifecycle evidence.
@@ -145,8 +146,8 @@ complete.
 ## Acceptance status
 
 The handoff and matrix are reconciled to current `main`, merged PRs #520/#522,
-and open drafts #519/#524/#525/#526/#527. Content CI for #527 passed, but its
-ticket-status update and this documentation update require final-head CI.
+and open drafts #519/#524/#525/#526/#527. All recorded PR #527 heads passed
+final-head CI; this handoff update requires its own final-head CI.
 
 ## Tests / validation performed
 
