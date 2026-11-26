@@ -10,13 +10,16 @@ Customer repository: None; disposable DavDeploy test environment.
 
 PR: [#517](https://github.com/Bepoadewale/davdeploy/pull/517).
 
-Commit: `94088574ed4cee18e598acb891ead564d0a90572`. Final-head CI run
-`45789356920` is in progress.
+Commit: `1955e9b5c6c4b4af57c7edd472a5d82776935cd8`. Final-head CI run
+`45838409775` passed all seven checks.
 
 Exact test ID: `batch-private-endpoints-517-20261126a`.
 
 Original expiry tag: `2026-11-26T09:45:00Z`. The latest reviewed plan changes
-it to `2026-11-26T11:00:00Z`; the maximum environment runtime remains one hour.
+it to `2026-11-26T11:00:00Z`; that timestamp is now past. The saved plan is
+inventory evidence only and must not be applied. Recheck current prices,
+quotas, and inventory, set a fresh expiry, and generate a new saved plan before
+any apply. The maximum environment runtime remains one hour.
 
 ## Authorization and plan review
 
@@ -97,7 +100,7 @@ log-group resources were applied.
 - `docker buildx build --platform linux/amd64 --load --tag davdeploy-batch-private-endpoints-517:run-20261126a infrastructure/terraform/module-validation/batch-private-endpoints/image`, local `docker run`, and ECR push to tag `run-20261126a` — succeeded, but duplicated the existing test image. Tagged digest `sha256:e7265ccc6387caa80d69aa215049baddb204e6736eb49623b9afc1fdbc49013d`. ECR also lists three untagged manifests; all five digests are enumerated above. No image has been deleted.
 - AWS Batch service-linked-role preflight — `AWSServiceRoleForBatch` was absent and `describe-compute-environments` found none in 17 enabled regions. This exact, untaggable role is declared as `aws_iam_service_linked_role.batch` for owned cleanup.
 - Monitored full-plan attempt `batch-private-517-full-apply-20261126a` failed at 08:55:35Z due missing credentials before creating resources; log `/var/folders/p1/wtz8hss162jgrh2bgrn3fwn40000gn/T/davdeploy-terraform-runs/batch-private-517-full-apply-20261126a.log`.
-- Latest read-only saved plan `/tmp/davdeploy-batch-private-517-final-reviewed.tfplan`: 22 creates, one ECR expiry-tag update, zero deletes. It references the intended digest `sha256:2ecf897431368650ff88989150358f12375f83459849e46d787fc8b66eb8daf2`. Cleanup approval for this AWS scope is pending.
+- Latest read-only saved plan `/tmp/davdeploy-batch-private-517-final-reviewed.tfplan`: 22 creates, one ECR expiry-tag update, zero deletes. It references the intended digest `sha256:2ecf897431368650ff88989150358f12375f83459849e46d787fc8b66eb8daf2`. Its expiry tag is past; do not apply it. Cleanup approval for this AWS scope is pending.
 - Current ECR inventory contains the five exact digests listed above. No image has been deleted.
 
 Current public pricing references reviewed 2026-11-26: AWS PrivateLink lists $0.01 per interface endpoint ENI-hour for the first tier; AWS Fargate lists $0.000011244 per vCPU-second and $0.000001235 per GB-second in us-east-1. At 0.25 vCPU and 0.5 GB, compute is approximately $0.01235/hour before the one-minute minimum. Six endpoint ENIs add approximately $0.06 for the first billed hour. These are preliminary public rates, not a quote; recheck before any apply. Sources: [AWS PrivateLink pricing](https://aws.amazon.com/privatelink/pricing/) and [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/).

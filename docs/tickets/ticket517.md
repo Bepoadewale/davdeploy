@@ -43,7 +43,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - [x] The test root sets public-IP assignment to `DISABLED`, requires a SHA256-pinned private ECR image, and constructs a plan-known task-role ARN so the full saved plan exposes the exact job configuration; the private image digest is recorded in `docs/test/test517.md`.
 - [x] Focused policy and Terraform-validation tests (641 passed), Terraform formatting/validation, docs conventions, and diff checks pass locally.
 - [x] Fargate uses an explicitly managed, untaggable `AWSServiceRoleForBatch`; preflight found it absent and no existing Batch compute environments in 17 enabled regions, defining the exact cleanup boundary.
-- [ ] Final-head CI for commit `94088574ed4cee18e598acb891ead564d0a90572` passes (run `45789356920` is in progress).
+- [x] Final-head CI for commit `1955e9b5c6c4b4af57c7edd472a5d82776935cd8` passed all seven checks (run `45838409775`).
 - [x] Current public pricing, account, quota, AZ availability, exact TestId inventory, and a saved full plan are recorded. The saved plan is scoped to 22 creates and one ECR tag update, with zero deletes. Maximum runtime is one hour and estimated maximum spend is USD $1.00.
 - [ ] Within the goal-authorized exact disposable test manifest, a real job succeeds, private ECR image retrieval is observed, and logs arrive through CloudWatch Logs.
 - [ ] Exact test resources are destroyed through the run monitor and independently verified absent; AWS-retained inactive job-definition history is listed separately.
@@ -54,7 +54,7 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - [x] Draft PR opened before substantive implementation; matching PR-numbered ticket created.
 - [x] Module input, private validation root, and regression test are implemented.
 - [x] Focused local validation passes.
-- [ ] Final-head CI for commit `94088574ed4cee18e598acb891ead564d0a90572` passes.
+- [x] Final-head CI for commit `1955e9b5c6c4b4af57c7edd472a5d82776935cd8` passed all seven checks (run `45838409775`).
 - [ ] Cloud experiment pricing, quota, exact plan, and approval prerequisites are satisfied.
 - [ ] Customer-side lifecycle and cleanup evidence are recorded within the exact authorized test scope; no Nova dispatch is claimed.
 - [ ] PR is reviewed and merged.
@@ -69,10 +69,10 @@ The shared Batch module currently hardcodes public-IP assignment on Fargate task
 - Read-only AWS preflight: expected account confirmed, two AZs available, Fargate quota 64 vCPUs, and no pre-existing resources with the test purpose tag.
 - Exact targeted ECR plan apply `nova-batch517-ecr-apply-20261126a` succeeded through the Terraform run monitor (supervisor PID `92773`, Terraform PID `92774`); the test image was pushed to the exact new repository and its digest is recorded in `docs/test/test517.md`.
 - A second image build/push added a duplicate manifest set to the same test repository; all five exact ECR manifest digests are recorded in `docs/test/test517.md` and require exact cleanup approval.
-- Full saved plan `/tmp/davdeploy-batch-private-517-final-reviewed.tfplan` uses the updated Fargate service-linked-role design and contains 22 creates, one ECR expiry-tag update, zero deletes. The first monitored full-plan apply failed before creating resources because `AWS_PROFILE` was not passed; state reconciliation found no partial VPC/Batch resources.
+- Full saved plan `/tmp/davdeploy-batch-private-517-final-reviewed.tfplan` uses the updated Fargate service-linked-role design and contains 22 creates, one ECR expiry-tag update, zero deletes. Its expiry tag is stale, so the plan is inventory evidence only and must not be applied. Recheck current pricing, quota, account inventory, and generate a new plan before any apply. The first monitored full-plan apply failed before creating resources because `AWS_PROFILE` was not passed; state reconciliation found no partial VPC/Batch resources.
 - `GITHUB_PR_NUMBER=517 python scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- GitHub CI run `45788118957` passed all seven checks on prior commit `95ae4e89e14de189c38b3cd78bc15ecf77bc4894`. Latest final-head run `45789356920` is still in progress for commit `94088574ed4cee18e598acb891ead564d0a90572`.
+- GitHub CI run `45838409775` passed all seven checks on final head `1955e9b5c6c4b4af57c7edd472a5d82776935cd8`.
 - Full isolated local clean-room cycle: bootstrap, smoke, API contract, customer-plan E2E, all five canonical demos, seed/restart persistence, trace check, and `make verify`; 1,971 tests passed with one Starlette/httpx deprecation warning. No AWS resources were used. Project containers were removed; local `.venv/`, `.local/`, and `davdeploy-pr517-cleanroom_davdeploy-postgres` were retained because cleanup of those non-container resources needs explicit approval.
 - AWS planning: complete. The ECR bootstrap apply and image push are recorded above. Full Batch/VPC apply awaits explicit AWS cleanup approval for the current exact resource inventory.
 
