@@ -7,6 +7,7 @@ variable "image" { type = string }
 variable "log_group_name" { type = string }
 variable "region" { type = string }
 variable "tags" { type = map(string) }
+variable "assign_public_ip" { type = bool, default = true }
 
 resource "aws_batch_compute_environment" "this" {
   compute_environment_name = var.name
@@ -44,7 +45,7 @@ resource "aws_batch_job_definition" "this" {
     # ECR and CloudWatch Logs unless the caller supplies private endpoints/NAT.
     # The validation root deliberately uses public default-VPC subnets.
     networkConfiguration = {
-      assignPublicIp = "ENABLED"
+      assignPublicIp = var.assign_public_ip ? "ENABLED" : "DISABLED"
     }
     logConfiguration = {
       logDriver = "awslogs"
