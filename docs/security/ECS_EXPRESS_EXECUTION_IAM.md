@@ -121,3 +121,88 @@ renderer disabled until those checks and final review pass.
 - [`customer-nova-apply-role.yaml`](../../infrastructure/cloudformation/customer-nova-apply-role.yaml)
 - [`customer-discovery-role.yaml`](../../infrastructure/cloudformation/customer-discovery-role.yaml)
 - [`customer-workload-ecs-express-pilot.sh`](../../scripts/customer-workload-ecs-express-pilot.sh)
+
+## AWS authorization map review (2026-11-27)
+
+This map is sourced from the current AWS Service Authorization Reference and
+ECS API reference. It is a review artifact, not an executable policy. AWS
+provider behavior and dependent actions must still be verified against the
+pinned Terraform AWS provider version before any role is authorized.
+
+| Pilot-root resource or call | Required authorization surface | Scoping evidence and remaining concern |
+| --- | --- | --- |
+| VPC, internet gateway, subnet, route table | EC2 create/modify/delete actions, plus tag actions | EC2 exposes resource ARNs and request/resource tag conditions for these resources. New subnet creation also authorizes against its parent VPC. The saved plan does not know newly created IDs; a policy needs an explicit request-tag contract and must bind relationship actions to tagged VPC/subnet/route-table resources. |
+| Route-table association | `ec2:AssociateRouteTable`, `ec2:DisassociateRouteTable` | The initial plan does not know newly created subnet and route-table IDs. EC2 authorization must therefore constrain the association to both resources through supported resource-tag conditions, with exact `ConnectionId`, `ProjectId`, and plan-digest tags. Verify the provider's tag-on-create and authorization context for the association API; reject the plan if both sides cannot be constrained. The later ECS service plan can use the now-known subnet IDs. |
+| ECR repository | ECR repository resource actions and tag operations | Repository name in this root is deterministic; use its exact same-account, same-region repository ARN. `ecr:GetAuthorizationToken` is separate and resource `*`; it belongs only to the image-publisher identity, not Terraform apply. |
+| CloudWatch log group | Log-group resource actions and tag operations | The log-group name is deterministic; use its exact ARN including the `:*` form only where the action requires log streams. Keep log reads in observation credentials. |
+| ECS Express service create/update | `ecs:CreateExpressGatewayService` or `ecs:UpdateExpressGatewayService`, plus `ecs:AssociateGatewayWithCluster`, `ecs:CreateCluster`, `ecs:CreateGateway`, `ecs:RegisterTaskDefinition`, `ecs:TagResource`, and exact `iam:PassRole` as listed by AWS | AWS documents service/resource tags, `ecs:cluster`, `ecs:subnet`, CPU/memory and task-definition condition keys. The current runner already has a staged path: a foundation plan/apply with `enable_service=false`, then image publication, then a separate service plan/apply with `enable_service=true`. The service plan can use subnet IDs from the already-applied foundation state. The IAM design must prove these are distinct, exact plan digests and must scope the service plan to verified subnet and service-role ARNs. The ECS API internally creates or associates several resources that do not appear as separate Terraform resource changes; their resource ARNs and condition behavior still need explicit policy tests. |
+| ECS Express service deletion | `ecs:DeleteExpressGatewayService` on the exact service ARN | AWS says this action stops tasks and removes its associated load balancer, target groups, security groups, scaling policies and managed components. It requires a separately approved destroy plan; no broad ELB or Auto Scaling caller access should be inferred from the deletion side effect. |
+| Terraform data-source and account/region checks | Read-only EC2 availability-zone, IAM role and STS identity actions | These reads are not necessarily represented as managed resource changes. The plan-role profile must cover them separately; they must not be added to apply permissions without exact resource/action justification. |
+
+AWS documents that `CreateExpressGatewayService` provisions Application Load
+Balancers, target groups, security groups and auto scaling components, and that
+an ECS infrastructure role is supplied for AWS to manage those components.
+That AWS-managed role is distinct from the DavDeploy caller role. The caller
+must receive only ECS API permissions and exact `iam:PassRole`, not the
+infrastructure role's ELB/EC2/Auto Scaling policy.
+
+The AWS ECS authorization table lists the composite create/update dependent
+actions and supports tag, cluster and subnet conditions. A single saved plan
+that creates the VPC/subnets and ECS service cannot bind `ecs:subnet` to IDs
+that do not yet exist. The existing runner avoids that by applying the
+foundation stage first and planning service creation afterward. This sequencing
+must be bound to separately approved plan digests and phase credentials. Tests
+must verify the provider's exact API calls, names, resource ARNs, condition
+context, and `iam:PassedToService` values for the two connection-scoped roles.
+
+No ECS policy builder or role was changed by this review. The renderer remains
+disabled until the action map is complete, tested against the pinned provider,
+and combined with separate plan, state, apply/destroy, observation and image
+publishing identities. See the official references below.
+
+## Additional official references
+
+- [Amazon EC2 actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html)
+- [Amazon ECR actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecr.html)
+- [CloudWatch Logs actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html)
+- [Amazon ECS actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html)
+- [CreateExpressGatewayService API](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateExpressGatewayService.html)
+- [DeleteExpressGatewayService API](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteExpressGatewayService.html)
+- [IAM actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_iam.html)
+
+## Pinned Terraform provider operation map (2026-11-27)
+
+The pilot lockfile pins `hashicorp/aws` 6.73.0. I reviewed the resource
+implementation at the corresponding upstream tag
+[`v6.73.0/internal/service/ecs/express_gateway_service.go`](https://github.com/hashicorp/terraform-provider-aws/blob/v6.73.0/internal/service/ecs/express_gateway_service.go).
+The file confirms these direct ECS API calls:
+
+| Terraform lifecycle path | Provider calls in v6.73.0 | IAM follow-up |
+| --- | --- | --- |
+| Create | `DescribeServices` existence check; `CreateExpressGatewayService`; `DescribeExpressGatewayService` readiness polling; because this root sets `wait_for_steady_state=true`, `ListServiceDeployments` and `DescribeServiceDeployments`; tag framework may call `TagResource` after creation | AWS lists the composite create dependencies: cluster, gateway, task definition, tag, gateway association and `iam:PassRole`. `DescribeServices` is a shared helper call against the exact service name and cluster. No caller-side ALB or Auto Scaling permission follows from ECS-managed side effects. |
+| Read / refresh | `DescribeExpressGatewayService` including tags; generic tag layer may call `ListTagsForResource`; EC2 `DescribeSecurityGroups` helper filters ECS-managed groups from the returned network configuration | The EC2 helper swallows errors and returns without failing the ECS read. Do not grant EC2 access to the apply role for this best-effort display/state filtering. The ECS read and tag actions must be scoped to the exact service and the documented tag conditions. |
+| Update | `UpdateExpressGatewayService`; `DescribeExpressGatewayService`; with `wait_for_steady_state=true`, `ListServiceDeployments` and `DescribeServiceDeployments`; generic tag synchronization may call `TagResource` or `UntagResource` | Bind update to the exact service, cluster, subnet, task CPU/memory and role conditions. Derive tag keys from before/after plan values; reject removal of ownership tags and do not grant `UntagResource` in the pilot unless a separately reviewed operation requires it. |
+| Delete | `DeleteExpressGatewayService`; `DescribeExpressGatewayService` polling until inactive | Use a separately approved destroy plan and deletion-only session; do not reuse create/update permissions or infer deletion from the prior create approval. |
+
+The provider source also identifies the generic tag hooks through
+`@Tags(identifierAttribute="service_arn")`. Its pinned ECS tag helper calls
+`ListTagsForResource`, `TagResource`, and `UntagResource`. The AWS authorization
+reference lists the ECS service resource type and tag conditions for these
+actions: reads can use resource tags; `TagResource` supports request tags,
+resource tags and `aws:TagKeys`; `UntagResource` supports resource tags and
+`aws:TagKeys`. The follow-on policy must allow only exact tags that the saved
+plan changes and reject ownership-tag removal.
+
+The provider's `filterManagedSecurityGroups` calls EC2
+`DescribeSecurityGroups` using returned security-group IDs, but returns without
+an error when that call fails. It is not required for the ECS create, update,
+delete or readiness API path and must not expand the apply role. If omitted,
+the provider may leave AWS-managed security-group IDs in the Terraform state
+view; this display/state detail is not readiness evidence.
+
+This completes the pinned provider source-call map; it is not a tested
+permission policy. The follow-on implementation must still verify IAM
+simulation for the exact action/resource/condition combinations, especially
+the service and deployment resource tuples used by `DescribeServiceDeployments`
+and tag hooks around initial creation. Re-review the map whenever the provider
+lockfile changes.
