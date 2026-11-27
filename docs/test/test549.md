@@ -55,7 +55,7 @@ persisted diagnostics. The validation schema remains strict.
 - Full `make verify`: config check, lint, 2,037 tests, OpenAPI snapshot, and
   Docker Compose configuration passed. One unrelated Starlette deprecation
   warning was emitted.
-- PR CI run `45989388240` passed all seven checks.
+- PR CI run `45989952826` passed all seven checks.
 
 ## Teardown
 

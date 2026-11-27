@@ -63,7 +63,7 @@ output or validator messages.
 
 Hosted v12 failure is recorded. Generic fallback feedback and regression tests
 are implemented. Focused and full repository verification pass. All seven
-checks in PR run `45989388240` pass. Protected deployment and a fresh v13
+checks in PR run `45989952826` pass. Protected deployment and a fresh v13
 plan-only run remain pending.
 
 ## Tests / validation performed
@@ -81,7 +81,7 @@ plan-only run remain pending.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python
   PYTHON=python3.12`: config check, lint, all 2,037 tests, OpenAPI snapshot,
   and Docker Compose configuration passed.
-- `git diff --check` passed. PR CI run `45989388240` passed all seven checks.
+- `git diff --check` passed. PR CI run `45989952826` passed all seven checks.
 
 ## Evidence files produced
 
