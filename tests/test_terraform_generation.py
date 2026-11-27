@@ -4,6 +4,7 @@ import json
 
 import pytest
 from davdeploy.contracts import EvidenceKind, EvidenceRef, ModelResponse, ModelUsage, TenantScope
+from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.model_gateway import (
     BedrockNovaGateway,
     FallbackModelGateway,
@@ -15,8 +16,10 @@ from davdeploy.terraform_generation import (
     NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
+    _sanitize_pydantic_feedback,
     generation_context_digest,
 )
+from pydantic import ValidationError
 
 
 class RecordingGateway:
@@ -98,6 +101,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert request.prompt_version == NOVA_TERRAFORM_PROMPT_VERSION
     assert "^[a-z][a-z0-9_]{0,62}$" in document["task"]
     assert "Do not use hyphens, uppercase letters, spaces, or punctuation" in document["task"]
+    assert "^[a-z][a-z0-9-]{0,62}$" in document["task"]
+    assert "source_resource_id only for an event_processing assertion" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -114,6 +119,41 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert result.proposal.resources[0].resource_type == "aws_ecs_cluster"
     rendered = instance.terraform_json(result.proposal)
     assert rendered["resource"]["aws_ecs_cluster"]["application"]["name"] == "customer-application"
+
+
+def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [
+            {
+                "resource_id": "bad-id",
+                "resource_type": "aws_s3_bucket",
+                "name": "files",
+                "arguments": {},
+                "rationale": "Synthetic test resource.",
+            }
+        ],
+        "requirements": {"region": "us-east-1"},
+        "health_assertions": [
+            {
+                "kind": "storage_roundtrip",
+                "target_resource_id": "bad_id",
+                "description": "Synthetic storage check.",
+            }
+        ],
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    assert feedback == [
+        {
+            "code": "string_pattern_mismatch",
+            "field": "health_assertions[*].target_resource_id",
+        }
+    ]
 
 
 @pytest.mark.parametrize(
