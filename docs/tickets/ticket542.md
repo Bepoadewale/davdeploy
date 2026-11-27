@@ -67,6 +67,10 @@ hosted v7 retry remain pending. No valid saved plan or workload is claimed.
 - `git diff --check` — passed.
 - GitHub Actions run `45947901539` — all seven checks passed for
   `6d8bd80c03c42f4c481f36b883f119791932f90d`.
+- Bootstrap run `45947613695` for the initial implementation-only commit failed
+  because tests still asserted the old v6 prompt and pre-guidance feedback
+  shape. Those assertions and the schema coverage were corrected before the
+  passing final implementation head above.
 
 ## Evidence files produced
 

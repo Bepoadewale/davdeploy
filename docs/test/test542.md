@@ -49,5 +49,8 @@ certification. The control plane and audit records remain intact.
 - Ruff, `scripts/check_doc_conventions.py`, and `git diff --check` — passed.
 - PR #542 CI run `45947901539` passed all seven checks for implementation head
   `6d8bd80c03c42f4c481f36b883f119791932f90d`.
+- The earlier bootstrap run `45947613695` failed because test expectations still
+  described prompt v6 and omitted the new fixed guidance; those were corrected
+  before the passing implementation head.
 - Protected deployment and one hosted retry after deployment are pending. No
   test workload or infrastructure was created.
