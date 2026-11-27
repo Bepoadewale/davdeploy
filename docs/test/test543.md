@@ -55,4 +55,6 @@ unapproved and unapplied.
 - Ruff, documentation convention checks, and `git diff --check`: passed.
 - One pre-existing Starlette deprecation warning was reported by the test
   environment.
-- Hosted CI and the post-deployment plan-only retry remain pending.
+- GitHub Actions run `45953221246` passed all seven required checks for head
+  `afc97c77482c1d4d526b932125e30bc3de03bfcf`.
+- The post-deployment plan-only retry remains pending.

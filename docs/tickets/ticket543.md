@@ -54,7 +54,7 @@ prompt contract.
 - [x] Guidance is emitted only for exact allowlisted validator causes and
       remains allowlisted at the hosted diagnostic boundary.
 - [x] The prompt version identifies the changed repair behavior as v8.
-- [ ] All required hosted CI checks pass.
+- [x] All seven required hosted CI checks pass.
 - [ ] Deploy the merged control-plane update and retry the fresh run once;
       inspect its bounded outcome.
 
@@ -68,7 +68,8 @@ hosted retry are pending. No valid plan or customer workload is claimed.
 - Prior hosted v7 run and safe diagnostics: `docs/test/test543.md`.
 - Focused tests: 101 passed, 1 existing Starlette deprecation warning.
 - Ruff, documentation conventions, and `git diff --check` passed.
-- GitHub Actions: pending.
+- GitHub Actions run `45953221246`, head `afc97c77482c1d4d526b932125e30bc3de03bfcf`:
+  all seven required checks passed.
 - Required GitHub Actions checks: pending.
 
 ## Evidence files produced
