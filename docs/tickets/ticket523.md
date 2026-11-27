@@ -130,19 +130,21 @@ claiming hosted workload execution or changing AWS resources.
 - [x] The next action is actionable and does not enable the renderer, mutate
   AWS, or alter the hosted control plane.
 - [x] Documentation conventions and `git diff --check` pass.
-- [ ] Final-head GitHub Actions checks pass for the updated PR #523 head.
+- [x] Final-head GitHub Actions run `45929408564` passes all seven checks for
+  handoff commit `54bebd0e`.
 
 ## Acceptance status
 
 The handoff and matrix are reconciled to current `main`, hosted planning
-evidence, the #519 feature stack, and current read-only AWS inventory. Local
-documentation validation is pending; PR #523 final-head CI must pass before
-merge.
+evidence, the #519 feature stack, and current read-only AWS inventory.
+Documentation validation and final-head CI passed. The PR is ready for review
+and merge; AWS cleanup remains outside this documentation package.
 
 ## Tests / validation performed
 
-- `GITHUB_PR_NUMBER=523 python3 scripts/check_doc_conventions.py`: pending.
-- `git diff --check`: pending after final edits.
+- `GITHUB_PR_NUMBER=523 python3 scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- Final-head run `45929408564` on `54bebd0e`: all seven checks passed.
 - Final-head run `45908603081` on `667de8be`: all seven checks passed.
 - Follow-up ticket-status commit `5b6fd18d` passed all seven checks in run
   `45909113939`.
