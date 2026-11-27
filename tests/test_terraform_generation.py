@@ -112,7 +112,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
         "revision-123",
     )
     assert request.input_digest == model_input_digest(document)
-    assert "provider/backend configuration" in document["task"]
+    assert "provider, provisioner, connection, backend" in document["task"]
     assert "contract_version to 1.1" in document["task"]
     assert "not evidence that a check ran" in document["task"]
     assert schema["additionalProperties"] is False
@@ -195,14 +195,40 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
 
 
 @pytest.mark.parametrize(
-    ("resource_update", "guidance"),
+    ("resource_update", "issue", "guidance"),
     [
         (
             {"arguments": {"provider": "aws"}},
+            "forbidden_argument_key",
             (
-                "Use supported resource arguments; remove provider/backend/provisioner "
-                "fields, Terraform expressions, credential values, and DavDeploy-reserved "
-                "tags. Use typed secret references only in supported secret ARN fields."
+                "Use only literal JSON values for AWS resource attributes. Remove provider, "
+                "provisioner, connection, backend, required_providers, access_key, secret_key, "
+                "session_token, private_key, password, and user_data fields."
+            ),
+        ),
+        (
+            {"arguments": {"bucket": "${var.bucket_name}"}},
+            "terraform_expression",
+            (
+                "Use literal JSON values only; remove Terraform interpolation, directives, file reads, "
+                "template functions, and other expressions. Use typed resource_reference objects for links."
+            ),
+        ),
+        (
+            {"arguments": {"db_secret": "private-value"}},
+            "credential_value",
+            (
+                "Never include a credential or secret value. Use a typed resource_reference only in a "
+                "Lambda environment variable ending in _SECRET_ARN; enable an AWS-managed database "
+                "master secret instead of setting a password."
+            ),
+        ),
+        (
+            {"arguments": {"tags": {"DavDeployOwner": "model-value"}}},
+            "reserved_ownership_tag",
+            (
+                "Remove every tag whose key starts with DavDeploy. Trusted execution code adds the "
+                "required ownership tags."
             ),
         ),
         (
@@ -212,6 +238,15 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
                     {"name": "endpoint", "value_type": "url"},
                 ]
             },
+            "duplicate_output_name",
+            (
+                "Give each output a unique name and expose only supported values; a secret "
+                "reference output is allowed only for an RDS-managed master secret ARN."
+            ),
+        ),
+        (
+            {"outputs": [{"name": "secret", "value_type": "secret_reference"}]},
+            "unsupported_secret_output",
             (
                 "Give each output a unique name and expose only supported values; a secret "
                 "reference output is allowed only for an RDS-managed master secret ARN."
@@ -219,7 +254,7 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
         ),
     ],
 )
-def test_resource_level_value_errors_receive_fixed_safe_guidance(resource_update, guidance):
+def test_resource_level_value_errors_receive_fixed_safe_guidance(resource_update, issue, guidance):
     resource = {
         "resource_id": "api",
         "resource_type": "aws_s3_bucket",
@@ -242,6 +277,7 @@ def test_resource_level_value_errors_receive_fixed_safe_guidance(resource_update
     assert feedback[0] == {
         "code": "value_error",
         "field": "resources[*]",
+        "issue": issue,
         "guidance": guidance,
     }
 

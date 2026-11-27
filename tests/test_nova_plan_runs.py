@@ -719,11 +719,18 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                     {
                         "code": "value_error",
                         "field": "resources[*]",
+                        "issue": "forbidden_argument_key",
                         "guidance": (
-                            "Use supported resource arguments; remove provider/backend/provisioner "
-                            "fields, Terraform expressions, credential values, and DavDeploy-reserved "
-                            "tags. Use typed secret references only in supported secret ARN fields."
+                            "Use only literal JSON values for AWS resource attributes. Remove provider, "
+                            "provisioner, connection, backend, required_providers, access_key, secret_key, "
+                            "session_token, private_key, password, and user_data fields."
                         ),
+                    },
+                    {
+                        "code": "value_error",
+                        "field": "resources[*]",
+                        "issue": "private_api_key_leak_me",
+                        "guidance": "private_api_key_leak_me",
                     },
                     {"code": "invalid", "field": "private_api_key_leak_me"},
                 ),
@@ -741,7 +748,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v8",
+        "prompt_version": "terraform-nova2-contract-v9",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,
@@ -762,12 +769,14 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
             {
                 "code": "value_error",
                 "field": "resources[*]",
+                "issue": "forbidden_argument_key",
                 "guidance": (
-                    "Use supported resource arguments; remove provider/backend/provisioner "
-                    "fields, Terraform expressions, credential values, and DavDeploy-reserved "
-                    "tags. Use typed secret references only in supported secret ARN fields."
+                    "Use only literal JSON values for AWS resource attributes. Remove provider, "
+                    "provisioner, connection, backend, required_providers, access_key, secret_key, "
+                    "session_token, private_key, password, and user_data fields."
                 ),
             },
+            {"code": "value_error", "field": "resources[*]"},
         ],
     }
     assert "private_api_key_leak_me" not in json.dumps(failed)
