@@ -97,6 +97,17 @@ _HEALTH_PAYLOAD_SIZE_GUIDANCE = (
     "4096 inclusive. Omit it for every other assertion kind. For http_response use max_response_bytes; "
     "for inference_response use minimum_response_bytes."
 )
+_ID_PATTERN_GUIDANCE = (
+    "Treat resource IDs and references as short machine keys, not prose labels or AWS type names. "
+    "Prefer IDs from "
+    "this fixed vocabulary: api, web, app, db, files, bucket, table, queue, topic, events, worker, "
+    "function, network, subnet, role, cache, logs. Declared resource IDs must be unique. For another "
+    "resource with the same role, append a numeric suffix such as -2 or -3. Every ID must match "
+    "^[a-z][a-z0-9-]{0,23}$: begin with a "
+    "lowercase letter, use only lowercase letters, digits, and hyphens, and stay within 24 characters. "
+    "Never use underscores, uppercase, spaces, dots, slashes, or long natural-language labels. Keep "
+    "Terraform name as a separate snake_case local label; copy every reference exactly from its declared resource_id."
+)
 _UNKNOWN_COST_FIELD_GUIDANCE = (
     "Correct the indicated cost_assumptions[*] field to the typed cost schema. Reference a declared "
     "resource ID and report only supported usage assumptions; unknown prices must remain explicit."
@@ -119,15 +130,8 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "The Terraform `name` is separate from `resource_id`: valid pairs include "
     "resource_id=db-primary with name=primary_database and resource_id=job-queue with "
     "name=job_queue. Never copy a hyphenated resource_id into resources[].name. "
-    "Use unique short descriptive IDs such as `api`, `files`, `primary-db`, or "
-    "`job-queue`; do not copy AWS type names or natural-language phrases. Every "
-    "resource_id and every ID reference in depends_on, typed resource_reference, "
-    "cost_assumptions, and health assertions must match the exact pattern "
-    "`^[a-z][a-z0-9-]{0,23}$` (lowercase letters/digits, optional hyphens, at most "
-    "24 characters; no underscores or uppercase). Prefer short IDs such as `api`, `db`, "
-    "`files`, `queue`, `worker`, `db-primary`, or `db-replica`; omit AWS service/type "
-    "prefixes. Make IDs unique and copy every reference exactly from its declared resource_id; "
-    "resource IDs are separate from Terraform names. Use target_resource_id in every "
+    + _ID_PATTERN_GUIDANCE
+    + " Use target_resource_id in every "
     "health assertion and source_resource_id only for event_processing; both must "
     "reference declared resources. Use typed resource_reference objects for links. Each "
     "resource arguments object may contain "
@@ -158,7 +162,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v16"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v17"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -280,12 +284,6 @@ _HEALTH_ASSERTION_DISCRIMINATORS = frozenset(
         "network_connectivity",
         "dns_resolution",
     }
-)
-_ID_PATTERN_GUIDANCE = (
-    "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
-    "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
-    "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
-    "reference exactly from its declared resource_id."
 )
 _RESOURCE_GRAPH_GUIDANCE = (
     "Keep resource IDs unique; every dependency, typed reference, cost assumption, and "
