@@ -50,12 +50,15 @@ session securely so governed CLI requests can use it without printing tokens.
 - [x] Invalid/expired credentials fail with actionable text and no token or
       sensitive Cognito response in output.
 - [x] Existing explicit bearer-token usage remains compatible.
-- [ ] Focused tests, documentation conventions, required CI and review pass.
+- [x] Focused tests, documentation conventions and all seven required CI checks pass.
+- [ ] Complete PR review and merge after final-head checks pass.
 
 ## Acceptance status
 
-Implemented and locally verified. Required hosted CI and PR review are pending.
-No live DavDeploy sign-in has been performed from this PR yet.
+Implemented and locally verified. The code head `30401b60` passed all seven
+required CI checks in run `45916251767`. The ticket now records that result;
+the resulting final-head CI and PR review remain pending. No live DavDeploy
+sign-in has been completed from this PR yet.
 
 ## Tests / validation performed
 
@@ -64,6 +67,7 @@ No live DavDeploy sign-in has been performed from this PR yet.
 - `uv run --project . --extra dev ruff check apps/api/src/davdeploy/cli.py apps/api/src/davdeploy/cli_auth.py tests/test_cli_auth.py` — passed.
 - `git diff --check` — passed.
 - `uv run --project . davdeploy --api-url https://api.davdeploy.tech auth login --help` — command registered and options displayed.
+- CI run `45916251767` — all seven checks passed on implementation head `30401b60`.
 
 ## Evidence files produced
 
