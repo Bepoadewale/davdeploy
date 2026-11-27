@@ -15,6 +15,7 @@ from davdeploy.model_gateway import (
 from davdeploy.terraform_generation import (
     _GRAPH_VALIDATION_FEEDBACK,
     _HEALTH_PAYLOAD_SIZE_GUIDANCE,
+    _ID_PATTERN_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
     _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
@@ -115,7 +116,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "Never copy a hyphenated resource_id" in document["task"]
     assert "source_resource_id only for event_processing" in document["task"]
     assert "copy every reference exactly from its declared resource_id" in document["task"]
-    assert "no underscores or uppercase" in document["task"]
+    assert "Never use underscores, uppercase, spaces, dots, slashes" in document["task"]
     assert "environment[0].variables.<NAME>_SECRET_ARN" in document["task"]
     assert "value_type=secret_reference" in document["task"]
     assert '"manage_master_user_password":true' in document["task"]
@@ -125,7 +126,11 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "integer from 1 to 4096 inclusive" in document["task"]
     assert "http_response use max_response_bytes" in document["task"]
     assert "inference_response use minimum_response_bytes" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v16"
+    assert "Treat resource IDs and references as short machine keys" in document["task"]
+    assert "fixed vocabulary: api, web, app, db, files, bucket, table, queue" in document["task"]
+    assert "append a numeric suffix such as -2 or -3" in document["task"]
+    assert "stay within 24 characters" in document["task"]
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v17"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -175,12 +180,7 @@ def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
         {
             "code": "string_pattern_mismatch",
             "field": "health_assertions[*].target_resource_id",
-            "guidance": (
-                "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
-                "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
-                "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
-                "reference exactly from its declared resource_id."
-            ),
+            "guidance": _ID_PATTERN_GUIDANCE,
         }
     ]
 
@@ -319,6 +319,38 @@ def test_resource_name_pattern_feedback_distinguishes_name_from_resource_id():
         "guidance": _RESOURCE_NAME_GUIDANCE,
     }
     assert all(item["field"] != "resources[*].resource_id" for item in feedback)
+
+
+def test_resource_id_pattern_feedback_is_actionable_and_redacts_invalid_value():
+    invalid_id = "AWS_Resource_Identifier_Too_Long"
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [
+            {
+                "resource_id": invalid_id,
+                "resource_type": "aws_s3_bucket",
+                "name": "files",
+                "arguments": {},
+                "rationale": "Synthetic test resource.",
+            }
+        ],
+        "requirements": {"region": "us-east-1"},
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    item = next(entry for entry in feedback if entry["field"] == "resources[*].resource_id")
+    assert item == {
+        "code": "string_pattern_mismatch",
+        "field": "resources[*].resource_id",
+        "guidance": _ID_PATTERN_GUIDANCE,
+    }
+    rendered = repr(feedback)
+    assert invalid_id not in rendered
+    assert "AWS_Resource" not in rendered
 
 
 def test_unknown_validator_error_keeps_safe_path_and_uses_fixed_field_guidance():

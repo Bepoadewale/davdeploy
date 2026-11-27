@@ -38,6 +38,7 @@ from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
 from davdeploy.terraform_generation import (
     _GENERIC_VALIDATION_GUIDANCE,
+    _ID_PATTERN_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     NovaTerraformGenerationFailed,
     generation_context_digest,
@@ -708,12 +709,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                     {
                         "code": "missing",
                         "field": "resources[*].resource_id",
-                        "guidance": (
-                            "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
-                            "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
-                            "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
-                            "reference exactly from its declared resource_id."
-                        ),
+                        "guidance": _ID_PATTERN_GUIDANCE,
                     },
                     {
                         "code": "missing",
@@ -763,7 +759,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v16",
+        "prompt_version": "terraform-nova2-contract-v17",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,
@@ -775,12 +771,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
             {
                 "code": "missing",
                 "field": "resources[*].resource_id",
-                "guidance": (
-                    "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
-                    "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
-                    "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
-                    "reference exactly from its declared resource_id."
-                ),
+                "guidance": _ID_PATTERN_GUIDANCE,
             },
             {"code": "missing", "field": "cost_assumptions[*].resource_id"},
             {
