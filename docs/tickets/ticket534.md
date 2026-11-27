@@ -1,7 +1,7 @@
-# ticket533 — Preserve the ECS Express apply-policy design handoff
+# ticket534 — Preserve the ECS Express apply-policy design handoff
 
-PR: #533 (draft; documentation-only replacement for closed PR #529)
-Branch: `feat/ecs-express-apply-policy-533`
+PR: #534 (draft; documentation-only replacement for closed PR #529)
+Branch: `feat/ecs-express-apply-policy-534`
 Base: PR #519 (`feat/ecs-express-renderer-519`)
 
 ## Problem / goal
@@ -15,7 +15,8 @@ implement or enable an ECS apply policy.
 ## Current repo state
 
 - PR #527's pinned-provider action map is merged into PR #526 at merge commit
-  `346b4a6bb4ac336df0c58c0695d5a54d8582bb13`.
+  `346b4a6bb4ac336df0c58c0695d5a54d8582bb13`; #526/#525 are subsequently
+  merged only into the #519 feature branch, not `main`.
 - PR #529 remains closed and unmerged. Its code prototype was restored; the
   replacement contains documentation only.
 - The ECS Express renderer remains disabled. No cloud role or workload was
@@ -85,7 +86,7 @@ package performed no workload test.
 - `docs/security/ECS_EXPRESS_APPLY_POLICY.md` — design and acceptance criteria.
 - `docs/tickets/ticket529.md` — original policy design ticket, with its PR
   history corrected.
-- `docs/tickets/ticket533.md` — replacement PR record.
+- `docs/tickets/ticket534.md` — replacement PR record.
 
 ## Boundaries
 

@@ -1,7 +1,7 @@
 # ticket529 — Add a plan-bound ECS Express service apply policy
 
 Original PR: #529 (closed unmerged when its base branch was deleted)
-Replacement PR: #533 (draft; design review)
+Replacement PR: #534 (draft; design review)
 Branch: `feat/ecs-express-apply-policy-529`
 Replacement base: PR #519 (`feat/ecs-express-renderer-519`)
 
@@ -24,10 +24,9 @@ customer apply role to make the prototype fit.
 
 ## Current repo state
 
-- PR #527 is an open draft based on PR #526. It maps the ECS Express
-  authorization surface and now records the direct API calls in the pinned
-  AWS provider v6.73.0 source. Shared-helper, tag synchronization, and some
-  condition/resource details remain open.
+- PR #527's pinned-provider action map is merged only into the #519 feature
+  branch. Shared-helper, tag synchronization, and some condition/resource
+  details remain open.
 - `apps/api/src/davdeploy/nova_apply_access.py` creates session policies for
   S3, SQS, and DynamoDB plan changes and rejects unsupported resource types.
 - `apps/api/src/davdeploy/generated_terraform_plan.py` stores the policy with
