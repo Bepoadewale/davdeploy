@@ -43,6 +43,22 @@ from davdeploy.nova_contract_generation import (
     validate_generation_context,
 )
 
+_RESOURCE_CREDENTIAL_EXAMPLE = (
+    "Supported database-secret shape (example only; include full required provider fields): "
+    'declare an aws_rds_cluster resource with '
+    '"arguments":{"manage_master_user_password":true} and '
+    '"outputs":[{"name":"master_user_secret[0].secret_arn",'
+    '"value_type":"secret_reference","sensitive":true}]. In an '
+    'aws_lambda_function resource, put exactly this object at '
+    '"arguments":{"environment":[{"variables":{"DATABASE_SECRET_ARN":'
+    '{"kind":"resource_reference","resource_id":"db",'
+    '"output_name":"master_user_secret[0].secret_arn",'
+    '"value_type":"secret_reference"}}}]}. The referenced resource ID '
+    "must be declared, and the output path and type must match exactly. "
+    "Use this only for database credentials; omit secret outputs and variables "
+    "when the application does not need them. Never put a secret value or ARN string in the proposal. "
+)
+
 NOVA_TERRAFORM_GENERATION_TASK = (
     "Generate the complete typed deployment proposal for this architecture and set "
     "contract_version to 1.1. Use only "
@@ -71,7 +87,9 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "`value_type=secret_reference`; place it only at "
     "`environment[0].variables.<NAME>_SECRET_ARN`. Do not use a string ARN or secret value "
     "there. For database credentials, enable the AWS-managed master secret and expose its "
-    "declared secret_reference output; never set password arguments. Omit all DavDeploy-"
+    "declared secret_reference output; never set password arguments. "
+    + _RESOURCE_CREDENTIAL_EXAMPLE
+    + "Omit all DavDeploy-"
     "prefixed tags because trusted code injects them. "
     "Health assertions are proposed requirements, "
     "not evidence that a check ran. Use only the enumerated health assertion kinds and "
@@ -83,7 +101,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v10"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v11"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -225,12 +243,11 @@ _RESOURCE_EXPRESSION_GUIDANCE = (
     "template functions, and other expressions. Use typed resource_reference objects for links."
 )
 _RESOURCE_CREDENTIAL_GUIDANCE = (
-    "Never include a credential, plaintext secret, or string ARN. Use the exact object "
-    "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
-    "output>, value_type: secret_reference} only at "
-    "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
-    "credentials, enable the AWS-managed master secret and reference its declared output; "
-    "never set a password argument."
+    "Never include a credential, plaintext secret, or string ARN. Use the exact typed "
+    "resource_reference shape only at environment[0].variables.<NAME>_SECRET_ARN on a Lambda "
+    "resource. For database credentials, enable the AWS-managed master secret and reference "
+    "its declared secret_reference output; never set a password argument. "
+    + _RESOURCE_CREDENTIAL_EXAMPLE
 )
 _RESOURCE_RESERVED_TAG_GUIDANCE = (
     "Remove every tag whose key starts with DavDeploy. Trusted execution code adds the "

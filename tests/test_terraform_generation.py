@@ -13,6 +13,7 @@ from davdeploy.model_gateway import (
     model_input_digest,
 )
 from davdeploy.terraform_generation import (
+    _RESOURCE_CREDENTIAL_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
@@ -107,6 +108,10 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "no underscores or uppercase" in document["task"]
     assert "environment[0].variables.<NAME>_SECRET_ARN" in document["task"]
     assert "value_type=secret_reference" in document["task"]
+    assert '"manage_master_user_password":true' in document["task"]
+    assert '"output_name":"master_user_secret[0].secret_arn"' in document["task"]
+    assert '"kind":"resource_reference"' in document["task"]
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v11"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -222,14 +227,7 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
         (
             {"arguments": {"db_secret": "private-value"}},
             "credential_value",
-            (
-                "Never include a credential, plaintext secret, or string ARN. Use the exact object "
-                "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
-                "output>, value_type: secret_reference} only at "
-                "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
-                "credentials, enable the AWS-managed master secret and reference its declared output; "
-                "never set a password argument."
-            ),
+            _RESOURCE_CREDENTIAL_GUIDANCE,
         ),
         (
             {"arguments": {"tags": {"DavDeployOwner": "model-value"}}},

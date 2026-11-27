@@ -24,7 +24,7 @@ from davdeploy.main import app, product_service
 from davdeploy.model_gateway import ModelGatewayUnavailable
 from davdeploy.models import (
     AuditEvent,
-        GeneratedPlanApplyRun,
+    GeneratedPlanApplyRun,
     GeneratedPlanArtifact,
     GeneratedPlanRun,
     GeneratedPlanRunIdempotencyKey,
@@ -37,6 +37,7 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
 from davdeploy.terraform_generation import (
+    _RESOURCE_CREDENTIAL_GUIDANCE,
     NovaTerraformGenerationFailed,
     generation_context_digest,
 )
@@ -732,14 +733,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                         "code": "value_error",
                         "field": "resources[*]",
                         "issue": "credential_value",
-                        "guidance": (
-                            "Never include a credential, plaintext secret, or string ARN. Use the exact object "
-                            "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
-                            "output>, value_type: secret_reference} only at "
-                            "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
-                            "credentials, enable the AWS-managed master secret and reference its declared output; "
-                            "never set a password argument."
-                        ),
+                        "guidance": _RESOURCE_CREDENTIAL_GUIDANCE,
                     },
                     {
                         "code": "value_error",
@@ -763,7 +757,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v10",
+        "prompt_version": "terraform-nova2-contract-v11",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,
@@ -797,14 +791,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                 "code": "value_error",
                 "field": "resources[*]",
                 "issue": "credential_value",
-                "guidance": (
-                    "Never include a credential, plaintext secret, or string ARN. Use the exact object "
-                    "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
-                    "output>, value_type: secret_reference} only at "
-                    "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
-                    "credentials, enable the AWS-managed master secret and reference its declared output; "
-                    "never set a password argument."
-                ),
+                "guidance": _RESOURCE_CREDENTIAL_GUIDANCE,
             },
             {"code": "value_error", "field": "resources[*]"},
         ],

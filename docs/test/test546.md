@@ -33,6 +33,16 @@ validation issue was `credential_value`. Raw proposal content was not retrieved
 or logged. No saved plan, CodeBuild build, or customer workload resource was
 created. The run's single explicit retry is exhausted; do not retry it again.
 
+## PR #546 local validation
+
+The v11 prompt adds the exact accepted RDS-managed master-secret output and
+Lambda typed-reference shape to initial generation and fixed repair guidance.
+The credential validator and allowed locations were not changed. Focused tests
+passed (161 tests); full `make verify` passed (2,029 tests), Ruff, Actions
+configuration, OpenAPI snapshot, and Docker Compose configuration, with one
+existing Starlette deprecation warning. Hosted CI and v11 deployment/evaluation
+remain pending.
+
 ## Teardown and evidence retention
 
 No customer workload resources or plan artifacts were created. The control-plane

@@ -49,11 +49,11 @@ deployed by plan run `45964473463` and apply run `45965284428`.
 
 ## Acceptance criteria
 
-- [ ] Nova receives an unambiguous valid secret-reference example in initial
+- [x] Nova receives an unambiguous valid secret-reference example in initial
   generation and bounded correction.
-- [ ] Credential values and secret references outside the exact typed location
+- [x] Credential values and secret references outside the exact typed location
   remain rejected; no validation rule is weakened.
-- [ ] Raw proposals, credential values, and sensitive plans remain redacted.
+- [x] Raw proposals, credential values, and sensitive plans remain redacted.
 - [ ] Focused and required full verification pass; all seven CI checks pass.
 - [ ] After protected deployment, a fresh review-only v11 hosted generation
   reaches an inspectable saved plan or reports a bounded actionable failure
@@ -64,7 +64,11 @@ deployed by plan run `45964473463` and apply run `45965284428`.
 - Hosted v10 retry: 2 attempts, 1 semantic repair, 12,079 input tokens,
   3,119 output tokens, 11,727 ms; estimated cost unavailable. Safe failure:
   `proposal_invalid` with one `credential_value` issue. No CodeBuild run.
-- Local tests and CI are pending implementation.
+- Focused suite: 161 passed, 1 existing Starlette deprecation warning.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python` passed:
+  config boundary, Ruff, 2,029 tests, OpenAPI snapshot, and Docker Compose
+  configuration; 1 existing Starlette deprecation warning.
+- GitHub CI, protected deployment, and v11 hosted evidence remain pending.
 
 ## Evidence files
 
