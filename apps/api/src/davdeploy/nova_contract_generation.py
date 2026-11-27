@@ -170,12 +170,21 @@ def normalize_managed_lambda_secret_reference(output: Any) -> Any:
     secret_outputs = [
         item
         for item in outputs
-        if isinstance(item, dict)
-        and item.get("name") == "master_user_secret[0].secret_arn"
+        if isinstance(item, dict) and item.get("value_type") == "secret_reference"
     ]
     if len(secret_outputs) > 1:
         return output
-    if secret_outputs and secret_outputs[0].get("value_type") != "secret_reference":
+    canonical_output = next(
+        (
+            item
+            for item in outputs
+            if isinstance(item, dict)
+            and item.get("name") == "master_user_secret[0].secret_arn"
+        ),
+        None,
+    )
+    if canonical_output is not None and canonical_output not in secret_outputs:
+        # Do not overwrite a differently typed value at the trusted output name.
         return output
 
     candidates: list[tuple[dict[str, Any], str]] = []
@@ -225,11 +234,8 @@ def normalize_managed_lambda_secret_reference(output: Any) -> Any:
     normalized_database["arguments"]["manage_master_user_password"] = True
     normalized_outputs = normalized_database.setdefault("outputs", [])
     if secret_outputs:
-        normalized_output = next(
-            item
-            for item in normalized_outputs
-            if isinstance(item, dict) and item.get("name") == "master_user_secret[0].secret_arn"
-        )
+        normalized_output = next(item for item in normalized_outputs if item in secret_outputs)
+        normalized_output["name"] = "master_user_secret[0].secret_arn"
         normalized_output["sensitive"] = True
     else:
         normalized_outputs.append(

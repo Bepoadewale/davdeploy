@@ -1,6 +1,6 @@
 # ticket561 — improve Nova RDS secret output repair
 
-PR: pending
+PR: [#561](https://github.com/Bepoadewale/davdeploy/pull/561) (draft)
 
 Branch: `fix/nova-rds-secret-output-repair-561`
 
@@ -12,7 +12,7 @@ before CodeBuild with sanitized feedback `unsupported_secret_output` at
 RDS-managed secret ARN output consumed by one declared Lambda environment
 variable. Keep strict contract validation for ambiguous or unsupported outputs.
 
-## Current repo and hosted state
+## Current repo state
 
 - Backend `main`: `1c4d36fa65ea34cd96f56c6356549b57fafd1d59` (PR #560 merged).
 - Protected control-plane apply run `46076195000` succeeded using saved plan
@@ -26,7 +26,7 @@ variable. Keep strict contract validation for ambiguous or unsupported outputs.
 - No customer workload was approved, planned, applied, or destroyed. The
   customer workload is not certified.
 
-## Research / references
+## Research / references used
 
 - `generated_deployment_contract.py` permits only the RDS-managed output
   `master_user_secret[0].secret_arn` when
@@ -37,7 +37,7 @@ variable. Keep strict contract validation for ambiguous or unsupported outputs.
   Nova repair loop.
 - `docs/test/test560.md` records the preceding hosted health-target failure.
 
-## Work planned
+## Work planned for the PR
 
 1. Clarify the exact supported RDS output name and managed-password requirement
    in fixed repair feedback.
@@ -53,13 +53,17 @@ variable. Keep strict contract validation for ambiguous or unsupported outputs.
 
 ## Acceptance criteria
 
-- [ ] Fixed feedback identifies the exact RDS-managed output and required flag.
-- [ ] One unambiguous RDS/Lambda reference is normalized and validated.
-- [ ] Unsupported and ambiguous outputs remain rejected.
-- [ ] No model-authored password or secret value is retained by normalization.
-- [ ] Focused tests and required local/clean-room verification pass.
+- [x] Fixed feedback identifies the exact RDS-managed output and required flag.
+- [x] One unambiguous RDS/Lambda reference is normalized and validated.
+- [x] Unsupported outputs on non-RDS resources and ambiguous references remain
+  unchanged for strict rejection.
+- [x] Normalization removes a model-authored RDS password and retains no such
+  literal in its normalized result.
+- [x] Focused tests pass (153 passed); full `make verify` passes (2,092
+  passed, Ruff, Actions configuration, OpenAPI, and Compose checks pass).
+- [ ] Required isolated clean-room verification passes.
 - [ ] PR review and all required current-head CI checks pass.
-- [ ] Fresh hosted generation yields an inspectable plan or a precise next
+- [ ] Fresh hosted v23 generation yields an inspectable plan or a precise next
   blocker; no customer workload approval/apply/destroy occurs.
 
 ## Boundaries
@@ -70,7 +74,27 @@ proposal/plan/state data, or claim customer deployment/lifecycle evidence.
 
 ## Acceptance status
 
-In progress. This ticket was created before substantive implementation. The
-observed hosted blocker is documented above; implementation and validation
-remain pending.
+In progress. The narrow normalization and fixed guidance are implemented and
+locally verified. Clean-room proof, PR/CI review, protected release, and the
+fresh hosted v23 outcome remain pending.
+
+## Tests / validation performed
+
+- Focused Nova contract/generation/review/run suite: 153 passed.
+- Full `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`:
+  2,092 passed; Ruff, Actions configuration, OpenAPI, and Compose passed.
+- Documentation convention check and `git diff --check` pass.
+- Isolated clean-room proof, PR review/CI, and hosted verification remain
+  pending.
+
+## Evidence files produced
+
+- `docs/test/test561.md`
+- `docs/tickets/ticket561.md`
+
+## Follow-up work
+
+Complete clean-room proof, PR review/CI, protected control-plane release, then
+run one fresh v23 review-only generation. Continue with its earliest safe
+blocker. Do not approve or apply the synthetic customer workload.
 

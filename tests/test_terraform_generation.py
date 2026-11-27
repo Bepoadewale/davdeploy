@@ -135,7 +135,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v22"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v23"
+    assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
@@ -1088,16 +1089,24 @@ def test_unrecognized_proposal_validator_message_is_never_returned():
             },
             "duplicate_output_name",
             (
-                "Give each output a unique name and expose only supported values; a secret "
-                "reference output is allowed only for an RDS-managed master secret ARN."
+                "Give every output a unique name. Use secret_reference outputs only on "
+                "aws_db_instance or aws_rds_cluster with "
+                "manage_master_user_password=true, and use the exact output name "
+                "master_user_secret[0].secret_arn. Remove every other secret_reference output. "
+                "A Lambda secret ARN environment reference must point to that declared output. "
+                "Do not add resources or change the selected architecture to repair this output."
             ),
         ),
         (
             {"outputs": [{"name": "secret", "value_type": "secret_reference"}]},
             "unsupported_secret_output",
             (
-                "Give each output a unique name and expose only supported values; a secret "
-                "reference output is allowed only for an RDS-managed master secret ARN."
+                "Give every output a unique name. Use secret_reference outputs only on "
+                "aws_db_instance or aws_rds_cluster with "
+                "manage_master_user_password=true, and use the exact output name "
+                "master_user_secret[0].secret_arn. Remove every other secret_reference output. "
+                "A Lambda secret ARN environment reference must point to that declared output. "
+                "Do not add resources or change the selected architecture to repair this output."
             ),
         ),
     ],
