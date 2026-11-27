@@ -1,9 +1,13 @@
 # Backlog
 
-## Nova status snapshot — 2026-11-26
+## Nova status snapshot — 2026-11-27
 
 Backend `main` is
-`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517).
+`63a94632d07e125d83c54f236a349b93d94254f9` (merged PR #557). Protected plan
+`46052921538` and apply `46053869885` deployed that exact source; the migration
+completed, all six control-plane Lambdas match its versioned package SHA-256,
+and `/healthz` returned HTTP 200. The protected control plane was not changed
+by the subsequent customer plan-only attempt.
 PRs #507–#514 add source-only bounded Batch prices; PR #515 adds source-only
 private endpoint policy. PR #517 adds backward-compatible private Fargate
 networking and records a direct same-account lifecycle test: suffix `a` failed
@@ -15,18 +19,19 @@ resource ARNs. This evidence covers only the recorded private Batch shape, not
 Nova dispatch, cross-account execution, or a general customer workload.
 See `docs/test/test517.md`.
 
-The Batch estimate remains approval-ineligible for unsupported material cost
-paths and assumptions. The hosted runtime is still PR #420 commit
-`9951caa9244128b1551fea3af66b1bdbf884c800`. A read-only check on 2026-11-26
-verified the Lambda package hash
-`GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=` and `/healthz` HTTP 200.
-The Terraform monitor has 75 records and no active operations. No authenticated
-workspace administrator session, verified customer connection, or hosted
-Nova-generated plan exists; no Nova customer workload has been applied,
-operated, or certified. The control plane was not changed for PR #517.
-PR #518 reconciles the source/deployed snapshot, private Batch evidence,
-26/30 capability map, and next-step boundaries through PR #517. It changes no
-application code, AWS resource, or hosted control-plane configuration.
+The authenticated CLI administrator session works, and the verified
+same-account plan-only connection is
+`3964addb-9f00-4c87-b829-2c3cd3b0b48c`. Fresh review-only run
+`572b2750-4070-4d8d-b903-15929297b929` used prompt v19, made two bounded
+proposal attempts, then failed with `NOVA_GENERATION_FAILED` /
+`proposal_invalid` because a relational database health assertion targeted an
+incompatible resource. It produced no Terraform artifact or customer
+resources; approval, apply, and destroy remain closed. Draft PR #558 adds a
+safe resource-type diagnostic and direct RDS targeting guidance. Its
+focused/full tests, clean-room cycle, and seven PR checks passed; the protected
+release and fresh hosted plan-only result are pending. The 26/30 capability
+map remains the finite scope reference. No Nova customer workload has been
+applied, operated, or certified.
 
 
 PR #493 merged with all seven checks passing in final-head run
