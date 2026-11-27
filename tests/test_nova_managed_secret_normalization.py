@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
 from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.nova_contract_generation import normalize_managed_lambda_secret_reference
+from pydantic import ValidationError
 
 
 def proposal(*, databases: int = 1, variables: dict[str, object] | None = None):
@@ -85,6 +87,46 @@ def test_existing_managed_secret_output_is_marked_sensitive_and_reused():
         }
     ]
     GeneratedDeploymentProposal.model_validate(normalized)
+
+
+def test_unique_rds_secret_output_name_is_normalized_for_one_lambda_consumer():
+    original = proposal()
+    original["resources"][0]["outputs"] = [
+        {"name": "generated_secret_arn", "value_type": "secret_reference"}
+    ]
+
+    normalized = normalize_managed_lambda_secret_reference(original)
+
+    assert normalized["resources"][0]["outputs"] == [
+        {
+            "name": "master_user_secret[0].secret_arn",
+            "value_type": "secret_reference",
+            "sensitive": True,
+        }
+    ]
+    GeneratedDeploymentProposal.model_validate(normalized)
+
+
+def test_unsupported_secret_output_on_non_rds_resource_is_not_normalized():
+    original = proposal()
+    original["resources"].append(
+        {
+            "resource_id": "secret",
+            "resource_type": "aws_secretsmanager_secret",
+            "name": "application_secret",
+            "arguments": {},
+            "outputs": [
+                {"name": "secret_arn", "value_type": "secret_reference"}
+            ],
+            "rationale": "Synthetic unsupported secret output.",
+        }
+    )
+
+    normalized = normalize_managed_lambda_secret_reference(original)
+
+    assert normalized["resources"][2]["outputs"] == original["resources"][2]["outputs"]
+    with pytest.raises(ValidationError, match="RDS-managed master secret ARN"):
+        GeneratedDeploymentProposal.model_validate(normalized)
 
 
 def test_multiple_database_resources_are_not_guessed():

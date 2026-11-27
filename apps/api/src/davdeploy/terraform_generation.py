@@ -204,7 +204,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v22"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v23"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -431,8 +431,12 @@ _RESOURCE_RESERVED_TAG_GUIDANCE = (
     "required ownership tags."
 )
 _RESOURCE_OUTPUT_GUIDANCE = (
-    "Give each output a unique name and expose only supported values; a secret reference "
-    "output is allowed only for an RDS-managed master secret ARN."
+    "Give every output a unique name. Use secret_reference outputs only on "
+    "aws_db_instance or aws_rds_cluster with "
+    "manage_master_user_password=true, and use the exact output name "
+    "master_user_secret[0].secret_arn. Remove every other secret_reference output. "
+    "A Lambda secret ARN environment reference must point to that declared output. "
+    "Do not add resources or change the selected architecture to repair this output."
 )
 _SECRET_REFERENCE_LOCATION_GUIDANCE = {
     "non_lambda_resource": (
