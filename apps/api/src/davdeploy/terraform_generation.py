@@ -83,6 +83,20 @@ _UNKNOWN_RESOURCE_FIELD_GUIDANCE = (
     "Correct the indicated resources[*] field to match the typed deployment contract. Use the exact "
     "JSON type and allowed value for that field; preserve the declared resource IDs and trusted context."
 )
+_RESOURCE_OBJECT_SHAPE_GUIDANCE = {
+    "missing": (
+        "Each resources[*] item must be a complete object with required fields "
+        "resource_id, resource_type, name, arguments, and rationale. Only depends_on and outputs "
+        "are optional. Preserve the selected architecture, resource identities, typed references, "
+        "and trusted context."
+    ),
+    "extra_forbidden": (
+        "Each resources[*] item may contain only resource_id, resource_type, name, arguments, "
+        "depends_on, outputs, and rationale. Put AWS resource-specific attributes under arguments; "
+        "remove wrapper or undeclared keys. Preserve the selected architecture, resource identities, "
+        "typed references, and trusted context."
+    ),
+}
 _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE = (
     "Correct resources[*].arguments to match the selected AWS provider resource schema. Use literal "
     "JSON values only; never add Terraform expressions, credentials, provider/backend settings, "
@@ -204,7 +218,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v23"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v24"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -467,6 +481,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         *_SECRET_REFERENCE_LOCATION_GUIDANCE.values(),
         _HEALTH_PAYLOAD_SIZE_GUIDANCE,
         _UNKNOWN_RESOURCE_FIELD_GUIDANCE,
+        *_RESOURCE_OBJECT_SHAPE_GUIDANCE.values(),
         _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
         _UNKNOWN_OUTPUT_FIELD_GUIDANCE,
         _UNKNOWN_HEALTH_FIELD_GUIDANCE,
@@ -870,6 +885,8 @@ def _graph_feedback(code: str, field: str, cause: Any = None) -> tuple[str, str]
 def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
     if code == "invalid":
         return _unknown_validation_guidance(field)
+    if field == "resources[*]" and code in _RESOURCE_OBJECT_SHAPE_GUIDANCE:
+        return _RESOURCE_OBJECT_SHAPE_GUIDANCE[code]
     if code == "string_pattern_mismatch" and field == "resources[*].name":
         return _RESOURCE_NAME_GUIDANCE
     if (

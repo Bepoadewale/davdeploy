@@ -1,6 +1,6 @@
 # ticket562 — give Nova safe feedback for malformed resource objects
 
-PR: pending
+PR: [#562](https://github.com/Bepoadewale/davdeploy/pull/562) (draft)
 
 Branch: `fix/nova-resource-shape-feedback-562`
 
@@ -51,29 +51,40 @@ untrusted field names or proposal data.
 
 ## Acceptance criteria
 
-- [ ] `missing` and `extra_forbidden` root-resource errors receive distinct
+- [x] `missing` and `extra_forbidden` root-resource errors receive distinct
   fixed, actionable guidance.
-- [ ] Feedback reveals no raw unknown key, input value, resource ID, or
+- [x] Feedback reveals no raw unknown key, input value, resource ID, or
   rationale.
-- [ ] Strict schema rejection remains unchanged; malformed and executable
+- [x] Strict schema rejection remains unchanged; malformed and executable
   payloads are still rejected before any credentialed runner.
-- [ ] Focused/full tests, docs conventions, and required clean-room proof pass.
+- [x] Focused generation/review/run suite passes: 147 tests.
+- [x] Full `make verify` passes 2,095 tests; Ruff, Actions configuration,
+  OpenAPI, Compose, docs conventions, and diff checks pass.
+- [ ] Required isolated clean-room proof passes.
 - [ ] PR review and all required current-head CI checks pass.
 - [ ] One fresh v24 run reaches an inspectable plan or a precise next blocker;
   no customer workload approval/apply/destroy occurs.
 
 ## Acceptance status
 
-In progress. Ticket created before substantive code changes. Implementation
-and validation are pending.
+In progress. Fixed guidance and bounded repair are implemented and focused
+tests pass. Full verification, clean-room proof, PR CI, protected release, and
+the fresh v24 hosted result remain pending.
 
 ## Tests / validation performed
 
-Pending.
+- Focused command:
+  `PYTHONPATH=apps/api/src /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_nova_plan_runs.py -q`
+  — 147 passed, with one pre-existing Starlette/httpx deprecation warning.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify` — 2,095
+  passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks
+  passed. Documentation convention and diff checks also passed.
+- Isolated clean-room proof will be added before merge.
 
 ## Evidence files produced
 
-Pending.
+- `docs/test/test562.md`
+- `docs/tickets/ticket562.md`
 
 ## Boundaries
 
