@@ -39,6 +39,7 @@ from davdeploy.model_gateway import (
 )
 from davdeploy.nova_contract_generation import (
     bind_generation_context,
+    normalize_generated_resource_ids,
     trusted_context,
     validate_generation_context,
 )
@@ -630,7 +631,9 @@ class NovaTerraformGenerator:
                 break
 
             try:
-                proposal = GeneratedDeploymentProposal.model_validate(response.output)
+                proposal = GeneratedDeploymentProposal.model_validate(
+                    normalize_generated_resource_ids(response.output)
+                )
             except ValidationError as error:
                 feedback = _sanitize_pydantic_feedback(error)
             else:

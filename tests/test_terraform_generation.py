@@ -151,6 +151,23 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert rendered["resource"]["aws_ecs_cluster"]["application"]["name"] == "customer-application"
 
 
+def test_nova_generation_normalizes_a_bounded_resource_id_before_strict_validation():
+    def malformed_id(request, document):
+        output = proposal(request, document)
+        output["resources"][0]["resource_id"] = "API Gateway"
+        return output
+
+    instance = generator(malformed_id)
+    result = instance.generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    assert result.proposal.resources[0].resource_id == "api-gateway"
+    assert len(instance.gateway.calls) == 1
+
+
 def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
     invalid = {
         "contract_version": "1.1",
