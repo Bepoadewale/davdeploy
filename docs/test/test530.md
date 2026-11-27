@@ -3,7 +3,7 @@
 Date: 2026-11-27
 Execution type: Local CLI command-routing validation
 Customer repository: None for CLI command tests; hosted Nova acceptance repository is `Bepoadewale/fitness-backend`
-Commit: pending PR commit
+Commit: `1825a2c9` (CLI implementation exercised by the recorded local checks)
 AWS account: `654654474502` (hosted test account; no AWS changes in this PR)
 AWS region: `us-east-1`
 
