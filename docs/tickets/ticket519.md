@@ -13,10 +13,16 @@ execution.
 
 ## Current repo state
 
-- Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`, after merged
-  PRs #520 and #522. This PR branch remains at
-  `403ea5a331e7e29b611d4a2f04b7aeb9a7d111ed`; its final-head run
-  `45884741945` passed all seven checks.
+- Backend `main` is `f300676aa3af32a76136947c4f4870cee498b5e6` (PR #532).
+  PR #531 documented a hosted Nova attempt that failed before a saved plan
+  existed; PR #532 preserves explicit storage, database, and queue requirements
+  in Nova intent. Neither changed the hosted runtime.
+- PR #525's service-role bootstrap and verifier merged into this branch as
+  `be87809f763f33d28aeca4daaa6d3d10ec932a7d`. PR #526's role-boundary review
+  is included in that stack. These separate ECS service roles do not resolve
+  the runner's effective-permission gap.
+- This PR head `be87809f763f33d28aeca4daaa6d3d10ec932a7d` passed all seven
+  GitHub checks in run `45928093637`; rerun after this ticket update.
 - `infrastructure/terraform/customer-workload-ecs-express-pilot` is an
   isolated single-service ECS Express root. This PR adds an optional S3
   backend, project/region-scoped names and tags, and an explicit customer
@@ -24,7 +30,8 @@ execution.
   resources; direct tests continue to initialize with `-backend=false`.
 - `docs/test/test437.md` records direct same-account AWS create, health,
   in-place update, failed-health rollback, recovery, and cleanup. It does not
-  prove Nova dispatch or cross-account isolation.
+  prove Nova dispatch or cross-account isolation. It satisfies the recorded
+  general customer-side lifecycle gate only for that tested service shape.
 - `module_renderers.py` now has a disabled, pilot-specific
   `aws-ecs-express-pilot` renderer bound to the ECS Express root. It does not
   reuse the broad `aws-container-service` module contract. The broader
@@ -38,6 +45,9 @@ execution.
   synthetic persisted context and no customer budget, so it is not
   approval-bound customer pricing evidence; draft PR #524 corrects the
   existing ticket wording.
+- PR #526 records that the current runner can assume an administrator role
+  without an exact-plan session policy. PR #529's compact ECS policy remains a
+  design candidate; no ECS plan-bound policy is implemented or supported.
 - Current cloud-execution gates and hosted control-plane configuration must
   remain untouched by this PR.
 
@@ -99,8 +109,9 @@ execution.
   revision and budget.
 - [ ] The renderer passes a clean-room local lifecycle cycle and an authorized
   isolated cloud cycle using project-scoped remote state.
-- [x] Final-head GitHub Actions run 45884741945 passed all seven checks; rerun
-  required after this ticket update is pushed.
+- [x] All seven GitHub checks passed on head
+  `be87809f763f33d28aeca4daaa6d3d10ec932a7d` in run `45928093637`; rerun after
+  this ticket update is pushed.
 - [x] No hosted control-plane, runtime, Terraform state, or lock resource was
   accessed or mutated by this PR.
 
@@ -111,7 +122,10 @@ runner source are implemented. The provider-generated plan policy and price
 model are merged and exercised. Effective execution-role permissions,
 customer-context approval evidence, clean-room validation, the isolated
 remote-state runner cycle, and this PR's refreshed final-head CI remain open;
-the renderer is not enabled for customer execution.
+the renderer is not enabled for customer execution. The service-role pair from
+PR #525 is source-verified only; it was not deployed in AWS. The direct ECS
+test in PR #437 remains the accepted general customer-side evidence for its
+tested resource shape, but it is not Nova-originated execution proof.
 
 ## Tests / validation performed
 
@@ -124,6 +138,9 @@ the renderer is not enabled for customer execution.
 - Terraform monitor snapshot: 75 terminal records, zero active operations.
 - Existing AWS evidence remains `docs/test/test437.md`; it is not relabeled as
   Nova-run evidence. No AWS or hosted-control-plane resource was changed.
+- GitHub Actions run `45928093637` passed all seven checks on source head
+  `be87809f763f33d28aeca4daaa6d3d10ec932a7d`; this evidence update requires a
+  fresh run.
 
 ## Boundaries
 
