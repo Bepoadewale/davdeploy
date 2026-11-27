@@ -9,7 +9,7 @@ lifecycle coverage remain distinct.
 
 ### Reconciliation after PRs #531 and #532
 
-Backend `main` is `95ce2aa76cbefedf94b5949866f7d29ecf4cd995` (PR #534).
+Backend `main` is `c58a2d4a6f3ce45712641e47a4aec52f8181d42b` (PR #536).
 PR #523's source-and-evidence reconciliation merged at `4887df037b2dfc90982b490915539eb03ded8d53`.
 PRs #520 and #522 remain merged: #520's provider-generated saved-plan policy
 evaluation produced three review findings and no denials; #522's regional
@@ -27,13 +27,16 @@ plan has not been rerun after that fix.
 
 The ECS Express implementation and evidence stack is:
 
-- PR #519 remains an open draft. Its branch head
-  `8a56669a` adds the default-off, project-scoped renderer, bounded runner, and
-  the role-bootstrap/security-review stack. The previous combined head
-  `be87809f763f33d28aeca4daaa6d3d10ec932a7d` passed all seven checks in run
+- PR #519 remains an open draft. Its current feature branch head is
+  `65423bd073871d446a151fe2d1b347d336e67305` after #535 merged into it. The
+  previous implementation head `8a56669a` adds the default-off, project-scoped
+  renderer, bounded runner, and role-bootstrap/security-review stack; the
+  earlier combined head `be87809f763f33d28aeca4daaa6d3d10ec932a7d` passed all
+  seven checks in run
   [45928093637](https://github.com/Bepoadewale/davdeploy/actions/runs/45928093637).
-  Fresh CI is required for the ticket update. Effective runner permissions and
-  a project-scoped remote-state lifecycle remain open; the renderer stays off.
+  GitHub now reports a conflict with current `main` after #536 merged, and no
+  current-head checks are available. Effective runner permissions and a
+  project-scoped remote-state lifecycle remain open; the renderer stays off.
 - PR #525's service-role bootstrap and verifier merged into the #519 feature
   branch as `be87809f`; PR #526's security-boundary review merged into #525,
   and PR #527's sourced provider/API permission map merged into #526. These
