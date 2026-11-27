@@ -15,7 +15,7 @@ No AWS workload resources were created or changed. The existing control plane wa
 
 - Authenticated `GET /api/v1/generated-plan-runs/e2395afb-6017-4ceb-9be1-6fdd5661e3c5` returned `FAILED`, `NOVA_GENERATION_FAILED`, no artifact, prompt v17, and one root `value_error` diagnostic. No raw proposal was fetched.
 - Focused tests: `pytest -q tests/test_terraform_generation.py tests/test_generated_deployment_contract.py` — 108 passed.
-- Ruff and `git diff --check` passed. `make verify` passed (2,064 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose); documentation conventions and diff checks passed. PR CI run `46031809126` passed all seven checks on implementation head `1ba63e7508fe49b65aba6b3b3f6152960062cee9`; final ticket-updated head CI and hosted v18 generation remain pending.
+- Ruff and `git diff --check` passed. `make verify` passed (2,064 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose); documentation conventions and diff checks passed. PR CI runs `46031809126` and `46032341067` passed all seven checks; `46032341067` includes the implementation and initial evidence update. Hosted v18 generation remains pending.
 
 ## Observed result
 
