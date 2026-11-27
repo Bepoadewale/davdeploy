@@ -54,7 +54,7 @@ deployed by plan run `45964473463` and apply run `45965284428`.
 - [x] Credential values and secret references outside the exact typed location
   remain rejected; no validation rule is weakened.
 - [x] Raw proposals, credential values, and sensitive plans remain redacted.
-- [ ] Focused and required full verification pass; all seven CI checks pass.
+- [x] Focused and required full verification pass; all seven CI checks pass.
 - [ ] After protected deployment, a fresh review-only v11 hosted generation
   reaches an inspectable saved plan or reports a bounded actionable failure
   before apply. The workload remains unapproved and unapplied.
@@ -62,8 +62,9 @@ deployed by plan run `45964473463` and apply run `45965284428`.
 ## Acceptance status
 
 Prompt, fixed feedback, and regression tests are implemented and locally
-verified. Hosted CI, protected deployment, and a fresh v11 hosted generation
-remain pending.
+verified. GitHub Actions run `45969981443` passed all seven checks on the
+current PR head. Protected deployment and a fresh v11 hosted generation remain
+pending.
 
 ## Tests / validation performed
 
@@ -74,7 +75,10 @@ remain pending.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python` passed:
   config boundary, Ruff, 2,029 tests, OpenAPI snapshot, and Docker Compose
   configuration; 1 existing Starlette deprecation warning.
-- GitHub CI, protected deployment, and v11 hosted evidence remain pending.
+- GitHub Actions run `45969981443`, head
+  `5486ee2417c72e792c3b021e043323ce79930338`: all seven required checks passed.
+- The documentation update recording the run will receive its own final-head
+  CI run. Protected deployment and v11 hosted evidence remain pending.
 
 ## Evidence files produced
 
