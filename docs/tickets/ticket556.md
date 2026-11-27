@@ -30,22 +30,25 @@ After PR #555 normalized resource IDs, a fresh hosted v18 run failed before Code
 
 ## Acceptance criteria
 
-- [ ] Only the single unambiguous Lambda secret ARN case is repaired.
-- [ ] Literal values are absent from the normalized output; the generated reference targets the uniquely declared RDS-managed secret output.
-- [ ] Multiple databases, multiple candidate variables, unsupported environments, and raw password fields remain rejected.
-- [ ] Strict contract/reference validation, policy, and no-apply boundary remain unchanged.
-- [ ] Focused/full verification, docs conventions, and required PR CI pass.
+- [x] Only the single unambiguous Lambda secret ARN case is repaired.
+- [x] Literal values are absent from the normalized output; the generated reference targets the uniquely declared RDS-managed secret output.
+- [x] Multiple databases, multiple candidate variables, other variable names, and standalone raw password fields remain rejected. Supported RDS password fields are removed only when bound to the unique Lambda secret-ARN consumer.
+- [x] Strict contract/reference validation, policy, and no-apply boundary remain unchanged.
+- [x] Focused tests (61) and full `make verify` (2,080 tests, Ruff, Actions configuration, OpenAPI, Compose) pass locally.
+- [ ] Documentation conventions and required PR CI pass.
 - [ ] Fresh deployed plan-only run reaches a plan artifact or actionable bounded feedback without customer approval/apply.
 - [ ] Full hosted gate is claimed only with supported API, private storage, DB behavior, async behavior, live pricing, and plan-policy evidence.
 
 ## Acceptance status
 
-Implementation and validation pending.
+Implementation and local validation are complete. Documentation conventions, required PR CI, protected release, and fresh hosted plan-only result remain pending.
 
 ## Tests / validation performed
 
 - Authenticated read-only status query for the v18 run; only safe diagnostics were inspected.
-- No code or infrastructure change has been made in this PR yet.
+- Focused tests: `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest -q tests/test_nova_managed_secret_normalization.py tests/test_terraform_generation.py` — 61 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 2,080 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. One existing Starlette deprecation warning.
+- Documentation convention check, diff check, and PR CI remain pending.
 
 ## Evidence files produced
 
