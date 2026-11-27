@@ -23,6 +23,24 @@ provider also makes read calls. A resource list that merely fits the size
 limit is not sufficient: every action, supported resource type, condition key,
 and provider call must match current AWS authorization behavior.
 
+AWS also documents that ECS does not support resource-based policies. That
+matters to the size failure: the explicit `Deny`/`NotResource` statement in the
+shared S3/SQS/DynamoDB session-policy builder is unnecessary for an ECS-only
+session. Keep that defense in shared profiles where it is needed; do not copy
+it into the ECS policy. A compact ECS session policy can limit the action set,
+while the verified fixed apply-role policy enforces exact resource, tag,
+subnet, CPU/memory, cluster, and `iam:PassRole` boundaries. This is only a
+candidate until its policy stays below STS's hard limit and IAM simulation
+proves the full condition context.
+
+A local size check of an action-only session-policy shape using the current
+provider-call map measured 424 compact-JSON characters for create, 404 for
+update, and 288 for delete. Those counts show that the STS limit is no longer
+the blocker for this shape; they do not validate the action list or role
+conditions. The fixed role allow rules must remain resource-scoped. IAM
+simulation must evaluate each action against the required resource tuple and
+derived context, including both resource types for multi-resource actions.
+
 AWS states that ECS supports identity-based policies, does not support
 resource-based policies, and supports tag-based access control. AWS STS session
 tags become `aws:PrincipalTag` values on subsequent requests. This makes a
@@ -53,14 +71,17 @@ authorization. For this ECS profile:
    values. Keep foundation, ECR publishing, EC2 networking, load balancer,
    autoscaling, observation, Terraform state, and control-plane permissions
    outside this role profile.
-5. Pass a compact session policy containing only the plan-required actions and
-   target region. The role policy provides the resource/tag boundary; the
-   session policy intersects it and narrows the actions for this exact plan.
-   Retain the 2,048-character hard check and fail closed on overflow.
+5. Pass a compact session policy containing only the plan-required actions.
+   The fixed ECS role policy provides the resource/tag boundary; the session
+   policy intersects it and narrows the actions for this exact plan. Omit the
+   shared builder's `NotResource` statement only because ECS does not support
+   resource-based policies. Retain the 2,048-character hard check and fail
+   closed on overflow.
 6. Verify the exact trust policy, role tags, inline policy and effective
    action/resource/tag combinations before issuing credentials. Extend IAM
    simulation to use the same derived principal-tag context and reject missing
-   context, implicit denies, unexpected allows, or role drift.
+   context, implicit denies, unexpected allows, or role drift. Include all
+   resource types together for actions that require multi-resource checks.
 7. Record the profile version, plan-policy digest, derived session-tag digest,
    role-profile digest and resulting audit evidence. The worker must receive
    only the approved saved plan and credentials derived for it.
@@ -104,6 +125,11 @@ required; do not infer safety from a successful IAM simulation alone.
 
 - **Benefit:** the dynamic resource scope moves into a fixed, inspected role
   policy, allowing the STS session policy to stay below its hard size limit.
+- **Size rationale:** because ECS does not support resource-based policies,
+  an ECS-only session does not need the shared builder's `NotResource` guard.
+  The fixed role policy remains the resource and tag ceiling; the compact
+  session policy intersects it to limit allowed actions. This does not make
+  `Resource: "*"` acceptable in the fixed ECS allow rules.
 - **Risk:** trust policy and role policy become more complex. Incorrect session
   tag values or overlapping keys could widen access; strict key allowlists,
   role-profile verification, deterministic tag derivation and negative tests

@@ -42,6 +42,12 @@ customer apply role to make the prototype fit.
   2,195-character update policy. Both exceed the documented 2,048-character
   STS limit. The policy builder rejected them as intended. The prototype was
   not retained as source and no live role or resource was changed.
+- Current AWS documentation confirms ECS does not support resource-based
+  policies. A follow-up local size check of a compact action-only session
+  policy measured 424 characters for create, 404 for update, and 288 for
+  delete. This is only a candidate: no fixed role policy with exact resources
+  and conditions has been implemented or IAM-simulated, so the candidate is
+  not executable or approved.
 - No AWS resource, hosted control-plane runtime, Terraform state, or lock is
   changed by this source package.
 
@@ -111,10 +117,13 @@ customer apply role to make the prototype fit.
 ## Acceptance status
 
 Design remains incomplete and implementation has not started. The first
-prototype failed the size gate; this is a confirmed fail-closed result, not a
-supported ECS apply profile. Even after this PR is accepted, it will not by
-itself make the ECS renderer eligible for customer execution: foundation
-permissions, phase-specific identity selection, complete role/effective-
+full session-policy prototype failed the size gate. A smaller action-only
+session-policy shape fits the character bound in a local measurement, but its
+fixed resource/tag-conditioned role policy and IAM simulation are unimplemented.
+Neither result is a supported ECS apply profile. Even after this PR is
+accepted, it will not by itself make the ECS renderer eligible for customer
+execution: foundation permissions, phase-specific identity selection,
+complete role/effective-
 permission review, cost approval, and an authorized isolated Nova
 plan/apply/update/recovery/destroy cycle remain separate gates.
 
