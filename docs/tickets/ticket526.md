@@ -20,7 +20,11 @@ renderer or execute any AWS operation.
 
 ## Current repo state
 
-- Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba` (merged PR #522).
+- Backend `main` is `f300676aa3af32a76136947c4f4870cee498b5e6` (PR #532), following PR #531's hosted-plan
+  evidence update and PR #532's explicit-capability preservation fix.
+- PR #531 recorded that Nova omitted explicitly requested private storage,
+  relational records, and queue work; generation failed before a saved plan
+  existed. No customer workload was applied.
 - PR #519 is an open draft at `00697d7b6b84ed7d0ff0fef7effb7cf0037392e7`; its
   seven final-head checks passed in run `45903656967`.
 - PR #523 is an open Nova handoff draft at
@@ -31,6 +35,9 @@ renderer or execute any AWS operation.
   `45907870966`.
 - PR #525 is an open draft at `bf876fe155a7fe946a457b6d61d74c25696893e0`; its
   seven final-head checks passed in run `45907548159`.
+- PR #527's action map is merged into this branch at
+  `346b4a6bb4ac336df0c58c0695d5a54d8582bb13`; all seven checks passed in run
+  `45919840010` on its original head.
 - No Terraform operation, customer AWS mutation, or hosted-control-plane
   mutation is part of this review.
 
@@ -104,7 +111,7 @@ The following review and documentation work is now complete in this draft PR.
 - [x] The customer runner, renderer, and hosted control plane remain disabled
   or unchanged; no AWS mutation is performed.
 - [x] Documentation conventions and `git diff --check` pass locally.
-- [ ] All final-head CI checks pass.
+- [ ] All final-head CI checks pass after this ticket update.
 
 ## Acceptance status
 
@@ -124,7 +131,9 @@ follow-up implementation package passes its acceptance gates.
 
 - `GITHUB_PR_NUMBER=526 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
-- Final-head GitHub Actions checks are pending.
+- Current branch head `346b4a6bb4ac336df0c58c0695d5a54d8582bb13` passed all
+  seven checks in run `45925247789`. This ticket update requires a fresh
+  final-head run.
 
 ## Boundaries
 
