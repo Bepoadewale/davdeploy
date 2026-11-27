@@ -47,9 +47,16 @@ def test_apply_boundary_is_disabled_and_requires_plan_and_remote_state_gates() -
         'DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_CREDENTIAL_BROKER_ENABLED = '
         'tostring(var.enable_nova_exact_plan_apply_credential_broker)'
     ) in " ".join(MAIN.split())
-    runtime_env = block(MAIN, "locals {\n  runtime_environment = {")
+    runtime_env = block(MAIN, "locals {\n  runtime_environment = merge(")
     assert "DAVDEPLOY_NOVA_APPLY_BUCKET_OWNER" in runtime_env
     assert "DAVDEPLOY_NOVA_APPLY_KMS_KEY_ARN" in runtime_env
+    assert "var.enable_nova_exact_plan_apply_runner ? {" in runtime_env
+    assert "var.enable_nova_apply_role_onboarding ? {" in runtime_env
+    assert "DAVDEPLOY_NOVA_APPLY_ROLE_TEMPLATE_URL" in runtime_env
+    assert "DAVDEPLOY_NOVA_EXACT_PLAN_APPLY_RUNNER_READY" in runtime_env
+    assert "DAVDEPLOY_JWKS_URL" not in runtime_env
+    assert "runtime_environment_size_bytes = sum([" in runtime_env
+    assert MAIN.count("condition     = local.runtime_environment_size_bytes <= 4096") == 3
     api_policy = block(MAIN, 'resource "aws_iam_role_policy" "api"')
     assert "var.enable_nova_exact_plan_apply_credential_broker ? [{" in api_policy
     assert "role/davdeployNovaApply-*" in api_policy

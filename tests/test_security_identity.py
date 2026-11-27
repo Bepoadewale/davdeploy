@@ -63,8 +63,60 @@ def test_external_identity_without_server_membership_is_denied(monkeypatch):
 def test_hosted_mode_requires_jwks_configuration(monkeypatch):
     monkeypatch.setenv("DAVDEPLOY_HOSTED_MODE", "true")
     monkeypatch.delenv("DAVDEPLOY_JWKS_URL", raising=False)
+    monkeypatch.delenv("DAVDEPLOY_OIDC_ISSUER", raising=False)
 
     with pytest.raises(HTTPException) as error:
         security.configured_verifier()
 
     assert error.value.status_code == 503
+
+
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_example",
+        "https://issuer-cognito-idp.us-east-1.amazonaws.com/us-east-1_example",
+    ],
+)
+def test_cognito_issuer_derives_standard_jwks_url(monkeypatch, issuer):
+    observed = {}
+
+    class CaptureVerifier:
+        def __init__(self, jwks_url, issuer, audience):
+            observed.update(jwks_url=jwks_url, issuer=issuer, audience=audience)
+
+    monkeypatch.setenv("DAVDEPLOY_HOSTED_MODE", "true")
+    monkeypatch.setenv("DAVDEPLOY_OIDC_ISSUER", issuer)
+    monkeypatch.setenv("DAVDEPLOY_OIDC_AUDIENCE", "frontend-client")
+    monkeypatch.delenv("DAVDEPLOY_JWKS_URL", raising=False)
+    monkeypatch.setattr(security, "JwksIdentityVerifier", CaptureVerifier)
+
+    security.configured_verifier()
+
+    assert observed == {
+        "jwks_url": f"{issuer}/.well-known/jwks.json",
+        "issuer": issuer,
+        "audience": "frontend-client",
+    }
+
+
+def test_explicit_jwks_url_remains_authoritative_for_other_oidc(monkeypatch):
+    observed = {}
+
+    class CaptureVerifier:
+        def __init__(self, jwks_url, issuer, audience):
+            observed.update(jwks_url=jwks_url, issuer=issuer, audience=audience)
+
+    monkeypatch.setenv("DAVDEPLOY_HOSTED_MODE", "true")
+    monkeypatch.setenv("DAVDEPLOY_OIDC_ISSUER", "https://identity.example.test/issuer")
+    monkeypatch.setenv("DAVDEPLOY_OIDC_AUDIENCE", "frontend-client")
+    monkeypatch.setenv("DAVDEPLOY_JWKS_URL", "https://identity.example.test/keys.json")
+    monkeypatch.setattr(security, "JwksIdentityVerifier", CaptureVerifier)
+
+    security.configured_verifier()
+
+    assert observed == {
+        "jwks_url": "https://identity.example.test/keys.json",
+        "issuer": "https://identity.example.test/issuer",
+        "audience": "frontend-client",
+    }

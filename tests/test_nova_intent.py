@@ -213,6 +213,40 @@ def test_nova_intent_keeps_only_allow_listed_customer_capabilities():
     assert result.spec.capability_requirements == ["ai", "payments"]
 
 
+def test_nova_intent_preserves_explicit_storage_database_and_async_needs():
+    intent_provider, _ = provider(proposal(capability_requirements=[]))
+
+    result = intent_provider.interpret(
+        "Deploy an API with private object storage for uploads, a relational database, "
+        "and a separate asynchronous queue worker for background processing.",
+        "example/fitness-api",
+        scope(),
+    )
+
+    assert result.spec.capability_requirements == [
+        "file_storage",
+        "jobs",
+        "relational_data",
+    ]
+    assert result.spec.stateful is True
+    assert result.spec.event_driven is True
+    assert result.spec.multi_service is True
+    assert result.spec.provenance["capability_resolution_version"] == "explicit-prompt-v1"
+
+
+def test_nova_intent_does_not_add_explicitly_negated_capabilities():
+    intent_provider, _ = provider(proposal(capability_requirements=[], stateful=False))
+
+    result = intent_provider.interpret(
+        "Deploy an API with object storage and a queue worker, but do not include a database.",
+        "example/fitness-api",
+        scope(),
+    )
+
+    assert result.spec.capability_requirements == ["file_storage", "jobs"]
+    assert result.spec.stateful is False
+
+
 def test_nova_intent_recalculates_material_unknowns_locally():
     intent_provider, _ = provider(
         proposal(

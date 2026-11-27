@@ -12,6 +12,7 @@ from davdeploy.model_gateway import (
     model_input_digest,
 )
 from davdeploy.terraform_generation import (
+    NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
     generation_context_digest,
@@ -94,7 +95,9 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     request, document, schema = instance.gateway.calls[0]
     assert request.purpose.value == "terraform_generation"
     assert request.provider == "bedrock"
-    assert request.prompt_version == "terraform-nova2-contract-v4"
+    assert request.prompt_version == NOVA_TERRAFORM_PROMPT_VERSION
+    assert "^[a-z][a-z0-9_]{0,62}$" in document["task"]
+    assert "Do not use hyphens, uppercase letters, spaces, or punctuation" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -299,6 +302,10 @@ def test_semantic_repair_stops_after_attempt_cap_with_safe_error():
     assert error.value.usage.output_tokens == 120
     assert error.value.usage.retry_count == 1
     assert error.value.attempt_count == 2
+    assert error.value.failure_code == "proposal_invalid"
+    assert error.value.validation_feedback == (
+        {"code": "extra_forbidden", "field": "proposal"},
+    )
 
 
 def test_gateway_failure_preserves_known_usage_without_exposing_provider_error():
@@ -350,6 +357,10 @@ def test_gateway_failure_preserves_known_usage_without_exposing_provider_error()
     assert error.value.usage.estimated_cost_usd is None
     assert error.value.usage.retry_count == 2
     assert len(error.value.evidence) == 2
+    assert error.value.failure_code == "provider_unavailable"
+    assert error.value.validation_feedback == (
+        {"code": "extra_forbidden", "field": "proposal"},
+    )
     assert "sensitive details" not in str(error.value)
 
 
