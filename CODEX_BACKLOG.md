@@ -3,11 +3,12 @@
 ## Nova status snapshot — 2026-11-27
 
 Backend `main` is
-`63a94632d07e125d83c54f236a349b93d94254f9` (merged PR #557). Protected plan
-`46052921538` and apply `46053869885` deployed that exact source; the migration
-completed, all six control-plane Lambdas match its versioned package SHA-256,
-and `/healthz` returned HTTP 200. The protected control plane was not changed
-by the subsequent customer plan-only attempt.
+`28f229416d7897ec2fe48b3def83ade6b9d4bcaf` (merged PR #558). Protected plan
+`46063294020` and apply `46064179578` deployed that exact source; the migration
+completed, all six control-plane Lambdas are Active and Successful and match
+the exact versioned package hash, and `/healthz` returned HTTP 200. The
+protected control plane was not changed by the subsequent customer plan-only
+attempt.
 PRs #507–#514 add source-only bounded Batch prices; PR #515 adds source-only
 private endpoint policy. PR #517 adds backward-compatible private Fargate
 networking and records a direct same-account lifecycle test: suffix `a` failed
@@ -21,15 +22,16 @@ See `docs/test/test517.md`.
 
 The authenticated CLI administrator session works, and the verified
 same-account plan-only connection is
-`3964addb-9f00-4c87-b829-2c3cd3b0b48c`. Fresh review-only run
-`572b2750-4070-4d8d-b903-15929297b929` used prompt v19, made two bounded
-proposal attempts, then failed with `NOVA_GENERATION_FAILED` /
-`proposal_invalid` because a relational database health assertion targeted an
-incompatible resource. It produced no Terraform artifact or customer
-resources; approval, apply, and destroy remain closed. Draft PR #558 adds a
-safe resource-type diagnostic and direct RDS targeting guidance. Its
-focused/full tests, clean-room cycle, and seven PR checks passed; the protected
-release and fresh hosted plan-only result are pending. The 26/30 capability
+`3964addb-9f00-4c87-b829-2c3cd3b0b48c`. After PR #557, v19 run
+`572b2750-4070-4d8d-b903-15929297b929` failed on an incompatible relational
+health target before producing an artifact. Merged PR #558 added its safe
+resource-type feedback, passed all seven PR checks, was deployed, and produced
+v20 plan-only run `886fcf57-a321-455c-9097-4bc90d351be4`. V20 failed during
+proposal validation with `invalid_secret_reference_location`, again before an
+artifact or customer resource. Approval, apply, and destroy remain closed.
+Draft PR #559 adds safe location context for bounded repair. Its branch passed
+full local verification and the clean-room cycle; final PR CI, merge, protected
+deployment, and a fresh v21 hosted result remain pending. The 26/30 capability
 map remains the finite scope reference. No Nova customer workload has been
 applied, operated, or certified.
 

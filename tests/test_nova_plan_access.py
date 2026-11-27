@@ -567,10 +567,11 @@ def test_unsupported_resource_type_fails_before_policy_creation():
         outputs=(GeneratedOutput(name="arn", value_type="secret_reference"),),
         rationale="Unsupported provider resource regression fixture.",
     )
-    unsupported = resource(
-        "secret-version",
-        "aws_secretsmanager_secret_version",
-        {
+    unsupported = GeneratedResource.model_construct(
+        resource_id="secret-version",
+        resource_type="aws_secretsmanager_secret_version",
+        name="secret_version",
+        arguments={
             "secret_id": {
                 "kind": "resource_reference",
                 "resource_id": "secret",
@@ -578,6 +579,9 @@ def test_unsupported_resource_type_fails_before_policy_creation():
                 "value_type": "secret_reference",
             }
         },
+        depends_on=(),
+        outputs=(),
+        rationale="Permission profile regression fixture.",
     )
     with pytest.raises(NovaPlanAccessError, match="unsupported plan resource types"):
         build_nova_plan_access_policy(
