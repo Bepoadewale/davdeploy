@@ -11,6 +11,7 @@ def test_catalogue_covers_major_workload_families_without_claiming_execution() -
         "aws-static-edge",
         "aws-serverless-api",
         "aws-ecs-fargate",
+        "aws-ecs-express-pilot",
         "aws-relational-data",
         "aws-event-backbone",
         "aws-ai-retrieval",
@@ -19,6 +20,8 @@ def test_catalogue_covers_major_workload_families_without_claiming_execution() -
     } <= entries.keys()
     assert entries["aws-app-runner"].stage == "pilot"
     assert entries["aws-ecs-fargate"].stage == "planning"
+    assert entries["aws-ecs-express-pilot"].stage == "pilot"
+    assert entries["aws-ecs-express-pilot"].purpose == "Bounded single-container HTTPS service pilot"
     assert entries["aws-ai-retrieval"].stage == "planning"
     assert entries["aws-managed-ml"].stage == "catalogued"
 

@@ -29,6 +29,7 @@ _CATALOGUE: tuple[AdapterCatalogueEntry, ...] = (
     AdapterCatalogueEntry("aws-serverless-api", "serverless-api", "planning", ("Lambda", "API Gateway"), "Variable-traffic HTTP APIs"),
     AdapterCatalogueEntry("aws-app-runner", "managed-application", "pilot", ("App Runner", "ECR"), "Single container web or API service"),
     AdapterCatalogueEntry("aws-ecs-fargate", "managed-containers", "planning", ("ECS Fargate", "ECR"), "Multi-container and API-worker services"),
+    AdapterCatalogueEntry("aws-ecs-express-pilot", "managed-application", "pilot", ("ECS Express", "ECR"), "Bounded single-container HTTPS service pilot"),
     AdapterCatalogueEntry("aws-ec2-managed", "managed-vm", "planning", ("EC2", "Auto Scaling"), "OS-level or legacy workloads"),
     AdapterCatalogueEntry("aws-eks-governed", "kubernetes", "planning", ("EKS", "ECR"), "Kubernetes-specific workloads"),
     AdapterCatalogueEntry("aws-scheduled-batch", "jobs-and-batch", "catalogued", ("EventBridge Scheduler", "Step Functions", "AWS Batch"), "Scheduled and batch work"),

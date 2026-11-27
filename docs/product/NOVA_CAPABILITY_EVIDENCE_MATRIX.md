@@ -30,6 +30,17 @@ predecessor cycle failed during a cleanup race; both exact stacks were removed
 and service-specific absence was checked. This proves only the bounded
 same-account Batch image/logging path in `test517.md`, not Nova dispatch,
 cross-account operation, or general endpoint reachability.
+
+Merged PR #518 reconciles the handoff through PR #517; backend main is now
+`dbbf7c135b7be97c832927d5c1758bc1faab805d`. Draft PR #519 at
+`a384bd9a335bcb6e5fc186da637c6a2a68d9b2d3` adds a disabled, pilot-specific
+ECS Express renderer and project-scoped runner. All seven final-head checks
+passed on the implementation commit in
+[run 45876400922](https://github.com/Bepoadewale/davdeploy/actions/runs/45876400922);
+this handoff update will receive a new final-head CI run.
+Plan policy, complete cost, effective permissions, and authorized remote-state
+cloud lifecycle remain open. This does not prove Nova dispatch or cross-account
+execution; no AWS workload or hosted control-plane resource changed.
 All seven checks passed on final PR head `e917c30` in run
 [45776482608](https://github.com/Bepoadewale/davdeploy/actions/runs/45776482608),
 and all seven merged-main checks passed in run

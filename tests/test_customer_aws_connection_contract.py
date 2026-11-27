@@ -134,8 +134,11 @@ def test_public_template_host_publishes_append_only_hash_keyed_objects():
     assert "published_keys = setunion(var.retained_template_keys, toset(keys(local.current_template_sources)))" in configuration
     assert 'key    = each.key' in configuration
     assert 'source       = lookup(local.current_template_sources, each.key, null)' in configuration
-    assert "(local.template_key)            = local.template_source" in configuration
-    assert "(local.nova_apply_template_key) = local.nova_apply_template_source" in configuration
+    assert re.search(r"\(local\.template_key\)[ \t]*=[ \t]*local\.template_source", configuration)
+    assert re.search(
+        r"\(local\.nova_apply_template_key\)[ \t]*=[ \t]*local\.nova_apply_template_source",
+        configuration,
+    )
     assert "contains(keys(local.current_template_sources), each.key)" in configuration
     assert "prevent_destroy = true" in configuration
     assert "ignore_changes  = all" in configuration
@@ -200,7 +203,10 @@ def test_public_template_host_publishes_nova_apply_role_in_protected_collection(
 
     assert "customer-nova-apply-role.yaml" in configuration
     assert "customer-nova-apply-role-${local.nova_apply_template_hash}.yaml" in configuration
-    assert "(local.nova_apply_template_key) = local.nova_apply_template_source" in configuration
+    assert re.search(
+        r"\(local\.nova_apply_template_key\)[ \t]*=[ \t]*local\.nova_apply_template_source",
+        configuration,
+    )
     assert 'resource "aws_s3_object" "current_customer_nova_apply_role"' not in configuration
     assert "prevent_destroy = true" in configuration
     assert "ignore_changes  = all" in configuration
