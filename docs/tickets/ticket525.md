@@ -22,7 +22,10 @@ renderer.
 
 ## Current repo state
 
-- Backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`.
+- Backend `main` is `f300676aa3af32a76136947c4f4870cee498b5e6` (PR #532).
+- PR #531 recorded the hosted Nova plan attempt. Nova omitted requested
+  storage, relational-data, and queue requirements and failed before a saved
+  plan was produced; no customer workload was applied.
 - PR #519 has a disabled ECS Express renderer and its final source head
   `00697d7b6b84ed7d0ff0fef7effb7cf0037392e7` passed all seven checks in run
   `45903656967`.
@@ -102,8 +105,9 @@ renderer.
   absence while those legacy roles remain.
 - [x] The ECS Express renderer remains disabled and no customer workload is
   applied or certified by this package.
-- [ ] Focused tests, Terraform validation, documentation conventions,
-  `git diff --check`, and all final-head CI checks pass.
+- [x] Focused tests, Terraform validation, documentation conventions,
+  `git diff --check`, and all seven checks pass on branch head
+  `62d8117040b3469d58045490a40a840287018cdf`; rerun after this ticket update.
 - [x] No AWS resources or hosted control-plane resources are mutated.
 
 ## Acceptance status
@@ -112,7 +116,10 @@ The source changes are implemented and local validation passes. The connection
 service roles are provisioned from a customer-side CloudFormation template;
 the Terraform root now only reads those exact roles. The runner rejects role
 trust, tag, managed-policy, or inline-policy drift before Terraform and records
-a non-secret role-profile digest in its run result. Final-head CI is pending.
+a non-secret role-profile digest in its run result. GitHub Actions run
+`45927023925` passed all seven checks on head
+`62d8117040b3469d58045490a40a840287018cdf`; this ticket update needs its own
+fresh run.
 Effective permissions of the customer execution role remain unreviewed, and
 this change does not enable the renderer or satisfy approval-bound pricing,
 clean-room lifecycle, or authorized remote-state execution gates.
@@ -132,8 +139,9 @@ clean-room lifecycle, or authorized remote-state execution gates.
 - AWS `cloudformation validate-template` accepted the new template and reported
   its `ConnectionId` parameter and `CAPABILITY_NAMED_IAM` capability.
 - `scripts/check_doc_conventions.py` and `git diff --check` passed.
-- Final-head CI has not yet run; the open PR currently has only its earlier
-  ticket-only commit as its GitHub head.
+- GitHub Actions run `45927023925` passed all seven final-head checks on
+  `62d8117040b3469d58045490a40a840287018cdf`. A fresh run is required after
+  this ticket update.
 - No Terraform plan, apply, destroy, CloudFormation deployment, hosted
   control-plane mutation, or workload certification was performed.
 
