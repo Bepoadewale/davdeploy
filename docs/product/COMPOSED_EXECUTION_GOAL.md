@@ -57,8 +57,9 @@ The ECS Express implementation and evidence stack is:
   The service plan must bind to verified subnet IDs from the applied
   foundation state. Head `e5aff6f9` passed all seven checks in run
   [45913543343](https://github.com/Bepoadewale/davdeploy/actions/runs/45913543343);
-  ticket-status head `fca8dd0b` is pending its own final-head checks. No AWS,
-  hosted control-plane, state or lock mutation occurred.
+  ticket-status head `fca8dd0b` passed all seven checks in run
+  [45913894537](https://github.com/Bepoadewale/davdeploy/actions/runs/45913894537).
+  No AWS, hosted control-plane, state or lock mutation occurred.
 
 PR #519 remains an open draft with no recorded GitHub review and is based on
 its earlier source revision. PR #524 is an open draft that corrects pricing

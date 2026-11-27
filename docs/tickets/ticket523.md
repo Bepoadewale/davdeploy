@@ -49,9 +49,9 @@ complete.
 - PR #527 is an open draft stacked on #526. It documents the AWS action/resource
   map and confirms that the runner already stages foundation and ECS service
   plans; phase-specific least-privilege credentials and exact-plan policy are
-  still missing. Head `e5aff6f9` passed all seven checks in run `45913543343`;
-  ticket-status head `fca8dd0b` is pending final-head CI. It contains no policy
-  code or cloud execution.
+  still missing. Head `e5aff6f9` passed all seven checks in run `45913543343`,
+  and ticket-status head `fca8dd0b` passed all seven checks in run
+  `45913894537`. It contains no policy code or cloud execution.
 - The direct ECS Express lifecycle evidence in PR #437 and private Batch
   evidence in PR #517 satisfy the general customer-side lifecycle gate for
   those exact tested shapes; neither proves Nova dispatch.
@@ -80,9 +80,9 @@ complete.
 - PR #526 head `df82c553fcfeef388592b9b1a5ddeb0c787f1cae` passed all seven
   checks in run `45910551656`; it records the unbounded execution-role path.
 - PR #527 head `e5aff6f9` records the sourced AWS permission map and required
-  phase credentials. All seven checks passed in run `45913543343`; ticket-status
-  head `fca8dd0b` is pending final-head CI. No AWS mutation or Terraform
-  operation occurred.
+  phase credentials. All seven checks passed in run `45913543343` and
+  ticket-status run `45913894537`. No AWS mutation or Terraform operation
+  occurred.
 - A provider-generated saved plan from the PR #519 root was evaluated under
   #520 policy. It yielded three review findings and no policy denials; this is
   plan-policy evidence only, not remote-state runner or lifecycle evidence.
@@ -159,6 +159,8 @@ current run.
   `45909113939`.
 - Handoff head `9bddba795ea62eff0a7c07e7774057c1486a4f42` passed all seven
   final-head checks in run `45912889818`.
+- Handoff head `1bf8a6ed7ec79c4271b23fcb7277988e51a5dd8a` passed all seven
+  final-head checks in run `45914086980`.
 
 ## Boundaries
 

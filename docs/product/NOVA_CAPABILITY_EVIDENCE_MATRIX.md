@@ -19,9 +19,9 @@ without an STS session policy and that `administrator-pilot` can attach
 `45910551656`. PR #527 adds a sourced AWS action/resource map. It confirms the
 runner already stages foundation and service plans, but those phases still
 lack distinct least-privilege credentials and exact plan-bound policy. All
-seven checks passed on head `e5aff6f9` in run `45913543343`; ticket-status head
-`fca8dd0b` is pending its own CI. Both are documentation-only: the renderer
-remains disabled, and effective
+seven checks passed on head `e5aff6f9` in run `45913543343` and on
+ticket-status head `fca8dd0b` in run `45913894537`. Both are documentation-
+only: the renderer remains disabled, and effective
 role permissions plus an isolated runner lifecycle remain open. PR #517
 adds a backward-compatible private Batch Fargate network option and records
 one successful private endpoint job in direct same-account AWS evidence. Its
