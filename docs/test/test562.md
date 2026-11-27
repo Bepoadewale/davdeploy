@@ -46,8 +46,15 @@ control plane was released through the protected workflow documented in
 - `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify` passed
   2,095 tests; Ruff, Actions configuration, OpenAPI snapshot, and Compose
   checks passed. Documentation convention and diff checks passed.
-- Isolated clean-room cycle, PR CI, and a fresh hosted v24 plan-only result
-  remain pending.
+- Fresh isolated `make VENV=/private/tmp/davdeploy-nova-shape-cleanroom-562-venv local-proof`
+  passed on commit `d3ccf230`, including bootstrap, API smoke/contract,
+  customer-plan E2E, seed/trace, full verification, OpenAPI, and Compose. It
+  passed 2,095 tests with one pre-existing warning.
+- `make VENV=/private/tmp/davdeploy-nova-shape-cleanroom-562-venv clean-local`
+  removed the isolated Compose stack/volume, generated `.local`, and dedicated
+  venv. The venv, `.local`, and Compose containers were verified absent. The
+  protected `/Users/adewale/Projects/davdeploy/.venv-pr399/` was untouched.
+- PR review/CI and a fresh hosted v24 plan-only result remain pending.
 
 ## Teardown
 

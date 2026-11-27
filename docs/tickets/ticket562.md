@@ -60,7 +60,7 @@ untrusted field names or proposal data.
 - [x] Focused generation/review/run suite passes: 147 tests.
 - [x] Full `make verify` passes 2,095 tests; Ruff, Actions configuration,
   OpenAPI, Compose, docs conventions, and diff checks pass.
-- [ ] Required isolated clean-room proof passes.
+- [x] Required isolated clean-room proof passes.
 - [ ] PR review and all required current-head CI checks pass.
 - [ ] One fresh v24 run reaches an inspectable plan or a precise next blocker;
   no customer workload approval/apply/destroy occurs.
@@ -79,7 +79,12 @@ the fresh v24 hosted result remain pending.
 - `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify` — 2,095
   passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks
   passed. Documentation convention and diff checks also passed.
-- Isolated clean-room proof will be added before merge.
+- Fresh isolated `make VENV=/private/tmp/davdeploy-nova-shape-cleanroom-562-venv local-proof`
+  passed on commit `d3ccf230`. It passed bootstrap, API smoke/contract,
+  customer-plan E2E, seed/trace, full 2,095-test verification, OpenAPI, and
+  Compose checks. The matching `clean-local` removed only that worktree's
+  generated `.local`, dedicated venv, and Compose stack; absence was verified.
+- PR review/CI and hosted verification remain pending.
 
 ## Evidence files produced
 
