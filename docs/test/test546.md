@@ -55,9 +55,9 @@ The credential validator and allowed locations were not changed. Focused tests
 passed (161 tests); full `make verify` passed (2,029 tests), Ruff, Actions
 configuration, OpenAPI snapshot, and Docker Compose configuration, with one
 existing Starlette deprecation warning. PR CI run `45969981443` passed all
-seven checks on head `5486ee2417c72e792c3b021e043323ce79930338`. A final-head
-CI run for the evidence update is pending; v11 deployment/evaluation remain
-pending.
+seven checks on head `4adb02412408e4abd108980ec7d2c7bafe5bf9fa` (run
+`45970681227`). The documentation update recording this evidence will receive
+its own final-head CI run; v11 deployment/evaluation remain pending.
 
 ## Teardown
 

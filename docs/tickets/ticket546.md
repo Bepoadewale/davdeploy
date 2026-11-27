@@ -62,9 +62,9 @@ deployed by plan run `45964473463` and apply run `45965284428`.
 ## Acceptance status
 
 Prompt, fixed feedback, and regression tests are implemented and locally
-verified. GitHub Actions run `45969981443` passed all seven checks on the
-current PR head. Protected deployment and a fresh v11 hosted generation remain
-pending.
+verified. GitHub Actions run `45970681227` passed all seven checks on final
+head `4adb02412408e4abd108980ec7d2c7bafe5bf9fa`. Protected deployment and a
+fresh v11 hosted generation remain pending.
 
 ## Tests / validation performed
 
@@ -75,10 +75,9 @@ pending.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python` passed:
   config boundary, Ruff, 2,029 tests, OpenAPI snapshot, and Docker Compose
   configuration; 1 existing Starlette deprecation warning.
-- GitHub Actions run `45969981443`, head
-  `5486ee2417c72e792c3b021e043323ce79930338`: all seven required checks passed.
-- The documentation update recording the run will receive its own final-head
-  CI run. Protected deployment and v11 hosted evidence remain pending.
+- GitHub Actions run `45970681227`, head
+  `4adb02412408e4abd108980ec7d2c7bafe5bf9fa`: all seven required checks passed.
+- Protected deployment and v11 hosted evidence remain pending.
 
 ## Evidence files produced
 
