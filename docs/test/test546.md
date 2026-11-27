@@ -3,9 +3,23 @@
 Date: 2026-11-27
 Execution type: Hosted plan-only generation failure before CodeBuild
 Customer repository: `Bepoadewale/fitness-backend` (synthetic acceptance project)
-Control-plane commit: `4ecb7070bfa030041dd43958595cb24b5eaff54b`
+Commit: deployed control-plane `4ecb7070bfa030041dd43958595cb24b5eaff54b`
 AWS account: `654654474502` (verified control-plane account; no customer workload operation)
 AWS region: `us-east-1`
+
+## Resources created
+
+No Nova customer workload resources were created. The authorized control-plane
+release updated existing resources only.
+
+## Commands executed
+
+- Dispatched protected Terraform plan run `45964473463` for the v10 commit.
+- Reviewed the value-free Terraform summary and approved apply run
+  `45965284428` for its exact saved plan.
+- Verified migrations, six Lambda code hashes, and the API health endpoint.
+- Used the authenticated CLI to inspect allowlisted diagnostics and retry the
+  failed generation once after v10 deployment.
 
 ## Control-plane deployment
 
@@ -20,7 +34,7 @@ control-plane Lambda functions are Active with successful updates and the same
 code hash as the exact versioned release ZIP. The API health endpoint returned
 HTTP 200.
 
-## Hosted Nova retry
+## Observed result
 
 After v10 deployed, the authenticated workspace administrator retried run
 `3f27c5fc-75d6-4393-8035-1938035a5a00` once using a new idempotency key. Nova
@@ -43,12 +57,12 @@ configuration, OpenAPI snapshot, and Docker Compose configuration, with one
 existing Starlette deprecation warning. Hosted CI and v11 deployment/evaluation
 remain pending.
 
-## Teardown and evidence retention
+## Teardown
 
 No customer workload resources or plan artifacts were created. The control-plane
 release and run diagnostics remain as audit evidence. No cleanup was needed.
 
-## Boundary
+## Final boundary
 
 This run establishes only a bounded hosted generation failure. It does not
 establish a valid saved plan, customer approval, apply, application behavior,

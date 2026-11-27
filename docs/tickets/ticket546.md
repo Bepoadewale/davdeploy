@@ -59,6 +59,12 @@ deployed by plan run `45964473463` and apply run `45965284428`.
   reaches an inspectable saved plan or reports a bounded actionable failure
   before apply. The workload remains unapproved and unapplied.
 
+## Acceptance status
+
+Prompt, fixed feedback, and regression tests are implemented and locally
+verified. Hosted CI, protected deployment, and a fresh v11 hosted generation
+remain pending.
+
 ## Tests / validation performed
 
 - Hosted v10 retry: 2 attempts, 1 semantic repair, 12,079 input tokens,
@@ -70,7 +76,7 @@ deployed by plan run `45964473463` and apply run `45965284428`.
   configuration; 1 existing Starlette deprecation warning.
 - GitHub CI, protected deployment, and v11 hosted evidence remain pending.
 
-## Evidence files
+## Evidence files produced
 
 - `docs/test/test546.md` — v10 deployed hosted generation retry and outcome.
 
