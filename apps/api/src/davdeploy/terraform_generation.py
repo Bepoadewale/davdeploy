@@ -57,20 +57,26 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "24 characters). Copy reference IDs exactly from a declared resource_id; "
     "resource IDs are separate from Terraform names. Use target_resource_id in every "
     "health assertion and source_resource_id only for event_processing; both must "
-    "reference declared resources. "
-    "typed resource_reference objects for links. Never author Terraform expressions, "
-    "provider/backend configuration, modules, provisioners, shell commands, local file "
-    "reads, credentials or secret values. Health assertions are proposed requirements, "
+    "reference declared resources. Use typed resource_reference objects for links. Each "
+    "resource arguments object may contain "
+    "only literal JSON values for AWS provider resource attributes. Never add provider, "
+    "provisioner, connection, backend, required_providers, access_key, secret_key, "
+    "session_token, private_key, password, or user_data fields. Never author Terraform "
+    "interpolation/directives, file reads, shell commands, credentials or secret values. "
+    "Use a typed resource_reference for credentials only in a Lambda environment variable "
+    "whose name ends with _SECRET_ARN; use AWS-managed database master secrets instead of "
+    "password arguments. Omit all DavDeploy-prefixed tags because trusted code injects them. "
+    "Health assertions are proposed requirements, "
     "not evidence that a check ran. Use only the enumerated health assertion kinds and "
     "their bounded schema fields. Use only the fixed fixture IDs allowed by the schema; "
     "never invent URLs, hostnames, commands, headers, secrets or fixture IDs. "
     "Copy the trusted provenance and region below. "
     "If validation_feedback is present, it contains only fixed schema error codes, safe "
-    "field paths, and trusted correction guidance. Correct those issues using the original "
-    "approved_plan and trusted generation "
+    "field paths, allowlisted issue codes, and trusted correction guidance. Correct those "
+    "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v8"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v9"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -201,9 +207,22 @@ _RESOURCE_GRAPH_GUIDANCE = (
     "health target/source must reference a declared ID, and dependencies must be acyclic."
 )
 _RESOURCE_ARGUMENT_GUIDANCE = (
-    "Use supported resource arguments; remove provider/backend/provisioner fields, "
-    "Terraform expressions, credential values, and DavDeploy-reserved tags. Use typed "
-    "secret references only in supported secret ARN fields."
+    "Use only literal JSON values for AWS resource attributes. Remove provider, provisioner, "
+    "connection, backend, required_providers, access_key, secret_key, session_token, "
+    "private_key, password, and user_data fields."
+)
+_RESOURCE_EXPRESSION_GUIDANCE = (
+    "Use literal JSON values only; remove Terraform interpolation, directives, file reads, "
+    "template functions, and other expressions. Use typed resource_reference objects for links."
+)
+_RESOURCE_CREDENTIAL_GUIDANCE = (
+    "Never include a credential or secret value. Use a typed resource_reference only in a "
+    "Lambda environment variable ending in _SECRET_ARN; enable an AWS-managed database "
+    "master secret instead of setting a password."
+)
+_RESOURCE_RESERVED_TAG_GUIDANCE = (
+    "Remove every tag whose key starts with DavDeploy. Trusted execution code adds the "
+    "required ownership tags."
 )
 _RESOURCE_OUTPUT_GUIDANCE = (
     "Give each output a unique name and expose only supported values; a secret reference "
@@ -214,7 +233,20 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _ID_PATTERN_GUIDANCE,
         _RESOURCE_GRAPH_GUIDANCE,
         _RESOURCE_ARGUMENT_GUIDANCE,
+        _RESOURCE_EXPRESSION_GUIDANCE,
+        _RESOURCE_CREDENTIAL_GUIDANCE,
+        _RESOURCE_RESERVED_TAG_GUIDANCE,
         _RESOURCE_OUTPUT_GUIDANCE,
+    }
+)
+_ALLOWED_VALIDATION_ISSUES = frozenset(
+    {
+        "forbidden_argument_key",
+        "terraform_expression",
+        "credential_value",
+        "reserved_ownership_tag",
+        "duplicate_output_name",
+        "unsupported_secret_output",
     }
 )
 
@@ -257,6 +289,9 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
             ):
                 continue
             sanitized = {"code": item["code"], "field": item["field"]}
+            issue = item.get("issue")
+            if isinstance(issue, str) and issue in _ALLOWED_VALIDATION_ISSUES:
+                sanitized["issue"] = issue
             guidance = item.get("guidance")
             if isinstance(guidance, str) and guidance in _ALLOWED_FEEDBACK_GUIDANCE:
                 sanitized["guidance"] = guidance
@@ -458,11 +493,57 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
         entry = {"code": safe_code, "field": safe_field}
         context = item.get("ctx") or {}
         cause = context.get("error") if isinstance(context, dict) else None
+        issue = _validation_issue(safe_code, safe_field, cause)
+        if issue:
+            entry["issue"] = issue
         guidance = _validation_guidance(safe_code, safe_field, cause)
         if guidance:
             entry["guidance"] = guidance
         feedback.append(entry)
     return feedback or [{"code": "invalid", "field": "proposal"}]
+
+
+_RESOURCE_ARGUMENT_FEEDBACK = {
+    "generated arguments contain a forbidden field": (
+        "forbidden_argument_key",
+        _RESOURCE_ARGUMENT_GUIDANCE,
+    ),
+    "model-authored Terraform expressions are forbidden": (
+        "terraform_expression",
+        _RESOURCE_EXPRESSION_GUIDANCE,
+    ),
+    "credential and secret fields must use a typed secret_reference": (
+        "credential_value",
+        _RESOURCE_CREDENTIAL_GUIDANCE,
+    ),
+    "generated arguments cannot set reserved DavDeploy ownership tags": (
+        "reserved_ownership_tag",
+        _RESOURCE_RESERVED_TAG_GUIDANCE,
+    ),
+}
+_RESOURCE_OUTPUT_FEEDBACK = {
+    "generated output names must be unique": (
+        "duplicate_output_name",
+        _RESOURCE_OUTPUT_GUIDANCE,
+    ),
+    "secret_reference outputs must identify an RDS-managed master secret ARN": (
+        "unsupported_secret_output",
+        _RESOURCE_OUTPUT_GUIDANCE,
+    ),
+}
+
+
+def _resource_feedback(code: str, field: str, cause: Any = None) -> tuple[str, str] | None:
+    if code != "value_error" or field != "resources[*]" or not isinstance(cause, ValueError):
+        return None
+    return _RESOURCE_ARGUMENT_FEEDBACK.get(str(cause)) or _RESOURCE_OUTPUT_FEEDBACK.get(
+        str(cause)
+    )
+
+
+def _validation_issue(code: str, field: str, cause: Any = None) -> str | None:
+    result = _resource_feedback(code, field, cause)
+    return result[0] if result else None
 
 
 def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
@@ -483,21 +564,9 @@ def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None
         "reference must match a declared output type",
         "health assertions must target declared resources",
     }
-    resource_output_causes = {
-        "generated output names must be unique",
-        "secret_reference outputs must identify an RDS-managed master secret ARN",
-    }
-    resource_argument_causes = {
-        "model-authored Terraform expressions are forbidden",
-        "generated arguments contain a forbidden field",
-        "credential and secret fields must use a typed secret_reference",
-        "generated arguments cannot set reserved DavDeploy ownership tags",
-    }
-    if code == "value_error" and field == "resources[*]" and isinstance(cause, ValueError):
-        if str(cause) in resource_output_causes:
-            return _RESOURCE_OUTPUT_GUIDANCE
-        if str(cause) in resource_argument_causes:
-            return _RESOURCE_ARGUMENT_GUIDANCE
+    resource_feedback = _resource_feedback(code, field, cause)
+    if resource_feedback:
+        return resource_feedback[1]
     if (
         code == "value_error"
         and field == "proposal"
