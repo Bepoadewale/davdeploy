@@ -195,6 +195,58 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
 
 
 @pytest.mark.parametrize(
+    ("resource_update", "guidance"),
+    [
+        (
+            {"arguments": {"provider": "aws"}},
+            (
+                "Use supported resource arguments; remove provider/backend/provisioner "
+                "fields, Terraform expressions, credential values, and DavDeploy-reserved "
+                "tags. Use typed secret references only in supported secret ARN fields."
+            ),
+        ),
+        (
+            {
+                "outputs": [
+                    {"name": "endpoint", "value_type": "url"},
+                    {"name": "endpoint", "value_type": "url"},
+                ]
+            },
+            (
+                "Give each output a unique name and expose only supported values; a secret "
+                "reference output is allowed only for an RDS-managed master secret ARN."
+            ),
+        ),
+    ],
+)
+def test_resource_level_value_errors_receive_fixed_safe_guidance(resource_update, guidance):
+    resource = {
+        "resource_id": "api",
+        "resource_type": "aws_s3_bucket",
+        "name": "files",
+        "arguments": {},
+        "rationale": "Synthetic test resource.",
+    }
+    resource.update(resource_update)
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [resource],
+        "requirements": {"region": "us-east-1"},
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    assert feedback[0] == {
+        "code": "value_error",
+        "field": "resources[*]",
+        "guidance": guidance,
+    }
+
+
+@pytest.mark.parametrize(
     "arguments",
     [
         {"password": "plaintext"},
