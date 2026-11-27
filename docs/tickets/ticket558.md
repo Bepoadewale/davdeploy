@@ -1,6 +1,6 @@
 # ticket558 — diagnose Nova health-target repair failures
 
-PR: draft to be opened
+PR: [#558](https://github.com/Bepoadewale/davdeploy/pull/558) (draft)
 
 Branch: `fix/nova-rds-health-feedback-558`
 
@@ -43,25 +43,38 @@ and make the RDS target instruction direct enough for a relational workload.
 
 ## Acceptance criteria
 
-- [ ] Compatible RDS instance/cluster targets remain accepted; incompatible
+- [x] Compatible RDS instance/cluster targets remain accepted; incompatible
   pairs still fail before a runner can receive the proposal.
-- [ ] Repair feedback includes the recognized AWS resource type and canonical
+- [x] Repair feedback includes the recognized AWS resource type and canonical
   target field, but no resource ID, rationale, raw cause, secret, or proposal.
-- [ ] Bounded repair can correct a database assertion from an API target to an
+- [x] Bounded repair can correct a database assertion from an API target to an
   RDS target using the direct instruction.
-- [ ] Focused tests, full verification, clean-room cycle, docs checks, review,
-  and all required PR CI pass.
+- [x] Focused tests, full verification, and docs conventions pass.
+- [ ] Clean-room cycle, review, all required PR CI, and deployed hosted
+  plan-only evidence pass.
 - [ ] After protected deployment, a fresh review-only hosted run reaches an
   inspectable saved plan or a new precise blocker; no customer approval/apply.
 
 ## Acceptance status
 
-Bootstrap only. Implementation and validation remain pending.
+Implementation, focused/full local verification, and docs conventions
+complete. Clean-room proof, review, CI, and deployed hosted plan-only evidence
+remain pending.
 
 ## Tests / validation performed
 
-No tests run before implementation. Prior deployment evidence is in
-`docs/test/test557.md` and the hosted v19 diagnostic is recorded there.
+Focused test command:
+
+```text
+PYTHONPATH=apps/api/src python -m pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py tests/test_nova_plan_runs.py tests/test_customer_plan_review.py
+```
+
+Result: 196 passed. `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399
+verify` passed with 2,084 tests, lint, OpenAPI snapshot, and Compose config.
+Ruff, `git diff --check`, and both CI documentation/configuration scripts
+passed. Clean-room proof, review, CI, and deployed hosted plan-only evidence
+remain pending. Prior deployment evidence is in
+`docs/test/test557.md`; the hosted v19 diagnostic is recorded there.
 
 ## Evidence files produced
 

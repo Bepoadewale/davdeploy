@@ -51,3 +51,15 @@ No customer workload resources were created, so no teardown was needed.
 This baseline failure does not prove SQL connectivity or write/read behavior,
 an inspectable saved plan, pricing, policy acceptance, approval, apply,
 observation, lifecycle recovery, destroy, or absence.
+
+## Local implementation verification
+
+- Focused contract/generation/run/review tests: 196 passed.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`: 2,084
+  tests passed; lint, OpenAPI snapshot check, and Compose config passed.
+- `ruff check` on the changed source and tests passed.
+- `git diff --check` passed.
+- CI documentation conventions and Actions configuration boundary scripts
+  passed for PR #558.
+- Clean-room cycle, PR CI/review, deployment, and a fresh hosted plan-only
+  attempt remain pending.
