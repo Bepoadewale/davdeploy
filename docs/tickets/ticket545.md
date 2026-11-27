@@ -45,7 +45,7 @@ and fixed feedback, without weakening validation.
 - [x] Credentials and malformed IDs receive specific fixed, allowlisted
   guidance in the repair loop and hosted diagnostics.
 - [x] Raw causes, input values, generated proposal text, and secrets remain hidden.
-- [ ] Required hosted CI checks pass.
+- [x] All seven required hosted CI checks pass.
 - [ ] The one post-deployment v10 retry produces an inspectable plan or a
   bounded actionable failure before CodeBuild. No customer workload is applied.
 
@@ -60,8 +60,10 @@ v10 retry are pending. The workload remains unapproved and unapplied.
 - Full `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python`:
   2029 passed, 1 existing Starlette deprecation warning; Actions boundary,
   Ruff, OpenAPI snapshot, and Docker Compose configuration checks passed.
-- Documentation conventions and `git diff --check`: pending final run.
-- Hosted CI: pending.
+- Documentation conventions and `git diff --check`: passed before this CI
+  evidence update.
+- GitHub Actions run `45962603764`, head `e4ccbdf2da2922dfc33e90c16f514ae7154070bb`:
+  all seven required checks passed.
 
 ## Evidence files produced
 
