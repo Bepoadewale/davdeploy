@@ -42,12 +42,12 @@ the stored session in terminal output.
 - [x] Missing items remain distinguishable from Keychain failures.
 - [x] Errors do not include secret values or native Keychain output.
 - [x] Focused authentication tests and Ruff pass locally.
-- [ ] Required hosted CI passes.
+- [x] All seven required hosted CI checks pass (run `45928984721`).
 
 ## Acceptance status
 
 - [x] Native Keychain read is implemented and locally verified.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI run `45928984721` passed all seven checks.
 - [ ] CLI-only repository discovery and hosted plan retry are complete.
 
 ## Tests / validation performed
@@ -55,6 +55,7 @@ the stored session in terminal output.
 - `uv run --project . --extra dev pytest -q tests/test_cli_auth.py` — 11 passed.
 - `uv run --project . --extra dev ruff check apps/api/src/davdeploy/cli_auth.py tests/test_cli_auth.py` — passed.
 - `git diff --check` — passed.
+- Hosted CI run `45928984721` — all seven checks passed.
 - Using the stored session through `resolve_token` verified `/api/v1/me` as a
   workspace administrator and read the verified plan-only connection; no token
   or Keychain value was emitted.
