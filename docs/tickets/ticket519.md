@@ -13,7 +13,7 @@ execution.
 
 ## Current repo state
 
-- Backend `main` is `f300676aa3af32a76136947c4f4870cee498b5e6` (PR #532).
+- Backend `main` is `c714fcb9686653c8e3ee36a334171b9deb4b92f3` (PR #538).
   PR #531 documented a hosted Nova attempt that failed before a saved plan
   existed; PR #532 preserves explicit storage, database, and queue requirements
   in Nova intent. Neither changed the hosted runtime.
@@ -48,6 +48,14 @@ execution.
 - PR #526 records that the current runner can assume an administrator role
   without an exact-plan session policy. PR #529's compact ECS policy remains a
   design candidate; no ECS plan-bound policy is implemented or supported.
+- PR #535's ECS session-boundary design merged into this feature branch as
+  `65423bd073871d446a151fe2d1b347d336e67305`; it remains documentation-only.
+  PR #536's exact-resource session-policy deny merged to `main` at
+  `c58a2d4a6f3ce45712641e47a4aec52f8181d42b`. It is source-only and does not
+  establish live AWS policy evaluation.
+- PR #539 integrated current `main` into this feature branch as
+  `a9494383e5634edcf66c056767957cdfe7ee68cc`; all seven checks passed on that
+  sync head in run `45938283518`. The renderer remains disabled.
 - Current cloud-execution gates and hosted control-plane configuration must
   remain untouched by this PR.
 
@@ -109,9 +117,9 @@ execution.
   revision and budget.
 - [ ] The renderer passes a clean-room local lifecycle cycle and an authorized
   isolated cloud cycle using project-scoped remote state.
-- [x] All seven GitHub checks passed on head
-  `be87809f763f33d28aeca4daaa6d3d10ec932a7d` in run `45928093637`; rerun after
-  this ticket update is pushed.
+- [x] All seven GitHub checks passed on PR #539's integration head
+  `a9494383e5634edcf66c056767957cdfe7ee68cc` in run `45938283518`; this ticket
+  refresh will receive its own final-head checks before merge.
 - [x] No hosted control-plane, runtime, Terraform state, or lock resource was
   accessed or mutated by this PR.
 
@@ -138,9 +146,10 @@ tested resource shape, but it is not Nova-originated execution proof.
 - Terraform monitor snapshot: 75 terminal records, zero active operations.
 - Existing AWS evidence remains `docs/test/test437.md`; it is not relabeled as
   Nova-run evidence. No AWS or hosted-control-plane resource was changed.
-- GitHub Actions run `45928093637` passed all seven checks on source head
-  `be87809f763f33d28aeca4daaa6d3d10ec932a7d`; this evidence update requires a
-  fresh run.
+- PR #539 integration head `a9494383e5634edcf66c056767957cdfe7ee68cc` passed
+  all seven checks in run
+  [45938283518](https://github.com/Bepoadewale/davdeploy/actions/runs/45938283518).
+- No new cloud operation is part of this ticket refresh.
 
 ## Boundaries
 
