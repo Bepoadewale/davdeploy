@@ -46,19 +46,22 @@ The ECS Express implementation and evidence stack is:
 - PR #524 remains an open draft; its prior-head run
   [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966)
   passed all seven checks. Check its current head before merging.
-- PR #535 is an open documentation draft on the #519 branch. It corrects the
-  ECS policy design to preserve an explicit action boundary against direct
-  same-account role-session resource-policy grants. Its current head passed
-  all seven checks in run [45930876536](https://github.com/Bepoadewale/davdeploy/actions/runs/45930876536).
-- PR #536 is an open draft on current `main`. It adds exact-resource
-  `Deny`/`NotAction` statements to the Nova apply session policy, retains the
-  out-of-plan resource deny, and bumps the policy version to v2. Full local
-  tests passed (2,021); final-head CI run
-  [45932732854](https://github.com/Bepoadewale/davdeploy/actions/runs/45932732854)
+- PR #535's documentation-only security handoff merged into the #519 feature
+  branch as `65423bd073871d446a151fe2d1b347d336e67305` after all seven checks
+  passed in run [45930431179](https://github.com/Bepoadewale/davdeploy/actions/runs/45930431179).
+- PR #536's exact-resource `Deny`/`NotAction` session-policy hardening merged to
+  `main` as `c58a2d4a6f3ce45712641e47a4aec52f8181d42b`. It retains the
+  out-of-plan resource deny and bumps policy version to v2. Full local tests
+  passed (2,021); final-head CI run
+  [45933859275](https://github.com/Bepoadewale/davdeploy/actions/runs/45933859275)
   passed all seven checks, including the isolated local end-to-end workflow.
   A three-service S3/SQS/DynamoDB policy overflows STS's 2,048-byte limit and
-  fails closed at 2,641 bytes. This change is not merged or deployed, and does
-  not claim AWS policy-evaluation or customer lifecycle evidence.
+  fails closed at 2,641 bytes. This is source-only hardening: no AWS policy
+  evaluation or customer lifecycle evidence is claimed.
+- PR #519 remains a draft renderer with no source deployment. Its feature
+  branch now includes #535 but conflicts with current `main` following #536;
+  resolve this through a separate reviewed PR into the feature branch before
+  proceeding with renderer gates.
 
 The current product boundary is explicit: direct same-account ECS Express
 and private Batch tests satisfy the general customer-side lifecycle gate only
