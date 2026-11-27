@@ -48,6 +48,31 @@ if status != errSecSuccess {
 }
 """
 
+_SWIFT_KEYCHAIN_READ = r"""
+import Foundation
+import Security
+
+let input = FileHandle.standardInput.readDataToEndOfFile()
+let payload = try JSONSerialization.jsonObject(with: input) as! [String: String]
+let query: [String: Any] = [
+    kSecClass as String: kSecClassGenericPassword,
+    kSecAttrService as String: payload["service"]!,
+    kSecAttrAccount as String: payload["account"]!,
+    kSecReturnData as String: true,
+    kSecMatchLimit as String: kSecMatchLimitOne
+]
+var result: CFTypeRef?
+let status = SecItemCopyMatching(query as CFDictionary, &result)
+if status == errSecItemNotFound {
+    exit(44)
+}
+guard status == errSecSuccess, let data = result as? Data, !data.isEmpty else {
+    fputs("Could not read the DavDeploy CLI session from Keychain.\n", stderr)
+    exit(1)
+}
+FileHandle.standardOutput.write(data)
+"""
+
 
 @dataclass
 class CliSession:
@@ -61,6 +86,23 @@ class CliSession:
 
 
 def _keychain_secret() -> str | None:
+    swift = shutil.which("swift")
+    if sys.platform == "darwin" and swift:
+        payload = json.dumps({"service": KEYCHAIN_SERVICE, "account": KEYCHAIN_ACCOUNT})
+        result = subprocess.run(
+            [swift, "-e", _SWIFT_KEYCHAIN_READ],
+            input=payload,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        if result.returncode == 44:
+            return None
+        if result.returncode != 0:
+            raise RuntimeError("Could not read the DavDeploy CLI session from macOS Keychain.")
+        return result.stdout.strip()
+
     security = shutil.which("security")
     if not security:
         raise RuntimeError("macOS Keychain is unavailable; use DAVDEPLOY_TOKEN instead.")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import time
 from types import SimpleNamespace
 
@@ -28,6 +29,55 @@ def _jwt_with_exp(expiry: int) -> str:
 
     segment = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     return f"header.{segment}.signature"
+
+
+def test_keychain_secret_uses_native_swift_access_without_logging_value(monkeypatch):
+    secret = '{"identity_token":"synthetic-token"}'
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, stdout=secret, stderr="")
+
+    monkeypatch.setattr(cli_auth.sys, "platform", "darwin")
+    monkeypatch.setattr(cli_auth.shutil, "which", lambda name: "/usr/bin/swift" if name == "swift" else None)
+    monkeypatch.setattr(cli_auth.subprocess, "run", fake_run)
+
+    assert cli_auth._keychain_secret() == secret
+    assert calls[0][0][:2] == ["/usr/bin/swift", "-e"]
+    assert json.loads(calls[0][1]["input"]) == {
+        "service": cli_auth.KEYCHAIN_SERVICE,
+        "account": cli_auth.KEYCHAIN_ACCOUNT,
+    }
+    assert calls[0][1]["timeout"] == 45
+
+
+def test_keychain_secret_returns_none_for_missing_native_item(monkeypatch):
+    monkeypatch.setattr(cli_auth.sys, "platform", "darwin")
+    monkeypatch.setattr(cli_auth.shutil, "which", lambda name: "/usr/bin/swift" if name == "swift" else None)
+    monkeypatch.setattr(
+        cli_auth.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 44, stdout="", stderr=""),
+    )
+
+    assert cli_auth._keychain_secret() is None
+
+
+def test_keychain_secret_hides_native_keychain_errors(monkeypatch):
+    monkeypatch.setattr(cli_auth.sys, "platform", "darwin")
+    monkeypatch.setattr(cli_auth.shutil, "which", lambda name: "/usr/bin/swift" if name == "swift" else None)
+    monkeypatch.setattr(
+        cli_auth.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 1, stdout="synthetic-secret", stderr="synthetic-secret detail"
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Could not read the DavDeploy CLI session") as error:
+        cli_auth._keychain_secret()
+    assert "synthetic-secret" not in str(error.value)
 
 
 def test_login_requires_password_and_totp_and_stores_only_verified_session(monkeypatch):
