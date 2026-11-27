@@ -17,6 +17,7 @@ from davdeploy.terraform_generation import (
     _HEALTH_PAYLOAD_SIZE_GUIDANCE,
     _ID_PATTERN_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
+    _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
     _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
@@ -130,7 +131,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "fixed vocabulary: api, web, app, db, files, bucket, table, queue" in document["task"]
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v17"
+    assert "without weakening customer requirements or inventing resource IDs" in document["task"]
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v18"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -486,6 +488,16 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
         ("references must target a declared resource", "unknown_resource_reference"),
         ("reference must match a declared output type", "reference_type_mismatch"),
         ("health assertions must target declared resources", "unknown_health_target"),
+        ("proposal assumptions and limitations must be bounded text", "invalid_assumption_text"),
+        (
+            "secret_reference values may only populate a Lambda secret ARN environment variable",
+            "invalid_secret_reference_location",
+        ),
+        ("health assertion target resource type is incompatible", "incompatible_health_target"),
+        ("event probes must reference a declared source queue", "unknown_event_source"),
+        ("event probe source must be an SQS queue", "unsupported_event_source"),
+        ("event probes require a declared SQS-to-Lambda event binding", "missing_event_binding"),
+        ("cost assumptions must target declared resources", "unknown_cost_resource"),
     ],
 )
 def test_known_graph_validator_causes_map_to_distinct_fixed_feedback(cause, issue):
@@ -495,6 +507,28 @@ def test_known_graph_validator_causes_map_to_distinct_fixed_feedback(cause, issu
     guidance = _validation_guidance("value_error", "proposal", error)
     assert guidance == _GRAPH_VALIDATION_FEEDBACK[cause][1]
     assert cause not in guidance
+    failure = NovaTerraformGenerationFailed(
+        "safe failure",
+        attempt_count=1,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=(
+            {"code": "value_error", "field": "proposal", "issue": issue, "guidance": guidance},
+        ),
+    )
+    assert failure.validation_feedback == (
+        {"code": "value_error", "field": "proposal", "issue": issue, "guidance": guidance},
+    )
+
+
+def test_unrecognized_proposal_validator_message_is_never_returned():
+    private_cause = ValueError("untrusted secret-like value must-not-escape")
+
+    assert _validation_issue("value_error", "proposal", private_cause) is None
+    guidance = _validation_guidance("value_error", "proposal", private_cause)
+    assert guidance == _RESOURCE_GRAPH_GUIDANCE
+    assert "must-not-escape" not in guidance
+    assert "untrusted secret-like value" not in guidance
 
 
 @pytest.mark.parametrize(
