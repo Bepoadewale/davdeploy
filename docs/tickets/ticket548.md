@@ -43,7 +43,8 @@ initializes the backend or applies it.
   `0600`.
 - The manifest binds the saved-plan digest, timestamp, AWS account, region,
   backend bucket/key/lock table, template bucket, Terraform version, Git commit,
-  and a fingerprint of Terraform/template source.
+  and a fingerprint of Terraform configuration, CloudFormation templates, the
+  shell entrypoint, and the manifest verifier itself.
 - The apply command requires `apply-saved-plan <directory> <reviewed-sha256>`
   and the existing explicit confirmation variable. It rejects tampering,
   changed context/source, symlinks, incorrect artifact paths, and the old
@@ -56,6 +57,8 @@ initializes the backend or applies it.
 - [x] Apply accepts only a saved plan and a valid reviewed digest.
 - [x] Manifest verification binds plan bytes and target/account/backend/source
       context; mismatches fail before Terraform apply.
+- [x] Changes to either helper used during apply or manifest verification
+      invalidate the reviewed plan.
 - [x] Apply passes the exact verified plan file to Terraform and does not
       recompute a plan or use `-auto-approve`.
 - [x] Plan artifacts are stored under ignored local storage with restrictive
@@ -70,7 +73,7 @@ initializes the backend or applies it.
 ## Acceptance status
 
 The implementation and local validations are complete on commit
-`cdde907d1ee0b1a067b4c7a39f443f134451fb42`. Required PR CI and final review
+`d2b879811e1dd143597a060154ebae0916d5e058`. Required PR CI and final review
 remain open. No AWS plan or apply is claimed.
 
 ## Tests / validation performed

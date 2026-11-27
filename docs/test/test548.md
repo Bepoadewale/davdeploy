@@ -6,7 +6,7 @@
 - Repository: `Bepoadewale/davdeploy`
 - Customer repository: N/A; platform-owned helper change
 - Branch: `fix/template-host-saved-plan-20261127`
-- Commit: `cdde907d1ee0b1a067b4c7a39f443f134451fb42`
+- Commit: `d2b879811e1dd143597a060154ebae0916d5e058`
 - Pull request: [#548](https://github.com/Bepoadewale/davdeploy/pull/548)
 - AWS account: None; no AWS commands or credentials were used
 - AWS region: None
@@ -18,6 +18,7 @@
 - Focused pytest for `tests/test_customer_aws_connection_contract.py` and
   `tests/test_template_host_saved_plan.py` — 17 passed using the existing local
   Python test environment.
+- `ruff check scripts/template_host_saved_plan.py tests/test_template_host_saved_plan.py` — passed.
 - `terraform -chdir=infrastructure/terraform/connection-template-host fmt -check -recursive` — passed.
 - In a temporary copy of the root and its two YAML templates,
   `terraform init -backend=false -input=false` and `terraform validate` — passed
@@ -38,8 +39,10 @@
   causes Terraform to receive exactly the saved-plan path; a tampered plan and
   the old unbound `apply` operation fail before apply. The manifest checks also
   reject permissive files, symlinked plans, changed backend/account context, and
-  changed Terraform/template sources. The fake AWS command returns only the
-  expected fixture account ID.
+  changed Terraform/template sources. Separate assertions confirm changes to
+  `scripts/customer-aws-template-host.sh` and
+  `scripts/template_host_saved_plan.py` invalidate the saved plan. The fake AWS
+  command returns only the expected fixture account ID.
 
 ## Observed result
 
