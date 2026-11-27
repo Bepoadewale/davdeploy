@@ -711,6 +711,11 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                             "copy reference IDs exactly from a declared resource_id."
                         ),
                     },
+                    {
+                        "code": "missing",
+                        "field": "cost_assumptions[*].resource_id",
+                        "guidance": ["untrusted non-string guidance"],
+                    },
                     {"code": "invalid", "field": "private_api_key_leak_me"},
                 ),
             )
@@ -744,6 +749,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                     "copy reference IDs exactly from a declared resource_id."
                 ),
             },
+            {"code": "missing", "field": "cost_assumptions[*].resource_id"},
         ],
     }
     assert "private_api_key_leak_me" not in json.dumps(failed)

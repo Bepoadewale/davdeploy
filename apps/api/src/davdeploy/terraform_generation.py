@@ -243,8 +243,9 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
             ):
                 continue
             sanitized = {"code": item["code"], "field": item["field"]}
-            if item.get("guidance") in _ALLOWED_FEEDBACK_GUIDANCE:
-                sanitized["guidance"] = item["guidance"]
+            guidance = item.get("guidance")
+            if isinstance(guidance, str) and guidance in _ALLOWED_FEEDBACK_GUIDANCE:
+                sanitized["guidance"] = guidance
             sanitized_feedback.append(sanitized)
         self.validation_feedback = tuple(sanitized_feedback)
 
