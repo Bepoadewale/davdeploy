@@ -56,8 +56,8 @@ passed; this PR's final-head checks are pending.
 ## Tests / validation performed
 
 - `git diff --check` — passed.
-- Documentation-convention check and final-head GitHub CI are pending ticket
-  creation on this PR.
+- `GITHUB_PR_NUMBER=540 python3 scripts/check_doc_conventions.py` — passed.
+- Final-head GitHub Actions checks are pending.
 - No AWS or Terraform operation was run.
 
 ## Evidence files produced
