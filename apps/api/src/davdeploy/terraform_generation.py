@@ -73,6 +73,37 @@ _GENERIC_VALIDATION_GUIDANCE = (
     "with every required field using its exact JSON type and an allowed value. Preserve the trusted "
     "revision, region, account, and context exactly; do not infer or change them."
 )
+_UNKNOWN_RESOURCE_FIELD_GUIDANCE = (
+    "Correct the indicated resources[*] field to match the typed deployment contract. Use the exact "
+    "JSON type and allowed value for that field; preserve the declared resource IDs and trusted context."
+)
+_UNKNOWN_ARGUMENTS_FIELD_GUIDANCE = (
+    "Correct resources[*].arguments to match the selected AWS provider resource schema. Use literal "
+    "JSON values only; never add Terraform expressions, credentials, provider/backend settings, "
+    "provisioners, or file and shell operations."
+)
+_UNKNOWN_OUTPUT_FIELD_GUIDANCE = (
+    "Correct the indicated resources[*].outputs field to the typed output contract. Use a unique "
+    "output name, a supported value type, and a declared provider output path; secret references are "
+    "allowed only for an RDS-managed master secret ARN."
+)
+_UNKNOWN_HEALTH_FIELD_GUIDANCE = (
+    "Correct the indicated health_assertions[*] field to the selected assertion kind's typed schema. "
+    "Use only supported fields and reference declared resource IDs. A proposed assertion is not "
+    "evidence that a health check ran."
+)
+_UNKNOWN_COST_FIELD_GUIDANCE = (
+    "Correct the indicated cost_assumptions[*] field to the typed cost schema. Reference a declared "
+    "resource ID and report only supported usage assumptions; unknown prices must remain explicit."
+)
+_UNKNOWN_REQUIREMENTS_FIELD_GUIDANCE = (
+    "Correct the indicated requirements field to its exact typed contract and allowed value. Preserve "
+    "the trusted region, account, revision, and context."
+)
+_UNKNOWN_CONTRACT_FIELD_GUIDANCE = (
+    "Correct the indicated contract field to its exact JSON type and allowed schema value. Regenerate "
+    "the complete proposal while preserving all trusted context exactly."
+)
 
 NOVA_TERRAFORM_GENERATION_TASK = (
     "Generate the complete typed deployment proposal for this architecture and set "
@@ -119,7 +150,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v14"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v15"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -331,6 +362,13 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _RESOURCE_CREDENTIAL_GUIDANCE,
         _RESOURCE_RESERVED_TAG_GUIDANCE,
         _RESOURCE_OUTPUT_GUIDANCE,
+        _UNKNOWN_RESOURCE_FIELD_GUIDANCE,
+        _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
+        _UNKNOWN_OUTPUT_FIELD_GUIDANCE,
+        _UNKNOWN_HEALTH_FIELD_GUIDANCE,
+        _UNKNOWN_COST_FIELD_GUIDANCE,
+        _UNKNOWN_REQUIREMENTS_FIELD_GUIDANCE,
+        _UNKNOWN_CONTRACT_FIELD_GUIDANCE,
     }
 )
 _ALLOWED_VALIDATION_ISSUES = frozenset(
@@ -378,11 +416,13 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
         )
         sanitized_feedback = []
         for item in validation_feedback[:_MAX_VALIDATION_FEEDBACK]:
-            generic_invalid = (
+            safe_invalid = (
                 isinstance(item, dict)
                 and item.get("code") == "invalid"
-                and item.get("field") == "proposal"
-                and item.get("guidance") == _GENERIC_VALIDATION_GUIDANCE
+                and isinstance(item.get("field"), str)
+                and _is_canonical_feedback_path(item["field"])
+                and isinstance(item.get("guidance"), str)
+                and item.get("guidance") in _ALLOWED_FEEDBACK_GUIDANCE
             )
             if (
                 not isinstance(item, dict)
@@ -390,7 +430,7 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
                 or not (
                     item.get("code") in _ALLOWED_PYDANTIC_ERROR_CODES
                     or item.get("code") == "trusted_context_mismatch"
-                    or generic_invalid
+                    or safe_invalid
                 )
                 or not isinstance(item.get("field"), str)
                 or not _SAFE_FEEDBACK_FIELD.fullmatch(item["field"])
@@ -598,9 +638,7 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
         code = str(item.get("type") or "invalid")
         safe_code = code if code in _ALLOWED_PYDANTIC_ERROR_CODES else "invalid"
         safe_field = (
-            "proposal"
-            if safe_code == "invalid"
-            else _canonical_field_path(item.get("loc") or ())
+            _canonical_field_path(item.get("loc") or ())
         )
         entry = {"code": safe_code, "field": safe_field}
         context = item.get("ctx") or {}
@@ -669,7 +707,7 @@ def _graph_feedback(code: str, field: str, cause: Any = None) -> tuple[str, str]
 
 def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
     if code == "invalid":
-        return _GENERIC_VALIDATION_GUIDANCE
+        return _unknown_validation_guidance(field)
     if code == "string_pattern_mismatch" and field == "resources[*].name":
         return _RESOURCE_NAME_GUIDANCE
     identifier_fields = {
@@ -691,7 +729,38 @@ def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None
     return None
 
 
+def _unknown_validation_guidance(field: str) -> str:
+    """Choose fixed guidance using only a canonical contract field path."""
+
+    if field == "resources[*].name":
+        return _RESOURCE_NAME_GUIDANCE
+    if field in {
+        "resources[*].resource_id",
+        "health_assertions[*].target_resource_id",
+        "health_assertions[*].source_resource_id",
+        "cost_assumptions[*].resource_id",
+    }:
+        return _ID_PATTERN_GUIDANCE
+    if field == "resources[*].arguments" or field.startswith("resources[*].arguments."):
+        return _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE
+    if field == "resources[*].outputs" or field.startswith("resources[*].outputs["):
+        return _UNKNOWN_OUTPUT_FIELD_GUIDANCE
+    if field.startswith("resources[*]."):
+        return _UNKNOWN_RESOURCE_FIELD_GUIDANCE
+    if field.startswith("health_assertions[*]."):
+        return _UNKNOWN_HEALTH_FIELD_GUIDANCE
+    if field.startswith("cost_assumptions[*]."):
+        return _UNKNOWN_COST_FIELD_GUIDANCE
+    if field.startswith("requirements."):
+        return _UNKNOWN_REQUIREMENTS_FIELD_GUIDANCE
+    if field == "proposal":
+        return _GENERIC_VALIDATION_GUIDANCE
+    return _UNKNOWN_CONTRACT_FIELD_GUIDANCE
+
+
 def _canonical_field_path(location: Any) -> str:
+    if not isinstance(location, (tuple, list)):
+        return "proposal"
     parts: list[str] = []
     for part in location:
         if isinstance(part, int):
@@ -713,6 +782,18 @@ def _canonical_field_path(location: Any) -> str:
         return "proposal"
     result = ".".join(parts)
     return result.replace(".[*]", "[*]")
+
+
+def _is_canonical_feedback_path(field: str) -> bool:
+    """Accept only field paths produced by the schema allowlist canonicalizer."""
+
+    if not isinstance(field, str) or not _SAFE_FEEDBACK_FIELD.fullmatch(field):
+        return False
+    tokens = re.findall(r"\[\*\]|[A-Za-z_][A-Za-z0-9_]*", field)
+    if not tokens:
+        return False
+    location = tuple(0 if token == "[*]" else token for token in tokens)
+    return _canonical_field_path(location) == field
 
 
 def _trusted_context_feedback(
