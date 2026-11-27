@@ -1,8 +1,9 @@
 # ticket529 — Add a plan-bound ECS Express service apply policy
 
-PR: #529 (draft; stacked on PR #527)
+Original PR: #529 (closed unmerged when its base branch was deleted)
+Replacement PR: #533 (draft; design review)
 Branch: `feat/ecs-express-apply-policy-529`
-Base: PR #527 (`feat/ecs-express-plan-scope-527`)
+Replacement base: PR #519 (`feat/ecs-express-renderer-519`)
 
 ## Problem / goal
 
@@ -45,7 +46,11 @@ customer apply role to make the prototype fit.
 - Current AWS documentation confirms ECS does not support resource-based
   policies. A follow-up local size check of a compact action-only session
   policy measured 424 characters for create, 404 for update, and 288 for
-  delete. This is only a candidate: no fixed role policy with exact resources
+  delete. Those measurements omit a proven explicit deny for cross-service
+  resource-policy grants directly to the assumed role session. AWS IAM
+  documents that such a same-account grant can bypass an implicit session
+  policy deny. Therefore those measurements do not establish a safe boundary
+  or that the complete policy fits. No fixed role policy with exact resources
   and conditions has been implemented or IAM-simulated, so the candidate is
   not executable or approved.
 - No AWS resource, hosted control-plane runtime, Terraform state, or lock is
@@ -65,14 +70,19 @@ customer apply role to make the prototype fit.
   and [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html).
 - AWS [STS session tags](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_session-tags.html)
   and [IAM policy variables](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html).
+- AWS [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html)
+  explains when same-account resource-policy grants to assumed role-session
+  principals bypass an implicit session-policy deny.
 - AWS [ECS IAM behavior](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/security_iam_service-with-iam.html): ECS does not support resource-based policies; its documented identity-based and tag-based controls must define the caller boundary.
 
 ## Work planned for the PR
 
-1. Finalize the tag-conditioned role-policy design in
+1. Finalize a tag-conditioned role-policy design in
    [`ECS_EXPRESS_APPLY_POLICY.md`](../security/ECS_EXPRESS_APPLY_POLICY.md).
-   Derive all dynamic values from the validated saved plan; use a short,
-   allowlisted STS session-tag set and a compact action-only session policy.
+   Derive dynamic values from the validated saved plan; preserve a tested
+   explicit deny boundary for direct same-account resource-policy grants to
+   the session principal, and redesign the credentials if the complete policy
+   exceeds the STS size limit.
 2. Bind `iam:PassRole` to the exact connection-scoped task execution and
    infrastructure roles and their respective `iam:PassedToService` values.
 3. Add only the provider and AWS dependent actions needed for this staged
@@ -105,6 +115,8 @@ customer apply role to make the prototype fit.
 - [ ] The fixed apply-role ceiling, role-profile verification, IAM simulation,
   policy digest, credential issuance, and saved-plan apply contract agree on
   the same policy version and scope.
+- [ ] Same-account resource-policy grants directly to the role session cannot
+  bypass the approved action boundary; tests exercise this IAM policy behavior.
 - [ ] Unknown IDs, unverified dependent actions, replacements, unsupported
   changes, missing constraints, role drift, and STS policy-size overflow fail
   closed.

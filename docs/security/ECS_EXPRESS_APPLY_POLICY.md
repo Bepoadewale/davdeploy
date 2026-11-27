@@ -23,23 +23,32 @@ provider also makes read calls. A resource list that merely fits the size
 limit is not sufficient: every action, supported resource type, condition key,
 and provider call must match current AWS authorization behavior.
 
-AWS also documents that ECS does not support resource-based policies. That
-matters to the size failure: the explicit `Deny`/`NotResource` statement in the
-shared S3/SQS/DynamoDB session-policy builder is unnecessary for an ECS-only
-session. Keep that defense in shared profiles where it is needed; do not copy
-it into the ECS policy. A compact ECS session policy can limit the action set,
-while the verified fixed apply-role policy enforces exact resource, tag,
-subnet, CPU/memory, cluster, and `iam:PassRole` boundaries. This is only a
-candidate until its policy stays below STS's hard limit and IAM simulation
-proves the full condition context.
+AWS documents that ECS itself does not support resource-based policies. That
+does not establish that an ECS session policy can safely omit its explicit
+deny guard: the assumed role may be named as a principal by a resource policy
+in another same-account AWS service. AWS documents that a resource policy
+granting directly to a role-session principal can bypass an implicit deny in
+the role policy, permissions boundary, or session policy. See [AWS IAM policy
+evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html).
+Therefore, the action-only session policy measured below is not a proven
+boundary. Preserve an explicit deny against actions outside the approved
+ECS/role-pass allowlist,
+or use a credential boundary demonstrated to reject direct session-principal
+grants. Verify this against AWS policy-evaluation behavior and a representative
+same-account resource-policy case before implementation. If the complete
+boundary cannot fit or be proven, stop this profile and choose another
+credential design; do not remove the shared builder's defense to meet the
+size limit.
 
 A local size check of an action-only session-policy shape using the current
 provider-call map measured 424 compact-JSON characters for create, 404 for
-update, and 288 for delete. Those counts show that the STS limit is no longer
-the blocker for this shape; they do not validate the action list or role
-conditions. The fixed role allow rules must remain resource-scoped. IAM
+update, and 288 for delete. Those counts do not include or validate a robust
+cross-service explicit-deny boundary, and therefore do not show that the
+complete STS session policy fits. They also do not validate the action list or
+role conditions. The fixed role allow rules must remain resource-scoped. IAM
 simulation must evaluate each action against the required resource tuple and
-derived context, including both resource types for multi-resource actions.
+derived context, including both resource types for multi-resource actions and
+direct same-account resource-policy grants to the assumed session.
 
 AWS states that ECS supports identity-based policies, does not support
 resource-based policies, and supports tag-based access control. AWS STS session
@@ -71,12 +80,13 @@ authorization. For this ECS profile:
    values. Keep foundation, ECR publishing, EC2 networking, load balancer,
    autoscaling, observation, Terraform state, and control-plane permissions
    outside this role profile.
-5. Pass a compact session policy containing only the plan-required actions.
-   The fixed ECS role policy provides the resource/tag boundary; the session
-   policy intersects it and narrows the actions for this exact plan. Omit the
-   shared builder's `NotResource` statement only because ECS does not support
-   resource-based policies. Retain the 2,048-character hard check and fail
-   closed on overflow.
+5. Pass a session policy containing only plan-required actions and a verified
+   explicit deny for actions outside that allowlist, or prove an equivalent
+   credential boundary against direct same-account resource-policy grants.
+   Do not omit the shared builder's deny guard merely because ECS resources do
+   not support resource-based policies. Retain the 2,048-character hard check
+   and fail closed on overflow. If the complete policy does not fit, redesign
+   the credentials rather than weakening the boundary.
 6. Verify the exact trust policy, role tags, inline policy and effective
    action/resource/tag combinations before issuing credentials. Extend IAM
    simulation to use the same derived principal-tag context and reject missing
@@ -125,11 +135,12 @@ required; do not infer safety from a successful IAM simulation alone.
 
 - **Benefit:** the dynamic resource scope moves into a fixed, inspected role
   policy, allowing the STS session policy to stay below its hard size limit.
-- **Size rationale:** because ECS does not support resource-based policies,
-  an ECS-only session does not need the shared builder's `NotResource` guard.
-  The fixed role policy remains the resource and tag ceiling; the compact
-  session policy intersects it to limit allowed actions. This does not make
-  `Resource: "*"` acceptable in the fixed ECS allow rules.
+- **Size rationale:** the compact action-only shape is not yet a safe session
+  boundary. Same-account resource policies in other services may grant
+  directly to the role session and bypass an implicit deny. Keep an explicit
+  deny or equivalent tested boundary, and treat its size as part of the hard
+  STS limit. This does not make `Resource: "*"` acceptable in fixed ECS allow
+  rules.
 - **Risk:** trust policy and role policy become more complex. Incorrect session
   tag values or overlapping keys could widen access; strict key allowlists,
   role-profile verification, deterministic tag derivation and negative tests
