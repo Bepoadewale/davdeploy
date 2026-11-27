@@ -1,18 +1,47 @@
 # Implementation Status
 
-Status snapshot: 2026-11-26. Backend `main` is
-`1453a5efdffbbbf7f7853b7ccfa71903a231bb96` (merged PR #517). The hosted
-runtime remains PR #420 commit
-`9951caa9244128b1551fea3af66b1bdbf884c800`, deployed by protected plan
-[43981566184](https://github.com/Bepoadewale/davdeploy/actions/runs/43981566184)
-and exact saved-plan apply
-[43982396577](https://github.com/Bepoadewale/davdeploy/actions/runs/43982396577).
-A read-only check in account `654654474502`, region `us-east-1`, found
-Lambda package hash `GL+7py0mhfOeY0RcD/BC7RZ0cWS+buxedxhrwtNzps0=`; public
-`/healthz` returned HTTP 200. This is control-plane evidence only; source
-through PR #517 has not been deployed. No authenticated workspace admin session
-or verified customer connection has produced a hosted Nova plan; no Nova
-customer workload has been applied, operated, or certified.
+Status snapshot: 2026-11-27. Backend `main` is
+`1270b88ac573dff4c0c569cd8d46d6dc66af0ccb` (merged PR #530). The latest
+read-only runtime observation in account `654654474502`, region `us-east-1`,
+found all six `davdeploy-*` Lambda functions sharing package hash
+`2HCKZNZtHlUm3EbeuIQcMdNx0TF8ZcS33EftrjXEl6k=` and
+`https://api.davdeploy.tech/healthz` returned HTTP 200. The package-to-source
+release mapping was not independently re-established in this check. PRs #528
+and #530 change the local CLI only. An authenticated workspace admin and
+verified discovery/plan-only connection produced an architecture recommendation,
+but no valid generic Terraform saved-plan artifact. No Nova customer workload
+has been applied, operated, or certified.
+
+## 27 November 2026 — authenticated hosted plan attempt
+
+The CLI password-plus-TOTP login in PR #528 verified the workspace identity and
+stored the session in macOS Keychain. Connection
+`3964addb-9f00-4c87-b829-2c3cd3b0b48c` is verified for the isolated same-account
+acceptance in `654654474502/us-east-1`; its plan-only role profile is
+`PROFILE_VERIFIED`. Exact stacks
+`davdeploy-Discovery-3964addb` and
+`davdeploy-Plan-3964addb-9f00-4c87-b829-2c3cd3b0b48c` completed successfully,
+with one discovery role and one plan-only role. The plan role has the exact
+three ownership tags required by its verifier. No workload resources were
+created or deleted.
+
+Nova 2 Lite (`intent-nova2-v2`) created intent
+`5c307811-cdc5-48b6-befb-dcec34578d87`; architecture plan
+`4adb10ea-ee9e-43eb-8ee1-dfb860a63f13` returned `PLANNED` / `ALLOW`, but chose
+only a Lambda/API profile and omitted the requested private storage, database,
+and asynchronous processing. Its `$50–$170` monthly range uses the fixture
+catalog `aws-v1-fixture-2026-10` with `us-east-1-like` assumptions, not current
+regional pricing. This is not an acceptable first-milestone plan.
+
+Submitted review revision `c7b19db9-1d78-4d51-acc5-68f65e82a9d9` was used to
+request the review-only generic Nova plan runner. Run
+`754421c8-1f04-4b81-8f95-78d92e0ee243` ended `FAILED` with
+`NOVA_GENERATION_FAILED` before a Terraform artifact was created. No approval,
+Terraform run, apply, or destroy followed. Exact-plan apply readiness and
+project configuration are currently false; preserve this gate. PR #530 adds
+authenticated CLI artifact review and exact-manifest approval commands, but has
+not yet been exercised on a real generated artifact. See
+[`test531.md`](test/test531.md) for the exact AWS and hosted observations.
 
 Merged PR #517 adds backward-compatible private-IP configuration to the
 shared Batch Fargate module and a private endpoint validation root. Its
