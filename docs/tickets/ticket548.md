@@ -70,7 +70,7 @@ initializes the backend or applies it.
 ## Acceptance status
 
 The implementation and local validations are complete on commit
-`874d85b0ddfddb918bab4c0d517ac953f96a2c7d`. Required PR CI and final review
+`cdde907d1ee0b1a067b4c7a39f443f134451fb42`. Required PR CI and final review
 remain open. No AWS plan or apply is claimed.
 
 ## Tests / validation performed

@@ -6,7 +6,7 @@
 - Repository: `Bepoadewale/davdeploy`
 - Customer repository: N/A; platform-owned helper change
 - Branch: `fix/template-host-saved-plan-20261127`
-- Commit: `874d85b0ddfddb918bab4c0d517ac953f96a2c7d`
+- Commit: `cdde907d1ee0b1a067b4c7a39f443f134451fb42`
 - Pull request: [#548](https://github.com/Bepoadewale/davdeploy/pull/548)
 - AWS account: None; no AWS commands or credentials were used
 - AWS region: None
@@ -24,13 +24,14 @@
   with AWS provider 5.100.0. No remote backend was initialized and no plan was
   generated.
 - `git diff --check` — passed.
-- Full clean-room sequence in isolated worktree
+- Full clean-room sequence on the rebased head in isolated worktree
   `/private/tmp/davdeploy-template-host-saved-plan-cleanroom-20261127` with
   Compose project `davdeploy-template-host-saved-plan-cleanroom-20261127`:
   clean, bootstrap, smoke, API contract, customer-plan E2E, fixture seed,
   simple/complex/Day-2/degraded demos, policy-failure and readiness-failure
   demos, trace check, and `make verify` — passed. `make verify` passed all
-  2,035 tests. Final `make clean-local` stopped the project containers and
+  2,036 tests (one unrelated Starlette deprecation warning). Final
+  `make clean-local` stopped the project containers and
   removed that worktree's generated `.venv` and `.local`; a follow-up Compose
   inventory was empty.
 - Mocked script execution proved plan creation does not apply; the valid digest
