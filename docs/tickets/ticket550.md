@@ -56,7 +56,7 @@ can repair the exact class of graph error without exposing raw validator text.
 - [x] Unknown causes, raw messages, proposal values, and secrets remain
   redacted from repair prompts and persisted diagnostics.
 - [ ] Graph constraints remain strict; no invalid graph reaches CodeBuild.
-- [ ] Focused/full local verification and all seven hosted CI checks pass.
+- [x] Focused/full local verification and all seven hosted CI checks pass.
 - [ ] One fresh v14 hosted run reaches a saved plan or returns actionable,
   bounded feedback before CodeBuild. No approval or workload apply occurs.
 
@@ -64,8 +64,8 @@ can repair the exact class of graph error without exposing raw validator text.
 
 The v13 graph failure is recorded. Distinct allowlisted issue codes and fixed
 guidance for all known graph causes are implemented with regression tests.
-Focused and full repository verification pass. PR CI, protected deployment, and
-the fresh v14 run remain pending.
+Focused and full repository verification pass. All seven checks in PR run
+`45995049620` pass. Protected deployment and the fresh v14 run remain pending.
 
 ## Tests / validation performed
 
@@ -79,7 +79,7 @@ the fresh v14 run remain pending.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python
   PYTHON=python3.12`: config check, lint, all 2,044 tests, OpenAPI snapshot,
   and Docker Compose configuration passed.
-- `git diff --check` passed. Hosted PR CI is pending.
+- `git diff --check` passed. PR CI run `45995049620` passed all seven checks.
 
 ## Evidence files produced
 

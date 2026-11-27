@@ -65,4 +65,4 @@ Validation remains strict. Raw validator messages remain absent from feedback.
 - Full `make verify`: config check, lint, 2,044 tests, OpenAPI snapshot, and
   Docker Compose configuration passed. One unrelated Starlette deprecation
   warning was emitted.
-- Hosted PR CI remains pending.
+- PR CI run `45995049620` passed all seven checks.
