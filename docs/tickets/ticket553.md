@@ -40,12 +40,12 @@ out of diagnostics.
 
 ## Work planned for the PR
 
-1. Describe `resource_id` as a short machine key, provide a fixed vocabulary of
+1. [x] Describe `resource_id` as a short machine key, provide a fixed vocabulary of
    common IDs, and specify a numeric suffix for duplicate roles.
-2. Repeat the exact 24-character lowercase/digit/hyphen limit and separate
+2. [x] Repeat the exact 24-character lowercase/digit/hyphen limit and separate
    `resource_id` from the Terraform `name` field.
-3. Keep the contract pattern, reference rules, and validation strict.
-4. Test prompt instructions, sanitized pattern feedback, and absence of raw
+3. [x] Keep the contract pattern, reference rules, and validation strict.
+4. [x] Test prompt instructions, sanitized pattern feedback, and absence of raw
    invalid IDs or validator text.
 5. Bump the prompt version to v17. After protected deployment, retry the failed
    v16 run at most once with a fresh idempotency key and inspect only bounded
@@ -53,21 +53,27 @@ out of diagnostics.
 
 ## Acceptance criteria
 
-- [ ] Fixed ID guidance provides short role IDs and a valid duplicate suffix.
-- [ ] Prompt states the exact regex, max length, forbidden characters, and
+- [x] Fixed ID guidance provides short role IDs and a valid duplicate suffix.
+- [x] Prompt states the exact regex, max length, forbidden characters, and
       separation from Terraform names.
-- [ ] Invalid IDs still fail before CodeBuild; raw values/messages remain
+- [x] Invalid IDs still fail before CodeBuild; raw values/messages remain
       absent from public diagnostics and repair context.
-- [ ] Focused tests, full local verification, docs checks, and all required
-      final-head CI checks pass.
+- [x] Focused tests, full local verification, and docs checks pass locally.
+- [ ] All required final-head CI checks pass.
 - [ ] One authorized retry of the v16 run after v17 deployment returns
       actionable safe feedback or inspectable saved-plan evidence. No workload
       approval or apply occurs.
 
 ## Acceptance status
 
-Draft opened at bootstrap commit `067a7596`. Implementation and validation
-remain pending.
+Draft opened at bootstrap commit `067a7596`. Implementation commit
+`1e11e594cb4cc510f467813c7f7d39739a55677f`
+adds a fixed vocabulary and suffix rule for stable resource IDs, repeats the
+exact regex and forbidden characters, and raises the prompt version to v17.
+Focused tests (126), full verification (2,056 tests plus Ruff, Actions
+configuration, OpenAPI snapshot, and Compose checks), documentation conventions,
+and diff checks pass locally. PR CI, protected deployment, and the single
+authorized hosted retry remain pending.
 
 ## Tests / validation performed
 
@@ -75,7 +81,15 @@ remain pending.
   the v16 deployment.
 - The v16 hosted run's bounded diagnostics were recorded without fetching raw
   proposal text, submitted values, or validator messages.
-- Implementation checks will be recorded as they are performed.
+- `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest
+  tests/test_terraform_generation.py tests/test_customer_plan_review.py
+  tests/test_nova_plan_runs.py -q` — 126 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` —
+  passed: 2,056 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker
+  Compose configuration. One existing Starlette deprecation warning.
+- Focused Ruff, `GITHUB_PR_NUMBER=553 .../python scripts/check_doc_conventions.py`,
+  and `git diff --check` — passed.
+- Required PR CI is pending for the final pushed head.
 
 ## Evidence files produced
 

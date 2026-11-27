@@ -4,7 +4,8 @@ Date: 2026-11-27
 Execution type: Authenticated hosted Nova plan-only generation; no CodeBuild
 plan or customer workload
 Customer repository: `Bepoadewale/fitness-backend` (synthetic acceptance case)
-Commit: control-plane v16 `e8c69f77095d4c0eb08a4a102b2ffde68ba41c71`; PR code pending
+Commit: control-plane v16 `e8c69f77095d4c0eb08a4a102b2ffde68ba41c71`; v17
+implementation `1e11e594cb4cc510f467813c7f7d39739a55677f`
 AWS account: `654654474502` (control-plane release only)
 AWS region: `us-east-1`
 
@@ -31,6 +32,12 @@ AWS region: `us-east-1`
 - The API status watcher inspected only run state and allow-listed diagnostics.
   It did not fetch raw proposal content, submitted values, validator messages,
   saved-plan bytes, or credentials.
+- Local v17 tests exercise fixed short-ID guidance, duplicate suffix examples,
+  the exact 24-character regex, strict pattern failure, and redaction of a
+  synthetic invalid ID. Focused tests passed (126); full `make verify` passed
+  2,056 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose
+  checks. Documentation and diff checks passed. PR CI and v17 deployment are
+  pending.
 
 ## Observed result
 
@@ -47,7 +54,7 @@ No customer workload resources were created; no teardown was required.
 
 ## Final boundary
 
-PR #553 will improve fixed ID guidance and bump the trusted prompt version to
-v17. It will not change the typed schema, approve a plan, or apply a workload.
+PR #553 improves fixed ID guidance and bumps the trusted prompt version to v17.
+It does not change the typed schema, approve a plan, or apply a workload.
 The architecture and fixture-price limitations remain open; a corrected ID
 does not alone satisfy the hosted plan acceptance gate.
