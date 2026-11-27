@@ -11,6 +11,7 @@ from davdeploy.generated_deployment_contract import GeneratedDeploymentProposal
 from davdeploy.model_gateway import ModelGatewayUnavailable, model_input_digest
 
 _RESOURCE_ID = re.compile(r"^[a-z][a-z0-9-]{0,23}$")
+_LAMBDA_SECRET_ARN_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,62}_SECRET_ARN$")
 _SAFE_SOURCE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9 _.-]{0,63}$")
 _SENSITIVE_SOURCE_ID = re.compile(
     r"(?i)(?:secret|password|credential|access.?key|session.?token|api.?token|arn)"
@@ -124,6 +125,133 @@ def _rewrite_typed_references(value: Any, mapping: dict[str, str]) -> Any:
     if isinstance(value, list):
         return [_rewrite_typed_references(item, mapping) for item in value]
     return value
+
+
+def normalize_managed_lambda_secret_reference(output: Any) -> Any:
+    """Replace one declared Lambda secret-ARN literal with the unique RDS secret ref.
+
+    No value is logged or retained in the normalized result. Ambiguous or
+    unsupported shapes remain untouched for strict contract validation.
+    """
+    if not isinstance(output, dict) or not isinstance(output.get("resources"), list):
+        return output
+    resources = output["resources"]
+    resource_ids = [
+        resource.get("resource_id")
+        for resource in resources
+        if isinstance(resource, dict) and isinstance(resource.get("resource_id"), str)
+    ]
+    if len(resource_ids) != len(resources) or len(resource_ids) != len(set(resource_ids)):
+        return output
+    databases = [
+        resource
+        for resource in resources
+        if isinstance(resource, dict)
+        and isinstance(resource.get("resource_type"), str)
+        and resource.get("resource_type") in {"aws_db_instance", "aws_rds_cluster"}
+    ]
+    if len(databases) != 1:
+        return output
+    database = databases[0]
+    arguments = database.get("arguments")
+    outputs = database.get("outputs", [])
+    if not isinstance(arguments, dict) or not isinstance(outputs, list):
+        return output
+    password_field = {
+        "aws_db_instance": "password",
+        "aws_rds_cluster": "master_password",
+    }[database["resource_type"]]
+    if password_field in arguments and not isinstance(arguments[password_field], str):
+        return output
+    managed_password = arguments.get("manage_master_user_password")
+    if managed_password is not None and type(managed_password) is not bool:
+        return output
+
+    secret_outputs = [
+        item
+        for item in outputs
+        if isinstance(item, dict)
+        and item.get("name") == "master_user_secret[0].secret_arn"
+    ]
+    if len(secret_outputs) > 1:
+        return output
+    if secret_outputs and secret_outputs[0].get("value_type") != "secret_reference":
+        return output
+
+    candidates: list[tuple[dict[str, Any], str]] = []
+    for resource in resources:
+        if not isinstance(resource, dict) or resource.get("resource_type") != "aws_lambda_function":
+            continue
+        lambda_arguments = resource.get("arguments")
+        if not isinstance(lambda_arguments, dict):
+            continue
+        environment = lambda_arguments.get("environment")
+        if not isinstance(environment, list) or not environment or not isinstance(environment[0], dict):
+            continue
+        variables = environment[0].get("variables")
+        if not isinstance(variables, dict):
+            continue
+        for name, value in variables.items():
+            if (
+                isinstance(name, str)
+                and _LAMBDA_SECRET_ARN_NAME.fullmatch(name)
+                and isinstance(value, str)
+            ):
+                candidates.append((resource, name))
+    if len(candidates) != 1:
+        return output
+
+    lambda_resource, variable_name = candidates[0]
+    resource_id = database.get("resource_id")
+    if not isinstance(resource_id, str) or not _RESOURCE_ID.fullmatch(resource_id):
+        return output
+    if not isinstance(lambda_resource.get("resource_id"), str) or not _RESOURCE_ID.fullmatch(
+        lambda_resource["resource_id"]
+    ):
+        return output
+    if resource_id == lambda_resource["resource_id"]:
+        return output
+
+    normalized = copy.deepcopy(output)
+    normalized_resources = normalized["resources"]
+    normalized_database = next(
+        resource
+        for resource in normalized_resources
+        if isinstance(resource, dict) and resource.get("resource_id") == resource_id
+    )
+    # Never retain model-authored master credentials. The AWS-managed value
+    # replaces this field and is exposed only through the supported secret ARN.
+    normalized_database["arguments"].pop(password_field, None)
+    normalized_database["arguments"]["manage_master_user_password"] = True
+    normalized_outputs = normalized_database.setdefault("outputs", [])
+    if secret_outputs:
+        normalized_output = next(
+            item
+            for item in normalized_outputs
+            if isinstance(item, dict) and item.get("name") == "master_user_secret[0].secret_arn"
+        )
+        normalized_output["sensitive"] = True
+    else:
+        normalized_outputs.append(
+            {
+                "name": "master_user_secret[0].secret_arn",
+                "value_type": "secret_reference",
+                "sensitive": True,
+            }
+        )
+    normalized_lambda = next(
+        resource
+        for resource in normalized_resources
+        if isinstance(resource, dict)
+        and resource.get("resource_id") == lambda_resource["resource_id"]
+    )
+    normalized_lambda["arguments"]["environment"][0]["variables"][variable_name] = {
+        "kind": "resource_reference",
+        "resource_id": resource_id,
+        "output_name": "master_user_secret[0].secret_arn",
+        "value_type": "secret_reference",
+    }
+    return normalized
 
 
 def trusted_context(

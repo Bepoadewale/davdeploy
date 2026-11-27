@@ -168,6 +168,75 @@ def test_nova_generation_normalizes_a_bounded_resource_id_before_strict_validati
     assert len(instance.gateway.calls) == 1
 
 
+def test_malformed_resource_type_reaches_bounded_validation_repair():
+    def malformed_then_valid(request, document):
+        if len(gateway.calls) == 1:
+            output = proposal(request, document)
+            output["resources"][0]["resource_type"] = ["aws_db_instance"]
+            return output
+        return proposal(request, document)
+
+    gateway = RecordingGateway(malformed_then_valid)
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+    result = instance.generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    assert result.proposal.resources[0].resource_type == "aws_ecs_cluster"
+    assert len(gateway.calls) == 2
+
+
+def test_nova_generation_binds_lambda_secret_arn_to_unique_managed_database_secret():
+    def literal_secret_arn(request, document):
+        output = proposal(request, document)
+        output["resources"] = [
+            {
+                "resource_id": "db",
+                "resource_type": "aws_db_instance",
+                "name": "database",
+                "arguments": {"manage_master_user_password": False},
+                "outputs": [],
+                "rationale": "Stores application records.",
+            },
+            {
+                "resource_id": "api",
+                "resource_type": "aws_lambda_function",
+                "name": "api",
+                "arguments": {
+                    "environment": [
+                        {"variables": {"DATABASE_SECRET_ARN": "literal-must-not-survive"}}
+                    ]
+                },
+                "rationale": "Processes application requests.",
+            },
+        ]
+        return output
+
+    instance = generator(literal_secret_arn)
+    result = instance.generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    database, lambda_resource = result.proposal.resources
+    reference = lambda_resource.arguments["environment"][0]["variables"]["DATABASE_SECRET_ARN"]
+    assert database.arguments["manage_master_user_password"] is True
+    assert database.outputs[0].name == "master_user_secret[0].secret_arn"
+    assert database.outputs[0].sensitive is True
+    assert reference == {
+        "kind": "resource_reference",
+        "resource_id": "db",
+        "output_name": "master_user_secret[0].secret_arn",
+        "value_type": "secret_reference",
+    }
+    assert len(instance.gateway.calls) == 1
+
+
 def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
     invalid = {
         "contract_version": "1.1",
