@@ -7,70 +7,52 @@ lifecycle coverage remain distinct.
 
 ## Current source and acceptance status — 2026-11-27
 
-### Reconciliation after PR #518
+### Reconciliation after PRs #531 and #532
 
-The current backend `main` is `a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`
-(merged PR #522). PR #520 is merged at
-`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`; its final-head and merged-main CI
-passed all seven checks in
-[45899643291](https://github.com/Bepoadewale/davdeploy/actions/runs/45899643291).
-PR #522's final-head run [45900573713](https://github.com/Bepoadewale/davdeploy/actions/runs/45900573713)
-also passed all seven checks. PR #521 remains in the source baseline and keeps
-the Nova control-plane Lambda environment within quota; it does not change
-customer-workload acceptance evidence.
+Backend `main` is `f300676aa3af32a76136947c4f4870cee498b5e6` (PR #532).
+PRs #520 and #522 remain merged: #520's provider-generated saved-plan policy
+evaluation produced three review findings and no denials; #522's regional
+pricing model covered 12 lines and modeled USD 1.27–415.81/month from
+synthetic usage assumptions. Neither result is customer approval evidence.
+Draft PR #524 corrects the pricing evidence wording.
+
+PR #531 records an authenticated hosted Nova plan attempt. Nova omitted the
+explicit file-storage, relational-data, and queue requirements; generation
+failed before a saved-plan artifact existed. No workload plan, approval,
+apply, health, recovery, or cleanup succeeded. PR #532 is merged to source
+`main` and preserves those explicit allow-listed requirements in intent
+resolution. It has not been deployed to the hosted runtime, and the hosted
+plan has not been rerun after that fix.
 
 The ECS Express implementation and evidence stack is:
 
-- PR #519 (`00697d7b6b84ed7d0ff0fef7effb7cf0037392e7`) adds a default-off,
-  project-scoped ECS Express renderer and bounded runner. Its final-head CI
-  run [45903656967](https://github.com/Bepoadewale/davdeploy/actions/runs/45903656967)
-  passed all seven checks. Effective role-permission review and its isolated
-  runner cycle remain open.
-- PR #520 (`c9ece16291af2c6a659e47ca0bad2867b2fd16c3`) merged the
-  source-only ECS Express actual-plan policy. An actual provider-generated
-  saved-plan fixture was generated and evaluated under this policy, producing
-  three review findings and no policy denials. Effective role-permission
-  evidence remains open.
-- PR #522 (`a04c5909075bfe975ba1628aeef9851a7b317784`) merged the plan-bound
-  regional pricing model, including both target-tracking alarms. A live AWS
-  Price List evaluation covered 12 lines and returned a modeled range of USD
-  1.27–415.81/month under synthetic usage assumptions. Its context digest was
-  synthetic and no customer budget was supplied, so this is not customer
-  approval evidence. Draft PR #524 corrects the original ticket's
-  approval-eligibility wording.
-- Draft PR #525 (`bf876fe155a7fe946a457b6d61d74c25696893e0`) adds a
-  customer-side CloudFormation bootstrap for connection-scoped ECS Express
-  roles and a fail-closed preflight verifier. Its final-head CI run
-  [45907548159](https://github.com/Bepoadewale/davdeploy/actions/runs/45907548159)
-  passed all seven checks. This is source-only; effective runner permissions
-  remain unreviewed and the renderer remains disabled.
-- Draft PR #526 records a source-verified security blocker: the ECS runner
-  assumes its customer execution role without a session policy, and the
-  supported `administrator-pilot` role carries `AdministratorAccess`. Its
-  final-head CI run [45910551656](https://github.com/Bepoadewale/davdeploy/actions/runs/45910551656)
-  passed all seven checks. It changed no cloud resources.
-- Draft PR #527 (`4ac9ab04`, based on #526) maps the AWS action/resource
-  boundary for the ECS Express root. Current AWS references show a composite
-  ECS API path. It confirms the current runner already stages foundation
-  plan/apply, image publication, and a separate service plan/apply, while
-  warning that the phases still lack distinct least-privilege credentials.
-  The service plan must bind to verified subnet IDs from the applied
-  foundation state. Head `e5aff6f9` passed all seven checks in run
-  [45913543343](https://github.com/Bepoadewale/davdeploy/actions/runs/45913543343);
-  ticket-status head `fca8dd0b` passed all seven checks in run
-  [45913894537](https://github.com/Bepoadewale/davdeploy/actions/runs/45913894537).
-  No AWS, hosted control-plane, state or lock mutation occurred.
+- PR #519 remains an open draft. Its branch head
+  `8a56669a` adds the default-off, project-scoped renderer, bounded runner, and
+  the role-bootstrap/security-review stack. The previous combined head
+  `be87809f763f33d28aeca4daaa6d3d10ec932a7d` passed all seven checks in run
+  [45928093637](https://github.com/Bepoadewale/davdeploy/actions/runs/45928093637).
+  Fresh CI is required for the ticket update. Effective runner permissions and
+  a project-scoped remote-state lifecycle remain open; the renderer stays off.
+- PR #525's service-role bootstrap and verifier merged into the #519 feature
+  branch as `be87809f`; PR #526's security-boundary review merged into #525,
+  and PR #527's sourced provider/API permission map merged into #526. These
+  stacked PRs are not merged to `main`. They do not implement or prove the
+  runner's least-privilege permissions.
+- PR #529 closed unmerged when its #527 base branch was deleted. Its compact
+  ECS policy is design-only. AWS's composite ECS API actions have distinct
+  resource and condition requirements, and exact policy simulation remains
+  unresolved. No ECS apply policy is supported.
+- PR #524 remains an open draft; its prior-head run
+  [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966)
+  passed all seven checks. Check its current head before merging.
 
-PR #519 remains an open draft with no recorded GitHub review and is based on
-its earlier source revision. PR #524 is an open draft that corrects pricing
-evidence wording; its two-file documentation diff passed all seven checks in
-run [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966).
-PR #525 is also an open draft stacked on #519. Review the current
-#519/#524/#525/#526/#527 stack before merging or enabling a renderer. The
-#526/#527 reviews confirm that the current runner role is not eligible for
-apply and that network and ECS service provisioning must use separate plans.
-The #519 worktree has untracked provider-plan stdout/stderr files; preserve
-them locally and do not publish their contents.
+The current product boundary is explicit: direct same-account ECS Express
+and private Batch tests satisfy the general customer-side lifecycle gate only
+for the exact tested shapes. They do not prove Nova authorization, dispatch,
+credential issuance, or cross-account isolation. Keep the #519/#524 stack
+gated until its source, security, cost, and lifecycle criteria pass. The #519
+worktree's untracked provider-plan stdout/stderr files remain protected; do
+not publish their contents.
 
 The Terraform run monitor currently has 75 terminal records and zero active
 runs; process inspection found no Terraform plan, apply, or destroy process.
@@ -542,30 +524,33 @@ close other per-entry requirements or prove Nova-originated execution.
 
 ## Next dependency-ready package
 
-PR #517 is merged and its exact direct same-account Batch lifecycle evidence is
-recorded in [`test517.md`](../test/test517.md) and [`ticket517.md`](../tickets/ticket517.md).
-Together with the accepted direct ECS lifecycle in PR #437, this satisfies the
-general customer-side lifecycle gate for those tested shapes. It does not prove
-Nova authorization/dispatch, cross-account trust, or support for other shapes.
+PR #437's direct isolated ECS Express lifecycle and PR #517's direct private
+Batch lifecycle satisfy the general customer-side plan/apply/lifecycle gate
+for those exact tested shapes. The hosted Nova attempt in PR #531 failed
+before a saved plan was created. PR #532 fixes explicit capability retention
+in source, but that source change has not been deployed and no hosted rerun
+exists.
 
-PR #518's documentation handoff is merged. Continue with the ECS Express stack
-in dependency order: review/reconcile #519, #524, and #525 against current
-`main`; independently review the customer runner's effective permissions and
-exact `iam:PassRole` scope; bind pricing to a persisted customer revision and
-budget; then run the isolated, authorized customer-side renderer lifecycle
-with project-scoped state and independent cleanup checks. The direct ECS
-Express lifecycle in PR #437 and the direct
-private Batch lifecycle in PR #517 satisfy the general customer-side
-plan/apply/lifecycle gate for their exact tested shapes. They do not prove
-Nova-originated dispatch, credential-path behavior, or cross-account trust.
+Keep the control plane, its Terraform state, locks, runtime, and queues
+untouched for customer-side tests. Continue the gated #519 source review and
+resolve the bounded ECS policy design before considering an isolated
+project-scoped remote-state lifecycle. The #525/#526/#527 stack is merged only
+into the #519 feature branch; it is not in `main` or deployed. PR #524's
+approval-bound pricing correction remains open. The closed #529 design PR
+does not provide an executable policy. The next source package must map every
+dependent ECS action to its exact resource/condition tuple and fail closed
+where AWS behavior cannot be bounded. Do not enable the renderer or claim
+Nova execution from direct Terraform tests.
 
-The last recorded hosted authentication attempt was rejected by DavDeploy TOTP;
-no later authenticated workspace-admin session or hosted customer plan is
-recorded here. The control plane must remain untouched for customer-side tests.
-Preserve MFA and tenant controls. Any paid test requires current pricing and
-quota preflight, a fresh exact manifest, explicit resource and runtime bounds,
-monitored Terraform operations, and independent cleanup checks. Deploy
-control-plane code only through its protected, reviewed Terraform workflow.
+The AWS account `654654474502` has seven DavDeploy-named inactive Batch job
+definitions, no SageMaker endpoints/models/configurations, and retained
+SageMaker lineage evidence. No cleanup was performed. The phrase “Approve this
+exact cleanup” did not name the target resource set; preserve the inactive
+definitions and lineage until an exact scope is supplied. Any paid test still
+requires current cost/quota preflight, a fresh exact manifest, resource and
+runtime bounds, monitored Terraform operations, and independent cleanup
+checks. Control-plane deployments remain subject to their protected reviewed
+Terraform workflow.
 
 ## Historical renderer-oriented checklist — superseded by the Nova-led path
 

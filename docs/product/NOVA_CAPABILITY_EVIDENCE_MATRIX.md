@@ -1,28 +1,25 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`a456b84aa17600daf2b2c0bfe51d3bddb67e59ba`, 2026-11-27. PR #520's exact-shape
-actual-plan policy and PR #522's regional ECS Express pricing model are merged;
-both final-head CI runs passed all seven checks. Draft PR #519 adds the
-default-off renderer and runner; draft PR #524 corrects the pricing ticket's
-approval-evidence wording. A provider-generated plan was evaluated under
-merged #520 policy, and live regional pricing covered 12 lines under synthetic
-usage assumptions. That pricing run is not tied to a persisted customer
-revision or budget and cannot authorize a customer apply. Draft PR #525 adds
-connection-scoped ECS Express role bootstrap and role-profile verification;
-its final-head CI passed all seven checks, but its customer runner permissions
-remain unreviewed and no workload was applied. PR #524 corrects pricing-ticket
-wording and its final-head CI passed all seven checks. PR #526's sourced
-security review found that the runner assumes its customer execution role
-without an STS session policy and that `administrator-pilot` can attach
-`AdministratorAccess`; its seven final-head checks passed in run
-`45910551656`. PR #527 adds a sourced AWS action/resource map. It confirms the
-runner already stages foundation and service plans, but those phases still
-lack distinct least-privilege credentials and exact plan-bound policy. All
-seven checks passed on head `e5aff6f9` in run `45913543343` and on
-ticket-status head `fca8dd0b` in run `45913894537`. Both are documentation-
-only: the renderer remains disabled, and effective
-role permissions plus an isolated runner lifecycle remain open. PR #517
+`f300676aa3af32a76136947c4f4870cee498b5e6`, 2026-11-27. PR #520's exact-shape
+actual-plan policy and PR #522's regional ECS Express pricing model are merged.
+A provider-generated plan was evaluated under #520 policy; #522's live
+regional pricing covered 12 lines under synthetic usage assumptions and is not
+tied to a persisted customer revision or budget. PR #531 recorded an
+authenticated hosted Nova plan attempt that omitted explicit storage,
+relational-data, and queue requirements and failed before a saved plan was
+created. PR #532 is merged to source `main` and adds deterministic retention of
+those explicit allow-listed requirements; it has not been deployed and the
+hosted plan has not been rerun.
+
+PR #519 remains a draft with the renderer disabled. PR #525's service-role
+bootstrap, #526's security review, and #527's AWS action/resource map are
+merged only into the #519 feature branch, not `main` or the hosted runtime.
+They do not implement or prove least-privilege runner permissions. PR #529
+closed unmerged; its compact ECS policy is design-only and no supported ECS
+apply policy exists. PR #524 remains an open pricing-evidence correction. The
+runner-permission, approval-bound pricing, project-scoped remote-state
+lifecycle, and Nova-driven authorization/dispatch gates remain open. PR #517
 adds a backward-compatible private Batch Fargate network option and records
 one successful private endpoint job in direct same-account AWS evidence. Its
 predecessor cycle failed during a cleanup race; both exact stacks were removed
@@ -277,7 +274,7 @@ customer.
 | Cost | Backend `main` has regional catalog-backed, assumption-bound pricing for explicitly bounded EBS gp3, S3 Standard, SQS Standard/FIFO, selected single-AZ RDS MySQL, single-region Standard DynamoDB on-demand tables, ZIP Lambda, HTTP API, CloudWatch Standard logs and modeled internet egress. PR #424 adds one Aurora PostgreSQL Serverless v2 writer shape. Merged PR #502 adds source-only NAT hourly, NAT data processing, associated public IPv4, internet egress, and double-direction cross-AZ transfer pricing with exact-address usage assumptions and AWS Price List evidence; all seven checks passed on final PR head `86b4b89` in CI run #45578164764. Merged PR #507 adds separate vCPU and memory price lines for the exact bounded Linux/x86 Batch Fargate job shape, using trusted monthly job and billed-runtime ranges and the per-job one-minute minimum. Merged PR #509 adds regional log-ingestion and retained-storage prices for one explicitly configured Batch `awslogs` destination bound to one same-plan Standard log group and strict, trusted usage ranges. Merged PR #511 adds bounded ECR standard-storage prices for exact planned private repositories. Merged PR #510 binds a digest-pinned same-region Batch image to its same-plan repository and reuses the #511 storage line. Merged PR #512 adds regional public IPv4 pricing for explicitly enabled Batch Fargate jobs with trusted job-count, per-attempt address-duration, and 1–10 maximum-attempt bounds that include submission-time overrides; final-head and merged-main CI passed in runs `45680499414` and `45681334818`. Merged PR #514 adds regional pricing for ECR API, ECR Docker, and CloudWatch Logs interface endpoint hours and processed data, tied to trusted usage and known same-plan subnet IDs/AZs; exact S3/DynamoDB gateway endpoints have no additional endpoint charge. Merged PR #515 restricts those endpoint classes to reviewed same-plan network bindings. All seven final-head checks passed in run `45776482608`; all seven merged-main checks passed in run `45777351766`. The clean-room sequence at `870ce27` preceded the later rule-binding hardening, which passed local full verification and fresh final-head CI. Its approved worktree was removed after the test containers, volume, network, and generated environments were confirmed absent. PRs #507–#515 remain source-only. | PR #502 is not deployment or customer billing evidence. Cost evidence is partial, not a complete quote or hard billing cap. Its VPC model supports one same-plan VPC Elastic IP per public NAT Gateway and assumes customer-declared monthly use; unrelated public addresses and unsupported network resources remain approval blockers. PRs #507–#515 are source-only. Batch and ECR estimates remain incomplete and approval-ineligible while unsupported image sources, other NAT/VPC network paths, egress, unsupported public IPv4 or endpoint usage, archive retrieval, signing, replication, and other material supporting costs remain unpriced. Same-region ECR-to-Fargate ECR transfer has no ECR charge; this does not establish that the network path has no cost. Every unpriced material resource, unknown assumption, unsupported configuration, missing regional price, or material supporting cost blocks approval. Fixture ranges and Cost Explorer history are not generated-plan price evidence. |
 | Workload health | `certification_factory.py` declares textual readiness probes for eight scenario names. PR #437 [test evidence](https://github.com/Bepoadewale/davdeploy/pull/437) records direct ECS Express v1/v2 `/healthz` probes and rollback recovery; PR #517 [`test517.md`](../test/test517.md) records a successful bounded Batch job and expected CloudWatch marker. The owner accepts isolated direct same-account tests as general customer-side lifecycle evidence for their exact shapes. | The tests do not prove Nova generated or dispatched their plans. A successful echo Batch job is not an application readiness probe. Scenario declarations do not prove that a hosted worker ran probes. The current `CertificationEvidence` is five booleans; it does not record controlled failure, cost, source/artifact digest, or evidence link. |
 | Update/recovery/cleanup | Service-level evidence includes healthy v1-to-v2 update, ECS circuit-breaker rollback of an unhealthy revision to v2, saved-plan teardown, and independent absence for ECS Express in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437). The owner accepts this isolated customer-side result for the general lifecycle gate for that tested shape. | Evidence does not generalize beyond the resource shapes and behaviors actually exercised. Nova dispatch is a separate product-integration property. |
-| Hosted execution | The repository records a legacy App Runner pilot in [`test42.md`](../test/test42.md), direct customer-side ECS Express lifecycle in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437), and a direct private Batch job in [PR #517](https://github.com/Bepoadewale/davdeploy/pull/517). Draft PRs #519/#520/#522 implement a disabled ECS Express renderer, actual-plan policy, and pricing source. Draft PR #525 adds connection-scoped service-role bootstrap and a role-profile verifier; its final-head CI passed all seven checks. PR #524 corrects the merged pricing ticket and is awaiting final-head CI. PR #314 added durable saved-plan storage and administrator approval; its ticket states that path's hosted worker has no caller and apply/destroy are unavailable. | These direct customer-side tests satisfy the general plan/apply/lifecycle evidence gate only for their exact tested shapes; they do not prove Nova authorization, dispatch, or credential path. PR #525 does not prove effective runner permissions and no renderer workload is applied. Hosted control-plane health is not workload health. The last recorded DavDeploy TOTP attempt was rejected; no later authenticated workspace-admin session or verified customer connection is recorded in this snapshot. The control plane was not rechecked for this reconciliation. Preserve MFA, tenant binding, and the protected plan/apply workflow. |
+| Hosted execution | The repository records a legacy App Runner pilot in [`test42.md`](../test/test42.md), direct customer-side ECS Express lifecycle in [PR #437](https://github.com/Bepoadewale/davdeploy/pull/437), and a direct private Batch job in [PR #517](https://github.com/Bepoadewale/davdeploy/pull/517). PR #531 records an authenticated hosted Nova plan attempt; Nova omitted explicit file-storage, relational-data, and queue requirements and failed before creating a saved-plan artifact. PR #532 fixes explicit allow-listed requirement retention in source but is not deployed to the hosted runtime and has not been rerun. PR #519 remains a disabled draft renderer; its latest final-head CI run `45928624349` passed all seven checks. PR #525/#526/#527 are merged only into the #519 feature branch and do not establish least-privilege runner permissions. PR #314 added durable saved-plan storage and administrator approval; its ticket states that path's hosted worker has no caller and apply/destroy are unavailable. | Direct customer-side tests satisfy the general plan/apply/lifecycle evidence gate only for their exact tested shapes; they do not prove Nova authorization, dispatch, credential path, or cross-account isolation. The #531 hosted attempt reached authenticated planning but failed before a saved plan; #532 has not been deployed or rerun. No Nova-originated workload plan/apply/health/recovery/cleanup lifecycle is proven. Hosted control-plane health is not workload health. Preserve MFA, tenant binding, and the protected plan/apply workflow. |
 
 ## Acceptance record required for every entry
 
