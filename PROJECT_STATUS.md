@@ -263,7 +263,7 @@ the 2026-11-17 read-only snapshot and is not refreshed by this PR.
 
 ## Nova deployment workflow next gates
 
-1. The first hosted gate is an authenticated workspace administrator, a verified isolated customer connection and role, and a successful hosted generated plan. The latest DavDeploy TOTP attempt for the selected account was rejected; no authenticated session or customer plan exists. Preserve MFA and tenant controls.
+1. Authentication and the isolated same-account plan-only connection are established for workspace `3964addb-9f00-4c87-b829-2c3cd3b0b48c` in AWS account `654654474502/us-east-1`. The first hosted acceptance gate is still unmet: deployed v21 run `d61e0c32-0379-4bd2-a240-a7924f4e98a1` failed before artifact creation because `container_readiness` targeted `aws_lambda_function`. Draft PR #560 adds targeted safe repair guidance; a fresh review-only run must still produce an inspectable plan with required API, private storage, relational read/write, async behavior, live regional pricing, and passing plan policy. Preserve MFA and tenant controls.
 2. Continue the shared authorization and exact-plan implementation; the generic Nova exact-plan apply runner is not ready. Do not enable customer apply or credentials until the saved-plan approval, policy, worker, and lifecycle gates are evidenced.
 3. Define and verify customer-owned least-privilege role scopes and service limits for supported shapes; keep role trust, account verification, and effective permissions as separate evidence.
 4. Use fresh, explicitly bounded AWS environments and direct Terraform for any further customer-side lifecycle evidence. PRs #437 and #517 meet the general lifecycle gate only for the ECS and private Batch shapes tested.

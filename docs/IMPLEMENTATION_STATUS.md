@@ -1,15 +1,18 @@
 # Implementation Status
 
 Status snapshot: 2026-11-27. Backend `main` is
-`28f229416d7897ec2fe48b3def83ade6b9d4bcaf` (merged PR #558). Protected
-Terraform plan `46063294020` and apply `46064179578` deployed this exact source;
-the migration completed, all six `davdeploy-*` Lambda functions are Active and
-Successful and match the exact versioned package hash, and `/healthz` returned
-HTTP 200. In account
-`654654474502`, region `us-east-1`, an authenticated workspace administrator
-and verified same-account plan-only role submitted a review-only Nova run. The
-current runner failed proposal validation before producing a saved Terraform
-plan. No Nova customer workload has been applied, operated, or certified.
+`fe02d62f123e27712fee686db05029de8b7a33af` (merged PR #559). Protected plan
+`46069601185` and exact saved-plan apply `46070230500` deployed this source;
+migrations passed, all six `davdeploy-*` Lambda functions are Active/Successful
+and match the exact versioned release package, `/healthz` returned HTTP 200,
+and authenticated CLI `/api/v1/me` returned HTTP 200. The authenticated
+workspace administrator and verified same-account plan-only connection remain
+available. The first hosted generated plan is still unmet: v21 run
+`d61e0c32-0379-4bd2-a240-a7924f4e98a1` failed proposal validation before an
+artifact with safe `container_readiness` / `aws_lambda_function` feedback.
+Draft PR #560 adds pair-specific repair guidance; customer approval, apply,
+and destroy remain closed. No Nova customer workload has been applied,
+operated, or certified.
 
 ## 27 November 2026 — authenticated hosted plan attempt
 
@@ -57,10 +60,11 @@ proof and CI and is now deployed. Fresh review-only revision
 and is unexecuted. Plan-only run `886fcf57-a321-455c-9097-4bc90d351be4` used
 prompt v20 and failed during generation with safe issue
 `invalid_secret_reference_location`, before producing an artifact. No customer
-resources were created. Draft PR #559 adds bounded location context to the
-repair loop; the branch passed full local verification and the clean-room
-cycle. Final PR CI, merge, protected deployment, and a fresh v21 hosted result
-remain pending.
+resources were created. PR #559 later merged as
+`fe02d62f123e27712fee686db05029de8b7a33af`; its protected deployment and fresh
+v21 result are recorded in `docs/test/test559.md` and `docs/test/test560.md`.
+The v21 run failed before an artifact with an incompatible Lambda
+`container_readiness` target; the current repair package is draft PR #560.
 
 Merged PR #517 adds backward-compatible private-IP configuration to the
 shared Batch Fargate module and a private endpoint validation root. Its

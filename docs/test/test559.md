@@ -89,5 +89,5 @@ No customer workload resources were created, so no teardown was needed.
   configuration, and Compose checks. `make clean-local` completed. The named
   containers, network, volumes, external venv, and `.local` data were verified
   absent.
-- Review, final PR CI, protected deployment, and a fresh v21 hosted plan-only
-  result remain pending.
+- Subsequent evidence supersedes the pending items above: PR #559 merged and
+  deployed, and the fresh v21 hosted result is recorded in `test560.md`.

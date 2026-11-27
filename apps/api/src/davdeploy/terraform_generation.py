@@ -126,6 +126,19 @@ _UNKNOWN_CONTRACT_FIELD_GUIDANCE = (
     "Correct the indicated contract field to its exact JSON type and allowed schema value. Regenerate "
     "the complete proposal while preserving all trusted context exactly."
 )
+_LAMBDA_CONTAINER_READINESS_GUIDANCE = (
+    "`container_readiness` measures a container service and cannot target Lambda. Preserve the "
+    "declared Lambda and the original application-health requirement. If the declared resource "
+    "graph includes an API Gateway stage whose declared API integration is wired to this Lambda, "
+    "use `http_response` targeting that stage to check the same HTTP behavior. If the requirement "
+    "is processing queued work, use `event_processing` targeting the Lambda and the declared SQS "
+    "source only when the graph already contains the matching SQS-to-Lambda event binding. Do "
+    "not invent or add a service, remove or weaken an assertion, or label Lambda as a container. "
+    "If no declared compatible path preserves the requirement, report that limitation."
+)
+_HEALTH_TARGET_PAIR_GUIDANCE = {
+    ("container_readiness", "aws_lambda_function"): _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+}
 _HEALTH_TARGET_COMPATIBILITY_GUIDANCE = (
     "Use a declared target resource type compatible with the assertion kind. Allowed types: "
     + "; ".join(
@@ -134,7 +147,8 @@ _HEALTH_TARGET_COMPATIBILITY_GUIDANCE = (
     )
     + ". For database_roundtrip with relational SQL, target the declared aws_db_instance or "
     "aws_rds_cluster resource itself; do not target the API, worker, secret, network, or security "
-    "group. These are typed proposals, not evidence that any check ran."
+    "group. These are typed proposals, not evidence that any check ran. "
+    + _LAMBDA_CONTAINER_READINESS_GUIDANCE
 )
 
 NOVA_TERRAFORM_GENERATION_TASK = (
@@ -190,7 +204,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v21"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v22"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -455,6 +469,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _UNKNOWN_COST_FIELD_GUIDANCE,
         _UNKNOWN_REQUIREMENTS_FIELD_GUIDANCE,
         _UNKNOWN_CONTRACT_FIELD_GUIDANCE,
+        _LAMBDA_CONTAINER_READINESS_GUIDANCE,
         *(guidance for _, guidance in _GRAPH_VALIDATION_FEEDBACK.values()),
     }
 )
@@ -771,6 +786,11 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
                 entry["assertion_kind"] = assertion_kind
             if re.fullmatch(r"aws_[a-z0-9_]{2,120}", resource_type):
                 entry["observed_resource_type"] = resource_type
+            pair_guidance = _HEALTH_TARGET_PAIR_GUIDANCE.get(
+                (assertion_kind, resource_type)
+            )
+            if pair_guidance:
+                entry["guidance"] = pair_guidance
         if (
             safe_code == "value_error"
             and safe_field in {"proposal", "resources[*]"}

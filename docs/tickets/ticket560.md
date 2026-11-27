@@ -48,16 +48,17 @@ the original health requirement.
 
 ## Acceptance criteria
 
-- [ ] Lambda `container_readiness` feedback contains precise, fixed guidance;
+- [x] Lambda `container_readiness` feedback contains precise, fixed guidance;
   other incompatible pairs retain the general typed compatibility guidance.
-- [ ] A bounded repair can select an already-declared compatible health target
+- [x] A bounded repair can select an already-declared compatible health target
   without removing a health requirement or changing trusted context.
-- [ ] If no declared compatible path exists, guidance requires an honest
+- [x] If no declared compatible path exists, guidance requires an honest
   limitation rather than a new architecture or weakened assertion.
-- [ ] Feedback contains no raw resource ID, proposal value, rationale, or
+- [x] Feedback contains no raw resource ID, proposal value, rationale, or
   untrusted validator/model text.
-- [ ] Focused tests, full verification, documentation checks, PR CI, and
-  required clean-room proof pass.
+- [x] Focused tests, full verification, Ruff, Actions configuration, OpenAPI,
+  Compose, documentation conventions, and diff checks pass locally.
+- [ ] Required isolated clean-room proof, PR review, and all CI checks pass.
 - [ ] After protected control-plane deployment, one fresh review-only hosted
   generation reaches an inspectable plan or a precise next blocker. No
   customer-workload approval, apply, or destroy occurs.
@@ -69,10 +70,35 @@ policy, execution roles, apply gates, tenant controls, or infrastructure
 resources. A successful proposal or plan is not application-health or
 lifecycle evidence.
 
+## Acceptance status
+
+The pair-specific prompt and feedback, bounded repair/fail-closed tests, full
+verification, documentation checks, and hosted v21 baseline evidence are
+complete. Isolated clean-room proof, PR review/CI, protected control-plane
+deployment, and the next fresh hosted plan-only outcome remain open.
+
 ## Tests / evidence files
 
 - `docs/tickets/ticket560.md`
 - `docs/test/test560.md`
+
+## Evidence files produced
+
+- `docs/tickets/ticket560.md`
+- `docs/test/test560.md`
+
+## Boundaries
+
+No customer approval, workload apply/destroy, control-plane setting expansion,
+policy weakening, tenant-control change, or infrastructure-resource change.
+Preserve secrets, raw proposals, plans, state, and all prior failure evidence.
+
+## Tests / validation performed
+
+- `pytest -q tests/test_terraform_generation.py tests/test_generated_deployment_contract.py tests/test_customer_plan_review.py tests/test_nova_plan_runs.py` — 202 passed.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify` — 2,090 passed, Ruff passed, Actions configuration passed, OpenAPI snapshot matched, and Compose config passed.
+- Direct Ruff check, documentation convention check, and `git diff --check` passed.
+- Clean-room, PR CI/review, protected deployment, and fresh hosted plan-only result remain pending.
 
 ## Follow-up work
 

@@ -17,6 +17,7 @@ from davdeploy.terraform_generation import (
     _HEALTH_PAYLOAD_SIZE_GUIDANCE,
     _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
     _ID_PATTERN_GUIDANCE,
+    _LAMBDA_CONTAINER_READINESS_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
@@ -134,10 +135,11 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v21"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v22"
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
+    assert _LAMBDA_CONTAINER_READINESS_GUIDANCE in document["task"]
     assert "secret_reference_location" in document["task"]
     assert "report the limitation instead of inventing a resource" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
@@ -298,6 +300,188 @@ def test_incompatible_health_target_gets_exact_feedback_and_bounded_rds_repair()
     assert "api-secret-key" not in str(repair_feedback)
     assert result.proposal.health_assertions[0].target_resource_id == "db"
     assert len(gateway.calls) == 2
+
+
+def test_lambda_container_readiness_feedback_preserves_http_health_requirement():
+    gateway = RecordingGateway(None)
+
+    def incompatible_then_correct(request, document):
+        output = proposal(request, document)
+        output["resources"] = [
+            {
+                "resource_id": "health-handler-7a1",
+                "resource_type": "aws_lambda_function",
+                "name": "function",
+                "arguments": {},
+                "outputs": [{"name": "function_arn", "value_type": "aws_arn"}],
+                "rationale": "Handles application requests.",
+            },
+            {
+                "resource_id": "http-api-4c2",
+                "resource_type": "aws_apigatewayv2_api",
+                "name": "http_api",
+                "arguments": {},
+                "outputs": [{"name": "api_id", "value_type": "resource_name"}],
+                "rationale": "Exposes the declared application HTTP API.",
+            },
+            {
+                "resource_id": "integration-x90",
+                "resource_type": "aws_apigatewayv2_integration",
+                "name": "http_integration",
+                "arguments": {
+                    "api_id": {
+                        "kind": "resource_reference",
+                        "resource_id": "http-api-4c2",
+                        "output_name": "api_id",
+                        "value_type": "resource_name",
+                    },
+                    "integration_uri": {
+                        "kind": "resource_reference",
+                        "resource_id": "health-handler-7a1",
+                        "output_name": "function_arn",
+                        "value_type": "aws_arn",
+                    },
+                },
+                "outputs": [{"name": "integration_id", "value_type": "resource_name"}],
+                "rationale": "Connects the API to the declared Lambda function.",
+            },
+            {
+                "resource_id": "route-y90",
+                "resource_type": "aws_apigatewayv2_route",
+                "name": "http_route",
+                "arguments": {
+                    "api_id": {
+                        "kind": "resource_reference",
+                        "resource_id": "http-api-4c2",
+                        "output_name": "api_id",
+                        "value_type": "resource_name",
+                    },
+                    "target": {
+                        "kind": "resource_reference",
+                        "resource_id": "integration-x90",
+                        "output_name": "integration_id",
+                        "value_type": "resource_name",
+                    },
+                },
+                "rationale": "Routes HTTP requests through the Lambda integration.",
+            },
+            {
+                "resource_id": "gateway-stage-22",
+                "resource_type": "aws_apigatewayv2_stage",
+                "name": "gateway_stage",
+                "arguments": {
+                    "api_id": {
+                        "kind": "resource_reference",
+                        "resource_id": "http-api-4c2",
+                        "output_name": "api_id",
+                        "value_type": "resource_name",
+                    }
+                },
+                "rationale": "Provides the API endpoint for HTTP health checks.",
+            },
+        ]
+        output["health_assertions"] = [
+            {
+                "kind": "container_readiness",
+                "target_resource_id": "health-handler-7a1" if len(gateway.calls) == 1 else "gateway-stage-22",
+                "description": "The HTTP application responds successfully.",
+            }
+        ]
+        if len(gateway.calls) > 1:
+            output["health_assertions"][0] = {
+                "kind": "http_response",
+                "target_resource_id": "gateway-stage-22",
+                "path": "/health",
+                "method": "GET",
+                "expected_status_code": 200,
+                "description": "The HTTP application health endpoint responds successfully.",
+            }
+        return output
+
+    gateway.output = incompatible_then_correct
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+    result = instance.generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    repair_feedback = gateway.calls[1][1]["validation_feedback"]
+    assert repair_feedback == [
+        {
+            "code": "value_error",
+            "field": "health_assertions[*].target_resource_id",
+            "issue": "incompatible_health_target",
+            "guidance": _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+            "assertion_kind": "container_readiness",
+            "observed_resource_type": "aws_lambda_function",
+        }
+    ]
+    assert not any(
+        resource_id in str(repair_feedback)
+        for resource_id in (
+            "health-handler-7a1",
+            "http-api-4c2",
+            "integration-x90",
+            "route-y90",
+            "gateway-stage-22",
+        )
+    )
+    assert result.proposal.health_assertions[0].kind == "http_response"
+    assert result.proposal.health_assertions[0].target_resource_id == "gateway-stage-22"
+    assert "health endpoint responds successfully" in result.proposal.health_assertions[0].description
+    assert len(gateway.calls) == 2
+
+
+def test_lambda_container_readiness_without_declared_alternative_fails_closed():
+    def unsupported_health_target(request, document):
+        output = proposal(request, document)
+        output["resources"] = [
+            {
+                "resource_id": "health-handler-7a1",
+                "resource_type": "aws_lambda_function",
+                "name": "health_handler",
+                "arguments": {},
+                "rationale": "Handles application requests.",
+            }
+        ]
+        output["health_assertions"] = [
+            {
+                "kind": "container_readiness",
+                "target_resource_id": "health-handler-7a1",
+                "description": "The application must be ready to serve requests.",
+            }
+        ]
+        return output
+
+    instance = NovaTerraformGenerator(
+        gateway=RecordingGateway(unsupported_health_target),
+        max_output_tokens=800,
+        timeout_seconds=30,
+    )
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        instance.generate(
+            approved_plan={"target": {"region": "us-east-1"}},
+            tenant=scope(),
+            source_revision="revision-123",
+        )
+
+    assert failure.value.attempt_count == 2
+    assert failure.value.validation_feedback == (
+        {
+            "code": "value_error",
+            "field": "health_assertions[*].target_resource_id",
+            "issue": "incompatible_health_target",
+            "guidance": _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+            "assertion_kind": "container_readiness",
+            "observed_resource_type": "aws_lambda_function",
+        },
+    )
+    assert "report that limitation" in failure.value.validation_feedback[0]["guidance"]
+    assert "health-handler-7a1" not in str(failure.value.validation_feedback)
+    assert len(instance.gateway.calls) == 2
 
 
 def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
