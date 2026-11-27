@@ -21,6 +21,7 @@ from davdeploy.terraform_generation import (
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
+    _RESOURCE_OBJECT_SHAPE_GUIDANCE,
     _SECRET_REFERENCE_LOCATION_GUIDANCE,
     _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
@@ -135,7 +136,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v23"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v24"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
@@ -1140,6 +1141,40 @@ def test_resource_level_value_errors_receive_fixed_safe_guidance(resource_update
 
 
 @pytest.mark.parametrize(
+    ("code", "location", "guidance"),
+    [
+        ("missing", ("resources", 0), _RESOURCE_OBJECT_SHAPE_GUIDANCE["missing"]),
+        (
+            "extra_forbidden",
+            ("resources", 0, "private_input_marker"),
+            _RESOURCE_OBJECT_SHAPE_GUIDANCE["extra_forbidden"],
+        ),
+    ],
+)
+def test_root_resource_shape_feedback_is_fixed_and_redacts_untrusted_keys(
+    code, location, guidance
+):
+    error = ValidationError.from_exception_data(
+        "GeneratedDeploymentProposal",
+        [
+            {
+                "type": code,
+                "loc": location,
+                "input": {"private_input_marker": "do-not-echo-this-value"},
+            }
+        ],
+    )
+
+    feedback = _sanitize_pydantic_feedback(error)
+
+    assert feedback == [
+        {"code": code, "field": "resources[*]", "guidance": guidance}
+    ]
+    assert "private_input_marker" not in repr(feedback)
+    assert "do-not-echo-this-value" not in repr(feedback)
+
+
+@pytest.mark.parametrize(
     "arguments",
     [
         {"password": "plaintext"},
@@ -1217,6 +1252,14 @@ def _invalid_with_untrusted_extra(request, document):
     return result
 
 
+def _invalid_with_resource_wrapper(request, document):
+    result = _valid_proposal(request, document)
+    result["resources"][0]["private_resource_wrapper"] = {
+        "value": "do-not-echo-resource-wrapper"
+    }
+    return result
+
+
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
     gateway = SequenceGateway(
         [_invalid_with_untrusted_extra, _valid_proposal],
@@ -1278,6 +1321,33 @@ def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inpu
         "fixture-call-1",
         "fixture-call-2",
     ]
+
+
+def test_semantic_repair_gets_fixed_guidance_for_root_resource_wrapper():
+    gateway = SequenceGateway([_invalid_with_resource_wrapper, _valid_proposal])
+    approved_plan = {"target": {"region": "us-east-1"}, "note": "synthetic fixture"}
+
+    result = NovaTerraformGenerator(
+        gateway=gateway,
+        max_output_tokens=800,
+        timeout_seconds=30,
+        total_timeout_seconds=60,
+    ).generate(
+        approved_plan=approved_plan,
+        tenant=scope(),
+        source_revision="trusted-revision-shape-1",
+    )
+
+    feedback = gateway.calls[1][1]["validation_feedback"]
+    assert feedback[0] == {
+        "code": "extra_forbidden",
+        "field": "resources[*]",
+        "guidance": _RESOURCE_OBJECT_SHAPE_GUIDANCE["extra_forbidden"],
+    }
+    assert all(set(item) <= {"code", "field", "guidance", "issue"} for item in feedback)
+    assert "private_resource_wrapper" not in repr(gateway.calls[1][1])
+    assert "do-not-echo-resource-wrapper" not in repr(gateway.calls[1][1])
+    assert result.proposal.source_revision == "trusted-revision-shape-1"
 
 
 def test_unknown_cost_stays_unknown_after_a_semantic_repair():
