@@ -4,6 +4,9 @@
 - Execution type: authenticated CLI status/audit reads and one bounded hosted
   Nova plan-only retry
 - Control-plane commit: `03d3192a4e5e5ec2c6b86f0c5abb47c8d2c2bdb4`
+- Commit: `d428e9f45ec38cb270cda46fa38ab9a845a38c58` (implementation)
+- Evidence commit: `d8de5bef51f99270dc7841a934b278fbff17f319`
+- Pull request: [#549](https://github.com/Bepoadewale/davdeploy/pull/549)
 - AWS account: `654654474502` (control plane only; no workload apply)
 - AWS region: `us-east-1`
 - Customer repository: `Bepoadewale/fitness-backend` (synthetic acceptance project)
@@ -59,3 +62,8 @@ persisted diagnostics. The validation schema remains strict.
 
 The synthetic run created no AWS workload resources and needs no cloud
 teardown. Run metadata remains as audit evidence.
+
+## Final boundary
+
+This documents one bounded hosted generation failure. It does not establish a
+valid plan, approval, apply, application behavior, lifecycle, or certification.
