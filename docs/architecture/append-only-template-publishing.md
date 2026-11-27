@@ -20,6 +20,23 @@ The existing discovery-template state uses a separate current-object address and
 
 After this migration, each release adds the prior current key to the manifest and introduces the new content-hash instance. No move is required for newly published objects because they are created directly at their permanent address. Keep all historical keys in the manifest indefinitely while customer URLs or stacks may depend on them; removal requires a separate explicit retention decision and must not be part of routine publishing.
 
+## Plan review and apply
+
+The template-host root is operated with `scripts/customer-aws-template-host.sh`, separately from the control-plane GitHub Actions workflows. Run `make customer-aws-template-host-plan` to initialize the configured remote state and create a saved plan under `.local/template-host-plans/`. The directory is mode `0700`; the saved plan and manifest are mode `0600`. Review the displayed plan and retain its printed directory and SHA-256 digest.
+
+Apply requires the same exact plan file and the digest recorded at review time:
+
+```sh
+CONFIRM_TEMPLATE_HOST_APPLY=APPLY_DAVDEPLOY_TEMPLATE_HOST \
+  make customer-aws-template-host-apply \
+  PLAN_DIRECTORY=/absolute/path/to/.local/template-host-plans/plan.<id> \
+  PLAN_SHA256=<reviewed-plan-sha256>
+```
+
+The helper checks the reviewed digest, manifest digest, AWS account, region, state bucket/key/lock table, template bucket, Terraform version, Git commit, and current Terraform/template source fingerprint before initializing the backend. It then applies only that saved plan; it does not regenerate a plan or use `-auto-approve`. Terraform's saved-plan state check rejects a plan if the remote state changed after review. Create and review a new plan after any source, target, or state change. Local saved plans are sensitive artifacts: keep them in the ignored `.local/` directory, use an encrypted local disk, and do not copy them into Git or GitHub artifacts. File permissions restrict access but do not encrypt a plan.
+
+The confirmation variable is an accidental-invocation guard. It does not replace inspection of the displayed plan and supplying the exact printed digest. This local operator path has no GitHub workflow or environment approval; a future remote workflow would need its own isolated plan storage, role, state binding, and approval design.
+
 ## Trade-offs
 
 | Choice | Benefit | Cost or limit |
