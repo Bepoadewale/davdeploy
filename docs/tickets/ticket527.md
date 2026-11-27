@@ -24,6 +24,7 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - AWS service authorization references: [EC2](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html), [ECR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecr.html), [CloudWatch Logs](https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html), [ECS](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html), and [IAM](https://docs.aws.amazon.com/service-authorization/latest/reference/list_iam.html).
 - ECS APIs: [CreateExpressGatewayService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateExpressGatewayService.html) and [DeleteExpressGatewayService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteExpressGatewayService.html).
 - Pinned AWS provider v6.73.0 source for [`aws_ecs_express_gateway_service`](https://github.com/hashicorp/terraform-provider-aws/blob/v6.73.0/internal/service/ecs/express_gateway_service.go), matching the pilot root lockfile.
+- Pinned provider shared ECS lookup helper in [`service.go`](https://github.com/hashicorp/terraform-provider-aws/blob/v6.73.0/internal/service/ecs/service.go) and generic ECS tag hooks in [`tags_gen.go`](https://github.com/hashicorp/terraform-provider-aws/blob/v6.73.0/internal/service/ecs/tags_gen.go).
 
 ## Work planned for the PR
 
@@ -31,7 +32,7 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - Document EC2 relationship/tag scope, exact ECR/log-group resources, Terraform data-source reads, ECS Express composite API actions, and exact-role `iam:PassRole` requirements in `docs/security/ECS_EXPRESS_EXECUTION_IAM.md`.
 - Verify the runner's existing staged flow: foundation plan/apply with the service disabled, image publication, then a separate service plan/apply after subnet IDs exist.
 - Identify ECS Express API side effects that are not represented as Terraform-managed resources in the approved plan.
-- Review the pinned provider's direct ECS API calls and record shared-helper/tagging calls that still need separate authorization mapping.
+- Review the pinned provider's direct ECS API calls, shared service lookup, generic tag synchronization, and best-effort EC2 managed-security-group filter. Record the mapping and keep unverified policy tuples deferred.
 - Keep permission code, credential wiring and cloud execution deferred wherever exact scoping is not proven.
 
 ## Acceptance criteria
@@ -40,20 +41,19 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - [x] ECS Express composite actions and the distinct ECS infrastructure-role responsibility are documented.
 - [x] A single combined plan's computed-subnet limitation is explicit, and the existing staged runner flow is identified as a way to supply known subnet IDs to the later service plan.
 - [x] No broad caller permission for ELB/Auto Scaling is inferred from ECS-managed side effects.
-- [x] The pinned provider version and direct ECS API calls for create, read, update, and delete are recorded; authorization for shared helpers, tag synchronization, and EC2 managed-security-group filtering remains open.
-- [ ] Every provider API call and internal ECS resource ARN is verified against the pinned provider and represented in tested policy code; deferred to a follow-up implementation package.
+- [x] The pinned provider's direct ECS calls, `DescribeServices` existence helper, generic `ListTagsForResource`/`TagResource`/`UntagResource` hooks, steady-state deployment polling, and best-effort `DescribeSecurityGroups` helper are mapped.
+- [x] AWS resource types and documented tag conditions for ECS service, deployment, and tag actions are recorded. Exact IAM simulation and create-time tag authorization remain follow-up implementation gates; no policy code is claimed by this documentation PR.
 - [x] Renderer, hosted control plane, customer resources, state and locks remain untouched.
-- [x] Final-head GitHub CI run `45913543343` passed all seven checks on head `e5aff6f9`.
+- [x] Prior-head GitHub CI run `45916136160` passed all seven checks on head `13b6c302`.
 
 ## Acceptance status
 
-The sourced authorization mapping and implementation blocker are recorded. This PR does not implement or enable ECS permissions. The pilot remains ineligible for any apply until the deferred criteria and later lifecycle gates are met.
+The pinned-provider call map and implementation blocker are recorded. This PR does not implement or enable ECS permissions. The pilot remains ineligible for any apply until the follow-up policy code, exact IAM simulation, role-profile verification, clean-room checks and later lifecycle gates pass.
 
 ## Tests / validation performed
 
-- `GITHUB_PR_NUMBER=527 python3 scripts/check_doc_conventions.py`: passed.
-- Final-head GitHub Actions run `45913543343` on `e5aff6f9`: all seven checks passed.
-- `git diff --check`: passed.
+- Prior head `13b6c302ab5a9ff55cba772b4af4c1dd890755c7`: GitHub Actions run `45916136160` passed all seven checks.
+- Updated provider helper/tag map still requires current-head documentation checks and CI.
 - No code tests apply to this documentation-only package. No cloud call, Terraform plan/apply/destroy, role assumption, or hosted control-plane operation was performed.
 
 ## Evidence files produced
@@ -68,4 +68,4 @@ The sourced authorization mapping and implementation blocker are recorded. This 
 
 ## Follow-up work
 
-Complete the shared-helper, tag-synchronization, and EC2 helper authorization map; verify all internal ECS resource ARNs and exact conditions; bind the existing foundation and service stages to separate approved plan digests and phase-specific identities; implement tested plan-bound policy generation; then pass clean-room and CI gates before any bounded AWS pilot.
+Implement the tested plan-bound policy; verify exact IAM simulation for all supported resource/condition tuples and tag operations; bind foundation and service stages to separate approved plan digests and phase-specific identities; then pass clean-room and CI gates before any bounded AWS pilot.
