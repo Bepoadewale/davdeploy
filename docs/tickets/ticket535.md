@@ -31,11 +31,11 @@ implement or enable an ECS apply policy.
   describes the composite operation and its service behavior.
 - The pinned AWS provider v6.73.0 operation map is in
   [`ECS_EXPRESS_EXECUTION_IAM.md`](../security/ECS_EXPRESS_EXECUTION_IAM.md).
-- AWS IAM documents that same-account resource policies naming a role-session
-  principal can grant access beyond an implicit session-policy deny. This is
-  relevant because an ECS caller session can be named from other AWS service
-  resource policies even though ECS resources themselves do not support such
-  policies.
+- AWS [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html)
+  documents that a same-account resource policy naming a role-session principal
+  can grant access beyond an implicit session-policy deny. An ECS caller
+  session can be named by other AWS service resource policies even though ECS
+  resources themselves do not support those policies.
 - The compact action-only policy's earlier character measurements omitted
   this explicit-deny boundary and do not prove that a complete safe session
   policy fits the STS input limit. No implementation is safe until this is
@@ -62,24 +62,25 @@ implement or enable an ECS apply policy.
   cross-service resource-policy grants to the assumed role session.
 - [x] Keep all implementation and cloud execution claims truthful; no ECS
   apply policy is supported by this documentation.
-- [ ] Obtain final-head CI for this replacement PR.
-- [ ] Keep the renderer disabled until action/resource mapping, role-profile
+- [x] All seven final-head checks pass for the documentation replacement.
+- [x] Keep the renderer disabled while action/resource mapping, role-profile
   verification, deterministic policy tests, and authorized lifecycle evidence
-  meet their separate gates.
+  remain separate open gates.
 
 ## Acceptance status
 
-The replacement is documentation-only and remains a draft until its own
-final-head CI passes. No policy implementation, cloud apply, or customer
-workload execution is claimed.
+The replacement is documentation-only. It records a security blocker that
+prevents treating the compact policy as a safe boundary. No policy
+implementation, cloud apply, or customer workload execution is claimed.
 
 ## Tests / validation performed
 
 The original documentation content passed all seven checks in GitHub Actions
 run `45924552446` on former PR #529 head `803553159c501ce9ff0750354b62ecb518ecd0ba`.
-That run does not validate this replacement branch; the new PR requires its own
-final-head checks. No customer workload evidence file is added because this
-package performed no workload test.
+Replacement PR #535 head `a0f6616fcbaa7dfe1d6b1394e9181ce4e29d53ca` passed all
+seven checks in run `45930431179`. The ticket status update needs fresh final-
+head checks. No customer workload evidence file is added because this package
+performed no workload test.
 
 ## Evidence files produced
 
