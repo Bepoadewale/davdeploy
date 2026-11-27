@@ -27,6 +27,26 @@ class IncompatibleHealthTargetError(ValueError):
         self.resource_type = resource_type
 
 
+SECRET_REFERENCE_LOCATION_CATEGORIES = frozenset(
+    {
+        "non_lambda_resource",
+        "lambda_environment_variable_name",
+        "lambda_other_argument",
+    }
+)
+
+
+class InvalidSecretReferenceLocationError(ValueError):
+    """Safe destination metadata for a rejected secret reference."""
+
+    def __init__(self, resource_type: str, location: str) -> None:
+        super().__init__(
+            "secret_reference values may only populate a Lambda secret ARN environment variable"
+        )
+        self.resource_type = resource_type
+        self.location = location
+
+
 class ResourceReference(StrictContract):
     kind: str = Field(pattern=r"^resource_reference$")
     resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
@@ -60,6 +80,12 @@ class GeneratedResource(StrictContract):
             ):
                 raise ValueError(
                     "secret_reference outputs must identify an RDS-managed master secret ARN"
+                )
+        for path, _reference in _secret_reference_paths(self.arguments):
+            if not _is_supported_secret_reference_location(self.resource_type, path):
+                raise InvalidSecretReferenceLocationError(
+                    self.resource_type,
+                    _secret_reference_location_category(self.resource_type, path),
                 )
         forbidden = {
             "provider", "provisioner", "connection", "access_key",
@@ -395,16 +421,10 @@ class GeneratedDeploymentProposal(StrictContract):
                 raise ValueError("dependencies must reference other declared resources")
             graph[resource.resource_id] = dependencies
             for path, _reference in _secret_reference_paths(resource.arguments):
-                allowed_lambda_secret_arn = (
-                    resource.resource_type == "aws_lambda_function"
-                    and len(path) == 4
-                    and path[0:3] == ("environment", 0, "variables")
-                    and isinstance(path[3], str)
-                    and path[3].endswith("_SECRET_ARN")
-                )
-                if not allowed_lambda_secret_arn:
-                    raise ValueError(
-                        "secret_reference values may only populate a Lambda secret ARN environment variable"
+                if not _is_supported_secret_reference_location(resource.resource_type, path):
+                    raise InvalidSecretReferenceLocationError(
+                        resource.resource_type,
+                        _secret_reference_location_category(resource.resource_type, path),
                     )
             for ref in _references(resource.arguments):
                 target = by_id.get(ref.resource_id)
@@ -487,6 +507,32 @@ def _secret_reference_paths(
             for item in _secret_reference_paths(child, (*path, index))
         ]
     return []
+
+
+def _is_supported_secret_reference_location(
+    resource_type: str, path: tuple[str | int, ...]
+) -> bool:
+    return (
+        resource_type == "aws_lambda_function"
+        and len(path) == 4
+        and path[0:3] == ("environment", 0, "variables")
+        and isinstance(path[3], str)
+        and path[3].endswith("_SECRET_ARN")
+    )
+
+
+def _secret_reference_location_category(
+    resource_type: str, path: tuple[str | int, ...]
+) -> str:
+    if resource_type != "aws_lambda_function":
+        return "non_lambda_resource"
+    if (
+        len(path) == 4
+        and path[0:3] == ("environment", 0, "variables")
+        and isinstance(path[3], str)
+    ):
+        return "lambda_environment_variable_name"
+    return "lambda_other_argument"
 
 
 def _is_supported_secret_output(resource: GeneratedResource, path: str) -> bool:

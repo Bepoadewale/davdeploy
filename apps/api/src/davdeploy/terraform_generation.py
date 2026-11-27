@@ -25,8 +25,10 @@ from davdeploy.contracts import (
 )
 from davdeploy.generated_deployment_contract import (
     HEALTH_ASSERTION_TARGET_RESOURCE_TYPES,
+    SECRET_REFERENCE_LOCATION_CATEGORIES,
     GeneratedDeploymentProposal,
     IncompatibleHealthTargetError,
+    InvalidSecretReferenceLocationError,
     terraform_resource_blocks,
 )
 from davdeploy.model_gateway import (
@@ -175,12 +177,20 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "Copy the trusted provenance and region below. "
     "If validation_feedback is present, it contains only fixed schema error codes, safe "
     "field paths, allowlisted issue codes, trusted correction guidance, and an optional "
-    "observed_resource_type chosen from the validated AWS resource type string. Correct the stated "
-    "graph, reference, health, event-binding, or cost-target issue without weakening customer "
-    "requirements or inventing resource IDs. Correct those issues using the original approved_plan and trusted generation "
+    "observed_resource_type chosen from the validated AWS resource type string, and an optional "
+    "secret_reference_location from a fixed location category. If it is "
+    "lambda_environment_variable_name, rename only the environment variable to end in "
+    "_SECRET_ARN. If it is lambda_other_argument, move the typed reference to the allowed Lambda "
+    "environment path. If it is non_lambda_resource, preserve the selected architecture and do "
+    "not add a Lambda solely to pass validation; do not remove or weaken a customer requirement. "
+    "If no supported location preserves that architecture and requirement, report the limitation "
+    "instead of inventing a resource. "
+    "Correct the stated graph, reference, health, event-binding, or cost-target issue without "
+    "weakening customer requirements or inventing resource IDs. Correct those issues using the "
+    "original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v20"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v21"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -410,6 +420,21 @@ _RESOURCE_OUTPUT_GUIDANCE = (
     "Give each output a unique name and expose only supported values; a secret reference "
     "output is allowed only for an RDS-managed master secret ARN."
 )
+_SECRET_REFERENCE_LOCATION_GUIDANCE = {
+    "non_lambda_resource": (
+        "The secret reference is on a non-Lambda resource. Preserve the selected architecture; "
+        "do not add a Lambda solely to pass validation or remove a customer requirement. Use the "
+        "supported secret location only when an existing declared Lambda needs the credential."
+    ),
+    "lambda_environment_variable_name": (
+        "Keep the declared Lambda and typed secret reference; rename only its environment variable "
+        "so the name ends with _SECRET_ARN. Do not change the secret output or add a resource."
+    ),
+    "lambda_other_argument": (
+        "Keep the declared Lambda and typed secret reference; move it only to "
+        "environment[0].variables.<NAME>_SECRET_ARN. Do not change the secret output or add a resource."
+    ),
+}
 _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
     {
         _ID_PATTERN_GUIDANCE,
@@ -421,6 +446,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _RESOURCE_CREDENTIAL_GUIDANCE,
         _RESOURCE_RESERVED_TAG_GUIDANCE,
         _RESOURCE_OUTPUT_GUIDANCE,
+        *_SECRET_REFERENCE_LOCATION_GUIDANCE.values(),
         _HEALTH_PAYLOAD_SIZE_GUIDANCE,
         _UNKNOWN_RESOURCE_FIELD_GUIDANCE,
         _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
@@ -505,6 +531,23 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
             guidance = item.get("guidance")
             if isinstance(guidance, str) and guidance in _ALLOWED_FEEDBACK_GUIDANCE:
                 sanitized["guidance"] = guidance
+            assertion_kind = item.get("assertion_kind")
+            if (
+                isinstance(assertion_kind, str)
+                and assertion_kind in HEALTH_ASSERTION_TARGET_RESOURCE_TYPES
+            ):
+                sanitized["assertion_kind"] = assertion_kind
+            resource_type = item.get("observed_resource_type")
+            if isinstance(resource_type, str) and re.fullmatch(
+                r"aws_[a-z0-9_]{2,120}", resource_type
+            ):
+                sanitized["observed_resource_type"] = resource_type
+            secret_location = item.get("secret_reference_location")
+            if (
+                isinstance(secret_location, str)
+                and secret_location in SECRET_REFERENCE_LOCATION_CATEGORIES
+            ):
+                sanitized["secret_reference_location"] = secret_location
             sanitized_feedback.append(sanitized)
         self.validation_feedback = tuple(sanitized_feedback)
 
@@ -728,6 +771,21 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
                 entry["assertion_kind"] = assertion_kind
             if re.fullmatch(r"aws_[a-z0-9_]{2,120}", resource_type):
                 entry["observed_resource_type"] = resource_type
+        if (
+            safe_code == "value_error"
+            and safe_field in {"proposal", "resources[*]"}
+            and isinstance(cause, InvalidSecretReferenceLocationError)
+        ):
+            feedback_field = "resources[*].arguments"
+            entry["issue"] = "invalid_secret_reference_location"
+            location = cause.location
+            if isinstance(location, str) and location in SECRET_REFERENCE_LOCATION_CATEGORIES:
+                entry["guidance"] = _SECRET_REFERENCE_LOCATION_GUIDANCE[location]
+                entry["secret_reference_location"] = location
+            else:
+                entry["guidance"] = _RESOURCE_CREDENTIAL_GUIDANCE
+            if re.fullmatch(r"aws_[a-z0-9_]{2,120}", cause.resource_type):
+                entry["observed_resource_type"] = cause.resource_type
         entry["field"] = feedback_field
         feedback.append(entry)
     return feedback or [{"code": "invalid", "field": "proposal"}]

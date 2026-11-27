@@ -52,14 +52,15 @@ name. No Terraform artifact or customer workload was created.
 
 ## Acceptance criteria
 
-- [ ] Valid RDS managed-secret output references in Lambda `_SECRET_ARN`
+- [x] Valid RDS managed-secret output references in Lambda `_SECRET_ARN`
   environment variables remain accepted; invalid destinations fail closed.
-- [ ] Repair and persisted diagnostics expose only the allowlisted resource type,
+- [x] Repair and persisted diagnostics expose only the validated AWS resource type,
   location category, canonical field, issue, and fixed guidance.
-- [ ] Resource IDs, argument names/values, secret values, rationale, and raw
+- [x] Resource IDs, argument names/values, secret values, rationale, and raw
   proposal text never enter feedback or API output.
-- [ ] Bounded repair and negative redaction tests pass; full verification,
-  clean-room proof, docs checks, review, and all required CI pass.
+- [x] Bounded repair and negative redaction tests pass; full verification and
+  docs checks pass.
+- [ ] Clean-room proof, review, and all required CI pass.
 - [ ] After protected deployment, a fresh review-only hosted run reaches an
   inspectable saved plan or a precise next blocker. No customer approval/apply.
 
@@ -72,12 +73,17 @@ state material out of logs.
 
 ## Acceptance status
 
-Bootstrap only. Implementation and local verification are pending.
+Implementation, bounded-repair tests, full local verification, and docs checks
+complete. Clean-room proof, review, and CI remain pending.
 
 ## Tests / validation performed
 
-No implementation tests have run yet. The hosted v20 baseline is recorded in
-`docs/test/test559.md`.
+`make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify` passed with
+2,088 tests, Ruff, OpenAPI snapshot, and Compose validation. The focused
+secret-reference tests also passed for both rejected locations and the
+bounded Lambda environment-name repair. Docs conventions and
+`git diff --check` passed. Clean-room proof, review, and PR CI remain pending.
+The hosted v20 baseline is recorded in `docs/test/test559.md`.
 
 ## Evidence files produced
 

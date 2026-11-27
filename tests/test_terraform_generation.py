@@ -20,6 +20,7 @@ from davdeploy.terraform_generation import (
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
+    _SECRET_REFERENCE_LOCATION_GUIDANCE,
     _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
@@ -133,10 +134,12 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v20"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v21"
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
+    assert "secret_reference_location" in document["task"]
+    assert "report the limitation instead of inventing a resource" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -665,6 +668,188 @@ def test_known_graph_validator_causes_map_to_distinct_fixed_feedback(cause, issu
     assert failure.validation_feedback == (
         {"code": "value_error", "field": "proposal", "issue": issue, "guidance": guidance},
     )
+
+
+@pytest.mark.parametrize(
+    ("target_type", "target_arguments", "location"),
+    [
+        (
+            "aws_ecs_task_definition",
+            {"container_definitions": [{"secrets": [{"valueFrom": "placeholder"}]}]},
+            "non_lambda_resource",
+        ),
+        (
+            "aws_lambda_function",
+            {"environment": [{"variables": {"DATABASE_PASSWORD": "placeholder"}}]},
+            "lambda_environment_variable_name",
+        ),
+        (
+            "aws_lambda_function",
+            {"kms_key_arn": "placeholder"},
+            "lambda_other_argument",
+        ),
+    ],
+)
+def test_secret_reference_location_feedback_is_safe_and_persisted(
+    target_type, target_arguments, location
+):
+    reference = {
+        "kind": "resource_reference",
+        "resource_id": "database-secret",
+        "output_name": "master_user_secret[0].secret_arn",
+        "value_type": "secret_reference",
+    }
+    if target_type == "aws_ecs_task_definition":
+        target_arguments["container_definitions"][0]["secrets"][0]["valueFrom"] = reference
+    else:
+        if "environment" in target_arguments:
+            target_arguments["environment"][0]["variables"]["DATABASE_PASSWORD"] = reference
+        else:
+            target_arguments["kms_key_arn"] = reference
+    raw = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "a" * 64,
+        "resources": [
+            {
+                "resource_id": "database-secret",
+                "resource_type": "aws_rds_cluster",
+                "name": "database",
+                "arguments": {"manage_master_user_password": True},
+                "outputs": [
+                    {
+                        "name": "master_user_secret[0].secret_arn",
+                        "value_type": "secret_reference",
+                    }
+                ],
+                "rationale": "Uses the provider-managed database credential.",
+            },
+            {
+                "resource_id": "worker-secret-target",
+                "resource_type": target_type,
+                "name": "application",
+                "arguments": target_arguments,
+                "rationale": "Receives the database credential.",
+            },
+        ],
+        "requirements": {"region": "us-east-1"},
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(raw)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    assert feedback == [
+        {
+            "code": "value_error",
+            "field": "resources[*].arguments",
+            "issue": "invalid_secret_reference_location",
+            "guidance": _SECRET_REFERENCE_LOCATION_GUIDANCE[location],
+            "observed_resource_type": target_type,
+            "secret_reference_location": location,
+        }
+    ]
+    assert "database-secret" not in str(feedback)
+    assert "worker-secret-target" not in str(feedback)
+    assert "DATABASE_PASSWORD" not in str(feedback)
+    assert "kms_key_arn" not in str(feedback)
+
+    failure = NovaTerraformGenerationFailed(
+        "safe failure",
+        attempt_count=2,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=tuple(feedback),
+    )
+    assert failure.validation_feedback == tuple(feedback)
+    hostile = NovaTerraformGenerationFailed(
+        "safe failure",
+        attempt_count=2,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=(
+            {
+                **feedback[0],
+                "observed_resource_type": "untrusted-resource-id",
+                "secret_reference_location": "untrusted-location",
+                "resource_id": "must-not-escape",
+            },
+        ),
+    )
+    assert hostile.validation_feedback == (
+        {key: feedback[0][key] for key in ("code", "field", "issue", "guidance")},
+    )
+    assert "must-not-escape" not in str(hostile.validation_feedback)
+
+
+def test_nova_repairs_lambda_secret_variable_name_with_bounded_feedback():
+    gateway = RecordingGateway(None)
+
+    def output(request, document):
+        variable_name = "DATABASE_PASSWORD" if len(gateway.calls) == 1 else "DATABASE_SECRET_ARN"
+        return {
+            "contract_version": "1.1",
+            "source_revision": "revision-123",
+            "context_digest": document["trusted_generation_context"]["context_digest"],
+            "resources": [
+                {
+                    "resource_id": "database",
+                    "resource_type": "aws_rds_cluster",
+                    "name": "database",
+                    "arguments": {"manage_master_user_password": True},
+                    "outputs": [
+                        {
+                            "name": "master_user_secret[0].secret_arn",
+                            "value_type": "secret_reference",
+                        }
+                    ],
+                    "rationale": "Uses a managed database credential.",
+                },
+                {
+                    "resource_id": "api",
+                    "resource_type": "aws_lambda_function",
+                    "name": "api",
+                    "arguments": {
+                        "environment": [
+                            {
+                                "variables": {
+                                    variable_name: {
+                                        "kind": "resource_reference",
+                                        "resource_id": "database",
+                                        "output_name": "master_user_secret[0].secret_arn",
+                                        "value_type": "secret_reference",
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    "rationale": "Connects the API to its database.",
+                },
+            ],
+            "requirements": {
+                "region": document["trusted_generation_context"]["region"]
+            },
+        }
+
+    gateway.output = output
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+    result = instance.generate(
+        approved_plan={"summary": {}, "target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    assert len(gateway.calls) == 2
+    feedback = gateway.calls[1][1]["validation_feedback"]
+    assert feedback[0]["issue"] == "invalid_secret_reference_location"
+    assert feedback[0]["observed_resource_type"] == "aws_lambda_function"
+    assert feedback[0]["secret_reference_location"] == "lambda_environment_variable_name"
+    assert "DATABASE_PASSWORD" not in str(feedback)
+    assert "database" not in str(feedback)
+    assert result.proposal.resources[1].arguments["environment"][0]["variables"].keys() == {
+        "DATABASE_SECRET_ARN"
+    }
 
 
 def test_unrecognized_proposal_validator_message_is_never_returned():
