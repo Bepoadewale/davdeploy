@@ -40,20 +40,20 @@ output or validator messages.
 
 ## Acceptance criteria
 
-- [ ] Unknown validator codes produce only a generic, fixed
+- [x] Unknown validator codes produce only a generic, fixed
   `invalid`/`proposal` diagnostic and allowlisted guidance.
-- [ ] Raw validator messages, proposal values, and secrets remain absent from
+- [x] Raw validator messages, proposal values, and secrets remain absent from
   feedback and persisted diagnostics.
-- [ ] Focused and full local verification and all seven hosted CI checks pass.
+- [ ] Focused/full local verification and all seven hosted CI checks pass.
 - [ ] A fresh v13 hosted run reaches a saved plan or ends with actionable,
   bounded feedback before CodeBuild; the workload remains unapproved and
   unapplied.
 
 ## Acceptance status
 
-Hosted v12 failure is recorded. Source changes, regression tests, local
-verification, PR CI, protected deployment, and a fresh v13 plan-only run remain
-pending.
+Hosted v12 failure is recorded. Generic fallback feedback and regression tests
+are implemented. Focused and full repository verification pass. PR CI,
+protected deployment, and a fresh v13 plan-only run remain pending.
 
 ## Tests / validation performed
 
@@ -63,7 +63,14 @@ pending.
 - The retry used v12, failed after 2 attempts and 1 semantic repair with
   `proposal_invalid`, and produced no artifact. No customer workload was
   approved or applied.
-- Source and CI validation are pending implementation.
+- Focused generation/run/review suites: 107 passed.
+- The regression covers an unrecognized custom validator code with a private
+  error message and confirms the generic feedback persists without exposing
+  that message, input value, or validator code.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python
+  PYTHON=python3.12`: config check, lint, all 2,037 tests, OpenAPI snapshot,
+  and Docker Compose configuration passed.
+- `git diff --check` passed. Hosted PR CI is pending.
 
 ## Evidence files produced
 

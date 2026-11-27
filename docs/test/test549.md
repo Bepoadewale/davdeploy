@@ -42,6 +42,19 @@ Source regression tests and v13 follow-up are pending in PR #549. The finding
 does not establish plan, approval, apply, application behavior, lifecycle, or
 certification.
 
+## Source regression verification
+
+The v13 source maps an unrecognized validator error to fixed generic
+`invalid`/`proposal` feedback. Regression coverage checks that private
+validator messages, inputs, and codes do not enter the correction feedback or
+persisted diagnostics. The validation schema remains strict.
+
+- Focused generation/run/review suites: 107 passed.
+- Full `make verify`: config check, lint, 2,037 tests, OpenAPI snapshot, and
+  Docker Compose configuration passed. One unrelated Starlette deprecation
+  warning was emitted.
+- Hosted PR CI remains pending.
+
 ## Teardown
 
 The synthetic run created no AWS workload resources and needs no cloud

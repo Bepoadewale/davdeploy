@@ -13,6 +13,7 @@ from davdeploy.model_gateway import (
     model_input_digest,
 )
 from davdeploy.terraform_generation import (
+    _GENERIC_VALIDATION_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
@@ -114,7 +115,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert '"manage_master_user_password":true' in document["task"]
     assert '"output_name":"master_user_secret[0].secret_arn"' in document["task"]
     assert '"kind":"resource_reference"' in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v12"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v13"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -200,6 +201,45 @@ def test_resource_name_pattern_feedback_distinguishes_name_from_resource_id():
         "guidance": _RESOURCE_NAME_GUIDANCE,
     }
     assert all(item["field"] != "resources[*].resource_id" for item in feedback)
+
+
+def test_unknown_validator_error_becomes_generic_safe_repair_feedback():
+    from pydantic_core import PydanticCustomError
+
+    error = ValidationError.from_exception_data(
+        "GeneratedDeploymentProposal",
+        [
+            {
+                "type": PydanticCustomError(
+                    "private_validator_code",
+                    "private validator detail: {secret}",
+                    {"secret": "must-not-escape"},
+                ),
+                "loc": ("resources", 0, "name"),
+                "input": "private-invalid-value",
+            }
+        ],
+    )
+
+    feedback = _sanitize_pydantic_feedback(error)
+    assert feedback == [
+        {
+            "code": "invalid",
+            "field": "proposal",
+            "guidance": _GENERIC_VALIDATION_GUIDANCE,
+        }
+    ]
+    failure = NovaTerraformGenerationFailed(
+        "bounded failure",
+        attempt_count=2,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=tuple(feedback),
+    )
+    assert failure.validation_feedback == tuple(feedback)
+    assert "private_validator_code" not in repr(failure.validation_feedback)
+    assert "must-not-escape" not in repr(failure.validation_feedback)
+    assert "private-invalid-value" not in repr(failure.validation_feedback)
 
 
 def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
