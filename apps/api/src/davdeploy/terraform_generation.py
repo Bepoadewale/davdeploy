@@ -435,20 +435,22 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
 
     feedback: list[dict[str, str]] = []
     for item in error.errors(
-        include_url=False, include_context=False, include_input=False
+        include_url=False, include_context=True, include_input=False
     )[:_MAX_VALIDATION_FEEDBACK]:
         code = str(item.get("type") or "invalid")
         safe_code = code if code in _ALLOWED_PYDANTIC_ERROR_CODES else "invalid"
         safe_field = _canonical_field_path(item.get("loc") or ())
         entry = {"code": safe_code, "field": safe_field}
-        guidance = _validation_guidance(safe_code, safe_field)
+        context = item.get("ctx") or {}
+        cause = context.get("error") if isinstance(context, dict) else None
+        guidance = _validation_guidance(safe_code, safe_field, cause)
         if guidance:
             entry["guidance"] = guidance
         feedback.append(entry)
     return feedback or [{"code": "invalid", "field": "proposal"}]
 
 
-def _validation_guidance(code: str, field: str) -> str | None:
+def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
     identifier_fields = {
         "resources[*].resource_id",
         "health_assertions[*].target_resource_id",
@@ -457,7 +459,21 @@ def _validation_guidance(code: str, field: str) -> str | None:
     }
     if code == "string_pattern_mismatch" and field in identifier_fields:
         return _ID_PATTERN_GUIDANCE
-    if code == "value_error" and field == "resources":
+    graph_validation_causes = {
+        "dependencies must reference other declared resources",
+        "resource dependency graph must be acyclic",
+        "resource IDs must be unique",
+        "Terraform resource addresses must be unique",
+        "references must target a declared resource",
+        "reference must match a declared output type",
+        "health assertions must target declared resources",
+    }
+    if (
+        code == "value_error"
+        and field == "proposal"
+        and isinstance(cause, ValueError)
+        and str(cause) in graph_validation_causes
+    ):
         return _RESOURCE_GRAPH_GUIDANCE
     return None
 
