@@ -73,6 +73,19 @@ def _parser() -> argparse.ArgumentParser:
     approve.add_argument("--plan-id", required=True)
     approve.add_argument("--plan-hash", required=True)
 
+    generated_artifact = subparsers.add_parser(
+        "get-generated-plan-artifact",
+        help="inspect safe evidence for one generated Terraform plan",
+    )
+    generated_artifact.add_argument("--artifact-id", required=True)
+
+    approve_generated = subparsers.add_parser(
+        "approve-generated-plan",
+        help="approve one generated Terraform plan by its exact manifest digest",
+    )
+    approve_generated.add_argument("--artifact-id", required=True)
+    approve_generated.add_argument("--manifest-sha256", required=True)
+
     customer_review = subparsers.add_parser("create-customer-review")
     customer_review.add_argument("--plan-id", required=True)
 
@@ -196,6 +209,16 @@ def run(
             "POST",
             f"/api/v1/deployment-plans/{args.plan_id}/approve",
             {"plan_hash": args.plan_hash},
+        )
+    if args.command == "get-generated-plan-artifact":
+        return client.request(
+            "GET", f"/api/v1/generated-plan-artifacts/{args.artifact_id}"
+        )
+    if args.command == "approve-generated-plan":
+        return client.request(
+            "POST",
+            f"/api/v1/generated-plan-artifacts/{args.artifact_id}/approve",
+            {"manifest_sha256": args.manifest_sha256},
         )
     if args.command == "create-customer-review":
         return client.request("POST", f"/api/v1/deployment-plans/{args.plan_id}/customer-review")
