@@ -32,7 +32,8 @@ Hosted run `e2395afb-6017-4ceb-9be1-6fdd5661e3c5` exhausted its v17 repair attem
 - [x] Unknown validator errors retain fixed generic guidance without reflecting exception text.
 - [x] Focused tests, Ruff, and diff checks pass.
 - [x] Full `make verify` (2,064 tests plus Ruff, Actions configuration, OpenAPI, and Compose), documentation conventions, and local diff checks pass.
-- [ ] Required PR CI passes.
+- [x] Required PR CI passed all seven checks on implementation head `1ba63e7508fe49b65aba6b3b3f6152960062cee9` in run `46031809126`.
+- [ ] Final ticket-updated PR head CI passes.
 - [ ] A fresh deployed plan-only run reaches a plan artifact or produces actionable bounded diagnostics.
 - [ ] Any plan artifact proves supported API, private storage, database, async processing, current regional prices, and exact policy before being called acceptance evidence.
 
@@ -47,7 +48,7 @@ Implementation and full local validation are complete. Required hosted CI and th
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 2,064 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. One pre-existing Starlette deprecation warning.
 - `GITHUB_PR_NUMBER=554 .../python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Required PR CI and deployed hosted plan-only run remain pending.
+- PR CI run `46031809126` passed all seven checks on implementation head `1ba63e7508fe49b65aba6b3b3f6152960062cee9`; final ticket-updated head CI and deployed hosted plan-only run remain pending.
 
 ## Evidence files produced
 
