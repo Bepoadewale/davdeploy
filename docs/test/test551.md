@@ -50,6 +50,8 @@ resources.
   /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python
   scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- PR CI run `46013241761` passed all seven required checks on code head
+  `cb74f8cd`. A new passing run is required for any later evidence commit.
 - Initial full verification found two stale v14 prompt-version assertions; both
   were updated, and the final full verification above passed.
 

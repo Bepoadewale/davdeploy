@@ -68,8 +68,10 @@ messages, field values, or proposal data.
 - [x] Unknown paths fail closed to a safe parent field or `proposal`.
 - [x] Existing graph and resource feedback behavior remains covered; malformed
   proposals still fail before CodeBuild.
-- [ ] Focused tests, full local verification, and documentation checks pass;
-  all required PR CI checks pass on the final head.
+- [x] Focused tests, full local verification, documentation checks, and all
+  seven required PR CI checks pass for code head `cb74f8cd` in run
+  `46013241761`. Any subsequent source or evidence commit must also pass all
+  required CI checks before merge.
 - [ ] One fresh v15 hosted run reaches an inspectable saved plan or returns
   actionable bounded feedback before CodeBuild. No approval or workload apply
   occurs.
@@ -82,8 +84,10 @@ Implementation commit `5a11f3ce8f5b3528b11211348617e761130bc217` now preserves
 canonical field paths for unknown validator codes, truncates unsafe suffixes,
 and supplies fixed field-category guidance. Focused tests (39), full local
 verification (2,051 tests plus lint/config/OpenAPI/Compose checks), Ruff,
-documentation conventions, and diff checks pass. Final-head PR CI, protected
-v15 deployment, and the fresh v15 hosted run remain pending.
+documentation conventions, and diff checks pass. All seven required PR CI
+checks passed in run `46013241761` on code head `cb74f8cd`. Further commits
+must pass CI on their exact final head before merge. Protected v15 deployment
+and the fresh v15 hosted run remain pending.
 
 ## Tests / validation performed
 
