@@ -148,6 +148,17 @@ def test_saved_plan_rejects_insecure_permissions_and_symlink_inputs(tmp_path: Pa
     else:
         raise AssertionError("a group-readable plan must be rejected")
 
+    plan.chmod(0o600)
+    linked_plan = plan_dir / "linked.tfplan"
+    linked_plan.symlink_to(plan)
+    args.plan = str(linked_plan)
+    try:
+        SAVED_PLAN.create(args)
+    except SAVED_PLAN.SavedPlanError as exc:
+        assert "private regular file" in str(exc)
+    else:
+        raise AssertionError("a symlinked saved plan must be rejected")
+
 
 def _prepare_shell_runner(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
     repo = tmp_path / "shell-repo"

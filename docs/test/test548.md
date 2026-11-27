@@ -36,8 +36,10 @@
   inventory was empty.
 - Mocked script execution proved plan creation does not apply; the valid digest
   causes Terraform to receive exactly the saved-plan path; a tampered plan and
-  the old unbound `apply` operation fail before apply. The fake AWS command
-  returns only the expected fixture account ID.
+  the old unbound `apply` operation fail before apply. The manifest checks also
+  reject permissive files, symlinked plans, changed backend/account context, and
+  changed Terraform/template sources. The fake AWS command returns only the
+  expected fixture account ID.
 
 ## Observed result
 
