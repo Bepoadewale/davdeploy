@@ -71,19 +71,22 @@ can authorize a customer workload.
   explicit.
 - [x] No runtime, infrastructure, customer configuration, or control-plane
   behavior is changed.
-- [ ] Documentation conventions, whitespace checks, and final-head CI pass.
+- [x] Documentation conventions, whitespace checks, and final-head CI pass.
 
 ## Acceptance status
 
-The evidence correction is recorded. Local documentation validation passed;
-final-head CI remains pending. `COMPLETE` describes coverage of the modeled
-price lines for this test plan and synthetic assumptions; it does not pass
-customer approval or permit execution.
+The evidence correction is recorded. Documentation validation and all seven
+final-head CI checks passed in run `45907870966`. `COMPLETE` describes coverage
+of the modeled price lines for this test plan and synthetic assumptions; it
+does not pass customer approval or permit execution.
 
 ## Tests / validation performed
 
 - `GITHUB_PR_NUMBER=524 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
+- Final-head GitHub Actions run
+  [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966)
+  passed all seven checks.
 
 ## Validation plan
 
