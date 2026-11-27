@@ -116,16 +116,30 @@ customer apply role to make the prototype fit.
 
 ## Acceptance status
 
-Design remains incomplete and implementation has not started. The first
-full session-policy prototype failed the size gate. A smaller action-only
-session-policy shape fits the character bound in a local measurement, but its
-fixed resource/tag-conditioned role policy and IAM simulation are unimplemented.
-Neither result is a supported ECS apply profile. Even after this PR is
-accepted, it will not by itself make the ECS renderer eligible for customer
-execution: foundation permissions, phase-specific identity selection,
-complete role/effective-
-permission review, cost approval, and an authorized isolated Nova
-plan/apply/update/recovery/destroy cycle remain separate gates.
+Design remains incomplete and there is no supported ECS apply profile. The
+first full session-policy prototype failed the size gate. A smaller
+action-only session-policy shape fits the character bound in a local
+measurement, but fixed resource/tag-conditioned role policy and role-profile
+simulation are not implemented.
+
+Review of AWS's current ECS authorization reference confirms that
+`CreateExpressGatewayService` authorizes several dependent actions, including
+cluster creation, gateway creation and association, task-definition
+registration, tagging, and role passing. Each action has its own resource types
+and condition keys. For example, gateway association is scoped to the gateway
+resource and uses `ecs:cluster`; it must not be simulated as if the cluster
+were a second resource for that action. The existing provider operation map
+and policy candidate do not yet establish the complete, exact API call and
+resource mapping for every create, update, and delete path. Mock IAM simulation
+tests alone cannot prove AWS evaluates those conditions as expected.
+
+Keep the renderer disabled. Before implementation is considered safe, record
+the action-to-resource/condition mapping from AWS's authorization reference,
+bind it to the pinned provider version, and verify it using isolated IAM
+simulation plus authorized customer-side lifecycle evidence. Foundation
+permissions, phase-specific identity selection, full role/effective-permission
+review, cost approval, and an authorized isolated Nova plan/apply/update/
+recovery/destroy cycle remain separate gates.
 
 ## Tests / validation performed
 
