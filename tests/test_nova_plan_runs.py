@@ -707,8 +707,10 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                         "code": "missing",
                         "field": "resources[*].resource_id",
                         "guidance": (
-                            "Use a unique short lowercase ID matching ^[a-z][a-z0-9-]{0,23}$; "
-                            "copy reference IDs exactly from a declared resource_id."
+                            "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
+                            "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
+                            "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
+                            "reference exactly from its declared resource_id."
                         ),
                     },
                     {
@@ -724,6 +726,19 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                             "Use only literal JSON values for AWS resource attributes. Remove provider, "
                             "provisioner, connection, backend, required_providers, access_key, secret_key, "
                             "session_token, private_key, password, and user_data fields."
+                        ),
+                    },
+                    {
+                        "code": "value_error",
+                        "field": "resources[*]",
+                        "issue": "credential_value",
+                        "guidance": (
+                            "Never include a credential, plaintext secret, or string ARN. Use the exact object "
+                            "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
+                            "output>, value_type: secret_reference} only at "
+                            "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
+                            "credentials, enable the AWS-managed master secret and reference its declared output; "
+                            "never set a password argument."
                         ),
                     },
                     {
@@ -748,7 +763,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v9",
+        "prompt_version": "terraform-nova2-contract-v10",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,
@@ -761,8 +776,10 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                 "code": "missing",
                 "field": "resources[*].resource_id",
                 "guidance": (
-                    "Use a unique short lowercase ID matching ^[a-z][a-z0-9-]{0,23}$; "
-                    "copy reference IDs exactly from a declared resource_id."
+                    "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
+                    "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
+                    "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
+                    "reference exactly from its declared resource_id."
                 ),
             },
             {"code": "missing", "field": "cost_assumptions[*].resource_id"},
@@ -774,6 +791,19 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                     "Use only literal JSON values for AWS resource attributes. Remove provider, "
                     "provisioner, connection, backend, required_providers, access_key, secret_key, "
                     "session_token, private_key, password, and user_data fields."
+                ),
+            },
+            {
+                "code": "value_error",
+                "field": "resources[*]",
+                "issue": "credential_value",
+                "guidance": (
+                    "Never include a credential, plaintext secret, or string ARN. Use the exact object "
+                    "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
+                    "output>, value_type: secret_reference} only at "
+                    "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
+                    "credentials, enable the AWS-managed master secret and reference its declared output; "
+                    "never set a password argument."
                 ),
             },
             {"code": "value_error", "field": "resources[*]"},
