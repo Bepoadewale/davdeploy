@@ -111,7 +111,9 @@ customer-aws-template-host-plan:
 	./scripts/customer-aws-template-host.sh plan
 
 customer-aws-template-host-apply:
-	./scripts/customer-aws-template-host.sh apply
+	@test -n "$(PLAN_DIRECTORY)" || { echo "Set PLAN_DIRECTORY to the reviewed .local/template-host-plans directory" >&2; exit 2; }
+	@test -n "$(PLAN_SHA256)" || { echo "Set PLAN_SHA256 to the reviewed plan digest" >&2; exit 2; }
+	./scripts/customer-aws-template-host.sh apply-saved-plan "$(PLAN_DIRECTORY)" "$(PLAN_SHA256)"
 
 customer-aws-template-host-destroy:
 	./scripts/customer-aws-template-host.sh destroy

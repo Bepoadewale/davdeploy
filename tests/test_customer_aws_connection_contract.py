@@ -192,6 +192,15 @@ def test_public_template_host_publishes_append_only_hash_keyed_objects():
     assert "APPLY_DAVDEPLOY_TEMPLATE_HOST" in script
     assert "DESTROY_DAVDEPLOY_TEMPLATE_HOST" in script
 
+    assert 'apply-saved-plan <plan-directory> <reviewed-sha256>' in script
+    assert 'terraform -chdir="$root" plan -input=false -no-color -out="$plan_file"' in script
+    assert 'terraform -chdir="$root" apply -input=false "$plan_file"' in script
+    assert 'terraform -chdir="$root" apply -input=false -auto-approve' not in script
+    assert 'python3 "$manifest_tool" verify' in script
+    assert 'customer-aws-template-host-apply:' in Path("Makefile").read_text()
+    assert '$(PLAN_DIRECTORY)' in Path("Makefile").read_text()
+    assert '$(PLAN_SHA256)' in Path("Makefile").read_text()
+
 
 def test_public_template_host_publishes_nova_apply_role_in_protected_collection():
     configuration = Path("infrastructure/terraform/connection-template-host/main.tf").read_text()
