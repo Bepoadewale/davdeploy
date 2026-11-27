@@ -1,7 +1,7 @@
 # ticket529 — Add a plan-bound ECS Express service apply policy
 
 Original PR: #529 (closed unmerged when its base branch was deleted)
-Replacement PR: #534 (draft; design review)
+Replacement PR: #535 (draft; design review)
 Branch: `feat/ecs-express-apply-policy-529`
 Replacement base: PR #519 (`feat/ecs-express-renderer-519`)
 

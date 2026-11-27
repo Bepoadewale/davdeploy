@@ -1,6 +1,6 @@
-# ticket534 — Preserve the ECS Express apply-policy design handoff
+# ticket535 — Preserve the ECS Express apply-policy design handoff
 
-PR: #534 (draft; documentation-only replacement for closed PR #529)
+PR: #535 (draft; documentation-only replacement for closed PR #529)
 Branch: `feat/ecs-express-apply-policy-534`
 Base: PR #519 (`feat/ecs-express-renderer-519`)
 
@@ -86,7 +86,7 @@ package performed no workload test.
 - `docs/security/ECS_EXPRESS_APPLY_POLICY.md` — design and acceptance criteria.
 - `docs/tickets/ticket529.md` — original policy design ticket, with its PR
   history corrected.
-- `docs/tickets/ticket534.md` — replacement PR record.
+- `docs/tickets/ticket535.md` — replacement PR record.
 
 ## Boundaries
 
