@@ -139,6 +139,8 @@ plan/apply/update/recovery/destroy cycle remain separate gates.
   control-plane access, or customer workload test was run.
 - No AWS call, role assumption, apply, destroy, or hosted-control-plane access
   was performed.
+- Final-head GitHub Actions run `45921934415` passed all seven checks on
+  commit `02885d95` after the compact-policy design update.
 
 ## Boundaries
 
