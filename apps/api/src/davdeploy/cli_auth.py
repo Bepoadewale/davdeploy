@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import getpass
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -235,7 +236,11 @@ def login(
     try:
         ProductApiClient(api_url, identity_token).request("GET", "/api/v1/me")
     except Exception as error:
-        raise RuntimeError("The signed-in identity could not be verified by DavDeploy.") from error
+        status = re.search(r"davdeploy API (\d{3})", str(error))
+        suffix = f" (HTTP {status.group(1)})" if status else " (API request failed)"
+        raise RuntimeError(
+            "The signed-in identity could not be verified by DavDeploy" + suffix + "."
+        ) from error
     session = CliSession(
         username=normalized,
         api_url=api_url.rstrip("/"),

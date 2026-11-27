@@ -120,6 +120,43 @@ def test_login_rejects_insecure_or_credential_bearing_api_urls():
             )
 
 
+def test_login_reports_only_safe_api_status_when_identity_verification_fails(monkeypatch):
+    cognito = FakeCognito(
+        [
+            {"ChallengeName": "SOFTWARE_TOKEN_MFA", "Session": "challenge-session"},
+            {
+                "AuthenticationResult": {
+                    "IdToken": "identity-token",
+                    "RefreshToken": "refresh-token",
+                    "ExpiresIn": 3600,
+                }
+            },
+        ]
+    )
+    monkeypatch.setattr(cli_auth.boto3, "client", lambda *args, **kwargs: cognito)
+    monkeypatch.setattr(cli_auth.getpass, "getpass", lambda _prompt: "synthetic-secret")
+    monkeypatch.setattr(cli_auth.sys.stdin, "isatty", lambda: True)
+
+    class Api:
+        def __init__(self, *_args):
+            pass
+
+        def request(self, *_args):
+            raise RuntimeError("davdeploy API 403: sensitive detail")
+
+    monkeypatch.setattr(cli_auth, "ProductApiClient", Api)
+    monkeypatch.setattr(cli_auth, "_save_session", lambda _session: pytest.fail("must not save"))
+
+    with pytest.raises(RuntimeError, match="HTTP 403") as error:
+        cli_auth.login(
+            api_url="https://api.example.test",
+            username="admin@example.test",
+            region="us-east-1",
+            client_id="public-client-id",
+        )
+    assert "sensitive detail" not in str(error.value)
+
+
 def test_explicit_token_takes_precedence_over_keychain(monkeypatch):
     monkeypatch.setattr(cli_auth, "load_session", lambda: pytest.fail("Keychain should not be read"))
     assert cli_auth.resolve_token("explicit-token", api_url="https://api.example.test") == "explicit-token"

@@ -59,7 +59,7 @@ No live DavDeploy sign-in has been performed from this PR yet.
 
 ## Tests / validation performed
 
-- `uv run --project . --extra dev pytest -q tests/test_cli_auth.py tests/test_agent_interfaces.py` — 18 passed.
+- `uv run --project . --extra dev pytest -q tests/test_cli_auth.py tests/test_agent_interfaces.py` — 19 passed.
 - `GITHUB_PR_NUMBER=528 python3 scripts/check_doc_conventions.py` — passed.
 - `uv run --project . --extra dev ruff check apps/api/src/davdeploy/cli.py apps/api/src/davdeploy/cli_auth.py tests/test_cli_auth.py` — passed.
 - `git diff --check` — passed.
