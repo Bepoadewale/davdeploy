@@ -63,3 +63,12 @@ observation, lifecycle recovery, destroy, or absence.
   passed for PR #558.
 - Clean-room cycle, PR CI/review, deployment, and a fresh hosted plan-only
   attempt remain pending.
+
+## Clean-room cycle
+
+Commit `15f10f9c` was checked out in an isolated worktree with an external
+virtual environment and PostgreSQL data on tmpfs. `make local-proof` passed:
+API and service smoke checks, API contract, customer-plan end-to-end flow,
+trace check, lint, all 2,084 tests, OpenAPI snapshot, and Compose config.
+`make clean-local` then completed. The named containers, network, volumes,
+external virtual environment, and `.local` directory were verified absent.
