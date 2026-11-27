@@ -5,6 +5,7 @@ import json
 import pytest
 from davdeploy.nova_apply_access import (
     MAX_SESSION_POLICY_BYTES,
+    NOVA_APPLY_ACCESS_POLICY_VERSION,
     NovaApplyAccessPolicyError,
     build_nova_apply_access_policy,
 )
@@ -31,6 +32,8 @@ def policy(*changes: dict):
 def test_apply_scope_binds_supported_create_to_exact_bucket_and_operations():
     result = policy(change("aws_s3_bucket", ["create"], after={"bucket": "pilot-data"}))
 
+    assert result.version == "nova-apply-plan-scope.v2"
+    assert result.version == NOVA_APPLY_ACCESS_POLICY_VERSION
     allows = [
         statement
         for statement in result.document["Statement"]
@@ -46,12 +49,25 @@ def test_apply_scope_binds_supported_create_to_exact_bucket_and_operations():
         "s3:PutBucketTagging",
     } <= set(allows[0]["Action"])
     assert result.sha256
-    assert not any(
-        statement.get("Effect") == "Deny"
-        and "NotAction" in statement
-        and statement.get("NotAction") != "sts:GetCallerIdentity"
+    exact_resource_deny = next(
+        statement
         for statement in result.document["Statement"]
+        if statement.get("Effect") == "Deny"
+        and "NotAction" in statement
+        and statement.get("Resource") == "arn:aws:s3:::pilot-data"
     )
+    assert set(allows[0]["Action"]) <= set(exact_resource_deny["NotAction"])
+    assert "sts:GetCallerIdentity" in exact_resource_deny["NotAction"]
+    assert {
+        "Effect": "Allow",
+        "Action": "sts:GetCallerIdentity",
+        "Resource": "*",
+    } in result.document["Statement"]
+    # This action is in the role's cross-service maximum profile but is not
+    # allowed for this create plan. The explicit deny blocks direct session-
+    # principal resource-policy grants that would bypass an implicit deny.
+    assert "s3:PutBucketPolicy" not in allows[0]["Action"]
+    assert "s3:PutBucketPolicy" not in exact_resource_deny["NotAction"]
     assert any(
         statement.get("Effect") == "Deny"
         and statement.get("NotAction") == "sts:GetCallerIdentity"
@@ -68,13 +84,75 @@ def test_apply_scope_binds_supported_create_to_exact_bucket_and_operations():
     )
 
 
-def test_apply_scope_fits_a_mixed_s3_sqs_dynamodb_plan_under_sts_limit():
+def test_apply_scope_groups_identical_per_resource_action_denies():
+    first_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:first-queue"
+    second_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:second-queue"
     result = policy(
-        change(
-            "aws_s3_bucket",
-            ["create"],
-            after={"bucket": "davdeploy-apply-scope-test-bucket"},
-        ),
+        change("aws_sqs_queue", ["create"], after={"name": "first-queue"}),
+        change("aws_sqs_queue", ["create"], after={"name": "second-queue"}),
+    )
+
+    exact_denies = [
+        statement
+        for statement in result.document["Statement"]
+        if statement.get("Effect") == "Deny"
+        and statement.get("NotAction") != "sts:GetCallerIdentity"
+        and isinstance(statement.get("Resource"), list)
+    ]
+    grouped = next(
+        statement
+        for statement in exact_denies
+        if set(statement["Resource"]) == {first_arn, second_arn}
+    )
+    assert "sqs:DeleteQueue" not in grouped["NotAction"]
+    assert "sqs:CreateQueue" in grouped["NotAction"]
+    assert "sts:GetCallerIdentity" in grouped["NotAction"]
+
+
+def test_apply_scope_uses_a_separate_action_deny_for_each_different_scope():
+    result = policy(
+        change("aws_sqs_queue", ["create"], after={"name": "created-queue"}),
+        change("aws_sqs_queue", ["delete"], before={"name": "deleted-queue"}),
+    )
+    denies = [
+        statement
+        for statement in result.document["Statement"]
+        if statement.get("Effect") == "Deny"
+        and "NotAction" in statement
+        and statement.get("Resource") != "*"
+        and "NotResource" not in statement
+    ]
+    by_resource = {statement["Resource"]: set(statement["NotAction"]) for statement in denies}
+    create_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:created-queue"
+    delete_arn = f"arn:aws:sqs:{REGION}:{ACCOUNT}:deleted-queue"
+    assert set(by_resource) == {create_arn, delete_arn}
+    assert "sqs:CreateQueue" in by_resource[create_arn]
+    assert "sqs:DeleteQueue" not in by_resource[create_arn]
+    assert "sqs:DeleteQueue" in by_resource[delete_arn]
+    assert "sqs:CreateQueue" not in by_resource[delete_arn]
+def test_apply_scope_fails_closed_when_mixed_plan_exceeds_sts_limit():
+    with pytest.raises(NovaApplyAccessPolicyError, match="STS limit"):
+        policy(
+            change(
+                "aws_s3_bucket",
+                ["create"],
+                after={"bucket": "davdeploy-apply-scope-test-bucket"},
+            ),
+            change(
+                "aws_sqs_queue",
+                ["create"],
+                after={"name": "davdeploy-apply-scope-test-queue"},
+            ),
+            change(
+                "aws_dynamodb_table",
+                ["create"],
+                after={"name": "davdeploy-apply-scope-test-table"},
+            ),
+        )
+
+
+def test_apply_scope_fits_a_mixed_sqs_dynamodb_plan_under_sts_limit():
+    result = policy(
         change(
             "aws_sqs_queue",
             ["create"],
@@ -86,26 +164,8 @@ def test_apply_scope_fits_a_mixed_s3_sqs_dynamodb_plan_under_sts_limit():
             after={"name": "davdeploy-apply-scope-test-table"},
         ),
     )
-
     encoded = json.dumps(result.document, sort_keys=True, separators=(",", ":")).encode()
     assert len(encoded) <= MAX_SESSION_POLICY_BYTES
-    resource_allows = {
-        statement["Resource"]: set(statement["Action"])
-        for statement in result.document["Statement"]
-        if statement["Effect"] == "Allow" and statement.get("Resource") != "*"
-    }
-    assert set(resource_allows) == {
-        "arn:aws:s3:::davdeploy-apply-scope-test-bucket",
-        f"arn:aws:sqs:{REGION}:{ACCOUNT}:davdeploy-apply-scope-test-queue",
-        f"arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/davdeploy-apply-scope-test-table",
-    }
-    assert all("*" not in resource for resource in resource_allows)
-    assert any(
-        statement.get("Effect") == "Deny"
-        and statement.get("NotAction") == "sts:GetCallerIdentity"
-        and set(statement.get("NotResource", [])) == set(resource_allows)
-        for statement in result.document["Statement"]
-    )
 
 
 def test_apply_scope_uses_before_and_after_arns_for_replacement():

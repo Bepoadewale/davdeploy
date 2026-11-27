@@ -21,6 +21,9 @@ the existing cross-resource deny and the 2,048-byte fail-closed limit.
 - The fixed customer apply role has a maximum action deny, but its action set
   is the union of supported services and operations, not the exact actions for
   this plan.
+- The builder now emits a per-resource `Deny`/`NotAction` statement for each
+  exact plan action set, groups identical sets, retains the out-of-plan
+  resource deny, and versions the policy as `nova-apply-plan-scope.v2`.
 - PR #519 remains a draft renderer branch and is not deployed. Its IAM review
   and customer lifecycle gates remain open.
 - The Terraform monitor currently reports 75 terminal runs and no active
@@ -41,42 +44,55 @@ the existing cross-resource deny and the 2,048-byte fail-closed limit.
 
 ## Work planned for the PR
 
-1. Group exact plan resources by their per-resource allowed action set.
-2. Add an explicit `Deny`/`NotAction` statement per action-set group, scoped
+1. [x] Group exact plan resources by their per-resource allowed action set.
+2. [x] Add an explicit `Deny`/`NotAction` statement per action-set group, scoped
    to only those exact resource ARNs, so unapproved actions are explicitly
    denied even when an AWS resource policy names the role session.
-3. Keep the existing deny for all actions on unplanned resources and retain
+3. [x] Keep the existing deny for all actions on unplanned resources and retain
    the STS size limit; reject plans whose complete policy exceeds the limit.
-4. Bump the session-policy version and add regression tests for single and
+4. [x] Bump the session-policy version and add regression tests for single and
    multiple resources, action subsets, resource scope, grouping, and overflow.
-5. Record that deterministic policy-shape tests do not replace IAM's live
+5. [x] Record that deterministic policy-shape tests do not replace IAM's live
    policy evaluation semantics or customer-side lifecycle evidence.
 
 ## Acceptance criteria
 
-- [ ] Every planned resource ARN has an explicit deny for actions outside the
+- [x] Every planned resource ARN has an explicit deny for actions outside the
   action set allowed for that exact ARN.
-- [ ] The deny does not block plan-allowed actions on the exact resource or
+- [x] The deny does not block plan-allowed actions on the exact resource or
   `sts:GetCallerIdentity`.
-- [ ] The existing deny for unplanned resource ARNs remains effective.
-- [ ] Multiple resources with identical action sets share a deny safely; a
+- [x] The existing deny for unplanned resource ARNs remains effective.
+- [x] Multiple resources with identical action sets share a deny safely; a
   resource with a different action set receives a separate scope.
-- [ ] The complete serialized policy remains under 2,048 bytes or fails
+- [x] The complete serialized policy remains under 2,048 bytes or fails
   closed without issuing credentials.
-- [ ] Policy versioning, artifact digests, credential contract, and worker
+- [x] Policy versioning, artifact digests, credential contract, and worker
   checks remain consistent.
-- [ ] Focused regression tests and final-head CI pass. No AWS role, workload,
-  hosted control plane, Terraform state, or lock is changed.
+- [x] Full Python test suite, focused regression coverage, lint, documentation
+  conventions, and `git diff --check` pass.
+- [x] No AWS role, workload, hosted control plane, Terraform state, or lock is
+  changed.
+- [ ] Final-head GitHub Actions checks pass.
+- [ ] Complete the repository-required clean-room cycle for this authorization
+  change.
 
 ## Acceptance status
 
-Implementation has not started. This PR is a draft; no cloud execution or
-customer workload evidence is claimed.
+The per-resource explicit-deny behavior and v2 fail-closed policy version are
+implemented. The compact mixed S3/SQS/DynamoDB fixture correctly fails closed
+at 2,641 bytes; a smaller mixed SQS/DynamoDB policy remains within the limit.
+The renderer remains disabled. Final-head CI and the repository-required
+clean-room validation remain open. No live AWS policy evaluation or customer
+lifecycle evidence is claimed.
 
 ## Tests / validation performed
 
-- Initial ticket conventions and `git diff --check`: pending.
-- No code tests or cloud operations have been run for this package.
+- `uv run --frozen --extra dev python -m pytest tests/test_nova_apply_access.py tests/test_nova_apply_contract.py tests/test_nova_apply_clients.py tests/test_nova_apply_role_profile.py tests/test_nova_apply_codebuild.py -q`: 53 passed.
+- `uv run --frozen --extra dev python -m pytest -q`: 2,021 passed, 1 Starlette deprecation warning.
+- `uv run --frozen --extra dev ruff check apps/api/src tests scripts`: passed.
+- `GITHUB_PR_NUMBER=536 python3 scripts/check_doc_conventions.py`: passed.
+- `git diff --check`: passed.
+- No AWS calls, role changes, Terraform operations, or control-plane access.
 
 ## Evidence files produced
 
@@ -94,6 +110,8 @@ code and deterministic tests only; it does not run a customer workload.
 
 ## Follow-up work
 
-After the boundary is reviewed and merged, re-evaluate the ECS plan-policy
-shape and exact IAM action/resource mapping. Complete isolated authorization
-and lifecycle validation under the separate approved customer-workload gates.
+Complete the required clean-room gate using a disposable local environment
+without removing protected files or existing local volumes. Re-evaluate the
+ECS plan-policy shape and exact IAM action/resource mapping, then complete
+isolated authorization and lifecycle validation under the separate approved
+customer-workload gates.

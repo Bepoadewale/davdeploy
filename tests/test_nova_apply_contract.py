@@ -261,6 +261,18 @@ def test_rejects_missing_or_mismatched_apply_prerequisite(mutate, message):
         _validate(document)
 
 
+def test_rejects_legacy_v1_apply_policy_artifact_after_boundary_upgrade():
+    document = _request_document()
+    document["manifest"]["customer_apply_access"]["version"] = (
+        "nova-apply-plan-scope.v1"
+    )
+    document["manifest_sha256"] = canonical_json_digest(document["manifest"])
+    document["approval"]["approved_manifest_sha256"] = document["manifest_sha256"]
+
+    with pytest.raises(NovaApplyContractError, match="permission scope is unavailable"):
+        _validate(document)
+
+
 def test_rejects_stale_actor_authorization():
     document = _request_document()
     now = datetime.now(UTC)
