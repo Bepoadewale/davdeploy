@@ -5,7 +5,6 @@
   Nova plan-only retry
 - Control-plane commit: `03d3192a4e5e5ec2c6b86f0c5abb47c8d2c2bdb4`
 - Commit: `d428e9f45ec38cb270cda46fa38ab9a845a38c58` (implementation)
-- Evidence commit: `d8de5bef51f99270dc7841a934b278fbff17f319`
 - Pull request: [#549](https://github.com/Bepoadewale/davdeploy/pull/549)
 - AWS account: `654654474502` (control plane only; no workload apply)
 - AWS region: `us-east-1`
