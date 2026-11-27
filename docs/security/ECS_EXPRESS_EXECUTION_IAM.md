@@ -179,15 +179,30 @@ The file confirms these direct ECS API calls:
 
 | Terraform lifecycle path | Provider calls in v6.73.0 | IAM follow-up |
 | --- | --- | --- |
-| Create | Existence check through the shared `DescribeServices` helper; `CreateExpressGatewayService`; readiness polling through `DescribeExpressGatewayService`; optional steady-state polling through `ListServiceDeployments` and `DescribeServiceDeployments` | AWS's authorization reference lists the composite dependent actions for `CreateExpressGatewayService`, including cluster/gateway/task-definition operations, tagging, and `iam:PassRole`. The caller must not gain ALB or Auto Scaling permissions because the ECS infrastructure role owns those side effects. |
-| Read / refresh | `DescribeExpressGatewayService`; the provider also calls EC2 `DescribeSecurityGroups` to filter ECS-managed security groups returned in the service network configuration | Scope the ECS describe to the service; determine whether the EC2 helper can use exact security-group ARNs or must be omitted from the apply identity and performed only by observation. Confirm shared helper and tagging framework calls before authorizing the role. |
-| Update | `UpdateExpressGatewayService`; `DescribeExpressGatewayService`; optional `ListServiceDeployments` and `DescribeServiceDeployments` polling | Use the AWS `UpdateExpressGatewayService` dependent-action list and bind service, cluster, subnet, CPU/memory, and passed-role conditions to trusted plan values. |
+| Create | `DescribeServices` existence check; `CreateExpressGatewayService`; `DescribeExpressGatewayService` readiness polling; because this root sets `wait_for_steady_state=true`, `ListServiceDeployments` and `DescribeServiceDeployments`; tag framework may call `TagResource` after creation | AWS lists the composite create dependencies: cluster, gateway, task definition, tag, gateway association and `iam:PassRole`. `DescribeServices` is a shared helper call against the exact service name and cluster. No caller-side ALB or Auto Scaling permission follows from ECS-managed side effects. |
+| Read / refresh | `DescribeExpressGatewayService` including tags; generic tag layer may call `ListTagsForResource`; EC2 `DescribeSecurityGroups` helper filters ECS-managed groups from the returned network configuration | The EC2 helper swallows errors and returns without failing the ECS read. Do not grant EC2 access to the apply role for this best-effort display/state filtering. The ECS read and tag actions must be scoped to the exact service and the documented tag conditions. |
+| Update | `UpdateExpressGatewayService`; `DescribeExpressGatewayService`; with `wait_for_steady_state=true`, `ListServiceDeployments` and `DescribeServiceDeployments`; generic tag synchronization may call `TagResource` or `UntagResource` | Bind update to the exact service, cluster, subnet, task CPU/memory and role conditions. Derive tag keys from before/after plan values; reject removal of ownership tags and do not grant `UntagResource` in the pilot unless a separately reviewed operation requires it. |
 | Delete | `DeleteExpressGatewayService`; `DescribeExpressGatewayService` polling until inactive | Use a separately approved destroy plan and deletion-only session; do not reuse create/update permissions or infer deletion from the prior create approval. |
 
-This is provider-source evidence for the ECS API path, not a complete role
-policy. The resource also invokes shared provider helpers for service lookup
-and deployment status, plus the generic tag synchronization layer. Their API
-actions, resource/condition support, and the provider's exact treatment of
-tags still need to be mapped before permissions can be implemented. The
-6.73.0 provider source does not remove the need for a fresh review when the
+The provider source also identifies the generic tag hooks through
+`@Tags(identifierAttribute="service_arn")`. Its pinned ECS tag helper calls
+`ListTagsForResource`, `TagResource`, and `UntagResource`. The AWS authorization
+reference lists the ECS service resource type and tag conditions for these
+actions: reads can use resource tags; `TagResource` supports request tags,
+resource tags and `aws:TagKeys`; `UntagResource` supports resource tags and
+`aws:TagKeys`. The follow-on policy must allow only exact tags that the saved
+plan changes and reject ownership-tag removal.
+
+The provider's `filterManagedSecurityGroups` calls EC2
+`DescribeSecurityGroups` using returned security-group IDs, but returns without
+an error when that call fails. It is not required for the ECS create, update,
+delete or readiness API path and must not expand the apply role. If omitted,
+the provider may leave AWS-managed security-group IDs in the Terraform state
+view; this display/state detail is not readiness evidence.
+
+This completes the pinned provider source-call map; it is not a tested
+permission policy. The follow-on implementation must still verify IAM
+simulation for the exact action/resource/condition combinations, especially
+the service and deployment resource tuples used by `DescribeServiceDeployments`
+and tag hooks around initial creation. Re-review the map whenever the provider
 lockfile changes.
