@@ -3,12 +3,12 @@
 ## Nova status snapshot — 2026-11-27
 
 Backend `main` is
-`28f229416d7897ec2fe48b3def83ade6b9d4bcaf` (merged PR #558). Protected plan
-`46063294020` and apply `46064179578` deployed that exact source; the migration
-completed, all six control-plane Lambdas are Active and Successful and match
-the exact versioned package hash, and `/healthz` returned HTTP 200. The
-protected control plane was not changed by the subsequent customer plan-only
-attempt.
+`fe02d62f123e27712fee686db05029de8b7a33af` (merged PR #559). Protected plan
+`46069601185` and exact saved-plan apply `46070230500` deployed that source;
+all six control-plane Lambdas are Active/Successful and match the exact versioned
+release package, migrations passed, `/healthz` returned HTTP 200, and the
+authenticated CLI `/api/v1/me` returned HTTP 200. The release changed only the
+control plane; no Nova customer workload was applied.
 PRs #507–#514 add source-only bounded Batch prices; PR #515 adds source-only
 private endpoint policy. PR #517 adds backward-compatible private Fargate
 networking and records a direct same-account lifecycle test: suffix `a` failed
@@ -20,20 +20,17 @@ resource ARNs. This evidence covers only the recorded private Batch shape, not
 Nova dispatch, cross-account execution, or a general customer workload.
 See `docs/test/test517.md`.
 
-The authenticated CLI administrator session works, and the verified
-same-account plan-only connection is
-`3964addb-9f00-4c87-b829-2c3cd3b0b48c`. After PR #557, v19 run
-`572b2750-4070-4d8d-b903-15929297b929` failed on an incompatible relational
-health target before producing an artifact. Merged PR #558 added its safe
-resource-type feedback, passed all seven PR checks, was deployed, and produced
-v20 plan-only run `886fcf57-a321-455c-9097-4bc90d351be4`. V20 failed during
-proposal validation with `invalid_secret_reference_location`, again before an
-artifact or customer resource. Approval, apply, and destroy remain closed.
-Draft PR #559 adds safe location context for bounded repair. Its branch passed
-full local verification and the clean-room cycle; final PR CI, merge, protected
-deployment, and a fresh v21 hosted result remain pending. The 26/30 capability
-map remains the finite scope reference. No Nova customer workload has been
-applied, operated, or certified.
+The authenticated workspace administrator and verified same-account plan-only
+connection remain available at
+`3964addb-9f00-4c87-b829-2c3cd3b0b48c`. PR #559 deployed prompt v21; fresh
+plan-only run `d61e0c32-0379-4bd2-a240-a7924f4e98a1` failed before artifact
+creation with sanitized `incompatible_health_target` feedback identifying
+`container_readiness` targeting `aws_lambda_function`. PR #560 is the current
+package: provide fixed guidance to preserve application health requirements
+using an already-declared compatible API or event path, without adding a
+service or weakening validation. The 26/30 capability map remains the finite
+scope reference. Approval, apply and destroy remain closed; no Nova customer
+workload has been applied, operated, or certified.
 
 
 PR #493 merged with all seven checks passing in final-head run

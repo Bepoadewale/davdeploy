@@ -1,7 +1,12 @@
 # Nova capability and execution evidence matrix
 
 Status snapshot: backend `main` at
-`c58a2d4a6f3ce45712641e47a4aec52f8181d42b`, 2026-11-27. PR #523's handoff
+`fe02d62f123e27712fee686db05029de8b7a33af`, 2026-11-27. PR #559 is merged
+and deployed. The fresh v21 hosted plan-only run
+`d61e0c32-0379-4bd2-a240-a7924f4e98a1` failed before artifact creation with
+safe feedback for `container_readiness` targeting `aws_lambda_function`; draft
+PR #560 supplies bounded type-specific repair guidance. No Nova-generated
+customer workload has been applied or certified. PR #523's handoff
 reconciliation and PR #534's Nova generation diagnostics are merged. PR #520's exact-shape
 actual-plan policy and PR #522's regional ECS Express pricing model are merged.
 A provider-generated plan was evaluated under #520 policy; #522's live
@@ -10,8 +15,7 @@ tied to a persisted customer revision or budget. PR #531 recorded an
 authenticated hosted Nova plan attempt that omitted explicit storage,
 relational-data, and queue requirements and failed before a saved plan was
 created. PR #532 is merged to source `main` and adds deterministic retention of
-those explicit allow-listed requirements; it has not been deployed and the
-hosted plan has not been rerun.
+those explicit allow-listed requirements; they are present in current main.
 
 PR #519 remains a draft with the renderer disabled. Its current feature branch
 head is `65423bd073871d446a151fe2d1b347d336e67305` after PR #535 merged into

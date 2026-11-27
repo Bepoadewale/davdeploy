@@ -686,6 +686,20 @@ execution strategy. Dated release details below remain historical records.
 
 ## Nova plan-only runner milestone
 
+### 27 November 2026 hosted checkpoint
+
+PR #559 is merged and deployed to the control plane at
+`fe02d62f123e27712fee686db05029de8b7a33af`. The authenticated workspace
+administrator and verified same-account plan-only connection are available,
+but the first hosted generated-plan gate remains unmet: v21 run
+`d61e0c32-0379-4bd2-a240-a7924f4e98a1` failed before artifact creation because
+`container_readiness` targeted `aws_lambda_function`. Draft PR #560 adds fixed
+repair guidance that preserves HTTP or asynchronous health requirements only
+through already-declared compatible resource paths. It does not change
+validation, policy, execution, or customer-workload approval gates. See
+`docs/test/test560.md`; a fresh review-only run and inspectable plan remain
+required, as do current regional cost evidence and exact plan-policy approval.
+
 - PR #328 merged as `64bfd2c55cf22b61c20305106dcbcec65ef48352` on 2026-11-10.
   Its fixed, versioned, disabled-by-default backend-free planning code is
   included in the November 10 release. Its artifacts are review-only,
