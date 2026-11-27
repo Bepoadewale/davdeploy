@@ -41,16 +41,18 @@ combined tree. The renderer must remain disabled.
 
 - [x] Current main is merged into the candidate feature branch.
 - [x] The handoff conflict is resolved in favor of current main's status.
-- [ ] All seven required CI checks pass on the final PR head.
-- [ ] GitHub reports clean mergeability into the #519 feature branch.
+- [x] All seven required CI checks pass on the final PR head.
+- [x] GitHub reports clean mergeability into the #519 feature branch.
 - [x] No AWS, Terraform, hosted control-plane, or workload mutation occurs.
 - [x] PR #519 remains a draft and its renderer remains disabled.
 
 ## Acceptance status
 
 The candidate branch merges current main and resolves the handoff conflict.
-This is branch integration only; CI is pending. It does not deploy or authorize
-the renderer, prove AWS IAM evaluation, or establish Nova customer-workload
+All seven checks passed in run `45936469732`, including the clean end-to-end
+and cloud-contract jobs. GitHub reports a clean merge into the #519 feature
+branch. This is branch integration only; it does not deploy or authorize the
+renderer, prove AWS IAM evaluation, or establish Nova customer-workload
 lifecycle evidence.
 
 ## Tests / validation performed
@@ -58,7 +60,9 @@ lifecycle evidence.
 - `git merge --no-ff origin/main` — merged the current main line; the only
   conflict was `docs/product/COMPOSED_EXECUTION_GOAL.md`, resolved using the
   current main version.
-- Final-head GitHub Actions validation is pending.
+- Final-head GitHub Actions run
+  [45936469732](https://github.com/Bepoadewale/davdeploy/actions/runs/45936469732)
+  — all seven checks passed.
 - No cloud calls or Terraform operations were run.
 
 ## Evidence files produced
