@@ -47,15 +47,15 @@ contract and safe, deterministic correction guidance for those known errors.
 - [x] Known identifier and graph errors receive deterministic safe guidance.
 - [x] Arbitrary guidance and sensitive diagnostic strings cannot be persisted.
 - [x] Focused tests, lint, and documentation convention checks pass locally.
-- [ ] Required GitHub CI passes.
+- [x] Required GitHub CI passes on the implementation head.
 - [ ] Deploy the merged control-plane change, then make one authenticated hosted
       retry and inspect its safe outcome.
 
 ## Acceptance status
 
-Implementation and focused local verification are complete. Required CI,
-protected deployment, and the hosted retry remain pending. No valid saved plan
-or workload is claimed.
+Implementation, focused local verification, and required CI are complete on
+head `6d8bd80c03c42f4c481f36b883f119791932f90d`. Protected deployment and the
+hosted v7 retry remain pending. No valid saved plan or workload is claimed.
 
 ## Tests / validation performed
 
@@ -65,7 +65,8 @@ or workload is claimed.
 - Ruff on the changed Python files — passed.
 - `python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
-- Required GitHub Actions checks: pending.
+- GitHub Actions run `45947901539` — all seven checks passed for
+  `6d8bd80c03c42f4c481f36b883f119791932f90d`.
 
 ## Evidence files produced
 

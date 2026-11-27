@@ -47,5 +47,7 @@ certification. The control plane and audit records remain intact.
 - `pytest tests/test_terraform_generation.py tests/test_nova_plan_runs.py
   tests/test_customer_plan_review.py -q` — 99 passed.
 - Ruff, `scripts/check_doc_conventions.py`, and `git diff --check` — passed.
-- PR #542 CI, protected deployment, and one hosted retry after deployment are
-  pending. No test workload or infrastructure was created.
+- PR #542 CI run `45947901539` passed all seven checks for implementation head
+  `6d8bd80c03c42f4c481f36b883f119791932f90d`.
+- Protected deployment and one hosted retry after deployment are pending. No
+  test workload or infrastructure was created.
