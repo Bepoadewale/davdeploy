@@ -55,6 +55,8 @@ def _source_digest(repo_root: Path, terraform_root: Path) -> str:
         [
             repo_root / "infrastructure/cloudformation/customer-discovery-role.yaml",
             repo_root / "infrastructure/cloudformation/customer-nova-apply-role.yaml",
+            repo_root / "scripts/customer-aws-template-host.sh",
+            repo_root / "scripts/template_host_saved_plan.py",
         ]
     )
     digest = hashlib.sha256()

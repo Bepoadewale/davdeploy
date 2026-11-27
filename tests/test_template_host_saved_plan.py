@@ -24,10 +24,13 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     template_root = repo / "infrastructure/cloudformation"
     terraform_root.mkdir(parents=True)
     template_root.mkdir(parents=True)
+    (repo / "scripts").mkdir()
     (terraform_root / "main.tf").write_text('terraform { required_version = ">= 1.0" }\n')
     (terraform_root / "terraform.lock.hcl").write_text('provider "registry.terraform.io/hashicorp/aws" {}\n')
     (template_root / "customer-discovery-role.yaml").write_text("discovery template\n")
     (template_root / "customer-nova-apply-role.yaml").write_text("apply template\n")
+    (repo / "scripts/customer-aws-template-host.sh").write_text("template host runner\n")
+    (repo / "scripts/template_host_saved_plan.py").write_text("saved plan verifier\n")
     plan_dir = repo / ".local/template-host-plans/plan.test001"
     plan_dir.mkdir(parents=True)
     plan_dir.chmod(0o700)
@@ -135,6 +138,26 @@ def test_saved_plan_rejects_changed_context_and_source(tmp_path: Path) -> None:
         assert "source changed" in str(exc)
     else:
         raise AssertionError("changed template source must be rejected")
+
+    (repo / "infrastructure/cloudformation/customer-nova-apply-role.yaml").write_text(
+        "apply template\n"
+    )
+    for helper in (
+        repo / "scripts/customer-aws-template-host.sh",
+        repo / "scripts/template_host_saved_plan.py",
+    ):
+        helper.write_text("changed plan verification behavior\n")
+        try:
+            SAVED_PLAN.verify(args)
+        except SAVED_PLAN.SavedPlanError as exc:
+            assert "source changed" in str(exc)
+        else:
+            raise AssertionError(f"changed saved-plan helper must be rejected: {helper.name}")
+        helper.write_text(
+            "template host runner\n"
+            if helper.name == "customer-aws-template-host.sh"
+            else "saved plan verifier\n"
+        )
 
 
 def test_saved_plan_rejects_insecure_permissions_and_symlink_inputs(tmp_path: Path) -> None:
