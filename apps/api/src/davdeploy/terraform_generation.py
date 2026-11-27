@@ -70,7 +70,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v7"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v8"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -200,8 +200,22 @@ _RESOURCE_GRAPH_GUIDANCE = (
     "Keep resource IDs unique; every dependency, typed reference, cost assumption, and "
     "health target/source must reference a declared ID, and dependencies must be acyclic."
 )
+_RESOURCE_ARGUMENT_GUIDANCE = (
+    "Use supported resource arguments; remove provider/backend/provisioner fields, "
+    "Terraform expressions, credential values, and DavDeploy-reserved tags. Use typed "
+    "secret references only in supported secret ARN fields."
+)
+_RESOURCE_OUTPUT_GUIDANCE = (
+    "Give each output a unique name and expose only supported values; a secret reference "
+    "output is allowed only for an RDS-managed master secret ARN."
+)
 _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
-    {_ID_PATTERN_GUIDANCE, _RESOURCE_GRAPH_GUIDANCE}
+    {
+        _ID_PATTERN_GUIDANCE,
+        _RESOURCE_GRAPH_GUIDANCE,
+        _RESOURCE_ARGUMENT_GUIDANCE,
+        _RESOURCE_OUTPUT_GUIDANCE,
+    }
 )
 
 
@@ -469,6 +483,21 @@ def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None
         "reference must match a declared output type",
         "health assertions must target declared resources",
     }
+    resource_output_causes = {
+        "generated output names must be unique",
+        "secret_reference outputs must identify an RDS-managed master secret ARN",
+    }
+    resource_argument_causes = {
+        "model-authored Terraform expressions are forbidden",
+        "generated arguments contain a forbidden field",
+        "credential and secret fields must use a typed secret_reference",
+        "generated arguments cannot set reserved DavDeploy ownership tags",
+    }
+    if code == "value_error" and field == "resources[*]" and isinstance(cause, ValueError):
+        if str(cause) in resource_output_causes:
+            return _RESOURCE_OUTPUT_GUIDANCE
+        if str(cause) in resource_argument_causes:
+            return _RESOURCE_ARGUMENT_GUIDANCE
     if (
         code == "value_error"
         and field == "proposal"
