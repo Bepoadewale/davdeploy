@@ -30,6 +30,24 @@ identity token before a request when needed. Cognito refresh tokens expire; run
 `DAVDEPLOY_TOKEN` overrides remain available for automation. Do not put tokens
 in shell history, repository files, issue text or logs.
 
+## Review and approve an exact generated plan
+
+Use the artifact identifier to retrieve the safe review summary, then approve
+only the manifest digest shown for that artifact:
+
+```sh
+davdeploy get-generated-plan-artifact --artifact-id ARTIFACT_ID
+davdeploy approve-generated-plan \\
+  --artifact-id ARTIFACT_ID \\
+  --manifest-sha256 MANIFEST_SHA256
+```
+
+The review endpoint returns plan summaries and evidence, not saved-plan bytes
+or sensitive state. Approval is bound to the immutable manifest digest. DavDeploy
+rechecks the artifact's target, proposal, configuration, provider schema,
+policy, saved-plan and regional pricing evidence; this command does not apply
+infrastructure. Apply remains a separate authorized action with its own gates.
+
 Secure session persistence currently requires macOS Keychain and Swift. On
 other platforms, use an externally provisioned `DAVDEPLOY_TOKEN`; this CLI does
 not store credentials in a plain-text file.
