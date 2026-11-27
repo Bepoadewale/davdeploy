@@ -171,6 +171,7 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
 from davdeploy.terraform_generation import (
+    NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
     generation_context_digest,
@@ -4207,7 +4208,7 @@ class ProductService:
             generation_diagnostics = {
                 "failure_code": error.failure_code,
                 "model": self.terraform_generator.model_id,
-                "prompt_version": "terraform-nova2-contract-v4",
+                "prompt_version": NOVA_TERRAFORM_PROMPT_VERSION,
                 "attempt_count": error.attempt_count,
                 "retry_count": error.usage.retry_count,
                 "input_tokens": error.usage.input_tokens,
@@ -4243,7 +4244,7 @@ class ProductService:
                 {
                     "provider": "bedrock",
                     "model": self.terraform_generator.model_id,
-                    "prompt_version": "terraform-nova2-contract-v4",
+                    "prompt_version": NOVA_TERRAFORM_PROMPT_VERSION,
                     "usage": error.usage.model_dump(mode="json"),
                     "attempt_count": error.attempt_count,
                     "retry_count": error.usage.retry_count,
@@ -7982,7 +7983,7 @@ class ProductService:
                     "request_id": None,
                     "provider": "bedrock",
                     "model": self.terraform_generator.model_id,
-                    "prompt_version": "terraform-nova2-contract-v4",
+                    "prompt_version": NOVA_TERRAFORM_PROMPT_VERSION,
                     "usage": error.usage.model_dump(mode="json"),
                     "attempt_count": error.attempt_count,
                     "retry_count": error.usage.retry_count,
