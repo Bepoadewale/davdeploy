@@ -412,6 +412,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _UNKNOWN_COST_FIELD_GUIDANCE,
         _UNKNOWN_REQUIREMENTS_FIELD_GUIDANCE,
         _UNKNOWN_CONTRACT_FIELD_GUIDANCE,
+        *(guidance for _, guidance in _GRAPH_VALIDATION_FEEDBACK.values()),
     }
 )
 _ALLOWED_VALIDATION_ISSUES = frozenset(
@@ -429,6 +430,7 @@ _ALLOWED_VALIDATION_ISSUES = frozenset(
         "unknown_resource_reference",
         "reference_type_mismatch",
         "unknown_health_target",
+        *(issue for issue, _ in _GRAPH_VALIDATION_FEEDBACK.values()),
     }
 )
 

@@ -507,6 +507,18 @@ def test_known_graph_validator_causes_map_to_distinct_fixed_feedback(cause, issu
     guidance = _validation_guidance("value_error", "proposal", error)
     assert guidance == _GRAPH_VALIDATION_FEEDBACK[cause][1]
     assert cause not in guidance
+    failure = NovaTerraformGenerationFailed(
+        "safe failure",
+        attempt_count=1,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=(
+            {"code": "value_error", "field": "proposal", "issue": issue, "guidance": guidance},
+        ),
+    )
+    assert failure.validation_feedback == (
+        {"code": "value_error", "field": "proposal", "issue": issue, "guidance": guidance},
+    )
 
 
 def test_unrecognized_proposal_validator_message_is_never_returned():
