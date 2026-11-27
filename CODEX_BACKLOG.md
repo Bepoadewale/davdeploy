@@ -29,9 +29,11 @@ resource-type feedback, passed all seven PR checks, was deployed, and produced
 v20 plan-only run `886fcf57-a321-455c-9097-4bc90d351be4`. V20 failed during
 proposal validation with `invalid_secret_reference_location`, again before an
 artifact or customer resource. Approval, apply, and destroy remain closed.
-Draft PR #559 adds safe location context for bounded repair; implementation
-and deployment are pending. The 26/30 capability map remains the finite scope
-reference. No Nova customer workload has been applied, operated, or certified.
+Draft PR #559 adds safe location context for bounded repair. Its branch passed
+full local verification and the clean-room cycle; final PR CI, merge, protected
+deployment, and a fresh v21 hosted result remain pending. The 26/30 capability
+map remains the finite scope reference. No Nova customer workload has been
+applied, operated, or certified.
 
 
 PR #493 merged with all seven checks passing in final-head run

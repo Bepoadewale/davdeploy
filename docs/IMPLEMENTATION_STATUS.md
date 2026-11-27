@@ -58,7 +58,9 @@ and is unexecuted. Plan-only run `886fcf57-a321-455c-9097-4bc90d351be4` used
 prompt v20 and failed during generation with safe issue
 `invalid_secret_reference_location`, before producing an artifact. No customer
 resources were created. Draft PR #559 adds bounded location context to the
-repair loop. Its implementation and deployment are pending.
+repair loop; the branch passed full local verification and the clean-room
+cycle. Final PR CI, merge, protected deployment, and a fresh v21 hosted result
+remain pending.
 
 Merged PR #517 adds backward-compatible private-IP configuration to the
 shared Batch Fargate module and a private endpoint validation root. Its

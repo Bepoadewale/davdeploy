@@ -60,7 +60,8 @@ name. No Terraform artifact or customer workload was created.
   proposal text never enter feedback or API output.
 - [x] Bounded repair and negative redaction tests pass; full verification and
   docs checks pass.
-- [ ] Clean-room proof, review, and all required CI pass.
+- [x] Clean-room proof passes on commit `ce287522`.
+- [ ] Review and all required PR CI pass.
 - [ ] After protected deployment, a fresh review-only hosted run reaches an
   inspectable saved plan or a precise next blocker. No customer approval/apply.
 
@@ -73,8 +74,8 @@ state material out of logs.
 
 ## Acceptance status
 
-Implementation, bounded-repair tests, full local verification, and docs checks
-complete. Clean-room proof, review, and CI remain pending.
+Implementation, bounded-repair tests, full local verification, docs checks,
+and clean-room proof complete. Review and CI remain pending.
 
 ## Tests / validation performed
 
@@ -82,7 +83,11 @@ complete. Clean-room proof, review, and CI remain pending.
 2,088 tests, Ruff, OpenAPI snapshot, and Compose validation. The focused
 secret-reference tests also passed for both rejected locations and the
 bounded Lambda environment-name repair. Docs conventions and
-`git diff --check` passed. Clean-room proof, review, and PR CI remain pending.
+`git diff --check` passed. Clean-room `make local-proof` passed on commit
+`ce287522`; it ran the API smoke/contract, customer-plan E2E, trace check,
+2,088 tests, OpenAPI snapshot, and Compose validation. `make clean-local`
+completed and the named containers, network, volumes, external venv, and
+`.local` data were absent. Review and final PR CI remain pending.
 The hosted v20 baseline is recorded in `docs/test/test559.md`.
 
 ## Evidence files produced
