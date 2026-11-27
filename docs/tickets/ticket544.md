@@ -43,7 +43,7 @@ strict validation and never reveal generated values or raw validator messages.
 - [x] Known resource errors return specific allowlisted issue codes and fixed
   corrective guidance.
 - [x] Raw error causes, field names, generated values, and secrets remain hidden.
-- [ ] Required hosted CI checks pass.
+- [x] All seven required hosted CI checks pass.
 - [ ] A new post-deployment hosted run provides an inspectable plan or a more
   specific bounded failure. No customer workload is applied.
 
@@ -60,7 +60,8 @@ and unapplied.
   2029 passed, 1 existing Starlette deprecation warning; Actions boundary,
   Ruff, OpenAPI snapshot, and Docker Compose configuration checks passed.
 - Documentation conventions and `git diff --check`: passed before final CI.
-- Hosted CI: pending.
+- GitHub Actions run `45958110974`, head `345aec0876e687c31000901cf50dd0eba00a6c0d`: all seven
+  required checks passed.
 
 ## Evidence files produced
 
