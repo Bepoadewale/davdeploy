@@ -54,8 +54,15 @@ AWS region: `us-east-1`
   tests passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose
   configuration checks passed. One pre-existing Starlette/httpx deprecation
   warning remains.
-- Isolated clean-room proof, PR CI, and a fresh hosted v23 plan-only result
-  remain pending.
+- Fresh clean-room `make VENV=/private/tmp/davdeploy-nova-secret-cleanroom-561-venv local-proof`
+  passed on `74cefcc1e270657961d81bc9f0354d16860444bb`, including bootstrap,
+  API smoke/contract, customer-plan E2E, seed/trace checks, full verification,
+  OpenAPI, and Compose. It passed 2,092 tests with one pre-existing warning.
+- `make VENV=/private/tmp/davdeploy-nova-secret-cleanroom-561-venv clean-local`
+  removed the isolated Compose stack/volume, generated `.local`, and dedicated
+  venv. The venv and `.local` were absent afterward, and Compose reported zero
+  containers. The main protected `.venv-pr399/` was not touched.
+- PR CI and a fresh hosted v23 plan-only result remain pending.
 
 ## Resources created
 

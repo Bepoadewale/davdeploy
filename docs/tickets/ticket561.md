@@ -61,7 +61,7 @@ variable. Keep strict contract validation for ambiguous or unsupported outputs.
   literal in its normalized result.
 - [x] Focused tests pass (153 passed); full `make verify` passes (2,092
   passed, Ruff, Actions configuration, OpenAPI, and Compose checks pass).
-- [ ] Required isolated clean-room verification passes.
+- [x] Required isolated clean-room verification passes.
 - [ ] PR review and all required current-head CI checks pass.
 - [ ] Fresh hosted v23 generation yields an inspectable plan or a precise next
   blocker; no customer workload approval/apply/destroy occurs.
@@ -84,8 +84,12 @@ fresh hosted v23 outcome remain pending.
 - Full `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`:
   2,092 passed; Ruff, Actions configuration, OpenAPI, and Compose passed.
 - Documentation convention check and `git diff --check` pass.
-- Isolated clean-room proof, PR review/CI, and hosted verification remain
-  pending.
+- Fresh isolated `make VENV=/private/tmp/davdeploy-nova-secret-cleanroom-561-venv local-proof`
+  passed on commit `74cefcc1e270657961d81bc9f0354d16860444bb`; its full
+  2,092-test verification and API/customer-plan/trace gates passed. The
+  matching `clean-local` removed only that worktree's generated `.local`, the
+  dedicated venv, and its compose stack; absence checks passed.
+- PR review/CI and hosted verification remain pending.
 
 ## Evidence files produced
 
