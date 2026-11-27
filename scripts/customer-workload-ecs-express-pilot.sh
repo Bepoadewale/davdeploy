@@ -57,6 +57,7 @@ result_file="/tmp/davdeploy-ecs-express-${run_id}-result.json"
 credentials_file="/tmp/davdeploy-ecs-express-${run_id}.credentials"
 error_file="/tmp/davdeploy-ecs-express-${run_id}.err"
 health_file="/tmp/davdeploy-ecs-express-${run_id}.health"
+role_profile_file="/tmp/davdeploy-ecs-express-${run_id}-service-roles.json"
 docker_config="/tmp/davdeploy-ecs-express-${run_id}-docker"
 customer_profile="davdeploy-customer"
 publisher_profile="davdeploy-customer-image-publisher"
@@ -142,6 +143,14 @@ unset customer_access_key_id customer_secret_access_key customer_session_token
 export AWS_SHARED_CREDENTIALS_FILE="$credentials_file"
 customer_account_id="$(aws sts get-caller-identity "${customer_aws_args[@]}" --query Account --output text)"
 [[ "$customer_account_id" == "$EXPECTED_AWS_ACCOUNT_ID" ]] || { echo "Assumed customer role is in the wrong AWS account" >&2; exit 3; }
+if [[ "$operation" != "build-artifact" ]]; then
+  if ! AWS_PROFILE="$customer_profile" .venv/bin/python scripts/verify_ecs_express_service_roles.py \
+    --account-id "$EXPECTED_AWS_ACCOUNT_ID" --connection-id "$connection_id" \
+    >"$role_profile_file"; then
+    echo "Customer ECS Express service roles do not match the reviewed connection profile" >&2
+    exit 3
+  fi
+fi
 if [[ "$operation" == "build-artifact" ]]; then
   external_id="$(platform_aws secretsmanager get-secret-value \
     --secret-id "$DAVDEPLOY_EXTERNAL_ID_SECRET_ARN" --query SecretString --output text)"
@@ -248,13 +257,13 @@ verify_foundation_absent() {
     return 1
   fi
   rm -f "$error_file"
-  for role_suffix in execution infrastructure; do
-    if aws iam get-role "${customer_aws_args[@]}" --role-name "${service_name}-${role_suffix}" >/dev/null 2>"$error_file"; then
-      echo "Customer ECS role remains after cleanup" >&2
+  for legacy_role in "${service_name}-execution" "${service_name}-infrastructure"; do
+    if aws iam get-role "${customer_aws_args[@]}" --role-name "$legacy_role" >/dev/null 2>"$error_file"; then
+      echo "Legacy project-scoped ECS role remains; cleanup is not confirmed" >&2
       return 1
     fi
     if ! grep -Eqi 'NoSuchEntity' "$error_file"; then
-      echo "Could not verify customer ECS role cleanup" >&2
+      echo "Could not verify legacy ECS role cleanup" >&2
       return 1
     fi
     rm -f "$error_file"
@@ -281,7 +290,8 @@ case "$operation" in
     platform_aws s3 cp "$plan_file" "$saved_plan_uri" --only-show-errors
     jq -n --arg saved_plan_s3_uri "$saved_plan_uri" --arg saved_plan_sha256 "$plan_sha256" \
       --slurpfile summary "${result_file}.summary" \
-      '{saved_plan_s3_uri:$saved_plan_s3_uri,saved_plan_sha256:$saved_plan_sha256,plan_summary:$summary[0]}' >"${result_file}.detail"
+      --slurpfile role_profile "$role_profile_file" \
+      '{saved_plan_s3_uri:$saved_plan_s3_uri,saved_plan_sha256:$saved_plan_sha256,plan_summary:$summary[0],service_role_profile:$role_profile[0]}' >"${result_file}.detail"
     write_result "$operation" "SUCCEEDED" "${result_file}.detail"
     ;;
   apply-saved-plan|destroy-saved-plan)
@@ -295,7 +305,9 @@ case "$operation" in
     }
     terraform -chdir="$root" apply -input=false "$plan_file"
     terraform -chdir="$root" output -json >"${result_file}.outputs"
-    write_result "$operation" "SUCCEEDED" "${result_file}.outputs"
+    jq -n --slurpfile outputs "${result_file}.outputs" --slurpfile role_profile "$role_profile_file" \
+      '{outputs:$outputs[0],service_role_profile:$role_profile[0]}' >"${result_file}.apply"
+    write_result "$operation" "SUCCEEDED" "${result_file}.apply"
     ;;
   observe)
     tf_init
@@ -310,7 +322,8 @@ case "$operation" in
       echo "ECS Express health response did not match the approved workload contract" >&2; exit 3;
     }
     jq -n --arg health_url "${ingress%/}/healthz" --slurpfile health "$health_file" \
-      '{health_url:$health_url,response:$health[0]}' >"${result_file}.observation"
+      --slurpfile role_profile "$role_profile_file" \
+      '{health_url:$health_url,response:$health[0],service_role_profile:$role_profile[0]}' >"${result_file}.observation"
     write_result "$operation" "SUCCEEDED" "${result_file}.observation"
     ;;
   build-artifact)
@@ -340,7 +353,8 @@ case "$operation" in
   verify-cleanup)
     verify_service_absent
     verify_foundation_absent
-    jq -n '{cleanup_proof:"confirmed_absent",customer_workload:"ecs-express"}' >"${result_file}.cleanup"
+    jq -n --slurpfile role_profile "$role_profile_file" \
+      '{cleanup_proof:"confirmed_absent",customer_workload:"ecs-express",connection_service_roles:"retained_and_verified",service_role_profile:$role_profile[0]}' >"${result_file}.cleanup"
     write_result "$operation" "SUCCEEDED" "${result_file}.cleanup"
     ;;
 esac

@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Connection-scoped Amazon ECS Express Mode task execution and infrastructure
+  roles. Deploy once in the customer account before creating ECS Express
+  workloads for this DavDeploy connection.
+Parameters:
+  ConnectionId:
+    Type: String
+    AllowedPattern: "^[a-z0-9-]{8,30}$"
+    ConstraintDescription: Use the DavDeploy connection identifier.
+Resources:
+  EcsExpressTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "davdeployEcsExpressTask-${ConnectionId}"
+      Description: !Sub "ECS task execution role for DavDeploy connection ${ConnectionId}."
+      Tags:
+        - Key: ManagedBy
+          Value: davdeploy
+        - Key: ConnectionId
+          Value: !Ref ConnectionId
+        - Key: Purpose
+          Value: ecs-express-task-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  EcsExpressInfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "davdeployEcsExpressInfra-${ConnectionId}"
+      Description: !Sub "ECS Express infrastructure role for DavDeploy connection ${ConnectionId}."
+      Tags:
+        - Key: ManagedBy
+          Value: davdeploy
+        - Key: ConnectionId
+          Value: !Ref ConnectionId
+        - Key: Purpose
+          Value: ecs-express-infrastructure
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+
+Outputs:
+  TaskExecutionRoleArn:
+    Description: Role used by Amazon ECS tasks to pull images and send logs.
+    Value: !GetAtt EcsExpressTaskExecutionRole.Arn
+  InfrastructureRoleArn:
+    Description: Role used by Amazon ECS to manage Express Mode infrastructure.
+    Value: !GetAtt EcsExpressInfrastructureRole.Arn
