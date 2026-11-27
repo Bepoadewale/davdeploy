@@ -40,16 +40,19 @@ Terraform plan or customer workload.
   generic run failure are recorded.
 - [x] No credentials, ExternalId, setup URL, plan bytes, or MFA values are
   included.
-- [ ] Documentation conventions and required hosted CI pass.
+- [x] Documentation conventions and all seven required hosted CI checks pass.
 
 ## Acceptance status
 
 - [x] Evidence is recorded without converting a failed run into success.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI passes (run `45921643669`; seven checks succeeded).
 
 ## Tests / validation performed
 
-Pending documentation convention check and required hosted CI.
+`uv run --project . python scripts/check_doc_conventions.py` and `git diff
+--check` passed locally. GitHub Actions run `45921643669` passed all seven
+checks: docs conventions, policy, Python, secrets, supply chain, cloud
+contracts, and local end-to-end.
 
 ## Evidence files produced
 
