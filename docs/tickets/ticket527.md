@@ -23,6 +23,7 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - AWS [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html), including resource-based grants to role sessions.
 - AWS service authorization references: [EC2](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ec2.html), [ECR](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecr.html), [CloudWatch Logs](https://docs.aws.amazon.com/service-authorization/latest/reference/list_logs.html), [ECS](https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html), and [IAM](https://docs.aws.amazon.com/service-authorization/latest/reference/list_iam.html).
 - ECS APIs: [CreateExpressGatewayService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateExpressGatewayService.html) and [DeleteExpressGatewayService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteExpressGatewayService.html).
+- Pinned AWS provider v6.73.0 source for [`aws_ecs_express_gateway_service`](https://github.com/hashicorp/terraform-provider-aws/blob/v6.73.0/internal/service/ecs/express_gateway_service.go), matching the pilot root lockfile.
 
 ## Work planned for the PR
 
@@ -30,6 +31,7 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - Document EC2 relationship/tag scope, exact ECR/log-group resources, Terraform data-source reads, ECS Express composite API actions, and exact-role `iam:PassRole` requirements in `docs/security/ECS_EXPRESS_EXECUTION_IAM.md`.
 - Verify the runner's existing staged flow: foundation plan/apply with the service disabled, image publication, then a separate service plan/apply after subnet IDs exist.
 - Identify ECS Express API side effects that are not represented as Terraform-managed resources in the approved plan.
+- Review the pinned provider's direct ECS API calls and record shared-helper/tagging calls that still need separate authorization mapping.
 - Keep permission code, credential wiring and cloud execution deferred wherever exact scoping is not proven.
 
 ## Acceptance criteria
@@ -38,6 +40,7 @@ Complete the AWS action, resource, and condition mapping needed before determini
 - [x] ECS Express composite actions and the distinct ECS infrastructure-role responsibility are documented.
 - [x] A single combined plan's computed-subnet limitation is explicit, and the existing staged runner flow is identified as a way to supply known subnet IDs to the later service plan.
 - [x] No broad caller permission for ELB/Auto Scaling is inferred from ECS-managed side effects.
+- [x] The pinned provider version and direct ECS API calls for create, read, update, and delete are recorded; authorization for shared helpers, tag synchronization, and EC2 managed-security-group filtering remains open.
 - [ ] Every provider API call and internal ECS resource ARN is verified against the pinned provider and represented in tested policy code; deferred to a follow-up implementation package.
 - [x] Renderer, hosted control plane, customer resources, state and locks remain untouched.
 - [x] Final-head GitHub CI run `45913543343` passed all seven checks on head `e5aff6f9`.
@@ -65,4 +68,4 @@ The sourced authorization mapping and implementation blocker are recorded. This 
 
 ## Follow-up work
 
-Verify exact AWS provider API behavior and internal resource ARNs; bind the existing foundation and service stages to separate approved plan digests and phase-specific identities; implement tested plan-bound policy generation; then pass clean-room and CI gates before any bounded AWS pilot.
+Complete the shared-helper, tag-synchronization, and EC2 helper authorization map; verify all internal ECS resource ARNs and exact conditions; bind the existing foundation and service stages to separate approved plan digests and phase-specific identities; implement tested plan-bound policy generation; then pass clean-room and CI gates before any bounded AWS pilot.

@@ -169,3 +169,25 @@ publishing identities. See the official references below.
 - [CreateExpressGatewayService API](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateExpressGatewayService.html)
 - [DeleteExpressGatewayService API](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteExpressGatewayService.html)
 - [IAM actions, resources, and condition keys](https://docs.aws.amazon.com/service-authorization/latest/reference/list_iam.html)
+
+## Pinned Terraform provider operation map (2026-11-27)
+
+The pilot lockfile pins `hashicorp/aws` 6.73.0. I reviewed the resource
+implementation at the corresponding upstream tag
+[`v6.73.0/internal/service/ecs/express_gateway_service.go`](https://github.com/hashicorp/terraform-provider-aws/blob/v6.73.0/internal/service/ecs/express_gateway_service.go).
+The file confirms these direct ECS API calls:
+
+| Terraform lifecycle path | Provider calls in v6.73.0 | IAM follow-up |
+| --- | --- | --- |
+| Create | Existence check through the shared `DescribeServices` helper; `CreateExpressGatewayService`; readiness polling through `DescribeExpressGatewayService`; optional steady-state polling through `ListServiceDeployments` and `DescribeServiceDeployments` | AWS's authorization reference lists the composite dependent actions for `CreateExpressGatewayService`, including cluster/gateway/task-definition operations, tagging, and `iam:PassRole`. The caller must not gain ALB or Auto Scaling permissions because the ECS infrastructure role owns those side effects. |
+| Read / refresh | `DescribeExpressGatewayService`; the provider also calls EC2 `DescribeSecurityGroups` to filter ECS-managed security groups returned in the service network configuration | Scope the ECS describe to the service; determine whether the EC2 helper can use exact security-group ARNs or must be omitted from the apply identity and performed only by observation. Confirm shared helper and tagging framework calls before authorizing the role. |
+| Update | `UpdateExpressGatewayService`; `DescribeExpressGatewayService`; optional `ListServiceDeployments` and `DescribeServiceDeployments` polling | Use the AWS `UpdateExpressGatewayService` dependent-action list and bind service, cluster, subnet, CPU/memory, and passed-role conditions to trusted plan values. |
+| Delete | `DeleteExpressGatewayService`; `DescribeExpressGatewayService` polling until inactive | Use a separately approved destroy plan and deletion-only session; do not reuse create/update permissions or infer deletion from the prior create approval. |
+
+This is provider-source evidence for the ECS API path, not a complete role
+policy. The resource also invokes shared provider helpers for service lookup
+and deployment status, plus the generic tag synchronization layer. Their API
+actions, resource/condition support, and the provider's exact treatment of
+tags still need to be mapped before permissions can be implemented. The
+6.73.0 provider source does not remove the need for a fresh review when the
+lockfile changes.
