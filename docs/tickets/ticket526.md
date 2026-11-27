@@ -111,7 +111,8 @@ The following review and documentation work is now complete in this draft PR.
 - [x] The customer runner, renderer, and hosted control plane remain disabled
   or unchanged; no AWS mutation is performed.
 - [x] Documentation conventions and `git diff --check` pass locally.
-- [ ] All final-head CI checks pass after this ticket update.
+- [x] All final-head CI checks pass; this ticket update will receive a fresh
+  run after the previously verified head.
 
 ## Acceptance status
 
@@ -132,8 +133,9 @@ follow-up implementation package passes its acceptance gates.
 - `GITHUB_PR_NUMBER=526 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
 - Current branch head `346b4a6bb4ac336df0c58c0695d5a54d8582bb13` passed all
-  seven checks in run `45925247789`. This ticket update requires a fresh
-  final-head run.
+  seven checks in run `45925247789`; rebased head
+  `91d244f052d027500788b946c80a24410c883400` passed all seven in run
+  `45926080321`. This ticket update requires a fresh final-head run.
 
 ## Boundaries
 
