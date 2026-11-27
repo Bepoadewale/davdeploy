@@ -71,7 +71,18 @@ alternative; generation still fails closed after its bounded attempts.
   passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks
   passed. One existing Starlette/httpx deprecation warning remains.
 - Direct Ruff, documentation convention, and `git diff --check` passed.
-- Isolated clean-room proof, PR CI/review, protected deployment, and a fresh
+- Isolated clean-room proof passed on commit
+  `003a54f218f7e42ccd079e2425040e1e76be068f`: `make
+  VENV=/private/tmp/davdeploy-nova-health-cleanroom-560-venv local-proof`
+  passed API smoke/contract, customer-plan E2E, seed and trace checks, Ruff,
+  Actions configuration, 2,090 tests, OpenAPI, and Compose.
+- `make VENV=/private/tmp/davdeploy-nova-health-cleanroom-560-venv clean-local`
+  removed the exact nine containers created for the isolated proof, its Compose
+  network/volume, generated `.local`, and external virtual environment.
+  Follow-up inventory confirmed all were absent.
+- Initial PR CI run `46073624716` passed all seven checks on implementation
+  head `003a54f218f7e42ccd079e2425040e1e76be068f`. The evidence update
+  triggers fresh final-head checks. Review, protected deployment, and a fresh
   review-only hosted run remain pending.
 
 ## Final boundary

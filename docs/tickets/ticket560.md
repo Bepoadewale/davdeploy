@@ -58,7 +58,8 @@ the original health requirement.
   untrusted validator/model text.
 - [x] Focused tests, full verification, Ruff, Actions configuration, OpenAPI,
   Compose, documentation conventions, and diff checks pass locally.
-- [ ] Required isolated clean-room proof, PR review, and all CI checks pass.
+- [x] Required isolated clean-room proof passes.
+- [ ] PR review and all current-head CI checks pass.
 - [ ] After protected control-plane deployment, one fresh review-only hosted
   generation reaches an inspectable plan or a precise next blocker. No
   customer-workload approval, apply, or destroy occurs.
@@ -73,9 +74,10 @@ lifecycle evidence.
 ## Acceptance status
 
 The pair-specific prompt and feedback, bounded repair/fail-closed tests, full
-verification, documentation checks, and hosted v21 baseline evidence are
-complete. Isolated clean-room proof, PR review/CI, protected control-plane
-deployment, and the next fresh hosted plan-only outcome remain open.
+verification, documentation checks, hosted v21 baseline evidence, and isolated
+clean-room proof are complete. PR review/current-head CI, protected
+control-plane deployment, and the next fresh hosted plan-only outcome remain
+open.
 
 ## Tests / evidence files
 
@@ -98,7 +100,9 @@ Preserve secrets, raw proposals, plans, state, and all prior failure evidence.
 - `pytest -q tests/test_terraform_generation.py tests/test_generated_deployment_contract.py tests/test_customer_plan_review.py tests/test_nova_plan_runs.py` — 202 passed.
 - `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify` — 2,090 passed, Ruff passed, Actions configuration passed, OpenAPI snapshot matched, and Compose config passed.
 - Direct Ruff check, documentation convention check, and `git diff --check` passed.
-- Clean-room, PR CI/review, protected deployment, and fresh hosted plan-only result remain pending.
+- `make VENV=/private/tmp/davdeploy-nova-health-cleanroom-560-venv local-proof` passed on `003a54f218f7e42ccd079e2425040e1e76be068f`: API smoke/contract, customer-plan E2E, seed/trace checks, Ruff, Actions configuration, 2,090 tests, OpenAPI, and Compose.
+- `make VENV=/private/tmp/davdeploy-nova-health-cleanroom-560-venv clean-local` removed only the clean-room runtime created for this proof. The nine named containers, its Compose network/volume, generated `.local`, and external virtual environment were verified absent.
+- CI run `46073624716` passed all seven checks on implementation head `003a54f218f7e42ccd079e2425040e1e76be068f`; the evidence update triggers fresh final-head checks. Review, protected deployment, and a fresh hosted plan-only result remain pending.
 
 ## Follow-up work
 
