@@ -105,6 +105,21 @@ def test_login_does_not_store_a_session_without_software_token_challenge(monkeyp
     assert not stored
 
 
+def test_login_rejects_insecure_or_credential_bearing_api_urls():
+    for api_url in (
+        "http://api.example.test",
+        "https://user:pass@api.example.test",
+        "https://api.example.test/?token=secret",
+    ):
+        with pytest.raises(RuntimeError, match="API URL"):
+            cli_auth.login(
+                api_url=api_url,
+                username="admin@example.test",
+                region="us-east-1",
+                client_id="public-client-id",
+            )
+
+
 def test_explicit_token_takes_precedence_over_keychain(monkeypatch):
     monkeypatch.setattr(cli_auth, "load_session", lambda: pytest.fail("Keychain should not be read"))
     assert cli_auth.resolve_token("explicit-token", api_url="https://api.example.test") == "explicit-token"

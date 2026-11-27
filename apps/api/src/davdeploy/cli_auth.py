@@ -11,6 +11,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import boto3
 
@@ -118,6 +119,16 @@ def _save_session(session: CliSession) -> None:
     _store_keychain_secret(json.dumps(asdict(session), separators=(",", ":")))
 
 
+def _validate_api_url(api_url: str) -> None:
+    parsed = urlsplit(api_url)
+    host = (parsed.hostname or "").lower()
+    loopback = host in {"localhost", "127.0.0.1", "::1"}
+    if not parsed.netloc or (parsed.scheme != "https" and not (parsed.scheme == "http" and loopback)):
+        raise RuntimeError("Use an HTTPS DavDeploy API URL for sign-in; HTTP is allowed only for localhost.")
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise RuntimeError("The sign-in API URL must not contain credentials, a query, or a fragment.")
+
+
 def _jwt_expiry(token: str) -> int:
     try:
         payload = token.split(".")[1]
@@ -181,6 +192,7 @@ def login(
 ) -> dict[str, Any]:
     if not client_id:
         raise RuntimeError("Set DAVDEPLOY_COGNITO_CLIENT_ID or pass --cognito-client-id.")
+    _validate_api_url(api_url)
     if not sys.stdin.isatty() and not sys.stderr.isatty():
         raise RuntimeError("Run `davdeploy auth login` from an interactive terminal to enter secrets safely.")
     normalized = (username or input("DavDeploy email: ")).strip().lower()

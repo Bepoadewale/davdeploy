@@ -45,6 +45,8 @@ session securely so governed CLI requests can use it without printing tokens.
 - [x] Workspace identity is verified by `GET /api/v1/me` before saving tokens.
 - [x] Tokens are stored only in Keychain, are not shown in output, and refresh
       occurs before API calls when the ID token is near expiry.
+- [x] The API must use HTTPS except for loopback development endpoints, and a
+      saved session cannot be sent to a different API URL.
 - [x] Invalid/expired credentials fail with actionable text and no token or
       sensitive Cognito response in output.
 - [x] Existing explicit bearer-token usage remains compatible.
@@ -57,7 +59,7 @@ No live DavDeploy sign-in has been performed from this PR yet.
 
 ## Tests / validation performed
 
-- `uv run --project . --extra dev pytest -q tests/test_cli_auth.py tests/test_agent_interfaces.py` — 17 passed.
+- `uv run --project . --extra dev pytest -q tests/test_cli_auth.py tests/test_agent_interfaces.py` — 18 passed.
 - `GITHUB_PR_NUMBER=528 python3 scripts/check_doc_conventions.py` — passed.
 - `uv run --project . --extra dev ruff check apps/api/src/davdeploy/cli.py apps/api/src/davdeploy/cli_auth.py tests/test_cli_auth.py` — passed.
 - `git diff --check` — passed.
