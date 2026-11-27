@@ -4,7 +4,7 @@
 - Execution type: authenticated CLI review submission and hosted Nova plan-only
   generation
 - Control-plane commit: `e8fc9ab8f391f22d889a119e9e3a64a47d4db09f`
-- Commit: implementation pending
+- Commit: `319378be56cf830f159095c6b08fa8cf3bbad712`
 - Pull request: [#550](https://github.com/Bepoadewale/davdeploy/pull/550)
 - AWS account: `654654474502` (control plane only; no workload apply)
 - AWS region: `us-east-1`
