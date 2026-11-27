@@ -50,16 +50,17 @@ and make the RDS target instruction direct enough for a relational workload.
 - [x] Bounded repair can correct a database assertion from an API target to an
   RDS target using the direct instruction.
 - [x] Focused tests, full verification, and docs conventions pass.
-- [ ] Clean-room cycle, review, all required PR CI, and deployed hosted
+- [x] Clean-room cycle passed on commit `15f10f9c`.
+- [ ] Review, all required PR CI, protected deployment, and fresh hosted
   plan-only evidence pass.
 - [ ] After protected deployment, a fresh review-only hosted run reaches an
   inspectable saved plan or a new precise blocker; no customer approval/apply.
 
 ## Acceptance status
 
-Implementation, focused/full local verification, and docs conventions
-complete. Clean-room proof, review, CI, and deployed hosted plan-only evidence
-remain pending.
+Implementation, focused/full local verification, docs conventions, and clean-
+room proof complete. Review, CI, protected deployment, and deployed hosted
+plan-only evidence remain pending.
 
 ## Tests / validation performed
 
@@ -72,8 +73,9 @@ PYTHONPATH=apps/api/src python -m pytest -q tests/test_generated_deployment_cont
 Result: 196 passed. `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399
 verify` passed with 2,084 tests, lint, OpenAPI snapshot, and Compose config.
 Ruff, `git diff --check`, and both CI documentation/configuration scripts
-passed. Clean-room proof, review, CI, and deployed hosted plan-only evidence
-remain pending. Prior deployment evidence is in
+passed. Clean-room proof also passed; details are in `docs/test/test558.md`.
+Review, CI, protected deployment, and deployed hosted plan-only evidence remain
+pending. Prior deployment evidence is in
 `docs/test/test557.md`; the hosted v19 diagnostic is recorded there.
 
 ## Evidence files produced
