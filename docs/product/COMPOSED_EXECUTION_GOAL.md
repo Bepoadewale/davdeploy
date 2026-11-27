@@ -9,7 +9,8 @@ lifecycle coverage remain distinct.
 
 ### Reconciliation after PRs #531 and #532
 
-Backend `main` is `f300676aa3af32a76136947c4f4870cee498b5e6` (PR #532).
+Backend `main` is `95ce2aa76cbefedf94b5949866f7d29ecf4cd995` (PR #534).
+PR #523's source-and-evidence reconciliation merged at `4887df037b2dfc90982b490915539eb03ded8d53`.
 PRs #520 and #522 remain merged: #520's provider-generated saved-plan policy
 evaluation produced three review findings and no denials; #522's regional
 pricing model covered 12 lines and modeled USD 1.27–415.81/month from
@@ -45,6 +46,19 @@ The ECS Express implementation and evidence stack is:
 - PR #524 remains an open draft; its prior-head run
   [45907870966](https://github.com/Bepoadewale/davdeploy/actions/runs/45907870966)
   passed all seven checks. Check its current head before merging.
+- PR #535 is an open documentation draft on the #519 branch. It corrects the
+  ECS policy design to preserve an explicit action boundary against direct
+  same-account role-session resource-policy grants. Its current head passed
+  all seven checks in run [45930876536](https://github.com/Bepoadewale/davdeploy/actions/runs/45930876536).
+- PR #536 is an open draft on current `main`. It adds exact-resource
+  `Deny`/`NotAction` statements to the Nova apply session policy, retains the
+  out-of-plan resource deny, and bumps the policy version to v2. Full local
+  tests passed (2,021); final-head CI run
+  [45932732854](https://github.com/Bepoadewale/davdeploy/actions/runs/45932732854)
+  passed all seven checks, including the isolated local end-to-end workflow.
+  A three-service S3/SQS/DynamoDB policy overflows STS's 2,048-byte limit and
+  fails closed at 2,641 bytes. This change is not merged or deployed, and does
+  not claim AWS policy-evaluation or customer lifecycle evidence.
 
 The current product boundary is explicit: direct same-account ECS Express
 and private Batch tests satisfy the general customer-side lifecycle gate only
