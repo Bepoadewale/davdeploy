@@ -54,3 +54,15 @@ remain as audit evidence; no cloud teardown was needed.
 This documents one bounded hosted generation failure and its diagnostics. It
 does not establish a valid plan, approval, apply, application behavior,
 lifecycle, or certification.
+
+## Source regression verification
+
+The v14 source maps each known graph validator cause to a distinct fixed issue
+code and guidance, while unknown graph causes retain generic safe guidance.
+Validation remains strict. Raw validator messages remain absent from feedback.
+
+- Focused generation/run/review suites: 114 passed.
+- Full `make verify`: config check, lint, 2,044 tests, OpenAPI snapshot, and
+  Docker Compose configuration passed. One unrelated Starlette deprecation
+  warning was emitted.
+- Hosted PR CI remains pending.

@@ -119,7 +119,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v13"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v14"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -251,6 +251,51 @@ _RESOURCE_GRAPH_GUIDANCE = (
     "Keep resource IDs unique; every dependency, typed reference, cost assumption, and "
     "health target/source must reference a declared ID, and dependencies must be acyclic."
 )
+_GRAPH_VALIDATION_FEEDBACK = {
+    "dependencies must reference other declared resources": (
+        "unknown_dependency",
+        (
+            "Every dependency must exactly match a declared resource_id. Remove undeclared IDs and "
+            "do not use Terraform resource names as dependency IDs."
+        ),
+    ),
+    "resource dependency graph must be acyclic": (
+        "dependency_cycle",
+        (
+            "Make the dependency graph acyclic. Remove an unnecessary dependency edge from each "
+            "cycle while preserving required prerequisites."
+        ),
+    ),
+    "resource IDs must be unique": (
+        "duplicate_resource_id",
+        (
+            "Assign each resource a unique stable resource_id, then update every reference to the "
+            "intended declared ID."
+        ),
+    ),
+    "Terraform resource addresses must be unique": (
+        "duplicate_terraform_address",
+        (
+            "Give each resource a unique Terraform name within its resource type. Keep each stable "
+            "resource_id separate from that local name."
+        ),
+    ),
+    "references must target a declared resource": (
+        "unknown_resource_reference",
+        "Every typed resource_reference must target a declared resource_id and a declared output.",
+    ),
+    "reference must match a declared output type": (
+        "reference_type_mismatch",
+        "Set each typed reference's output name and type to exactly match the declared output.",
+    ),
+    "health assertions must target declared resources": (
+        "unknown_health_target",
+        (
+            "Every health assertion target_resource_id and source_resource_id must match a declared "
+            "resource_id."
+        ),
+    ),
+}
 _RESOURCE_ARGUMENT_GUIDANCE = (
     "Use only literal JSON values for AWS resource attributes. Remove provider, provisioner, "
     "connection, backend, required_providers, access_key, secret_key, session_token, "
@@ -296,6 +341,13 @@ _ALLOWED_VALIDATION_ISSUES = frozenset(
         "reserved_ownership_tag",
         "duplicate_output_name",
         "unsupported_secret_output",
+        "unknown_dependency",
+        "dependency_cycle",
+        "duplicate_resource_id",
+        "duplicate_terraform_address",
+        "unknown_resource_reference",
+        "reference_type_mismatch",
+        "unknown_health_target",
     }
 )
 
@@ -603,7 +655,16 @@ def _resource_feedback(code: str, field: str, cause: Any = None) -> tuple[str, s
 
 def _validation_issue(code: str, field: str, cause: Any = None) -> str | None:
     result = _resource_feedback(code, field, cause)
-    return result[0] if result else None
+    if result:
+        return result[0]
+    graph_feedback = _graph_feedback(code, field, cause)
+    return graph_feedback[0] if graph_feedback else None
+
+
+def _graph_feedback(code: str, field: str, cause: Any = None) -> tuple[str, str] | None:
+    if code != "value_error" or field != "proposal" or not isinstance(cause, ValueError):
+        return None
+    return _GRAPH_VALIDATION_FEEDBACK.get(str(cause))
 
 
 def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
@@ -619,24 +680,13 @@ def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None
     }
     if code == "string_pattern_mismatch" and field in identifier_fields:
         return _ID_PATTERN_GUIDANCE
-    graph_validation_causes = {
-        "dependencies must reference other declared resources",
-        "resource dependency graph must be acyclic",
-        "resource IDs must be unique",
-        "Terraform resource addresses must be unique",
-        "references must target a declared resource",
-        "reference must match a declared output type",
-        "health assertions must target declared resources",
-    }
     resource_feedback = _resource_feedback(code, field, cause)
     if resource_feedback:
         return resource_feedback[1]
-    if (
-        code == "value_error"
-        and field == "proposal"
-        and isinstance(cause, ValueError)
-        and str(cause) in graph_validation_causes
-    ):
+    graph_feedback = _graph_feedback(code, field, cause)
+    if graph_feedback:
+        return graph_feedback[1]
+    if code == "value_error" and field == "proposal" and isinstance(cause, ValueError):
         return _RESOURCE_GRAPH_GUIDANCE
     return None
 

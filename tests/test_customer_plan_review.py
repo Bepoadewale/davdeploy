@@ -610,7 +610,7 @@ def test_failed_nova_generation_persists_only_aggregated_usage_and_safe_evidence
     model_records = [
         record
         for record in records
-        if record.detail.get("prompt_version") == "terraform-nova2-contract-v13"
+        if record.detail.get("prompt_version") == "terraform-nova2-contract-v14"
     ]
     by_metric = {record.metric: record for record in model_records}
     assert by_metric["model_calls"].quantity == 1
