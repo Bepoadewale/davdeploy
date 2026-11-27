@@ -447,6 +447,54 @@ def test_customer_ecr_storage_assumptions_are_revision_bound_and_cleared():
     assert cleared.content_digest == plan_hash(cleared.content)
 
 
+def test_customer_ecs_express_usage_assumptions_are_revision_bound_and_cleared():
+    service, _ = make_service()
+    original = draft(service)
+    usage = {
+        "service_address": "aws_ecs_express_gateway_service.workload[0]",
+        "log_group_address": "aws_cloudwatch_log_group.workload",
+        "monthly_task_starts": {"minimum": 1, "maximum": 100},
+        "average_billed_task_runtime_seconds": {"minimum": 60, "maximum": 3600},
+        "average_task_public_ipv4_address_seconds": {"minimum": 60, "maximum": 3600},
+        "monthly_alb_billed_hours": {"minimum": 24, "maximum": 744},
+        "monthly_alb_lcu_hours": {"minimum": 24, "maximum": 1000},
+        "monthly_alb_public_ipv4_address_seconds": {
+            "minimum": 172800, "maximum": 267840000,
+        },
+        "cloudwatch_logs": {
+            "monthly_ingested_gb": {"minimum": 0, "maximum": 10},
+            "monthly_retained_gb_month": {"minimum": 0, "maximum": 30},
+        },
+        "monthly_internet_egress_gb": {"minimum": 0, "maximum": 100},
+        "monthly_cross_az_transfer_gb": {"minimum": 0, "maximum": 100},
+    }
+    revised = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"ecs_express_pricing_usage_assumptions": usage},
+    )
+    assert revised.content["user_constraints"]["ecs_express_pricing_usage_assumptions"] == usage
+    assert revised.content["application_analysis"]["workload_spec"][
+        "ecs_express_pricing_usage_assumptions"
+    ] == usage
+    assert revised.content["revision_diff"]["ecs_express_pricing_usage_assumptions"] == {
+        "before": None, "after": usage,
+    }
+    assert revised.content_digest == plan_hash(revised.content)
+
+    cleared = service.revise_infrastructure_plan_constraints(
+        founder(), original.infrastructure_plan_id,
+        {"ecs_express_pricing_usage_assumptions": None},
+    )
+    assert "ecs_express_pricing_usage_assumptions" not in cleared.content["user_constraints"]
+    assert "ecs_express_pricing_usage_assumptions" not in cleared.content[
+        "application_analysis"
+    ]["workload_spec"]
+    assert cleared.content["revision_diff"]["ecs_express_pricing_usage_assumptions"] == {
+        "before": usage, "after": None,
+    }
+    assert cleared.content_digest == plan_hash(cleared.content)
+
+
 def test_submitted_revision_cannot_be_regenerated_from_constraint_edits():
     service, _ = make_service()
     revision = draft(service)

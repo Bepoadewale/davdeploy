@@ -8,6 +8,8 @@ import os
 import sys
 from typing import Any
 
+from davdeploy.cli_auth import login as cognito_login
+from davdeploy.cli_auth import resolve_token
 from davdeploy.client import ProductApiClient
 
 CLI_PROTOCOL_VERSION = "v1"
@@ -20,6 +22,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--token", default=os.getenv("DAVDEPLOY_TOKEN"))
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    auth = subparsers.add_parser("auth", help="authenticate this CLI with DavDeploy")
+    auth_subparsers = auth.add_subparsers(dest="auth_command", required=True)
+    auth_login = auth_subparsers.add_parser("login", help="sign in with password and authenticator code")
+    auth_login.add_argument("--username", default=os.getenv("DAVDEPLOY_USERNAME"))
+    auth_login.add_argument(
+        "--cognito-region", default=os.getenv("DAVDEPLOY_COGNITO_REGION", "us-east-1")
+    )
+    auth_login.add_argument(
+        "--cognito-client-id",
+        default=os.getenv("DAVDEPLOY_COGNITO_CLIENT_ID", "5f5f3jq5afh628m4c8csd7rjo5"),
+    )
 
     intent = subparsers.add_parser("analyze-workload")
     intent.add_argument("--project-id", required=True)
@@ -58,6 +72,19 @@ def _parser() -> argparse.ArgumentParser:
     approve = subparsers.add_parser("approve-plan")
     approve.add_argument("--plan-id", required=True)
     approve.add_argument("--plan-hash", required=True)
+
+    generated_artifact = subparsers.add_parser(
+        "get-generated-plan-artifact",
+        help="inspect safe evidence for one generated Terraform plan",
+    )
+    generated_artifact.add_argument("--artifact-id", required=True)
+
+    approve_generated = subparsers.add_parser(
+        "approve-generated-plan",
+        help="approve one generated Terraform plan by its exact manifest digest",
+    )
+    approve_generated.add_argument("--artifact-id", required=True)
+    approve_generated.add_argument("--manifest-sha256", required=True)
 
     customer_review = subparsers.add_parser("create-customer-review")
     customer_review.add_argument("--plan-id", required=True)
@@ -183,6 +210,16 @@ def run(
             f"/api/v1/deployment-plans/{args.plan_id}/approve",
             {"plan_hash": args.plan_hash},
         )
+    if args.command == "get-generated-plan-artifact":
+        return client.request(
+            "GET", f"/api/v1/generated-plan-artifacts/{args.artifact_id}"
+        )
+    if args.command == "approve-generated-plan":
+        return client.request(
+            "POST",
+            f"/api/v1/generated-plan-artifacts/{args.artifact_id}/approve",
+            {"manifest_sha256": args.manifest_sha256},
+        )
     if args.command == "create-customer-review":
         return client.request("POST", f"/api/v1/deployment-plans/{args.plan_id}/customer-review")
     if args.command == "get-customer-review":
@@ -301,11 +338,29 @@ def run(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if not args.token:
+    if args.command == "auth" and args.auth_command == "login":
+        try:
+            result = cognito_login(
+                api_url=args.api_url,
+                username=args.username,
+                region=args.cognito_region,
+                client_id=args.cognito_client_id,
+            )
+        except RuntimeError as error:
+            print(f"davdeploy auth: {error}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, indent=2, default=str))
+        return 0
+    try:
+        token = resolve_token(args.token, api_url=args.api_url)
+    except RuntimeError as error:
+        print(f"davdeploy auth: {error}", file=sys.stderr)
+        return 1
+    if not token:
         raise SystemExit(
-            "set DAVDEPLOY_TOKEN or pass --token; the CLI never obtains cloud credentials"
+            "run `davdeploy --api-url https://api.davdeploy.tech auth login` or set DAVDEPLOY_TOKEN"
         )
-    result = run(args, ProductApiClient(args.api_url, args.token))
+    result = run(args, ProductApiClient(args.api_url, token))
     print(json.dumps(result, indent=2, default=str))
     return 0
 
