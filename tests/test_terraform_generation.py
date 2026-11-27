@@ -13,13 +13,15 @@ from davdeploy.model_gateway import (
     model_input_digest,
 )
 from davdeploy.terraform_generation import (
-    _GENERIC_VALIDATION_GUIDANCE,
     _GRAPH_VALIDATION_FEEDBACK,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
+    _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
+    _canonical_field_path,
+    _is_canonical_feedback_path,
     _sanitize_pydantic_feedback,
     _validation_guidance,
     _validation_issue,
@@ -118,7 +120,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert '"manage_master_user_password":true' in document["task"]
     assert '"output_name":"master_user_secret[0].secret_arn"' in document["task"]
     assert '"kind":"resource_reference"' in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v14"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v15"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -206,7 +208,7 @@ def test_resource_name_pattern_feedback_distinguishes_name_from_resource_id():
     assert all(item["field"] != "resources[*].resource_id" for item in feedback)
 
 
-def test_unknown_validator_error_becomes_generic_safe_repair_feedback():
+def test_unknown_validator_error_keeps_safe_path_and_uses_fixed_field_guidance():
     from pydantic_core import PydanticCustomError
 
     error = ValidationError.from_exception_data(
@@ -228,8 +230,8 @@ def test_unknown_validator_error_becomes_generic_safe_repair_feedback():
     assert feedback == [
         {
             "code": "invalid",
-            "field": "proposal",
-            "guidance": _GENERIC_VALIDATION_GUIDANCE,
+            "field": "resources[*].name",
+            "guidance": _RESOURCE_NAME_GUIDANCE,
         }
     ]
     failure = NovaTerraformGenerationFailed(
@@ -243,6 +245,58 @@ def test_unknown_validator_error_becomes_generic_safe_repair_feedback():
     assert "private_validator_code" not in repr(failure.validation_feedback)
     assert "must-not-escape" not in repr(failure.validation_feedback)
     assert "private-invalid-value" not in repr(failure.validation_feedback)
+
+
+def test_unknown_nested_path_is_truncated_before_unrecognized_argument_name():
+    from pydantic_core import PydanticCustomError
+
+    error = ValidationError.from_exception_data(
+        "GeneratedDeploymentProposal",
+        [
+            {
+                "type": PydanticCustomError(
+                    "private_nested_validator_code",
+                    "private detail: {secret}",
+                    {"secret": "do-not-expose"},
+                ),
+                "loc": ("resources", 0, "arguments", "untrusted_private_attribute"),
+                "input": "private-input-value",
+            }
+        ],
+    )
+
+    feedback = _sanitize_pydantic_feedback(error)
+    assert feedback == [
+        {
+            "code": "invalid",
+            "field": "resources[*].arguments",
+            "guidance": _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
+        }
+    ]
+    assert _is_canonical_feedback_path(feedback[0]["field"])
+    rendered = repr(feedback)
+    assert "private_nested_validator_code" not in rendered
+    assert "untrusted_private_attribute" not in rendered
+    assert "do-not-expose" not in rendered
+    assert "private-input-value" not in rendered
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (("resources", 0, "name"), "resources[*].name"),
+        (("resources", 0, "arguments", object()), "resources[*].arguments"),
+        (("requirements", "region", object()), "requirements.region"),
+        (("untrusted_top_level", "field"), "proposal"),
+        (("resources", "not-an-index", "name"), "resources"),
+        (123, "proposal"),
+    ],
+)
+def test_unknown_error_paths_fail_closed_to_canonical_schema_prefix(location, expected):
+    field = _canonical_field_path(location)
+    assert field == expected
+    assert _is_canonical_feedback_path(field)
+    assert not _is_canonical_feedback_path("resources[*].untrusted_private_attribute")
 
 
 def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
