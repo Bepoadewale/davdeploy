@@ -52,14 +52,14 @@ whitelisted discriminator tag was omitted from canonicalization.
   fixed known assertion kinds and schema fields.
 - [ ] Generation, feedback, plan-run, and customer-review tests pass; Ruff and
   documentation checks pass.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI run `45939566852` passed all seven checks.
 - [ ] After protected deployment, the same submitted plan-only revision yields
   an inspectable saved plan or a new actionable safe diagnostic.
 
 ## Acceptance status
 
 - [x] Prompt v6 and improved canonical feedback are implemented and locally tested.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI run `45939566852` passed all seven checks.
 - [ ] Post-deployment hosted retry is complete.
 
 ## Tests / validation performed
@@ -68,6 +68,7 @@ whitelisted discriminator tag was omitted from canonicalization.
 - Ruff passed for the five changed Python files.
 - `GITHUB_PR_NUMBER=541 uv run --project . python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Hosted CI run `45939566852` — all seven checks passed.
 
 ## Evidence files produced
 
