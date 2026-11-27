@@ -59,8 +59,14 @@ No customer workload resources were created, so no teardown was needed.
 - `pytest -q tests/test_generated_deployment_contract.py tests/test_terraform_generation.py` — 114 passed.
 - `make verify` passed 2,084 tests, Ruff, Actions configuration, OpenAPI
   snapshot, and Compose checks. One existing Starlette deprecation warning.
-- Documentation conventions and `git diff --check` passed. Clean-room cycle
-  and PR CI remain pending.
+- Isolated clean-room `make local-proof` passed on commit `4d994927`: API
+  contract, customer-plan E2E, trace, Ruff, 2,084 tests, OpenAPI, Actions
+  configuration, and Compose checks passed. The unique Docker containers and
+  network, generated `.local` data, and external venv were removed; absence was
+  verified.
+- Documentation conventions and `git diff --check` passed. PR CI has six
+  passing checks; the SBOM check failed because GitHub returned HTTP 504 while
+  fetching the Syft release.
 - No AWS workload or generated Terraform plan was created by these local tests.
 
 ## Final boundary

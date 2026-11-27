@@ -59,7 +59,12 @@ targets and keep plan-only execution boundaries unchanged.
 - [x] Focused tests (114), full `make verify` (2,084), Ruff, OpenAPI snapshot,
   Actions configuration, Compose, documentation conventions, and diff checks
   pass locally.
-- [ ] Required full clean-room cycle, review, and PR CI pass.
+- [x] Required isolated clean-room cycle passed on commit `4d994927` with
+  2,084 tests, API contract, customer-plan E2E, trace, Ruff, OpenAPI, Actions,
+  and Compose checks; its unique containers/network, local data, and external
+  venv were removed and absence verified.
+- [ ] PR CI completes successfully; current SBOM job is failing while GitHub
+  returns HTTP 504 fetching Syft.
 - [ ] Fresh deployed plan-only run advances to an inspectable saved plan or a
   new precise blocker without approval or apply.
 
@@ -68,8 +73,10 @@ targets and keep plan-only execution boundaries unchanged.
 Implementation and local verification are complete. Focused contract/generation
 tests pass (114); full `make verify` passes (2,084 tests), and Ruff, OpenAPI
 snapshot, Actions configuration, Compose, documentation conventions, and diff
-checks pass. The required clean-room cycle, PR CI, protected release, and fresh
-hosted plan-only attempt remain pending.
+checks pass. The isolated clean-room cycle also passed on `4d994927` and its
+task-created local data, venv, containers, and network were removed and absence
+verified. PR CI, protected release, and a fresh hosted plan-only attempt remain
+pending.
 
 ## Tests / validation performed
 
@@ -78,7 +85,10 @@ passed 2,084 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose
 checks, with one existing Starlette deprecation warning. Documentation
 conventions and `git diff --check` passed. The first full verification run found
 two stale v18 expectations; both were updated to v19 before the passing run.
-The clean-room cycle and PR CI remain pending.
+The isolated clean-room cycle passed on `4d994927` with the full `make
+local-proof` suite (2,084 tests); unique containers, network, local data, and
+external venv were removed and absence verified. The PR CI SBOM job remains
+pending because GitHub returned HTTP 504 fetching Syft; all other checks passed.
 
 ## Evidence files produced
 
