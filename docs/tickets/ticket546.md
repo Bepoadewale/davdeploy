@@ -10,7 +10,7 @@ repair still returned `credential_value` and failed before CodeBuild. Improve
 Nova's concrete instruction for the supported database-managed secret and
 Lambda reference shape. Keep typed validation and credential rejection intact.
 
-## Current repo and hosted state
+## Current repo state
 
 - Main `4ecb7070bfa030041dd43958595cb24b5eaff54b` includes PR #545 and is
 deployed by plan run `45964473463` and apply run `45965284428`.
