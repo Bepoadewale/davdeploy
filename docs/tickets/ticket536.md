@@ -1,7 +1,7 @@
 # ticket536 — Deny unapproved actions on exact Nova apply resources
 
-PR: #536 (draft; session-policy boundary hardening)
-Branch: `fix/nova-apply-session-boundary-536`
+PR: #536 (merged 2026-11-27 as `c58a2d4a6f3ce45712641e47a4aec52f8181d42b`)
+Branch: `fix/nova-apply-session-boundary-536` (deleted after merge)
 
 ## Problem / goal
 
@@ -75,19 +75,22 @@ the existing cross-resource deny and the 2,048-byte fail-closed limit.
 - [x] Final-head GitHub Actions checks pass.
 - [x] Complete the repository-required clean-room cycle for this authorization
   change.
+- [x] PR #536 merged after all seven checks passed; source branch deleted.
 
 ## Acceptance status
 
 The per-resource explicit-deny behavior and v2 fail-closed policy version are
 implemented. The compact mixed S3/SQS/DynamoDB fixture correctly fails closed
 at 2,641 bytes; a smaller mixed SQS/DynamoDB policy remains within the limit.
-All seven final-head CI checks passed, including `local-e2e` on a fresh GitHub
-runner. A separate fresh local worktree passed bootstrap, smoke, customer-plan
+All seven final-head CI checks passed on head `5689dfaf` in run
+`45933859275`, including `local-e2e` on a fresh GitHub runner. PR #536 merged
+to source `main` as `c58a2d4a6f3ce45712641e47a4aec52f8181d42b`. A separate
+fresh local worktree passed bootstrap, smoke, customer-plan
 end-to-end, simple/complex/degraded/Day-2 demos, policy and readiness failures,
 trace verification, full lint, and all 2,021 tests. Its project containers were
 stopped; generated local files and the test database volume were retained.
-The renderer remains disabled. No live AWS policy evaluation or customer
-lifecycle evidence is claimed.
+The renderer remains disabled. The source merge did not update a live AWS role
+or prove AWS policy evaluation or customer lifecycle execution.
 
 ## Tests / validation performed
 
@@ -101,8 +104,9 @@ lifecycle evidence is claimed.
   passed; required demo/failure targets passed; stack containers were stopped
   without removing the named volume or generated files.
 - Final-head GitHub Actions run
-  [45932732854](https://github.com/Bepoadewale/davdeploy/actions/runs/45932732854):
+  [45933859275](https://github.com/Bepoadewale/davdeploy/actions/runs/45933859275):
   all seven checks passed, including `local-e2e` and its fresh-runner cleanup.
+- Merge commit: `c58a2d4a6f3ce45712641e47a4aec52f8181d42b`.
 - No AWS calls, role changes, Terraform operations, or control-plane access.
 
 ## Evidence files produced
