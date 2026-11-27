@@ -27,6 +27,16 @@ output or validator messages.
   created. This run cannot be retried again.
 - The existing submitted synthetic revision remains unapproved and unapplied.
 
+## Research / references used
+
+- The bounded exception sanitizer and prompt feedback allowlist in
+  `apps/api/src/davdeploy/terraform_generation.py`.
+- Hosted run status and entity-filtered retry audit evidence for
+  `7ed97bc9-4460-40bb-9ca7-7bf8a84b38b2`.
+- The safe persisted diagnostic contract in
+  `apps/api/src/davdeploy/service.py` and
+  `apps/api/src/davdeploy/main.py`.
+
 ## Work planned for the PR
 
 - Preserve a generic safe `invalid` diagnostic rather than dropping an
