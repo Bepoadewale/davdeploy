@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 from botocore.exceptions import BotoCoreError, ClientError
 from davdeploy import main as api_main
+from davdeploy.contracts import ModelUsage
 from davdeploy.db import make_engine, run_migrations
 from davdeploy.domain import GeneratedPlanGenerationReconciliationRequest
 from davdeploy.generated_deployment_contract import (
@@ -35,7 +36,10 @@ from davdeploy.nova_plan_role_profile import NovaPlanRoleProfile
 from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
-from davdeploy.terraform_generation import generation_context_digest
+from davdeploy.terraform_generation import (
+    NovaTerraformGenerationFailed,
+    generation_context_digest,
+)
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import create_engine, select
@@ -670,6 +674,62 @@ def test_generation_failure_is_recorded_by_the_worker_without_starting_codebuild
         .one()
     )
     assert retry_binding.run_id == run["id"]
+    db.close()
+
+
+def test_schema_generation_failure_exposes_only_bounded_diagnostics():
+    service, db, _, dispatcher = service_with_dispatcher()
+    _, _, revision = make_submitted_revision(service)
+    service._wake_worker = lambda *_args: None
+
+    class InvalidGenerator(StaticGenerator):
+        def generate(self, **_kwargs):
+            self.calls += 1
+            raise NovaTerraformGenerationFailed(
+                "private_api_key_leak_me",
+                attempt_count=2,
+                usage=ModelUsage(
+                    input_tokens=40,
+                    output_tokens=18,
+                    estimated_cost_usd=0.004,
+                    latency_ms=710,
+                    retry_count=1,
+                ),
+                evidence=(),
+                failure_code="proposal_invalid",
+                validation_feedback=(
+                    {"code": "extra_forbidden", "field": "proposal"},
+                    {"code": "missing", "field": "resources[*].resource_id"},
+                    {"code": "invalid", "field": "private_api_key_leak_me"},
+                ),
+            )
+
+    service.terraform_generator = InvalidGenerator()
+    run = service.request_generated_plan_run(
+        founder(), revision.id, revision.content_digest, "nova-plan-diagnostics-fixture-0001"
+    )
+
+    assert service.run_next_generated_plan_run() is True
+    failed = service.generated_plan_run_detail(founder(), run["id"])
+
+    assert failed["state"] == "FAILED"
+    assert failed["generation_diagnostics"] == {
+        "failure_code": "proposal_invalid",
+        "model": "fixture-nova-model",
+        "prompt_version": "terraform-nova2-contract-v4",
+        "attempt_count": 2,
+        "retry_count": 1,
+        "input_tokens": 40,
+        "output_tokens": 18,
+        "latency_ms": 710,
+        "estimated_cost_usd": 0.004,
+        "validation_feedback": [
+            {"code": "extra_forbidden", "field": "proposal"},
+            {"code": "missing", "field": "resources[*].resource_id"},
+        ],
+    }
+    assert "private_api_key_leak_me" not in json.dumps(failed)
+    assert dispatcher.started == []
     db.close()
 
 
@@ -1729,6 +1789,7 @@ def test_plan_history_is_stable_paginated_and_uses_safe_status_projection():
         "finished_at",
         "error_code",
         "error_summary",
+        "generation_diagnostics",
         "execution_boundary",
     }
     assert set(first["items"][0]) == expected_fields

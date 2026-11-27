@@ -299,6 +299,10 @@ def test_semantic_repair_stops_after_attempt_cap_with_safe_error():
     assert error.value.usage.output_tokens == 120
     assert error.value.usage.retry_count == 1
     assert error.value.attempt_count == 2
+    assert error.value.failure_code == "proposal_invalid"
+    assert error.value.validation_feedback == (
+        {"code": "extra_forbidden", "field": "proposal"},
+    )
 
 
 def test_gateway_failure_preserves_known_usage_without_exposing_provider_error():
@@ -350,6 +354,10 @@ def test_gateway_failure_preserves_known_usage_without_exposing_provider_error()
     assert error.value.usage.estimated_cost_usd is None
     assert error.value.usage.retry_count == 2
     assert len(error.value.evidence) == 2
+    assert error.value.failure_code == "provider_unavailable"
+    assert error.value.validation_feedback == (
+        {"code": "extra_forbidden", "field": "proposal"},
+    )
     assert "sensitive details" not in str(error.value)
 
 
