@@ -6,7 +6,8 @@
   or customer workload
 - Repository: `Bepoadewale/davdeploy`
 - Commit: v15 deployed control-plane code
-  `6f6a1c1e42645327b5ce30006d1f8be39179561f`; v16 PR code `PENDING`
+  `6f6a1c1e42645327b5ce30006d1f8be39179561f`; v16 implementation
+  `c5b6d3fc4051e7ce6ad762a353b19a49a5afb79e`
 - Pull request: [#552](https://github.com/Bepoadewale/davdeploy/pull/552) (draft)
 - AWS account: `654654474502` (control-plane release only)
 - AWS region: `us-east-1`

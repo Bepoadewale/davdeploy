@@ -73,7 +73,8 @@ contract and sanitization boundary.
 ## Acceptance status
 
 The v15 hosted diagnostic and local synthetic reproduction are recorded.
-Implementation commit `PENDING` adds fixed field guidance, includes
+Implementation commit `c5b6d3fc4051e7ce6ad762a353b19a49a5afb79e` adds fixed
+field guidance, includes
 `less_than_equal` in the safe error-code allowlist, and increments the trusted
 prompt version to v16. Focused tests (125 across generation, review, and run
 diagnostics), full verification (2,055 tests plus Ruff, Actions configuration,
