@@ -15,6 +15,12 @@ using the `administrator-pilot` role. Keep foundation provisioning, unknown
 ECS side effects, and the renderer gated until they have separate reviewed
 profiles and lifecycle evidence.
 
+The first inline-policy design is not viable: the local prototype exceeded
+AWS's fixed STS policy input limit. This PR remains a draft while the role
+profile is redesigned around plan-derived, allowlisted STS session tags and
+tag-conditioned role permissions. Do not relax the size limit or broaden the
+customer apply role to make the prototype fit.
+
 ## Current repo state
 
 - PR #527 is an open draft based on PR #526. It maps the ECS Express
@@ -32,6 +38,10 @@ profiles and lifecycle evidence.
   with `enable_service=false`, then plan the service after subnets exist. This
   PR covers only a plan whose managed mutation is the exact ECS service
   resource; it does not authorize the foundation root or direct shell runner.
+- A local prototype produced a 3,104-character create session policy and a
+  2,195-character update policy. Both exceed the documented 2,048-character
+  STS limit. The policy builder rejected them as intended. The prototype was
+  not retained as source and no live role or resource was changed.
 - No AWS resource, hosted control-plane runtime, Terraform state, or lock is
   changed by this source package.
 
@@ -47,27 +57,32 @@ profiles and lifecycle evidence.
   and [DeleteExpressGatewayService API](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_DeleteExpressGatewayService.html).
 - AWS [STS session policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_use_switch-role-api.html)
   and [IAM policy evaluation](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html).
+- AWS [STS session tags](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_session-tags.html)
+  and [IAM policy variables](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html).
+- AWS [ECS IAM behavior](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/security_iam_service-with-iam.html): ECS does not support resource-based policies; its documented identity-based and tag-based controls must define the caller boundary.
 
 ## Work planned for the PR
 
-1. Add a plan policy profile for the ECS Express service resource only, using
-   the exact service name/cluster, known post-foundation subnet IDs, bounded
-   CPU/memory, and required connection/project/plan tags from the trusted plan.
+1. Finalize the tag-conditioned role-policy design in
+   [`ECS_EXPRESS_APPLY_POLICY.md`](../security/ECS_EXPRESS_APPLY_POLICY.md).
+   Derive all dynamic values from the validated saved plan; use a short,
+   allowlisted STS session-tag set and a compact action-only session policy.
 2. Bind `iam:PassRole` to the exact connection-scoped task execution and
    infrastructure roles and their respective `iam:PassedToService` values.
 3. Add only the provider and AWS dependent actions needed for this staged
    service operation. Do not grant caller-side ELB, Auto Scaling, EC2 network,
    IAM role-management, image-push, state, observation, or broad wildcard
    permissions as a consequence of ECS-managed side effects.
-4. Extend the dedicated apply-role maximum policy and role-profile verification
-   consistently with the session policy; ensure IAM simulation checks every
-   generated action/resource/condition tuple.
+4. Extend the dedicated apply-role trust, maximum policy, role-profile
+   verification, IAM simulation context, artifact digest, credential issuance,
+   and saved-plan apply contract together. Keep fixed ownership tags immutable
+   and reject missing or unexpected session-tag context.
 5. Reject unknown or unsupported plan attributes/actions, unknown subnet IDs,
    role ARNs outside the connection profile, replacements, missing tag
    conditions, and policies over the STS size limit.
 6. Add deterministic regression tests for create, update, and destroy plans,
-   exact ARNs and conditions, role passing, malformed/unsupported plans, policy
-   digest binding, and size limits.
+   exact ARNs and conditions, role passing, malformed/unsupported plans, tag
+   and policy digest binding, IAM simulation, and size limits.
 7. Keep customer dispatch disabled and run no cloud workload. Record the local
    focused tests, clean-room requirements, and final-head CI truthfully.
 
@@ -95,17 +110,24 @@ profiles and lifecycle evidence.
 
 ## Acceptance status
 
-Implementation has not started. This ticket scopes a source-only authorization
-package. Even if accepted, it will not by itself make the ECS renderer eligible
-for customer execution: foundation permissions, phase-specific identity
-selection, complete role/effective-permission review, cost approval, and an
-authorized isolated Nova plan/apply/update/recovery/destroy cycle remain
-separate gates.
+Design remains incomplete and implementation has not started. The first
+prototype failed the size gate; this is a confirmed fail-closed result, not a
+supported ECS apply profile. Even after this PR is accepted, it will not by
+itself make the ECS renderer eligible for customer execution: foundation
+permissions, phase-specific identity selection, complete role/effective-
+permission review, cost approval, and an authorized isolated Nova
+plan/apply/update/recovery/destroy cycle remain separate gates.
 
 ## Tests / validation performed
 
-- Bootstrap commit only; no code tests or Terraform commands have run for this
-  PR.
+- Local exploratory prototype command:
+  `PYTHONPATH=apps/api/src /Users/adewale/Projects/davdeploy/.venv/bin/python -m pytest tests/test_nova_apply_access.py tests/test_nova_apply_role_profile.py -q`
+  — 35 passed, 3 failed. The failures included create/update policy sizes
+  above the STS limit and a replacement error-message assertion. The prototype
+  source was restored; the test result is not evidence of a passing
+  implementation.
+- No Terraform command, cloud role assumption, AWS mutation, hosted
+  control-plane access, or customer workload test was run.
 - No AWS call, role assumption, apply, destroy, or hosted-control-plane access
   was performed.
 
@@ -121,12 +143,14 @@ separate gates.
 ## Evidence files produced
 
 - No `docs/test/test529.md`; this package performs no customer workload test.
-- `docs/security/ECS_EXPRESS_APPLY_POLICY.md` will summarize the implemented
-  contract and any remaining limitations.
+- `docs/security/ECS_EXPRESS_APPLY_POLICY.md` records the confirmed limit,
+  candidate architecture, migration approach, trade-offs, and acceptance
+  criteria. It is design evidence only.
 
 ## Follow-up work
 
-Complete the foundation policy and separate phase credentials; finish the
+First complete the plan-tag-bound role-profile design and implementation.
+Separately complete the foundation policy and phase credentials; finish the
 provider helper/tagging authorization map; validate cost and customer revision
 evidence; then pass the renderer's clean-room and explicitly authorized Nova
 lifecycle gates before enabling dispatch.
