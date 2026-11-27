@@ -19,6 +19,7 @@ validation before CodeBuild. No saved plan artifact was produced.
 - `uv run --project . --extra dev pytest -q tests/test_terraform_generation.py tests/test_nova_plan_runs.py tests/test_customer_plan_review.py` — 97 passed.
 - Ruff — passed for the five changed Python files.
 - Documentation convention checks and `git diff --check` — passed.
+- Hosted CI run `45934547678` — all seven checks passed.
 
 ## Observed result
 

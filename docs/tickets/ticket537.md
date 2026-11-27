@@ -50,14 +50,14 @@ prompt did not state these constraints explicitly.
 - [x] Generation requests and hosted diagnostics/usage report prompt v5.
 - [ ] Focused generation, plan-run and customer-review tests pass; Ruff and docs
   convention checks pass.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI run `45934547678` passed all seven checks.
 - [ ] After protected deployment, the same submitted plan-only revision produces
   either a valid inspectable saved plan or a new specific bounded diagnostic.
 
 ## Acceptance status
 
 - [x] Prompt constraints and prompt v5 are implemented and locally tested.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI run `45934547678` passed all seven checks.
 - [ ] Post-deployment hosted retry is complete and produces a valid saved plan.
 
 ## Tests / validation performed
@@ -66,6 +66,7 @@ prompt did not state these constraints explicitly.
 - Ruff passed for the five changed Python files.
 - `GITHUB_PR_NUMBER=537 uv run --project . python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Hosted CI run `45934547678` — all seven checks passed.
 
 ## Evidence files produced
 
