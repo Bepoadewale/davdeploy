@@ -168,6 +168,28 @@ def test_nova_generation_normalizes_a_bounded_resource_id_before_strict_validati
     assert len(instance.gateway.calls) == 1
 
 
+def test_malformed_resource_type_reaches_bounded_validation_repair():
+    def malformed_then_valid(request, document):
+        if len(gateway.calls) == 1:
+            output = proposal(request, document)
+            output["resources"][0]["resource_type"] = ["aws_db_instance"]
+            return output
+        return proposal(request, document)
+
+    gateway = RecordingGateway(malformed_then_valid)
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+    result = instance.generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    assert result.proposal.resources[0].resource_type == "aws_ecs_cluster"
+    assert len(gateway.calls) == 2
+
+
 def test_nova_generation_binds_lambda_secret_arn_to_unique_managed_database_secret():
     def literal_secret_arn(request, document):
         output = proposal(request, document)

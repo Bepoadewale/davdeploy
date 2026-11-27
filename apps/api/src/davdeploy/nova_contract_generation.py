@@ -147,6 +147,7 @@ def normalize_managed_lambda_secret_reference(output: Any) -> Any:
         resource
         for resource in resources
         if isinstance(resource, dict)
+        and isinstance(resource.get("resource_type"), str)
         and resource.get("resource_type") in {"aws_db_instance", "aws_rds_cluster"}
     ]
     if len(databases) != 1:

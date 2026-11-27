@@ -15,7 +15,8 @@ No customer workload AWS resources were created. The v18 run failed before CodeB
 
 - Authenticated read-only `GET /api/v1/generated-plan-runs/3b5b2a3e-96f8-4167-9af9-ea1c5ccdebb6`: `FAILED`, no artifact, prompt v18, two attempts/one repair, safe `credential_value` at `resources[*]`.
 - No raw proposal, credential value, plan/state bytes, or customer workload was retrieved or created.
-- Focused tests passed (61); full `make verify` passed 2,080 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose checks. Documentation conventions and PR CI remain pending.
+- Prior-head focused tests passed (61); full `make verify` passed 2,080 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose checks.
+- Final-head focused tests passed (62), including malformed non-string resource-type bounded-repair regression; targeted Ruff, documentation conventions, and diff checks passed. Final-head full verification and clean-room cycle remain pending.
 
 ## Observed result
 
