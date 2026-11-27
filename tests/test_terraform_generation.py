@@ -14,6 +14,7 @@ from davdeploy.model_gateway import (
 )
 from davdeploy.terraform_generation import (
     _GRAPH_VALIDATION_FEEDBACK,
+    _HEALTH_PAYLOAD_SIZE_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
     _UNKNOWN_ARGUMENTS_FIELD_GUIDANCE,
@@ -120,7 +121,11 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert '"manage_master_user_password":true' in document["task"]
     assert '"output_name":"master_user_secret[0].secret_arn"' in document["task"]
     assert '"kind":"resource_reference"' in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v15"
+    assert "payload_size_bytes only for storage_roundtrip or queue_roundtrip" in document["task"]
+    assert "integer from 1 to 4096 inclusive" in document["task"]
+    assert "http_response use max_response_bytes" in document["task"]
+    assert "inference_response use minimum_response_bytes" in document["task"]
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v16"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -178,6 +183,114 @@ def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
             ),
         }
     ]
+
+
+@pytest.mark.parametrize(("payload_size", "code"), [(0, "greater_than_equal"), (4097, "less_than_equal")])
+def test_health_payload_bounds_return_fixed_safe_guidance(payload_size, code):
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [
+            {
+                "resource_id": "files",
+                "resource_type": "aws_s3_bucket",
+                "name": "files",
+                "arguments": {},
+                "rationale": "Synthetic test resource.",
+            }
+        ],
+        "requirements": {"region": "us-east-1"},
+        "health_assertions": [
+            {
+                "kind": "storage_roundtrip",
+                "target_resource_id": "files",
+                "description": "Synthetic storage check.",
+                "payload_size_bytes": payload_size,
+            }
+        ],
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    item = next(entry for entry in feedback if entry["field"] == "health_assertions[*].payload_size_bytes")
+    assert item == {
+        "code": code,
+        "field": "health_assertions[*].payload_size_bytes",
+        "guidance": _HEALTH_PAYLOAD_SIZE_GUIDANCE,
+    }
+    assert set(item) == {"code", "field", "guidance"}
+
+
+def test_health_payload_size_on_wrong_assertion_kind_is_rejected_with_guidance():
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [
+            {
+                "resource_id": "api",
+                "resource_type": "aws_s3_bucket",
+                "name": "files",
+                "arguments": {},
+                "rationale": "Synthetic test resource.",
+            }
+        ],
+        "requirements": {"region": "us-east-1"},
+        "health_assertions": [
+            {
+                "kind": "http_response",
+                "target_resource_id": "api",
+                "description": "Synthetic HTTP check.",
+                "payload_size_bytes": 128,
+            }
+        ],
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    item = next(
+        entry
+        for entry in feedback
+        if entry["field"] == "health_assertions[*].payload_size_bytes"
+        and entry["code"] == "extra_forbidden"
+    )
+    assert item["guidance"] == _HEALTH_PAYLOAD_SIZE_GUIDANCE
+    assert "128" not in repr(feedback)
+
+
+def test_unknown_health_payload_error_uses_fixed_guidance_and_redacts_details():
+    from pydantic_core import PydanticCustomError
+
+    error = ValidationError.from_exception_data(
+        "GeneratedDeploymentProposal",
+        [
+            {
+                "type": PydanticCustomError(
+                    "private_payload_validator",
+                    "private value {secret}",
+                    {"secret": "must-not-escape"},
+                ),
+                "loc": ("health_assertions", 0, "payload_size_bytes"),
+                "input": 987654,
+            }
+        ],
+    )
+
+    feedback = _sanitize_pydantic_feedback(error)
+    assert feedback == [
+        {
+            "code": "invalid",
+            "field": "health_assertions[*].payload_size_bytes",
+            "guidance": _HEALTH_PAYLOAD_SIZE_GUIDANCE,
+        }
+    ]
+    rendered = repr(feedback)
+    assert "private_payload_validator" not in rendered
+    assert "must-not-escape" not in rendered
+    assert "987654" not in rendered
 
 
 def test_resource_name_pattern_feedback_distinguishes_name_from_resource_id():
