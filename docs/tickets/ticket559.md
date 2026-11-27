@@ -1,6 +1,6 @@
 # ticket559 — expose safe secret-reference repair context
 
-PR: draft to be opened
+PR: [#559](https://github.com/Bepoadewale/davdeploy/pull/559) (draft)
 
 Branch: `fix/nova-secret-reference-feedback-559`
 
@@ -15,7 +15,8 @@ name. No Terraform artifact or customer workload was created.
 
 ## Current repo state
 
-- Main: `28f229416d7897ec2fe48b3def83ade6b9d4bcaf` (merged PR #558).
+- Main: `28f229416d7897ec2fe48b3def83ade6b9d4bcaf` (merged PR #558); this
+  package is draft PR #559.
 - PR #558 is deployed through protected plan `46063294020` and saved-plan
   apply `46064179578`; release and hosted diagnostic evidence is in
   `docs/test/test559.md`.

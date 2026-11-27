@@ -17,8 +17,12 @@ AWS region: `us-east-1`
 - PR #558 (`28f2294`) passed all seven final-head checks in run
   `46061688461`; merged-main CI passed all seven checks in run `46062708393`.
 - Protected plan `46063294020` and exact saved-plan apply `46064179578`
-  deployed the release. Migration completed; all six control-plane Lambdas
-  matched the exact versioned package hash; `/healthz` returned HTTP 200.
+  deployed the release after a reviewed plan of 0 additions, 8 in-place
+  updates, and 0 destroys/replacements. Migration completed. Versioned release
+  object `VoJ2LJnywUC0iCzljipLts5boDiuqp0X` has base64 SHA-256
+  `K9poAqYFnrt4bLwuaIYvm1wdqh65ZQKWhhEwA9sfkRE=`; all six control-plane
+  Lambdas are Active/Successful and match that hash; `/healthz` returned HTTP
+  200 and CLI `/api/v1/me` confirmed workspace-admin access.
 - Fresh review-only revision `7dc3915c-f39b-4268-b244-a417e17c83b1` has digest
   `fb7384977baea8ff63b83d19be71ff5e0fcd54d45b19466a4f79a9722779cd4e`, state
   `SUBMITTED`, and no decision. Execution remains unexecuted.
