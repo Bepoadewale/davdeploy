@@ -14,12 +14,15 @@ from davdeploy.model_gateway import (
 )
 from davdeploy.terraform_generation import (
     _GENERIC_VALIDATION_GUIDANCE,
+    _GRAPH_VALIDATION_FEEDBACK,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
     _sanitize_pydantic_feedback,
+    _validation_guidance,
+    _validation_issue,
     generation_context_digest,
 )
 from pydantic import ValidationError
@@ -115,7 +118,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert '"manage_master_user_password":true' in document["task"]
     assert '"output_name":"master_user_secret[0].secret_arn"' in document["task"]
     assert '"kind":"resource_reference"' in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v13"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v14"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -266,13 +269,33 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
         {
             "code": "value_error",
             "field": "proposal",
-            "guidance": (
-                "Keep resource IDs unique; every dependency, typed reference, cost "
-                "assumption, and health target/source must reference a declared ID, "
-                "and dependencies must be acyclic."
-            ),
+            "issue": "unknown_dependency",
+            "guidance": _GRAPH_VALIDATION_FEEDBACK[
+                "dependencies must reference other declared resources"
+            ][1],
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("cause", "issue"),
+    [
+        ("dependencies must reference other declared resources", "unknown_dependency"),
+        ("resource dependency graph must be acyclic", "dependency_cycle"),
+        ("resource IDs must be unique", "duplicate_resource_id"),
+        ("Terraform resource addresses must be unique", "duplicate_terraform_address"),
+        ("references must target a declared resource", "unknown_resource_reference"),
+        ("reference must match a declared output type", "reference_type_mismatch"),
+        ("health assertions must target declared resources", "unknown_health_target"),
+    ],
+)
+def test_known_graph_validator_causes_map_to_distinct_fixed_feedback(cause, issue):
+    error = ValueError(cause)
+
+    assert _validation_issue("value_error", "proposal", error) == issue
+    guidance = _validation_guidance("value_error", "proposal", error)
+    assert guidance == _GRAPH_VALIDATION_FEEDBACK[cause][1]
+    assert cause not in guidance
 
 
 @pytest.mark.parametrize(
