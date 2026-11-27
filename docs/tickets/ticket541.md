@@ -68,6 +68,7 @@ whitelisted discriminator tag was omitted from canonicalization.
 - Ruff passed for the five changed Python files.
 - `GITHUB_PR_NUMBER=541 uv run --project . python scripts/check_doc_conventions.py` — passed.
 - `git diff --check` — passed.
+- Hosted CI run `45940069020` — all seven checks passed.
 - Hosted CI run `45939566852` — all seven checks passed.
 
 ## Evidence files produced
