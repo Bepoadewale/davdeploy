@@ -20,7 +20,7 @@ class StrictContract(BaseModel):
 
 class ResourceReference(StrictContract):
     kind: str = Field(pattern=r"^resource_reference$")
-    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
     output_name: str = Field(pattern=GENERATED_OUTPUT_PATH_PATTERN)
     value_type: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -32,7 +32,7 @@ class GeneratedOutput(StrictContract):
 
 
 class GeneratedResource(StrictContract):
-    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
     resource_type: str = Field(pattern=r"^aws_[a-z0-9_]{2,120}$")
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,62}$")
     arguments: dict[str, Any]
@@ -181,7 +181,7 @@ class WorkloadRequirements(StrictContract):
 
 
 class HealthAssertionBase(StrictContract):
-    target_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    target_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
     description: str = Field(min_length=1, max_length=500)
 
 
@@ -239,7 +239,7 @@ class QueueRoundTripAssertion(HealthAssertionBase):
 
 class EventProcessingAssertion(HealthAssertionBase):
     kind: Literal["event_processing"]
-    source_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    source_resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
     minimum_processed_events: int = Field(default=1, ge=1, le=100)
     timeout_seconds: int = Field(default=120, ge=1, le=900)
     maximum_attempts: int = Field(default=3, ge=1, le=5)
@@ -341,7 +341,7 @@ class RecoveryRequirement(StrictContract):
 
 
 class CostAssumption(StrictContract):
-    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,62}$")
+    resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
     description: str = Field(min_length=1, max_length=500)
     source: str = Field(min_length=1, max_length=300)
     captured_at: str = Field(min_length=1, max_length=80)

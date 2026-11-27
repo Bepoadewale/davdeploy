@@ -698,8 +698,24 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                 evidence=(),
                 failure_code="proposal_invalid",
                 validation_feedback=(
-                    {"code": "extra_forbidden", "field": "proposal"},
-                    {"code": "missing", "field": "resources[*].resource_id"},
+                    {
+                        "code": "extra_forbidden",
+                        "field": "proposal",
+                        "guidance": "private_api_key_leak_me",
+                    },
+                    {
+                        "code": "missing",
+                        "field": "resources[*].resource_id",
+                        "guidance": (
+                            "Use a unique short lowercase ID matching ^[a-z][a-z0-9-]{0,23}$; "
+                            "copy reference IDs exactly from a declared resource_id."
+                        ),
+                    },
+                    {
+                        "code": "missing",
+                        "field": "cost_assumptions[*].resource_id",
+                        "guidance": ["untrusted non-string guidance"],
+                    },
                     {"code": "invalid", "field": "private_api_key_leak_me"},
                 ),
             )
@@ -716,7 +732,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v6",
+        "prompt_version": "terraform-nova2-contract-v7",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,
@@ -725,7 +741,15 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
         "estimated_cost_usd": 0.004,
         "validation_feedback": [
             {"code": "extra_forbidden", "field": "proposal"},
-            {"code": "missing", "field": "resources[*].resource_id"},
+            {
+                "code": "missing",
+                "field": "resources[*].resource_id",
+                "guidance": (
+                    "Use a unique short lowercase ID matching ^[a-z][a-z0-9-]{0,23}$; "
+                    "copy reference IDs exactly from a declared resource_id."
+                ),
+            },
+            {"code": "missing", "field": "cost_assumptions[*].resource_id"},
         ],
     }
     assert "private_api_key_leak_me" not in json.dumps(failed)

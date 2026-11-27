@@ -101,8 +101,9 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert request.prompt_version == NOVA_TERRAFORM_PROMPT_VERSION
     assert "^[a-z][a-z0-9_]{0,62}$" in document["task"]
     assert "Do not use hyphens, uppercase letters, spaces, or punctuation" in document["task"]
-    assert "^[a-z][a-z0-9-]{0,62}$" in document["task"]
-    assert "source_resource_id only for an event_processing assertion" in document["task"]
+    assert "^[a-z][a-z0-9-]{0,23}$" in document["task"]
+    assert "source_resource_id only for event_processing" in document["task"]
+    assert "Copy reference IDs exactly from a declared resource_id" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -128,7 +129,7 @@ def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
         "context_digest": "0" * 64,
         "resources": [
             {
-                "resource_id": "bad-id",
+                "resource_id": "api",
                 "resource_type": "aws_s3_bucket",
                 "name": "files",
                 "arguments": {},
@@ -152,6 +153,43 @@ def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
         {
             "code": "string_pattern_mismatch",
             "field": "health_assertions[*].target_resource_id",
+            "guidance": (
+                "Use a unique short lowercase ID matching ^[a-z][a-z0-9-]{0,23}$; "
+                "copy reference IDs exactly from a declared resource_id."
+            ),
+        }
+    ]
+
+
+def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [
+            {
+                "resource_id": "api",
+                "resource_type": "aws_s3_bucket",
+                "name": "files",
+                "arguments": {},
+                "depends_on": ["missing"],
+                "rationale": "Synthetic test resource.",
+            }
+        ],
+        "requirements": {"region": "us-east-1"},
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    assert _sanitize_pydantic_feedback(error.value) == [
+        {
+            "code": "value_error",
+            "field": "proposal",
+            "guidance": (
+                "Keep resource IDs unique; every dependency, typed reference, cost "
+                "assumption, and health target/source must reference a declared ID, "
+                "and dependencies must be acyclic."
+            ),
         }
     ]
 
