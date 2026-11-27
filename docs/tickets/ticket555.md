@@ -30,23 +30,26 @@ Hosted Nova generation continues to emit IDs outside the strict contract even af
 
 ## Acceptance criteria
 
-- [ ] Valid IDs are unchanged; malformed unique string IDs become deterministic valid IDs.
-- [ ] Every supported graph reference to a changed ID is rewritten consistently.
-- [ ] Duplicate original IDs and ambiguous/colliding structures remain rejected without lossy guesses.
-- [ ] The strict contract, cycle checks, typed reference checks, trusted context, policy, and no-apply boundary remain enforced.
-- [ ] No raw source ID or model output appears in public diagnostics.
-- [ ] Focused/full verification, docs conventions, and required PR CI pass.
+- [x] Valid IDs are unchanged; bounded malformed unique string IDs become deterministic valid IDs.
+- [x] Dependencies, typed argument references, health targets/sources, and cost assumptions referencing a changed ID are rewritten consistently.
+- [x] Duplicate original IDs, sensitive or unbounded source labels, and unresolved collisions are left unchanged for strict schema rejection.
+- [x] The unchanged strict contract, cycle checks, typed reference checks, trusted context, policy, and no-apply boundary remain enforced.
+- [x] No raw source ID is placed in diagnostics; existing sanitized validator feedback remains unchanged.
+- [x] Focused tests (60) and full `make verify` (2,072 tests, Ruff, Actions configuration, OpenAPI, Compose) pass locally.
+- [ ] Documentation conventions and required PR CI pass.
 - [ ] Fresh deployed plan-only run reaches an inspectable artifact or actionable bounded feedback; no customer approval/apply occurs.
 - [ ] Acceptance is not claimed unless supported API, private storage, database, async behavior, current pricing, and plan policy are evidenced.
 
 ## Acceptance status
 
-Implementation and validation pending.
+Implementation and local test validation complete; docs convention check, PR CI, protected deployment, and hosted v19 plan-only result remain pending.
 
 ## Tests / validation performed
 
 - Read-only hosted v18 run status and bounded diagnostic inspection; no raw proposal access.
-- No code or infrastructure change has been made yet.
+- `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest -q tests/test_nova_resource_id_normalization.py tests/test_terraform_generation.py` — 60 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 2,072 passed; Ruff, Actions configuration, OpenAPI, and Compose checks passed. One existing Starlette deprecation warning.
+- Docs conventions, diff check, and PR CI are pending.
 
 ## Evidence files produced
 
