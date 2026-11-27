@@ -46,6 +46,11 @@ from davdeploy.nova_contract_generation import (
 NOVA_TERRAFORM_GENERATION_TASK = (
     "Generate the complete typed deployment proposal for this architecture and set "
     "contract_version to 1.1. Use only "
+    "Terraform resource names that match `^[a-z][a-z0-9_]{0,62}$`; use lowercase "
+    "letters, digits, and underscores only (for example, `api` or `primary_database`). "
+    "Do not use hyphens, uppercase letters, spaces, or punctuation in resources[].name. "
+    "Keep each resource_id distinct from its Terraform name; resource_id may contain "
+    "lowercase letters, digits, and hyphens. "
     "typed resource_reference objects for links. Never author Terraform expressions, "
     "provider/backend configuration, modules, provisioners, shell commands, local file "
     "reads, credentials or secret values. Health assertions are proposed requirements, "
@@ -57,6 +62,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "paths. Correct those issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v5"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -267,7 +273,7 @@ class NovaTerraformGenerator:
             purpose=ModelPurpose.TERRAFORM_GENERATION,
             provider="bedrock",
             model=self.model_id,
-            prompt_version="terraform-nova2-contract-v4",
+            prompt_version=NOVA_TERRAFORM_PROMPT_VERSION,
             input_digest=model_input_digest(document),
             timeout_seconds=self.timeout_seconds,
             max_output_tokens=self.max_output_tokens,
