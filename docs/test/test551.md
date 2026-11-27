@@ -38,6 +38,20 @@ resources.
 - Only the generated-plan run's safe status and allow-listed diagnostics were
   read. No raw proposal, validator message, saved-plan bytes, or credential was
   retrieved.
+- PR #551 implementation commit `5a11f3ce8f5b3528b11211348617e761130bc217`
+  preserves canonical paths for unknown validator codes, truncates untrusted
+  path suffixes, and selects fixed guidance by contract-field category.
+- `/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest
+  tests/test_terraform_generation.py -q` — 39 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` —
+  passed: 2,051 tests, Ruff, Actions configuration, OpenAPI snapshot, and Docker
+  Compose configuration. One existing Starlette deprecation warning.
+- `GITHUB_PR_NUMBER=551
+  /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python
+  scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+- Initial full verification found two stale v14 prompt-version assertions; both
+  were updated, and the final full verification above passed.
 
 ## Observed result
 
@@ -75,8 +89,8 @@ needed. The customer review/run metadata remains as audit evidence.
 
 PR #551 makes unknown typed-validator errors safer and more actionable by
 preserving only allowlisted schema paths and fixed field-specific guidance. A
-new v15 run is pending implementation, merge, and protected deployment. Do not
-approve or apply the synthetic workload. Even a successful generated plan will
+new v15 run is pending PR merge and protected deployment. Do not approve or
+apply the synthetic workload. Even a successful generated plan will
 not close the hosted-plan acceptance gate until it contains supported private
 storage, database, and asynchronous processing with current regional pricing,
 passes exact plan policy, and yields inspectable saved-plan evidence.

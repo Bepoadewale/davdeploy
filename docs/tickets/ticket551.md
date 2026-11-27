@@ -48,27 +48,28 @@ messages, field values, or proposal data.
 
 ## Work planned for the PR
 
-1. Preserve a canonical field path for unknown validator codes only when it is
-   composed from allowed contract fields; otherwise use `proposal`.
-2. Select field-specific fixed correction guidance from an allowlist. Never use
-   the validator's message, input value, arbitrary context, or model output.
-3. Keep contract validation strict and keep invalid proposals out of CodeBuild.
-4. Bump the prompt contract version and add regression tests for unknown error
-   types, path truncation, and raw-data redaction.
+1. [x] Preserve a canonical field path for unknown validator codes only when it
+   is composed from allowed contract fields; otherwise use `proposal`.
+2. [x] Select field-specific fixed correction guidance from an allowlist. Never
+   use the validator's message, input value, arbitrary context, or model output.
+3. [x] Keep contract validation strict and keep invalid proposals out of
+   CodeBuild.
+4. [x] Bump the prompt contract version and add regression tests for unknown
+   error types, path truncation, and raw-data redaction.
 5. After protected deployment, create a fresh submitted review revision and
    make one v15 plan-only run. Record only bounded diagnostics or sanitized
    artifact metadata; do not approve or apply a workload.
 
 ## Acceptance criteria
 
-- [ ] Unknown Pydantic error types retain only safe canonical field paths.
-- [ ] Field-specific guidance is fixed, allow-listed, and contains no validator
+- [x] Unknown Pydantic error types retain only safe canonical field paths.
+- [x] Field-specific guidance is fixed, allow-listed, and contains no validator
   text, field value, or proposal content.
-- [ ] Unknown paths fail closed to a safe parent field or `proposal`.
-- [ ] Existing graph and resource feedback behavior remains covered; malformed
+- [x] Unknown paths fail closed to a safe parent field or `proposal`.
+- [x] Existing graph and resource feedback behavior remains covered; malformed
   proposals still fail before CodeBuild.
-- [ ] Focused tests, full local verification, documentation checks, and all
-  required PR CI checks pass on the final head.
+- [ ] Focused tests, full local verification, and documentation checks pass;
+  all required PR CI checks pass on the final head.
 - [ ] One fresh v15 hosted run reaches an inspectable saved plan or returns
   actionable bounded feedback before CodeBuild. No approval or workload apply
   occurs.
@@ -77,15 +78,19 @@ messages, field values, or proposal data.
 
 ## Acceptance status
 
-The v14 failure is documented. The field-aware sanitizer, regression tests,
-local verification, PR CI, protected v15 deployment, and v15 hosted run remain
-pending.
+Implementation commit `5a11f3ce8f5b3528b11211348617e761130bc217` now preserves
+canonical field paths for unknown validator codes, truncates unsafe suffixes,
+and supplies fixed field-category guidance. Focused tests (39), full local
+verification (2,051 tests plus lint/config/OpenAPI/Compose checks), Ruff,
+documentation conventions, and diff checks pass. Final-head PR CI, protected
+v15 deployment, and the fresh v15 hosted run remain pending.
 
 ## Tests / validation performed
 
 - The pre-implementation v14 run and safe diagnostics are recorded in
   `docs/test/test551.md`.
-- Local and hosted implementation checks will be added here as performed.
+- The v15 implementation and local checks are recorded in
+  `docs/test/test551.md`.
 - Hosted v15 evidence remains pending deployment of this PR.
 
 ## Evidence files produced
