@@ -52,7 +52,7 @@ deployed by protected plan `45973303637` and apply `45974135992`.
 - [x] Invalid resource names remain rejected; no validation is weakened.
 - [x] Sanitized feedback identifies only the safe canonical field and fixed
   guidance; raw proposals remain hidden.
-- [ ] Focused/full local verification and all seven hosted CI checks pass.
+- [x] Focused/full local verification and all seven hosted CI checks pass.
 - [ ] After protected deployment, the one v12 retry reaches a saved plan or a
   bounded actionable failure before apply. The workload remains unapproved and
   unapplied.
@@ -60,8 +60,9 @@ deployed by protected plan `45973303637` and apply `45974135992`.
 ## Acceptance status
 
 Hosted v11 evidence is recorded. Prompt/feedback changes and regression tests
-are implemented. Focused tests and full repository verification pass. Hosted
-CI, protected deployment, and the one post-deployment retry remain pending.
+are implemented. Focused tests, full repository verification, and all seven
+checks in PR run `45979757789` pass. Protected deployment and the one
+post-deployment retry remain pending.
 
 ## Tests / validation performed
 
@@ -73,7 +74,7 @@ CI, protected deployment, and the one post-deployment retry remain pending.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python
   PYTHON=python3.12`: config check, lint, all 2,030 tests, OpenAPI snapshot,
   and Docker Compose configuration passed.
-- `git diff --check` passed. Hosted PR CI remains pending.
+- `git diff --check` passed. PR CI run `45979757789` passed all seven checks.
 
 ## Evidence files produced
 

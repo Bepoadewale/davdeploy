@@ -40,8 +40,8 @@ examples and returns fixed, sanitized guidance for a
 - Full `make verify`: 2,030 tests passed; lint, config check, OpenAPI snapshot,
   and Docker Compose validation passed.
 - `git diff --check` passed.
-- These are local source checks only. PR CI, protected deployment, and the
-  single v12 hosted retry have not yet run.
+- These are local source checks only. PR CI run `45979757789` passed all seven
+  checks. Protected deployment and the single v12 hosted retry have not yet run.
 
 ## Teardown
 
