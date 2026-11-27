@@ -45,13 +45,13 @@ does not show which bounded validation feedback exhausted repair.
 - [x] Hosted run status exposes only fixed, sanitized generation diagnostics.
 - [x] Raw model or provider content is absent from status and stored metadata.
 - [x] Focused generator and run tests, Ruff, and diff checks pass locally.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI passes (all seven checks in run `45930341738`).
 - [ ] A new hosted failure after deployment exposes usable safe diagnostics.
 
 ## Acceptance status
 
 - [x] Local implementation and focused tests pass.
-- [ ] Required hosted CI passes.
+- [x] Required hosted CI run `45930341738` passed all seven checks.
 - [ ] Runtime deployment and a new authenticated hosted retry remain pending.
 
 ## Tests / validation performed
@@ -59,6 +59,7 @@ does not show which bounded validation feedback exhausted repair.
 - `uv run --project . --extra dev pytest -q tests/test_terraform_generation.py tests/test_nova_plan_runs.py` — 65 passed.
 - `uv run --project . --extra dev ruff check apps/api/src/davdeploy/terraform_generation.py apps/api/src/davdeploy/service.py tests/test_terraform_generation.py tests/test_nova_plan_runs.py` — passed.
 - `git diff --check` — passed.
+- Hosted CI run `45930341738` — all seven required checks passed.
 
 ## Evidence files produced
 
