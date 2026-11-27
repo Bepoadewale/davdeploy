@@ -54,7 +54,7 @@ output or validator messages.
   `invalid`/`proposal` diagnostic and allowlisted guidance.
 - [x] Raw validator messages, proposal values, and secrets remain absent from
   feedback and persisted diagnostics.
-- [ ] Focused/full local verification and all seven hosted CI checks pass.
+- [x] Focused/full local verification and all seven hosted CI checks pass.
 - [ ] A fresh v13 hosted run reaches a saved plan or ends with actionable,
   bounded feedback before CodeBuild; the workload remains unapproved and
   unapplied.
@@ -62,8 +62,9 @@ output or validator messages.
 ## Acceptance status
 
 Hosted v12 failure is recorded. Generic fallback feedback and regression tests
-are implemented. Focused and full repository verification pass. PR CI,
-protected deployment, and a fresh v13 plan-only run remain pending.
+are implemented. Focused and full repository verification pass. All seven
+checks in PR run `45989388240` pass. Protected deployment and a fresh v13
+plan-only run remain pending.
 
 ## Tests / validation performed
 
@@ -80,7 +81,7 @@ protected deployment, and a fresh v13 plan-only run remain pending.
 - `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python
   PYTHON=python3.12`: config check, lint, all 2,037 tests, OpenAPI snapshot,
   and Docker Compose configuration passed.
-- `git diff --check` passed. Hosted PR CI is pending.
+- `git diff --check` passed. PR CI run `45989388240` passed all seven checks.
 
 ## Evidence files produced
 
