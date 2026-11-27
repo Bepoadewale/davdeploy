@@ -297,7 +297,8 @@ HealthAssertion = Annotated[
 ]
 
 
-_HEALTH_ASSERTION_TARGET_RESOURCE_TYPES = {
+# This describes proposal compatibility only; it does not prove an observer ran.
+HEALTH_ASSERTION_TARGET_RESOURCE_TYPES = {
     "http_response": frozenset(
         {
             "aws_apprunner_service",
@@ -318,7 +319,9 @@ _HEALTH_ASSERTION_TARGET_RESOURCE_TYPES = {
         }
     ),
     "storage_roundtrip": frozenset({"aws_s3_bucket", "aws_efs_file_system"}),
-    "database_roundtrip": frozenset({"aws_dynamodb_table"}),
+    "database_roundtrip": frozenset(
+        {"aws_dynamodb_table", "aws_db_instance", "aws_rds_cluster"}
+    ),
     "queue_roundtrip": frozenset({"aws_sqs_queue"}),
     "event_processing": frozenset({"aws_lambda_function"}),
     "container_readiness": frozenset({"aws_apprunner_service", "aws_ecs_service"}),
@@ -421,7 +424,7 @@ class GeneratedDeploymentProposal(StrictContract):
             target = by_id.get(item.target_resource_id)
             if target is None:
                 raise ValueError("health assertions must target declared resources")
-            allowed_targets = _HEALTH_ASSERTION_TARGET_RESOURCE_TYPES[item.kind]
+            allowed_targets = HEALTH_ASSERTION_TARGET_RESOURCE_TYPES[item.kind]
             if target.resource_type not in allowed_targets:
                 raise ValueError("health assertion target resource type is incompatible")
             if isinstance(item, EventProcessingAssertion):

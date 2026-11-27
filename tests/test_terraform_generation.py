@@ -15,6 +15,7 @@ from davdeploy.model_gateway import (
 from davdeploy.terraform_generation import (
     _GRAPH_VALIDATION_FEEDBACK,
     _HEALTH_PAYLOAD_SIZE_GUIDANCE,
+    _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
     _ID_PATTERN_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
@@ -132,7 +133,9 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v18"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v19"
+    assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
+    assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -235,6 +238,59 @@ def test_nova_generation_binds_lambda_secret_arn_to_unique_managed_database_secr
         "value_type": "secret_reference",
     }
     assert len(instance.gateway.calls) == 1
+
+
+def test_incompatible_health_target_gets_exact_feedback_and_bounded_rds_repair():
+    gateway = RecordingGateway(None)
+
+    def incompatible_then_correct(request, document):
+        output = proposal(request, document)
+        output["resources"] = [
+            {
+                "resource_id": "db",
+                "resource_type": "aws_rds_cluster",
+                "name": "database",
+                "arguments": {"manage_master_user_password": True},
+                "rationale": "Stores relational application records.",
+            },
+            {
+                "resource_id": "api",
+                "resource_type": "aws_ecs_service",
+                "name": "api",
+                "arguments": {},
+                "rationale": "Serves application requests.",
+            },
+        ]
+        output["health_assertions"] = [
+            {
+                "kind": "database_roundtrip",
+                "target_resource_id": "api" if len(gateway.calls) == 1 else "db",
+                "description": "Write, read, and delete a synthetic relational record.",
+            }
+        ]
+        return output
+
+    gateway.output = incompatible_then_correct
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+    result = instance.generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    repair_feedback = gateway.calls[1][1]["validation_feedback"]
+    assert repair_feedback == [
+        {
+            "code": "value_error",
+            "field": "health_assertions[*].target_resource_id",
+            "issue": "incompatible_health_target",
+            "guidance": _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
+        }
+    ]
+    assert result.proposal.health_assertions[0].target_resource_id == "db"
+    assert len(gateway.calls) == 2
 
 
 def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():

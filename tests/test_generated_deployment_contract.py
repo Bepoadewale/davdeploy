@@ -119,6 +119,8 @@ def test_proposal_health_recovery_and_cost_evidence_is_bounded() -> None:
         {"kind": "tls_certificate", "resource_type": "aws_apprunner_service"},
         {"kind": "storage_roundtrip", "resource_type": "aws_s3_bucket"},
         {"kind": "database_roundtrip", "resource_type": "aws_dynamodb_table"},
+        {"kind": "database_roundtrip", "resource_type": "aws_db_instance"},
+        {"kind": "database_roundtrip", "resource_type": "aws_rds_cluster"},
         {"kind": "queue_roundtrip", "resource_type": "aws_sqs_queue"},
         {
             "kind": "event_processing",

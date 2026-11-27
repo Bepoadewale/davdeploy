@@ -24,6 +24,7 @@ from davdeploy.contracts import (
     TenantScope,
 )
 from davdeploy.generated_deployment_contract import (
+    HEALTH_ASSERTION_TARGET_RESOURCE_TYPES,
     GeneratedDeploymentProposal,
     terraform_resource_blocks,
 )
@@ -122,6 +123,14 @@ _UNKNOWN_CONTRACT_FIELD_GUIDANCE = (
     "Correct the indicated contract field to its exact JSON type and allowed schema value. Regenerate "
     "the complete proposal while preserving all trusted context exactly."
 )
+_HEALTH_TARGET_COMPATIBILITY_GUIDANCE = (
+    "Use a declared target resource type compatible with the assertion kind. Allowed types: "
+    + "; ".join(
+        f"{kind}: {', '.join(sorted(resource_types))}"
+        for kind, resource_types in sorted(HEALTH_ASSERTION_TARGET_RESOURCE_TYPES.items())
+    )
+    + ". These are typed proposals, not evidence that any check ran."
+)
 
 NOVA_TERRAFORM_GENERATION_TASK = (
     "Generate the complete typed deployment proposal for this architecture and set "
@@ -156,6 +165,8 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "their bounded schema fields. Use payload_size_bytes only for storage_roundtrip or "
     "queue_roundtrip, as an integer from 1 to 4096 inclusive; omit it for every other kind. "
     "For http_response use max_response_bytes; for inference_response use minimum_response_bytes. "
+    + _HEALTH_TARGET_COMPATIBILITY_GUIDANCE
+    + " "
     "Use only the fixed fixture IDs allowed by the schema; "
     "never invent URLs, hostnames, commands, headers, secrets or fixture IDs. "
     "Copy the trusted provenance and region below. "
@@ -165,7 +176,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "requirements or inventing resource IDs. Correct those issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v18"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v19"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -349,7 +360,7 @@ _GRAPH_VALIDATION_FEEDBACK = {
     ),
     "health assertion target resource type is incompatible": (
         "incompatible_health_target",
-        "Choose a declared resource type supported by the selected health assertion kind.",
+        _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
     ),
     "event probes must reference a declared source queue": (
         "unknown_event_source",
@@ -700,6 +711,15 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
         guidance = _validation_guidance(safe_code, safe_field, cause)
         if guidance:
             entry["guidance"] = guidance
+        feedback_field = safe_field
+        if (
+            safe_code == "value_error"
+            and safe_field == "proposal"
+            and isinstance(cause, ValueError)
+            and str(cause) == "health assertion target resource type is incompatible"
+        ):
+            feedback_field = "health_assertions[*].target_resource_id"
+        entry["field"] = feedback_field
         feedback.append(entry)
     return feedback or [{"code": "invalid", "field": "proposal"}]
 
