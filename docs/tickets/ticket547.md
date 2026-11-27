@@ -47,10 +47,10 @@ deployed by protected plan `45973303637` and apply `45974135992`.
 
 ## Acceptance criteria
 
-- [ ] Nova receives an explicit distinct pattern and paired examples for
+- [x] Nova receives an explicit distinct pattern and paired examples for
   `resource_id` versus Terraform `name` in generation and repair.
-- [ ] Invalid resource names remain rejected; no validation is weakened.
-- [ ] Sanitized feedback identifies only the safe canonical field and fixed
+- [x] Invalid resource names remain rejected; no validation is weakened.
+- [x] Sanitized feedback identifies only the safe canonical field and fixed
   guidance; raw proposals remain hidden.
 - [ ] Focused/full local verification and all seven hosted CI checks pass.
 - [ ] After protected deployment, the one v12 retry reaches a saved plan or a
@@ -59,8 +59,9 @@ deployed by protected plan `45973303637` and apply `45974135992`.
 
 ## Acceptance status
 
-Hosted v11 evidence is recorded. The prompt and feedback change, tests, local
-verification, CI, deployment, and the one post-deployment retry are pending.
+Hosted v11 evidence is recorded. Prompt/feedback changes and regression tests
+are implemented. Focused tests and full repository verification pass. Hosted
+CI, protected deployment, and the one post-deployment retry remain pending.
 
 ## Tests / validation performed
 
@@ -68,7 +69,11 @@ verification, CI, deployment, and the one post-deployment retry are pending.
   input tokens, 4,057 output tokens, 15,860 ms; estimated cost unavailable.
   Safe feedback contained only the resource-name pattern mismatch. No CodeBuild
   run.
-- Local tests and CI are pending implementation.
+- Focused generation/run/review suites: 106 passed.
+- `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python
+  PYTHON=python3.12`: config check, lint, all 2,030 tests, OpenAPI snapshot,
+  and Docker Compose configuration passed.
+- `git diff --check` passed. Hosted PR CI remains pending.
 
 ## Evidence files produced
 

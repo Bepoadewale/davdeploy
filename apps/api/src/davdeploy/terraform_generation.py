@@ -59,12 +59,24 @@ _RESOURCE_CREDENTIAL_EXAMPLE = (
     "when the application does not need them. Never put a secret value or ARN string in the proposal. "
 )
 
+_RESOURCE_NAME_GUIDANCE = (
+    "The Terraform `name` is a local label, separate from `resource_id`. Use a `name` matching "
+    "^[a-z][a-z0-9_]{0,62}$: lowercase letters, digits, and underscores only; no hyphens, "
+    "uppercase, spaces, or punctuation. Keep the stable `resource_id` matching "
+    "^[a-z][a-z0-9-]{0,23}$ with lowercase letters, digits, and optional hyphens. Valid pairs: "
+    "resource_id=db-primary with name=primary_database; resource_id=job-queue with name=job_queue. "
+    "Never copy a hyphenated resource_id into the Terraform `name` field."
+)
+
 NOVA_TERRAFORM_GENERATION_TASK = (
     "Generate the complete typed deployment proposal for this architecture and set "
     "contract_version to 1.1. Use only "
     "Terraform resource names that match `^[a-z][a-z0-9_]{0,62}$`; use lowercase "
     "letters, digits, and underscores only (for example, `api` or `primary_database`). "
     "Do not use hyphens, uppercase letters, spaces, or punctuation in resources[].name. "
+    "The Terraform `name` is separate from `resource_id`: valid pairs include "
+    "resource_id=db-primary with name=primary_database and resource_id=job-queue with "
+    "name=job_queue. Never copy a hyphenated resource_id into resources[].name. "
     "Use unique short descriptive IDs such as `api`, `files`, `primary-db`, or "
     "`job-queue`; do not copy AWS type names or natural-language phrases. Every "
     "resource_id and every ID reference in depends_on, typed resource_reference, "
@@ -101,7 +113,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v11"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v12"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -260,6 +272,7 @@ _RESOURCE_OUTPUT_GUIDANCE = (
 _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
     {
         _ID_PATTERN_GUIDANCE,
+        _RESOURCE_NAME_GUIDANCE,
         _RESOURCE_GRAPH_GUIDANCE,
         _RESOURCE_ARGUMENT_GUIDANCE,
         _RESOURCE_EXPRESSION_GUIDANCE,
@@ -576,6 +589,8 @@ def _validation_issue(code: str, field: str, cause: Any = None) -> str | None:
 
 
 def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
+    if code == "string_pattern_mismatch" and field == "resources[*].name":
+        return _RESOURCE_NAME_GUIDANCE
     identifier_fields = {
         "resources[*].resource_id",
         "health_assertions[*].target_resource_id",

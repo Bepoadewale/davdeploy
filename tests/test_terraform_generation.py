@@ -14,6 +14,7 @@ from davdeploy.model_gateway import (
 )
 from davdeploy.terraform_generation import (
     _RESOURCE_CREDENTIAL_GUIDANCE,
+    _RESOURCE_NAME_GUIDANCE,
     NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
@@ -103,6 +104,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "^[a-z][a-z0-9_]{0,62}$" in document["task"]
     assert "Do not use hyphens, uppercase letters, spaces, or punctuation" in document["task"]
     assert "^[a-z][a-z0-9-]{0,23}$" in document["task"]
+    assert "resource_id=db-primary with name=primary_database" in document["task"]
+    assert "Never copy a hyphenated resource_id" in document["task"]
     assert "source_resource_id only for event_processing" in document["task"]
     assert "copy every reference exactly from its declared resource_id" in document["task"]
     assert "no underscores or uppercase" in document["task"]
@@ -111,7 +114,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert '"manage_master_user_password":true' in document["task"]
     assert '"output_name":"master_user_secret[0].secret_arn"' in document["task"]
     assert '"kind":"resource_reference"' in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v11"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v12"
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -169,6 +172,34 @@ def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
             ),
         }
     ]
+
+
+def test_resource_name_pattern_feedback_distinguishes_name_from_resource_id():
+    invalid = {
+        "contract_version": "1.1",
+        "source_revision": "revision-123",
+        "context_digest": "0" * 64,
+        "resources": [
+            {
+                "resource_id": "api-service",
+                "resource_type": "aws_s3_bucket",
+                "name": "api-service",
+                "arguments": {},
+                "rationale": "Synthetic test resource.",
+            }
+        ],
+        "requirements": {"region": "us-east-1"},
+    }
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    assert feedback[0] == {
+        "code": "string_pattern_mismatch",
+        "field": "resources[*].name",
+        "guidance": _RESOURCE_NAME_GUIDANCE,
+    }
+    assert all(item["field"] != "resources[*].resource_id" for item in feedback)
 
 
 def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():

@@ -1,4 +1,4 @@
-# test547 — Hosted Nova v11 resource-name validation
+# test547 — Hosted Nova resource-name validation and v12 follow-up
 
 Date: 2026-11-27
 Execution type: Hosted plan-only generation failure before CodeBuild
@@ -28,6 +28,20 @@ was unavailable. The only safe feedback was
 `resources[*].name` / `string_pattern_mismatch`. It failed before CodeBuild; no
 saved plan or workload was created. The run has not been explicitly retried
 and is eligible for one retry after v12 deployment.
+
+## Source regression verification
+
+The v12 source change states that Terraform `name` uses lowercase letters,
+digits, and underscores, while `resource_id` may use hyphens. It gives paired
+examples and returns fixed, sanitized guidance for a
+`resources[*].name` pattern mismatch. Validation remains strict.
+
+- Focused generation/run/review suites: 106 passed.
+- Full `make verify`: 2,030 tests passed; lint, config check, OpenAPI snapshot,
+  and Docker Compose validation passed.
+- `git diff --check` passed.
+- These are local source checks only. PR CI, protected deployment, and the
+  single v12 hosted retry have not yet run.
 
 ## Teardown
 
