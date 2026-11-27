@@ -1,16 +1,14 @@
 # Implementation Status
 
 Status snapshot: 2026-11-27. Backend `main` is
-`1270b88ac573dff4c0c569cd8d46d6dc66af0ccb` (merged PR #530). The latest
-read-only runtime observation in account `654654474502`, region `us-east-1`,
-found all six `davdeploy-*` Lambda functions sharing package hash
-`2HCKZNZtHlUm3EbeuIQcMdNx0TF8ZcS33EftrjXEl6k=` and
-`https://api.davdeploy.tech/healthz` returned HTTP 200. The package-to-source
-release mapping was not independently re-established in this check. PRs #528
-and #530 change the local CLI only. An authenticated workspace admin and
-verified discovery/plan-only connection produced an architecture recommendation,
-but no valid generic Terraform saved-plan artifact. No Nova customer workload
-has been applied, operated, or certified.
+`63a94632d07e125d83c54f236a349b93d94254f9` (merged PR #557). Protected
+Terraform plan `46052921538` and apply `46053869885` deployed this exact source;
+the migration completed, all six `davdeploy-*` Lambda functions match its
+versioned package SHA-256, and `/healthz` returned HTTP 200. In account
+`654654474502`, region `us-east-1`, an authenticated workspace administrator
+and verified same-account plan-only role submitted a review-only Nova run. The
+current runner failed proposal validation before producing a saved Terraform
+plan. No Nova customer workload has been applied, operated, or certified.
 
 ## 27 November 2026 — authenticated hosted plan attempt
 
@@ -42,6 +40,19 @@ project configuration are currently false; preserve this gate. PR #530 adds
 authenticated CLI artifact review and exact-manifest approval commands, but has
 not yet been exercised on a real generated artifact. See
 [`test531.md`](test/test531.md) for the exact AWS and hosted observations.
+
+After deployment of PR #557, a fresh review-only revision
+`0d2531af-3a92-4a9f-a41a-aec3186f1255` retained the approved-plan digest and
+was submitted without a decision. Hosted plan-only run
+`572b2750-4070-4d8d-b903-15929297b929` used prompt
+`terraform-nova2-contract-v19`, made two bounded generation attempts, and
+failed with `NOVA_GENERATION_FAILED` / `proposal_invalid` because a relational
+database health assertion targeted an incompatible resource. No Terraform
+artifact, CodeBuild run, or customer resource was created; approval and
+execution remained closed. Draft PR #558 adds the resource-type-only repair
+diagnostic and direct RDS targeting instruction. Its code is locally and
+clean-room verified; it must pass CI, merge, deploy through the protected saved
+plan, and produce a fresh inspectable plan-only result or precise new blocker.
 
 Merged PR #517 adds backward-compatible private-IP configuration to the
 shared Batch Fargate module and a private endpoint validation root. Its

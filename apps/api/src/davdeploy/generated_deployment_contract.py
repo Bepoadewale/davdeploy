@@ -18,6 +18,15 @@ class StrictContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class IncompatibleHealthTargetError(ValueError):
+    """Safe metadata for a rejected health target, without exposing proposal values."""
+
+    def __init__(self, assertion_kind: str, resource_type: str) -> None:
+        super().__init__("health assertion target resource type is incompatible")
+        self.assertion_kind = assertion_kind
+        self.resource_type = resource_type
+
+
 class ResourceReference(StrictContract):
     kind: str = Field(pattern=r"^resource_reference$")
     resource_id: str = Field(pattern=r"^[a-z][a-z0-9-]{0,23}$")
@@ -426,7 +435,7 @@ class GeneratedDeploymentProposal(StrictContract):
                 raise ValueError("health assertions must target declared resources")
             allowed_targets = HEALTH_ASSERTION_TARGET_RESOURCE_TYPES[item.kind]
             if target.resource_type not in allowed_targets:
-                raise ValueError("health assertion target resource type is incompatible")
+                raise IncompatibleHealthTargetError(item.kind, target.resource_type)
             if isinstance(item, EventProcessingAssertion):
                 source = by_id.get(item.source_resource_id)
                 if source is None:

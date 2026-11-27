@@ -133,9 +133,10 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v19"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v20"
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
+    assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -254,7 +255,7 @@ def test_incompatible_health_target_gets_exact_feedback_and_bounded_rds_repair()
                 "rationale": "Stores relational application records.",
             },
             {
-                "resource_id": "api",
+                "resource_id": "api-secret-key",
                 "resource_type": "aws_ecs_service",
                 "name": "api",
                 "arguments": {},
@@ -264,7 +265,7 @@ def test_incompatible_health_target_gets_exact_feedback_and_bounded_rds_repair()
         output["health_assertions"] = [
             {
                 "kind": "database_roundtrip",
-                "target_resource_id": "api" if len(gateway.calls) == 1 else "db",
+                "target_resource_id": "api-secret-key" if len(gateway.calls) == 1 else "db",
                 "description": "Write, read, and delete a synthetic relational record.",
             }
         ]
@@ -287,8 +288,11 @@ def test_incompatible_health_target_gets_exact_feedback_and_bounded_rds_repair()
             "field": "health_assertions[*].target_resource_id",
             "issue": "incompatible_health_target",
             "guidance": _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
+            "assertion_kind": "database_roundtrip",
+            "observed_resource_type": "aws_ecs_service",
         }
     ]
+    assert "api-secret-key" not in str(repair_feedback)
     assert result.proposal.health_assertions[0].target_resource_id == "db"
     assert len(gateway.calls) == 2
 
