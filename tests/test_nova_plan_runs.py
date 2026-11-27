@@ -37,6 +37,7 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import Principal, issue_local_token
 from davdeploy.service import ProductService, plan_hash
 from davdeploy.terraform_generation import (
+    _GENERIC_VALIDATION_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     NovaTerraformGenerationFailed,
     generation_context_digest,
@@ -736,6 +737,11 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                         "guidance": _RESOURCE_CREDENTIAL_GUIDANCE,
                     },
                     {
+                        "code": "invalid",
+                        "field": "proposal",
+                        "guidance": _GENERIC_VALIDATION_GUIDANCE,
+                    },
+                    {
                         "code": "value_error",
                         "field": "resources[*]",
                         "issue": "private_api_key_leak_me",
@@ -757,7 +763,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v12",
+        "prompt_version": "terraform-nova2-contract-v13",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,
@@ -792,6 +798,11 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
                 "field": "resources[*]",
                 "issue": "credential_value",
                 "guidance": _RESOURCE_CREDENTIAL_GUIDANCE,
+            },
+            {
+                "code": "invalid",
+                "field": "proposal",
+                "guidance": _GENERIC_VALIDATION_GUIDANCE,
             },
             {"code": "value_error", "field": "resources[*]"},
         ],

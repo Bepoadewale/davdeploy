@@ -68,6 +68,12 @@ _RESOURCE_NAME_GUIDANCE = (
     "Never copy a hyphenated resource_id into the Terraform `name` field."
 )
 
+_GENERIC_VALIDATION_GUIDANCE = (
+    "The proposal did not match the typed deployment contract. Regenerate the complete proposal "
+    "with every required field using its exact JSON type and an allowed value. Preserve the trusted "
+    "revision, region, account, and context exactly; do not infer or change them."
+)
+
 NOVA_TERRAFORM_GENERATION_TASK = (
     "Generate the complete typed deployment proposal for this architecture and set "
     "contract_version to 1.1. Use only "
@@ -113,7 +119,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "issues using the original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v12"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v13"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -273,6 +279,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
     {
         _ID_PATTERN_GUIDANCE,
         _RESOURCE_NAME_GUIDANCE,
+        _GENERIC_VALIDATION_GUIDANCE,
         _RESOURCE_GRAPH_GUIDANCE,
         _RESOURCE_ARGUMENT_GUIDANCE,
         _RESOURCE_EXPRESSION_GUIDANCE,
@@ -319,12 +326,19 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
         )
         sanitized_feedback = []
         for item in validation_feedback[:_MAX_VALIDATION_FEEDBACK]:
+            generic_invalid = (
+                isinstance(item, dict)
+                and item.get("code") == "invalid"
+                and item.get("field") == "proposal"
+                and item.get("guidance") == _GENERIC_VALIDATION_GUIDANCE
+            )
             if (
                 not isinstance(item, dict)
                 or not isinstance(item.get("code"), str)
                 or not (
                     item.get("code") in _ALLOWED_PYDANTIC_ERROR_CODES
                     or item.get("code") == "trusted_context_mismatch"
+                    or generic_invalid
                 )
                 or not isinstance(item.get("field"), str)
                 or not _SAFE_FEEDBACK_FIELD.fullmatch(item["field"])
@@ -531,7 +545,11 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
     )[:_MAX_VALIDATION_FEEDBACK]:
         code = str(item.get("type") or "invalid")
         safe_code = code if code in _ALLOWED_PYDANTIC_ERROR_CODES else "invalid"
-        safe_field = _canonical_field_path(item.get("loc") or ())
+        safe_field = (
+            "proposal"
+            if safe_code == "invalid"
+            else _canonical_field_path(item.get("loc") or ())
+        )
         entry = {"code": safe_code, "field": safe_field}
         context = item.get("ctx") or {}
         cause = context.get("error") if isinstance(context, dict) else None
@@ -589,6 +607,8 @@ def _validation_issue(code: str, field: str, cause: Any = None) -> str | None:
 
 
 def _validation_guidance(code: str, field: str, cause: Any = None) -> str | None:
+    if code == "invalid":
+        return _GENERIC_VALIDATION_GUIDANCE
     if code == "string_pattern_mismatch" and field == "resources[*].name":
         return _RESOURCE_NAME_GUIDANCE
     identifier_fields = {
