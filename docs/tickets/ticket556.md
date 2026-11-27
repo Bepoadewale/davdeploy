@@ -35,14 +35,14 @@ After PR #555 normalized resource IDs, a fresh hosted v18 run failed before Code
 - [x] Multiple databases, multiple candidate variables, other variable names, and standalone raw password fields remain rejected. Supported RDS password fields are removed only when bound to the unique Lambda secret-ARN consumer.
 - [x] Strict contract/reference validation, policy, and no-apply boundary remain unchanged.
 - [x] Malformed non-string resource types remain available to strict validation and the bounded repair loop.
-- [ ] Focused tests, full `make verify`, and the required clean-room cycle pass and are recorded.
-- [ ] Documentation conventions and required PR CI pass.
+- [x] Focused tests, full `make verify`, and the required clean-room cycle pass and are recorded.
+- [x] Documentation conventions and required PR CI pass.
 - [ ] Fresh deployed plan-only run reaches a plan artifact or actionable bounded feedback without customer approval/apply.
 - [ ] Full hosted gate is claimed only with supported API, private storage, DB behavior, async behavior, live pricing, and plan-policy evidence.
 
 ## Acceptance status
 
-Implementation is complete. A review found and fixed a malformed-resource-type repair-path issue. Focused/full tests passed before that final fix; regression tests and the required clean-room cycle are pending. Documentation conventions and required PR CI passed for the prior head but must pass again for the final head. Protected release and fresh hosted plan-only result remain pending.
+Implementation and local validation are complete. A review found and fixed a malformed-resource-type repair-path issue. Focused tests, full verification, and the prescribed clean-room cycle pass. Documentation conventions and required PR CI pass. Protected release and fresh hosted plan-only result remain pending.
 
 ## Tests / validation performed
 
@@ -51,7 +51,10 @@ Implementation is complete. A review found and fixed a malformed-resource-type r
 - Prior-head `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 2,080 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. One existing Starlette deprecation warning.
 - Final-head focused tests: `pytest -q tests/test_nova_managed_secret_normalization.py tests/test_terraform_generation.py` — 62 passed, including malformed resource-type bounded-repair regression.
 - Final-head targeted Ruff, documentation convention check, and `git diff --check` passed.
-- Full final-head `make verify`, clean-room cycle, and PR CI remain pending.
+- Final-head `make verify PY=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python` — 2,081 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. One existing Starlette deprecation warning.
+- Required clean-room cycle passed at `0078bc90d41d2c9a20242e88a2d7d2f6f430f8b4` in detached worktree `/private/tmp/davdeploy-nova-556-cleanroom`, using isolated Compose project `davdeploy-nova-556-cleanroom`, tmpfs PostgreSQL, and external venv `/private/tmp/davdeploy-nova-556-venv`. Bootstrap, smoke, API contract, customer-plan E2E, seed, simple/complex/degraded/Day-2/failure/readiness-failure demos, trace check, and full verify passed. Final clean removed only the scoped Compose containers/network and generated `.local` and venv; absence checks passed. Worktree and Compose override remain.
+- Required PR CI run `46043864593`: all seven checks passed at code head `0078bc90d41d2c9a20242e88a2d7d2f6f430f8b4`.
+- Documentation conventions and diff checks passed.
 
 ## Evidence files produced
 
