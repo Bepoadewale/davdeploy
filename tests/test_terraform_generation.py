@@ -103,7 +103,10 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "Do not use hyphens, uppercase letters, spaces, or punctuation" in document["task"]
     assert "^[a-z][a-z0-9-]{0,23}$" in document["task"]
     assert "source_resource_id only for event_processing" in document["task"]
-    assert "Copy reference IDs exactly from a declared resource_id" in document["task"]
+    assert "copy every reference exactly from its declared resource_id" in document["task"]
+    assert "no underscores or uppercase" in document["task"]
+    assert "environment[0].variables.<NAME>_SECRET_ARN" in document["task"]
+    assert "value_type=secret_reference" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
             "summary": {"selected_profile": "aws-ecs-fargate"},
@@ -154,8 +157,10 @@ def test_health_assertion_pattern_feedback_keeps_the_canonical_nested_field():
             "code": "string_pattern_mismatch",
             "field": "health_assertions[*].target_resource_id",
             "guidance": (
-                "Use a unique short lowercase ID matching ^[a-z][a-z0-9-]{0,23}$; "
-                "copy reference IDs exactly from a declared resource_id."
+                "Use a unique resource_id of 1-24 characters matching ^[a-z][a-z0-9-]{0,23}$: "
+                "lowercase letters, digits, and hyphens only; no underscores or uppercase. Prefer short "
+                "IDs such as api, db, files, queue, worker, db-primary, or db-replica; copy every "
+                "reference exactly from its declared resource_id."
             ),
         }
     ]
@@ -218,9 +223,12 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
             {"arguments": {"db_secret": "private-value"}},
             "credential_value",
             (
-                "Never include a credential or secret value. Use a typed resource_reference only in a "
-                "Lambda environment variable ending in _SECRET_ARN; enable an AWS-managed database "
-                "master secret instead of setting a password."
+                "Never include a credential, plaintext secret, or string ARN. Use the exact object "
+                "{kind: resource_reference, resource_id: <declared ID>, output_name: <declared secret "
+                "output>, value_type: secret_reference} only at "
+                "environment[0].variables.<NAME>_SECRET_ARN on a Lambda resource. For database "
+                "credentials, enable the AWS-managed master secret and reference its declared output; "
+                "never set a password argument."
             ),
         ),
         (

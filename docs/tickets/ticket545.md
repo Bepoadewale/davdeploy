@@ -42,21 +42,25 @@ and fixed feedback, without weakening validation.
 
 ## Acceptance criteria
 
-- [ ] Credentials and malformed IDs receive specific fixed, allowlisted
+- [x] Credentials and malformed IDs receive specific fixed, allowlisted
   guidance in the repair loop and hosted diagnostics.
-- [ ] Raw causes, input values, generated proposal text, and secrets remain hidden.
-- [ ] Focused tests, full verification, docs checks, and required CI pass.
+- [x] Raw causes, input values, generated proposal text, and secrets remain hidden.
+- [ ] Required hosted CI checks pass.
 - [ ] The one post-deployment v10 retry produces an inspectable plan or a
   bounded actionable failure before CodeBuild. No customer workload is applied.
 
 ## Acceptance status
 
-Implementation is in progress. Tests, CI, protected deployment, and the v10
-retry are pending. The workload remains unapproved and unapplied.
+Implementation is locally verified; hosted CI, protected deployment, and the
+v10 retry are pending. The workload remains unapproved and unapplied.
 
 ## Tests / validation performed
 
-- Local validation: pending.
+- Focused suite: 105 passed, 1 existing Starlette deprecation warning.
+- Full `make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python`:
+  2029 passed, 1 existing Starlette deprecation warning; Actions boundary,
+  Ruff, OpenAPI snapshot, and Docker Compose configuration checks passed.
+- Documentation conventions and `git diff --check`: pending final run.
 - Hosted CI: pending.
 
 ## Evidence files produced

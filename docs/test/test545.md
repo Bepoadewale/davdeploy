@@ -25,6 +25,15 @@ resource, health-target, and cost-assumption IDs. The run failed before
 CodeBuild; no saved plan or workload exists. The run remains eligible for one
 explicit retry after v10 deployment.
 
+## PR #545 local verification
+
+The v10 prompt now gives the exact supported typed secret-reference object and
+stronger examples for short IDs. Focused tests passed (105 tests); the full
+verification suite passed (2029 tests), with one existing Starlette
+deprecation warning. Ruff, OpenAPI snapshot, Actions configuration boundary,
+and Docker Compose configuration checks passed. Hosted CI and the post-release
+retry remain pending.
+
 ## Teardown
 
 Not applicable. Generation created no workload resources, builds, or plan
