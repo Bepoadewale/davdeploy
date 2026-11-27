@@ -72,8 +72,8 @@ the existing cross-resource deny and the 2,048-byte fail-closed limit.
   conventions, and `git diff --check` pass.
 - [x] No AWS role, workload, hosted control plane, Terraform state, or lock is
   changed.
-- [ ] Final-head GitHub Actions checks pass.
-- [ ] Complete the repository-required clean-room cycle for this authorization
+- [x] Final-head GitHub Actions checks pass.
+- [x] Complete the repository-required clean-room cycle for this authorization
   change.
 
 ## Acceptance status
@@ -81,8 +81,12 @@ the existing cross-resource deny and the 2,048-byte fail-closed limit.
 The per-resource explicit-deny behavior and v2 fail-closed policy version are
 implemented. The compact mixed S3/SQS/DynamoDB fixture correctly fails closed
 at 2,641 bytes; a smaller mixed SQS/DynamoDB policy remains within the limit.
-The renderer remains disabled. Final-head CI and the repository-required
-clean-room validation remain open. No live AWS policy evaluation or customer
+All seven final-head CI checks passed, including `local-e2e` on a fresh GitHub
+runner. A separate fresh local worktree passed bootstrap, smoke, customer-plan
+end-to-end, simple/complex/degraded/Day-2 demos, policy and readiness failures,
+trace verification, full lint, and all 2,021 tests. Its project containers were
+stopped; generated local files and the test database volume were retained.
+The renderer remains disabled. No live AWS policy evaluation or customer
 lifecycle evidence is claimed.
 
 ## Tests / validation performed
@@ -92,6 +96,13 @@ lifecycle evidence is claimed.
 - `uv run --frozen --extra dev ruff check apps/api/src tests scripts`: passed.
 - `GITHUB_PR_NUMBER=536 python3 scripts/check_doc_conventions.py`: passed.
 - `git diff --check`: passed.
+- Fresh local worktree `/private/tmp/davdeploy-nova-apply-session-boundary-536-cleanroom`
+  at `a41db8d3fe1a455a83ae9de27a30329e4ea60491`: `COMPOSE_PROJECT_NAME=davdeploy-pr536-cleanroom make local-proof`
+  passed; required demo/failure targets passed; stack containers were stopped
+  without removing the named volume or generated files.
+- Final-head GitHub Actions run
+  [45932732854](https://github.com/Bepoadewale/davdeploy/actions/runs/45932732854):
+  all seven checks passed, including `local-e2e` and its fresh-runner cleanup.
 - No AWS calls, role changes, Terraform operations, or control-plane access.
 
 ## Evidence files produced
@@ -110,8 +121,9 @@ code and deterministic tests only; it does not run a customer workload.
 
 ## Follow-up work
 
-Complete the required clean-room gate using a disposable local environment
-without removing protected files or existing local volumes. Re-evaluate the
-ECS plan-policy shape and exact IAM action/resource mapping, then complete
-isolated authorization and lifecycle validation under the separate approved
-customer-workload gates.
+Re-evaluate the ECS plan-policy shape and exact IAM action/resource mapping,
+then complete isolated authorization and lifecycle validation under the
+separate approved customer-workload gates. Before that work, determine whether
+the policy-size limit needs a narrower supported service/action set or a
+different supported credential strategy; oversized plans must continue to
+fail closed.
