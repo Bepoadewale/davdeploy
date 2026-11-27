@@ -226,7 +226,7 @@ def test_dynamodb_on_demand_and_pitr_costs_use_exact_regional_products():
     assert storage_line.monthly_cost_minor == 25
     assert storage_line.unit_price_low_usd == "0.2500000000"
     evidence = result.as_manifest_document()
-    assert evidence["version"] == 10
+    assert evidence["version"] == 11
     assert evidence["dynamodb_usage_assumptions"] == usage()
     assert pricing_evidence_is_approval_eligible(evidence, trusted_context=context, now=NOW)
 

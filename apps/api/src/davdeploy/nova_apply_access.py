@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-NOVA_APPLY_ACCESS_POLICY_VERSION = "nova-apply-plan-scope.v1"
+NOVA_APPLY_ACCESS_POLICY_VERSION = "nova-apply-plan-scope.v2"
 NOVA_APPLY_ROLE_PROFILE_VERSION = "nova-apply-role-profile.v2"
 APPLY_ROLE_POLICY_NAME = "davdeployNovaApplyBoundedExecution"
 APPLY_ROLE_ACCESS_TAG = "nova-apply-bounded-v1"
@@ -387,19 +387,39 @@ def build_nova_apply_access_policy(
 
     statements: list[dict[str, Any]] = []
     all_resources: set[str] = set()
-    for arn in sorted(scoped):
-        actions = scoped[arn]
+    resources_by_actions: dict[tuple[str, ...], list[str]] = {}
+    for arn, actions in scoped.items():
         all_resources.add(arn)
+        resource_group = resources_by_actions.setdefault(tuple(sorted(actions)), [])
+        resource_group.append(arn)
+    for actions, resources in sorted(resources_by_actions.items()):
+        scoped_resources: str | list[str] = (
+            resources[0] if len(resources) == 1 else sorted(resources)
+        )
         statements.append(
-            {"Effect": "Allow", "Action": sorted(actions), "Resource": arn}
+            {
+                "Effect": "Allow",
+                "Action": list(actions),
+                "Resource": scoped_resources,
+            }
         )
     statements.append(
         {"Effect": "Allow", "Action": "sts:GetCallerIdentity", "Resource": "*"}
     )
-    # The customer's fixed role policy supplies an explicit maximum-action
-    # deny. Keep the exact-resource deny here as defense against a resource
-    # policy granting directly to this assumed-role session, but avoid
-    # repeating the larger maximum-action list in this STS-limited document.
+    # Resource-policy grants directly to an assumed-role session can bypass
+    # an implicit session-policy deny. Deny actions outside this plan's exact
+    # action set on each planned resource, as well as all actions on resources
+    # outside the plan. The fixed role ceiling is a superset across profiles
+    # and cannot replace this per-plan action boundary.
+    for actions, resources in sorted(resources_by_actions.items()):
+        scoped_resources = resources[0] if len(resources) == 1 else sorted(resources)
+        statements.append(
+            {
+                "Effect": "Deny",
+                "NotAction": sorted({*actions, "sts:GetCallerIdentity"}),
+                "Resource": scoped_resources,
+            }
+        )
     statements.append(
         {
             "Effect": "Deny",

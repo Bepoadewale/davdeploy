@@ -27,6 +27,7 @@ from davdeploy.domain import (
     BatchPricingUsageAssumptions,
     DynamoDbPricingUsageAssumptions,
     EcrPricingUsageAssumptions,
+    EcsExpressPricingUsageAssumptions,
     RdsPricingUsageAssumptions,
     S3PricingUsageAssumptions,
     ServerlessPricingUsageAssumptions,
@@ -118,6 +119,7 @@ class GeneratedPlanPricingEvidence:
     transitions: tuple[PlanTransition, ...]
     findings: tuple[PlanPricingFinding, ...]
     evidence_sha256: str
+    ecs_express_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def approval_eligible(self) -> bool:
@@ -146,12 +148,13 @@ class GeneratedPlanPricingEvidence:
             "vpc_usage_assumptions": self.vpc_usage_assumptions,
             "batch_usage_assumptions": self.batch_usage_assumptions,
             "ecr_usage_assumptions": self.ecr_usage_assumptions,
+            "ecs_express_usage_assumptions": self.ecs_express_usage_assumptions,
             "evidence_sha256": self.evidence_sha256,
         }
 
     def as_manifest_document(self) -> dict[str, Any]:
         return {
-            "version": 10,
+            "version": 11,
             "status": self.status.value,
             "region": self.region,
             "currency": self.currency,
@@ -178,6 +181,7 @@ class GeneratedPlanPricingEvidence:
             "vpc_usage_assumptions": self.vpc_usage_assumptions,
             "batch_usage_assumptions": self.batch_usage_assumptions,
             "ecr_usage_assumptions": self.ecr_usage_assumptions,
+            "ecs_express_usage_assumptions": self.ecs_express_usage_assumptions,
             "lines": [
                 {
                     "address": item.address,
@@ -232,10 +236,12 @@ class GeneratedPlanPricingEvidence:
             "serverless_usage_assumptions", "dynamodb_usage_assumptions",
             "vpc_usage_assumptions", "batch_usage_assumptions",
             "ecr_usage_assumptions",
+            "ecs_express_usage_assumptions",
             "lines", "transitions", "findings", "evidence_sha256",
         }
         version = document.get("version")
-        version_9_fields = expected_fields - {"ecr_usage_assumptions"}
+        version_10_fields = expected_fields - {"ecs_express_usage_assumptions"}
+        version_9_fields = version_10_fields - {"ecr_usage_assumptions"}
         version_8_fields = version_9_fields - {"batch_usage_assumptions"}
         version_7_fields = version_8_fields - {"vpc_usage_assumptions"}
         version_6_fields = version_7_fields - {"dynamodb_usage_assumptions"}
@@ -243,7 +249,8 @@ class GeneratedPlanPricingEvidence:
         version_4_fields = version_5_fields - {"rds_usage_assumptions"}
         legacy_fields = version_4_fields - {"sqs_usage_assumptions"}
         valid_shape = (
-            version == 10 and set(document) == expected_fields
+            version == 11 and set(document) == expected_fields
+            or version == 10 and set(document) == version_10_fields
             or version == 9 and set(document) == version_9_fields
             or version == 8 and set(document) == version_8_fields
             or version == 7 and set(document) == version_7_fields
@@ -326,6 +333,16 @@ class GeneratedPlanPricingEvidence:
             )
             if ecr_usage != raw_ecr_usage:
                 raise ValueError("non-canonical ECR usage assumptions")
+            raw_ecs_express_usage = document.get("ecs_express_usage_assumptions")
+            ecs_express_usage = (
+                None
+                if raw_ecs_express_usage is None
+                else EcsExpressPricingUsageAssumptions.model_validate(
+                    raw_ecs_express_usage
+                ).model_dump(mode="json")
+            )
+            if ecs_express_usage != raw_ecs_express_usage:
+                raise ValueError("non-canonical ECS Express usage assumptions")
             lines = tuple(PlanCostLine(**item) for item in document["lines"])
             transitions = tuple(
                 PlanTransition(
@@ -366,12 +383,13 @@ class GeneratedPlanPricingEvidence:
                 transitions=transitions,
                 findings=findings,
                 evidence_sha256=document["evidence_sha256"],
+                ecs_express_usage_assumptions=ecs_express_usage,
             )
         except (KeyError, TypeError, ValueError):
             raise PlanPricingError("pricing evidence fields are invalid") from None
-        if document.get("version") == 10 and result.as_manifest_document() != document:
+        if document.get("version") == 11 and result.as_manifest_document() != document:
             raise PlanPricingError("pricing evidence is not canonical")
-        if document.get("version") != 10:
+        if document.get("version") != 11:
             normalized = result.as_manifest_document()
             normalized.pop("evidence_sha256")
             result = replace(result, evidence_sha256=_canonical_digest(normalized))
@@ -415,6 +433,7 @@ class TrustedPlanPricingContext:
     vpc_usage_assumptions: dict[str, Any] | None = None
     batch_usage_assumptions: dict[str, Any] | None = None
     ecr_usage_assumptions: dict[str, Any] | None = None
+    ecs_express_usage_assumptions: dict[str, Any] | None = None
 
     @property
     def pricing_context_sha256(self) -> str:
@@ -432,6 +451,7 @@ class TrustedPlanPricingContext:
             self.vpc_usage_assumptions,
             self.batch_usage_assumptions,
             self.ecr_usage_assumptions,
+            self.ecs_express_usage_assumptions,
         )
 
     @classmethod
@@ -496,6 +516,11 @@ class TrustedPlanPricingContext:
         )
         raw_ecr_usage_assumptions = (
             workload_spec.get("ecr_pricing_usage_assumptions")
+            if isinstance(workload_spec, dict)
+            else None
+        )
+        raw_ecs_express_usage_assumptions = (
+            workload_spec.get("ecs_express_pricing_usage_assumptions")
             if isinstance(workload_spec, dict)
             else None
         )
@@ -583,6 +608,15 @@ class TrustedPlanPricingContext:
                 ).model_dump(mode="json")
             except (TypeError, ValueError):
                 raise PlanPricingError("persisted customer revision has invalid ECR pricing usage assumptions") from None
+        if raw_ecs_express_usage_assumptions is None:
+            ecs_express_usage_assumptions = None
+        else:
+            try:
+                ecs_express_usage_assumptions = EcsExpressPricingUsageAssumptions.model_validate(
+                    raw_ecs_express_usage_assumptions
+                ).model_dump(mode="json")
+            except (TypeError, ValueError):
+                raise PlanPricingError("persisted customer revision has invalid ECS Express pricing usage assumptions") from None
         return cls(
             region=region,
             currency="USD",
@@ -596,6 +630,7 @@ class TrustedPlanPricingContext:
             vpc_usage_assumptions=vpc_usage_assumptions,
             batch_usage_assumptions=batch_usage_assumptions,
             ecr_usage_assumptions=ecr_usage_assumptions,
+            ecs_express_usage_assumptions=ecs_express_usage_assumptions,
         )
 
 
@@ -1033,6 +1068,43 @@ class AwsPriceListCatalog:
             "Hrs",
         )
 
+    def application_load_balancer_hourly_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AWSELB", region, "application-load-balancer-hours",
+            [
+                ("productFamily", "Load Balancer-Application"),
+                ("group", "ELB:Balancing"),
+                ("groupDescription", "LoadBalancer hourly usage by Application Load Balancer"),
+                ("regionCode", region),
+            ],
+            "Hrs",
+        )
+
+    def application_load_balancer_lcu_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AWSELB", region, "application-load-balancer-lcu-hours",
+            [
+                ("productFamily", "Load Balancer-Application"),
+                ("group", "ELB:Balancing"),
+                ("groupDescription", "Used Application Load Balancer capacity units-hr"),
+                ("regionCode", region),
+            ],
+            "LCU-Hrs",
+        )
+
+    def cloudwatch_standard_alarm_metric_rate(self, region: str) -> CatalogRate:
+        return self._regional_rate(
+            "AmazonCloudWatch", region, "cloudwatch-standard-alarm-metric-month",
+            [
+                ("productFamily", "Alarm"),
+                ("group", "Alarm"),
+                ("groupDescription", "CloudWatch Alarms"),
+                ("usagetype", "CW:AlarmMonitorUsage"),
+                ("regionCode", region),
+            ],
+            "Alarms",
+        )
+
     def interface_vpc_endpoint_hourly_rate(self, region: str) -> CatalogRate:
         return self._regional_rate(
             "AmazonVPC",
@@ -1148,7 +1220,7 @@ class AwsPriceListCatalog:
             "regionCode": region,
             attribute: value,
         }
-        rate = _parse_regional_product(matches[0][0], "AmazonECS", expected, "Hrs")
+        rate = _parse_regional_product(matches[0][0], "AmazonECS", expected, "hours")
         with self._cache_lock:
             self._cache[cache_key] = (now + self.cache_ttl_seconds, rate)
         return rate
@@ -1305,6 +1377,7 @@ def evaluate_generated_plan_pricing(
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
             ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+            ecs_express_usage_assumptions=trusted_context.ecs_express_usage_assumptions,
         )
     if monthly_budget_minor is not None and (
         isinstance(monthly_budget_minor, bool)
@@ -1337,6 +1410,7 @@ def evaluate_generated_plan_pricing(
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
             ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+            ecs_express_usage_assumptions=trusted_context.ecs_express_usage_assumptions,
         )
     if proposal_declared_currency is not None and proposal_declared_currency != currency:
         return _evidence(
@@ -1365,6 +1439,7 @@ def evaluate_generated_plan_pricing(
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
             ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+            ecs_express_usage_assumptions=trusted_context.ecs_express_usage_assumptions,
         )
     if (
         proposal_declared_budget_minor is not None
@@ -1396,6 +1471,7 @@ def evaluate_generated_plan_pricing(
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
             ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+            ecs_express_usage_assumptions=trusted_context.ecs_express_usage_assumptions,
         )
     if not _plan_region_matches(document, region):
         return _evidence(
@@ -1421,6 +1497,7 @@ def evaluate_generated_plan_pricing(
             vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
             batch_usage_assumptions=trusted_context.batch_usage_assumptions,
             ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+            ecs_express_usage_assumptions=trusted_context.ecs_express_usage_assumptions,
         )
 
     resources = _planned_managed_resources(document)
@@ -1444,6 +1521,7 @@ def evaluate_generated_plan_pricing(
     http_apis: list[dict[str, Any]] = []
     lambda_log_groups: list[dict[str, Any]] = []
     ecr_repositories: list[dict[str, Any]] = []
+    ecs_express_services: list[dict[str, Any]] = []
     priced_ecr_addresses: set[str] = set()
     for resource in resources:
         address = resource["address"]
@@ -1505,6 +1583,9 @@ def evaluate_generated_plan_pricing(
             continue
         if resource_type == "aws_ecr_repository":
             ecr_repositories.append(resource)
+            continue
+        if resource_type == "aws_ecs_express_gateway_service":
+            ecs_express_services.append(resource)
             continue
         if resource_type == "aws_apigatewayv2_api":
             http_apis.append(resource)
@@ -1581,12 +1662,24 @@ def evaluate_generated_plan_pricing(
             )
         )
 
+    ecs_express_shape_valid = False
+    if ecs_express_services:
+        ecs_express_shape_valid = _validate_ecs_express_pricing_shape(
+            document,
+            resources,
+            ecs_express_services,
+            ecr_repositories,
+            lambda_log_groups,
+            region,
+        )
+
     ecr_usage_document = trusted_context.ecr_usage_assumptions
     if ecr_repositories:
-        findings.append(PlanPricingFinding(
-            "ecr_supporting_costs_unpriced", None,
-            "ECR standard storage is priced when bounded; archive retrieval, cross-region or internet transfer, image signing, replication, and other linked usage remain unpriced.",
-        ))
+        if not ecs_express_shape_valid:
+            findings.append(PlanPricingFinding(
+                "ecr_supporting_costs_unpriced", None,
+                "ECR standard storage is priced when bounded; archive retrieval, cross-region or internet transfer, image signing, replication, and other linked usage remain unpriced.",
+            ))
         if ecr_usage_document is None:
             findings.append(PlanPricingFinding(
                 "ecr_storage_assumptions_missing", ecr_repositories[0]["address"],
@@ -1672,6 +1765,169 @@ def evaluate_generated_plan_pricing(
             "ECR storage usage assumptions do not match any ECR repository in this plan.",
         ))
 
+    ecs_express_usage_document = trusted_context.ecs_express_usage_assumptions
+    if ecs_express_services:
+        if not ecs_express_shape_valid:
+            findings.append(PlanPricingFinding(
+                "ecs_express_pricing_shape_unsupported",
+                ecs_express_services[0]["address"],
+                "Only the exact single-service, same-region public-VPC pilot inventory is priced.",
+            ))
+        elif ecs_express_usage_document is None:
+            findings.append(PlanPricingFinding(
+                "ecs_express_usage_assumptions_missing",
+                ecs_express_services[0]["address"],
+                "Trusted workload, load-balancer, public IPv4, log, and transfer bounds are required.",
+            ))
+        else:
+            try:
+                ecs_usage = EcsExpressPricingUsageAssumptions.model_validate(
+                    ecs_express_usage_document
+                )
+            except (TypeError, ValueError):
+                findings.append(PlanPricingFinding(
+                    "ecs_express_usage_assumptions_invalid",
+                    ecs_express_services[0]["address"],
+                    "Persisted ECS Express usage assumptions are invalid.",
+                ))
+            else:
+                service = ecs_express_services[0]
+                address = service["address"]
+                usage = ecs_usage
+                try:
+                    if pricing_catalog is None:
+                        pricing_catalog = AwsPriceListCatalog()
+                    rates = [
+                        (
+                            "AWS Fargate Linux/x86 vCPU",
+                            usage.monthly_task_starts.minimum * max(60, usage.average_billed_task_runtime_seconds.minimum) * 256,
+                            usage.monthly_task_starts.maximum * max(60, usage.average_billed_task_runtime_seconds.maximum) * 256,
+                            "milli-vCPU-seconds",
+                            pricing_catalog.fargate_linux_x86_rate(region, dimension="vcpu"),
+                            3_600_000,
+                        ),
+                        (
+                            "AWS Fargate Linux/x86 memory",
+                            usage.monthly_task_starts.minimum * max(60, usage.average_billed_task_runtime_seconds.minimum) * 512,
+                            usage.monthly_task_starts.maximum * max(60, usage.average_billed_task_runtime_seconds.maximum) * 512,
+                            "MiB-seconds",
+                            pricing_catalog.fargate_linux_x86_rate(region, dimension="memory"),
+                            3_686_400,
+                        ),
+                        (
+                            "AWS ECS Express Application Load Balancer hours",
+                            usage.monthly_alb_billed_hours.minimum,
+                            usage.monthly_alb_billed_hours.maximum,
+                            "Hrs",
+                            pricing_catalog.application_load_balancer_hourly_rate(region),
+                            1,
+                        ),
+                        (
+                            "AWS ECS Express Application Load Balancer capacity",
+                            usage.monthly_alb_lcu_hours.minimum,
+                            usage.monthly_alb_lcu_hours.maximum,
+                            "LCU-Hrs",
+                            pricing_catalog.application_load_balancer_lcu_rate(region),
+                            1,
+                        ),
+                        (
+                            "AWS ECS Express task public IPv4 addresses",
+                            usage.monthly_task_starts.minimum * max(60, usage.average_task_public_ipv4_address_seconds.minimum),
+                            usage.monthly_task_starts.maximum * max(60, usage.average_task_public_ipv4_address_seconds.maximum),
+                            "IPv4-address-seconds",
+                            pricing_catalog.public_ipv4_in_use_rate(region),
+                            3_600,
+                        ),
+                        (
+                            "AWS ECS Express load-balancer public IPv4 addresses",
+                            usage.monthly_alb_public_ipv4_address_seconds.minimum,
+                            usage.monthly_alb_public_ipv4_address_seconds.maximum,
+                            "IPv4-address-seconds",
+                            pricing_catalog.public_ipv4_in_use_rate(region),
+                            3_600,
+                        ),
+                        (
+                            "AWS ECS Express CloudWatch Logs ingestion",
+                            usage.cloudwatch_logs.monthly_ingested_gb.minimum,
+                            usage.cloudwatch_logs.monthly_ingested_gb.maximum,
+                            "GB",
+                            pricing_catalog.cloudwatch_log_ingestion_rate(region),
+                            1,
+                        ),
+                        (
+                            "AWS ECS Express CloudWatch Logs storage",
+                            usage.cloudwatch_logs.monthly_retained_gb_month.minimum,
+                            usage.cloudwatch_logs.monthly_retained_gb_month.maximum,
+                            "GB-Mo",
+                            pricing_catalog.cloudwatch_standard_log_storage_rate(region),
+                            1,
+                        ),
+                        (
+                            "AWS ECS Express target-tracking CloudWatch alarms",
+                            2,
+                            2,
+                            "Alarms",
+                            pricing_catalog.cloudwatch_standard_alarm_metric_rate(region),
+                            1,
+                        ),
+                    ]
+                    if usage.monthly_internet_egress_gb.maximum:
+                        rates.append((
+                            "AWS ECS Express internet data transfer out",
+                            usage.monthly_internet_egress_gb.minimum,
+                            usage.monthly_internet_egress_gb.maximum,
+                            "GB",
+                            pricing_catalog.aws_internet_egress_rate(region),
+                            1,
+                        ))
+                    if usage.monthly_cross_az_transfer_gb.maximum:
+                        rates.append((
+                            "AWS ECS Express cross-AZ data transfer in and out",
+                            usage.monthly_cross_az_transfer_gb.minimum * 2,
+                            usage.monthly_cross_az_transfer_gb.maximum * 2,
+                            "GB",
+                            pricing_catalog.regional_data_transfer_rate(region),
+                            1,
+                        ))
+                except PriceListUnavailableError:
+                    unavailable = True
+                    findings.append(PlanPricingFinding(
+                        "regional_price_lookup_unavailable", address,
+                        "DavDeploy could not verify one or more regional ECS Express prices.",
+                    ))
+                except PlanPricingError:
+                    findings.append(PlanPricingFinding(
+                        "regional_price_ambiguous", address,
+                        "DavDeploy could not identify exact regional ECS Express prices.",
+                    ))
+                else:
+                    for description, low_quantity, high_quantity, unit, rate, divisor in rates:
+                        unit_rate = Decimal(rate.unit_price_usd) / divisor
+                        low_rate = Decimal(rate.low_unit_price_usd or rate.unit_price_usd) / divisor
+                        lines.append(PlanCostLine(
+                            address=address,
+                            resource_type="aws_ecs_express_gateway_service",
+                            description=description,
+                            quantity=low_quantity,
+                            quantity_max=high_quantity,
+                            unit=unit,
+                            unit_price_usd=format(unit_rate, "f"),
+                            monthly_cost_minor=int((low_rate * low_quantity * 100).quantize(Decimal(1), rounding=ROUND_FLOOR)),
+                            monthly_cost_max_minor=int((unit_rate * high_quantity * 100).quantize(Decimal(1), rounding=ROUND_CEILING)),
+                            catalog_sku=rate.sku,
+                            catalog_product_sha256=rate.product_digest,
+                            catalog_published_at=rate.published_at,
+                            catalog_effective_at=rate.effective_at,
+                            unit_price_low_usd=format(low_rate, "f"),
+                            unit_price_low_source_url=rate.low_rate_source_url,
+                            low_cost_quantity=low_quantity,
+                        ))
+    elif ecs_express_usage_document is not None:
+        findings.append(PlanPricingFinding(
+            "ecs_express_usage_assumptions_stale", None,
+            "ECS Express usage assumptions do not match any ECS Express service in this plan.",
+        ))
+
     batch_jobs = [
         item for item in resources if item["type"] == "aws_batch_job_definition"
     ]
@@ -1683,7 +1939,10 @@ def evaluate_generated_plan_pricing(
             "aws_batch_job_definition",
         }
     ]
-    if lambda_log_groups and not lambda_functions and not http_apis and not batch_resources:
+    if (
+        lambda_log_groups and not lambda_functions and not http_apis and not batch_resources
+        and not ecs_express_shape_valid
+    ):
         findings.append(
             PlanPricingFinding(
                 "cloudwatch_log_group_unpriced",
@@ -3426,13 +3685,14 @@ def evaluate_generated_plan_pricing(
         proposal_declared_currency=proposal_declared_currency,
         persisted_context_sha256=persisted_context_sha256,
         usage_assumptions=trusted_context.usage_assumptions,
-            sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
-            rds_usage_assumptions=trusted_context.rds_usage_assumptions,
-            serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
-            dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
-            vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
-            batch_usage_assumptions=trusted_context.batch_usage_assumptions,
-            ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+        sqs_usage_assumptions=trusted_context.sqs_usage_assumptions,
+        rds_usage_assumptions=trusted_context.rds_usage_assumptions,
+        serverless_usage_assumptions=trusted_context.serverless_usage_assumptions,
+        dynamodb_usage_assumptions=trusted_context.dynamodb_usage_assumptions,
+        vpc_usage_assumptions=trusted_context.vpc_usage_assumptions,
+        batch_usage_assumptions=trusted_context.batch_usage_assumptions,
+        ecr_usage_assumptions=trusted_context.ecr_usage_assumptions,
+        ecs_express_usage_assumptions=trusted_context.ecs_express_usage_assumptions,
         transitions=transitions,
     )
 
@@ -3466,6 +3726,309 @@ def pricing_evidence_document_is_valid(document: Any) -> bool:
         return False
 
 
+def _validate_ecs_express_pricing_shape(
+    document: dict[str, Any],
+    resources: tuple[dict[str, Any], ...],
+    services: list[dict[str, Any]],
+    repositories: list[dict[str, Any]],
+    log_groups: list[dict[str, Any]],
+    region: str,
+) -> bool:
+    """Accept only the reviewed single-service pilot inventory and bindings."""
+    configured_references = _pricing_configured_resource_references(document)
+
+    def references_resource(
+        source: str,
+        target: str,
+        field: str,
+        *,
+        allow_count_index: bool = False,
+    ) -> bool:
+        source = source.split("[", maxsplit=1)[0]
+        references = configured_references.get(source, {}).get(field, ())
+        target_references = tuple(
+            reference for reference in references
+            if reference == target or reference.startswith(f"{target}.")
+        )
+        return bool(target_references) and all(
+            reference in target_references
+            or (allow_count_index and reference == "count.index")
+            for reference in references
+        )
+
+    def matches_or_references(
+        value: Any,
+        expected: Any,
+        source: str,
+        target: str,
+        field: str,
+        *,
+        allow_count_index: bool = False,
+    ) -> bool:
+        return value == expected if value is not None else references_resource(
+            source, target, field, allow_count_index=allow_count_index
+        )
+
+    expected_counts = {
+        "terraform_data": 1,
+        "aws_ecs_express_gateway_service": 1,
+        "aws_iam_role": 2,
+        "aws_iam_role_policy_attachment": 2,
+        "aws_vpc": 1,
+        "aws_internet_gateway": 1,
+        "aws_subnet": 2,
+        "aws_route_table": 1,
+        "aws_route_table_association": 2,
+        "aws_ecr_repository": 1,
+        "aws_cloudwatch_log_group": 1,
+    }
+    counts = {kind: sum(item["type"] == kind for item in resources) for kind in expected_counts}
+    expected_addresses = {
+        "terraform_data.account_guard",
+        "aws_ecs_express_gateway_service.workload[0]",
+        "aws_iam_role.execution",
+        "aws_iam_role.infrastructure",
+        "aws_iam_role_policy_attachment.execution",
+        "aws_iam_role_policy_attachment.infrastructure",
+        "aws_vpc.customer",
+        "aws_internet_gateway.customer",
+        "aws_subnet.public[0]",
+        "aws_subnet.public[1]",
+        "aws_route_table.public",
+        "aws_route_table_association.public[0]",
+        "aws_route_table_association.public[1]",
+        "aws_ecr_repository.workload",
+        "aws_cloudwatch_log_group.workload",
+    }
+    if (
+        any(item["type"] not in expected_counts for item in resources)
+        or counts != expected_counts
+        or {item["address"] for item in resources} != expected_addresses
+        or len(services) != 1
+    ):
+        return False
+
+    service = services[0]
+    address = service["address"]
+    values = service["values"]
+    if (
+        address != "aws_ecs_express_gateway_service.workload[0]"
+        or values.get("cpu") not in ("256", 256)
+        or values.get("memory") not in ("512", 512)
+        or values.get("region") not in (None, region)
+        or values.get("wait_for_steady_state") is not True
+        or values.get("task_role_arn") not in (None, "")
+        or values.get("health_check_path") != "/healthz"
+        or values.get("cluster") not in (None, "default")
+    ):
+        return False
+
+    name = values.get("service_name")
+    if not isinstance(name, str) or re.fullmatch(r"davdeploy-ecs-[a-f0-9]{24}", name) is None:
+        return False
+    containers = values.get("primary_container")
+    if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
+        return False
+    container = containers[0]
+    repo_values = repositories[0]["values"]
+    repo_address = repositories[0]["address"]
+    log_values = log_groups[0]["values"]
+    log_address = log_groups[0]["address"]
+    registry = repo_values.get("registry_id")
+    repo_url = repo_values.get("repository_url")
+    image = container.get("image")
+    account_guard = next(
+        item for item in resources if item["address"] == "terraform_data.account_guard"
+    )["values"].get("input")
+    expected_repository_url = (
+        f"{account_guard}.dkr.ecr.{region}.amazonaws.com/{name}"
+        if isinstance(account_guard, str) and re.fullmatch(r"\d{12}", account_guard)
+        else None
+    )
+    image_pattern = (
+        rf"^{re.escape(account_guard)}\.dkr\.ecr\.{re.escape(region)}\.amazonaws\.com/"
+        rf"{re.escape(name)}@sha256:[a-f0-9]{{64}}$"
+        if isinstance(account_guard, str) and re.fullmatch(r"\d{12}", account_guard)
+        else r"(?!)"
+    )
+    if (
+        repo_address != "aws_ecr_repository.workload"
+        or repo_values.get("name") != name
+        or not isinstance(expected_repository_url, str)
+        or (repo_url is not None and repo_url != expected_repository_url)
+        or (registry is not None and registry != account_guard)
+        or repo_values.get("encryption_configuration") not in (
+            [{"encryption_type": "AES256", "kms_key": None}],
+            [{"encryption_type": "AES256"}],
+        )
+        or not isinstance(image, str)
+        or re.fullmatch(image_pattern, image) is None
+        or not image.startswith(f"{expected_repository_url}@sha256:")
+        or log_address != "aws_cloudwatch_log_group.workload"
+        or log_values.get("name") != f"/aws/ecs/{name}"
+        or log_values.get("retention_in_days") != 3
+        or log_values.get("log_group_class") not in (None, "STANDARD")
+        or log_values.get("kms_key_id") not in (None, "")
+        or account_guard is None
+    ):
+        return False
+    logs = container.get("aws_logs_configuration")
+    if (
+        not isinstance(logs, list)
+        or len(logs) != 1
+        or not isinstance(logs[0], dict)
+        or logs[0].get("log_group") != log_values.get("name")
+        or logs[0].get("log_stream_prefix") != "customer-test"
+        or container.get("container_port") not in (8000, "8000")
+        or container.get("environment") != [
+            {"name": "DAVDEPLOY_TEST_SCOPE", "value": "same-account-customer-sandbox"}
+        ]
+        or container.get("secret") not in (None, [])
+        or container.get("repository_credentials") not in (None, [])
+        or container.get("command") not in (None, [])
+    ):
+        return False
+    scaling = values.get("scaling_target")
+    if (
+        not isinstance(scaling, list)
+        or len(scaling) != 1
+        or not isinstance(scaling[0], dict)
+        or scaling[0].get("min_task_count") != 1
+        or scaling[0].get("max_task_count") != 1
+        or scaling[0].get("auto_scaling_metric") != "AVERAGE_CPU"
+        or scaling[0].get("auto_scaling_target_value") != 70
+    ):
+        return False
+    network = values.get("network_configuration")
+    subnets = [item for item in resources if item["type"] == "aws_subnet"]
+    subnet_ids = {item["values"].get("id") for item in subnets}
+    network_subnets = (
+        network[0].get("subnets")
+        if isinstance(network, list) and len(network) == 1 and isinstance(network[0], dict)
+        else None
+    )
+    vpc = next(item for item in resources if item["type"] == "aws_vpc")["values"]
+    gateway = next(item for item in resources if item["type"] == "aws_internet_gateway")["values"]
+    route_table = next(item for item in resources if item["type"] == "aws_route_table")["values"]
+    associations = [item["values"] for item in resources if item["type"] == "aws_route_table_association"]
+    expected_subnets = {
+        "aws_subnet.public[0]": "10.84.10.0/24",
+        "aws_subnet.public[1]": "10.84.11.0/24",
+    }
+    subnets_valid = all(
+        matches_or_references(
+            item["values"].get("vpc_id"), vpc.get("id"),
+            item["address"], "aws_vpc.customer", "vpc_id",
+        )
+        and item["values"].get("map_public_ip_on_launch") is True
+        and item["values"].get("assign_ipv6_address_on_creation") is not True
+        and item["values"].get("cidr_block") == expected_subnets[item["address"]]
+        and isinstance(item["values"].get("availability_zone"), str)
+        and item["values"]["availability_zone"].startswith(region)
+        for item in subnets
+    )
+    availability_zones = {item["values"].get("availability_zone") for item in subnets}
+    routes = route_table.get("route")
+    route_valid = (
+        isinstance(routes, list)
+        and len(routes) == 1
+        and isinstance(routes[0], dict)
+        and routes[0].get("cidr_block") == "0.0.0.0/0"
+        and matches_or_references(
+            routes[0].get("gateway_id"), gateway.get("id"),
+            "aws_route_table.public", "aws_internet_gateway.customer", "route",
+        )
+    )
+    subnet_ids_by_address = {item["address"]: item["values"].get("id") for item in subnets}
+    return (
+        isinstance(network_subnets, list)
+        and (
+            (
+                all(isinstance(item, str) for item in network_subnets)
+                and set(network_subnets) == subnet_ids
+            )
+            or (
+                len(network_subnets) == 2
+                and all(item is None for item in network_subnets)
+                and references_resource(
+                    "aws_ecs_express_gateway_service.workload",
+                    "aws_subnet.public",
+                    "network_configuration",
+                )
+            )
+        )
+        and network[0].get("security_groups") in (None, [])
+        and len(subnets) == 2
+        and (
+            (all(isinstance(value, str) for value in subnet_ids) and len(subnet_ids) == 2)
+            or all(value is None for value in subnet_ids)
+        )
+        and vpc.get("cidr_block") == "10.84.0.0/16"
+        and vpc.get("enable_dns_support") is True
+        and vpc.get("enable_dns_hostnames") is True
+        and vpc.get("assign_generated_ipv6_cidr_block") is not True
+        and matches_or_references(
+            gateway.get("vpc_id"), vpc.get("id"),
+            "aws_internet_gateway.customer", "aws_vpc.customer", "vpc_id",
+        )
+        and matches_or_references(
+            route_table.get("vpc_id"), vpc.get("id"),
+            "aws_route_table.public", "aws_vpc.customer", "vpc_id",
+        )
+        and route_valid
+        and subnets_valid
+        and len(availability_zones) == 2
+        and len(associations) == 2
+        and all(
+            matches_or_references(
+                next(
+                    item["values"] for item in resources
+                    if item["address"] == f"aws_route_table_association.public[{index}]"
+                ).get("subnet_id"),
+                subnet_ids_by_address.get(f"aws_subnet.public[{index}]"),
+                f"aws_route_table_association.public[{index}]",
+                "aws_subnet.public",
+                "subnet_id",
+                allow_count_index=True,
+            )
+            and matches_or_references(
+                next(
+                    item["values"] for item in resources
+                    if item["address"] == f"aws_route_table_association.public[{index}]"
+                ).get("route_table_id"),
+                route_table.get("id"),
+                f"aws_route_table_association.public[{index}]",
+                "aws_route_table.public",
+                "route_table_id",
+            )
+            for index in range(2)
+        )
+    )
+
+
+def _pricing_configured_resource_references(
+    document: dict[str, Any],
+) -> dict[str, dict[str, tuple[str, ...]]]:
+    configuration = document.get("configuration")
+    root = configuration.get("root_module") if isinstance(configuration, dict) else None
+    resources = root.get("resources") if isinstance(root, dict) else None
+    if not isinstance(resources, list):
+        return {}
+    result: dict[str, dict[str, tuple[str, ...]]] = {}
+    for resource in resources:
+        if not isinstance(resource, dict) or not isinstance(resource.get("address"), str):
+            continue
+        expressions = resource.get("expressions")
+        if not isinstance(expressions, dict):
+            continue
+        result[resource["address"].split("[", maxsplit=1)[0]] = {
+            field: tuple(reference for reference in expression.get("references", []) if isinstance(reference, str))
+            for field, expression in expressions.items()
+            if isinstance(expression, dict) and isinstance(expression.get("references", []), list)
+        }
+    return result
+
+
 def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
     """Return the public-safe summary only for an intact evidence document."""
     if not pricing_evidence_document_is_valid(document):
@@ -3488,6 +4051,7 @@ def pricing_evidence_safe_summary(document: Any) -> dict[str, Any] | None:
         "vpc_usage_assumptions": document.get("vpc_usage_assumptions"),
         "batch_usage_assumptions": document.get("batch_usage_assumptions"),
         "ecr_usage_assumptions": document.get("ecr_usage_assumptions"),
+        "ecs_express_usage_assumptions": document.get("ecs_express_usage_assumptions"),
         "evidence_sha256": document.get("evidence_sha256"),
     }
 
@@ -3518,6 +4082,7 @@ def pricing_evidence_is_approval_eligible(
         or document.get("vpc_usage_assumptions") != trusted_context.vpc_usage_assumptions
         or document.get("batch_usage_assumptions") != trusted_context.batch_usage_assumptions
         or document.get("ecr_usage_assumptions") != trusted_context.ecr_usage_assumptions
+        or document.get("ecs_express_usage_assumptions") != trusted_context.ecs_express_usage_assumptions
         or document.get("budget_source") != "PERSISTED_CUSTOMER_CONTEXT"
         or document.get("rate_type") != "ON_DEMAND_PUBLIC_PRICE_LIST"
         or document.get("within_budget") is False
@@ -4688,7 +5253,17 @@ def _plan_region_matches(document: dict[str, Any], region: str) -> bool:
     aws = providers.get("aws") if isinstance(providers, dict) else None
     expressions = aws.get("expressions") if isinstance(aws, dict) else None
     region_expression = expressions.get("region") if isinstance(expressions, dict) else None
-    return isinstance(region_expression, dict) and region_expression.get("constant_value") == region
+    if not isinstance(region_expression, dict):
+        return False
+    if region_expression.get("constant_value") == region:
+        return True
+    variables = document.get("variables")
+    region_variable = variables.get("region") if isinstance(variables, dict) else None
+    return (
+        region_expression.get("references") == ["var.region"]
+        and isinstance(region_variable, dict)
+        and region_variable.get("value") == region
+    )
 
 
 def _planned_managed_resources(document: dict[str, Any]) -> tuple[dict[str, Any], ...]:
@@ -5035,6 +5610,7 @@ def _evidence(
     vpc_usage_assumptions: dict[str, Any] | None = None,
     batch_usage_assumptions: dict[str, Any] | None = None,
     ecr_usage_assumptions: dict[str, Any] | None = None,
+    ecs_express_usage_assumptions: dict[str, Any] | None = None,
 ) -> GeneratedPlanPricingEvidence:
     lines = tuple(sorted(lines, key=lambda item: item.address))
     transitions = tuple(sorted(transitions, key=lambda item: (item.address, item.actions)))
@@ -5056,9 +5632,10 @@ def _evidence(
         sqs_usage_assumptions, rds_usage_assumptions, serverless_usage_assumptions,
         dynamodb_usage_assumptions, vpc_usage_assumptions,
         batch_usage_assumptions, ecr_usage_assumptions,
+        ecs_express_usage_assumptions,
     )
     payload = {
-        "version": 10,
+        "version": 11,
         "status": status.value,
         "region": region,
         "currency": currency,
@@ -5089,6 +5666,7 @@ def _evidence(
         "vpc_usage_assumptions": vpc_usage_assumptions,
         "batch_usage_assumptions": batch_usage_assumptions,
         "ecr_usage_assumptions": ecr_usage_assumptions,
+        "ecs_express_usage_assumptions": ecs_express_usage_assumptions,
         "lines": [
             {
                 "address": item.address,
@@ -5153,6 +5731,7 @@ def _evidence(
         vpc_usage_assumptions=vpc_usage_assumptions,
         batch_usage_assumptions=batch_usage_assumptions,
         ecr_usage_assumptions=ecr_usage_assumptions,
+        ecs_express_usage_assumptions=ecs_express_usage_assumptions,
         lines=lines,
         transitions=transitions,
         findings=findings,
@@ -5185,21 +5764,23 @@ def _pricing_context_digest(
     vpc_usage_assumptions: dict[str, Any] | None = None,
     batch_usage_assumptions: dict[str, Any] | None = None,
     ecr_usage_assumptions: dict[str, Any] | None = None,
+    ecs_express_usage_assumptions: dict[str, Any] | None = None,
 ) -> str:
-    return _canonical_digest(
-        {
-            "version": 9,
-            "region": region,
-            "currency": currency,
-            "monthly_budget_minor": monthly_budget_minor,
-            "persisted_context_sha256": persisted_context_sha256,
-            "usage_assumptions": usage_assumptions,
-            "sqs_usage_assumptions": sqs_usage_assumptions,
-            "rds_usage_assumptions": rds_usage_assumptions,
-            "serverless_usage_assumptions": serverless_usage_assumptions,
-            "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
-            "vpc_usage_assumptions": vpc_usage_assumptions,
-            "batch_usage_assumptions": batch_usage_assumptions,
-            "ecr_usage_assumptions": ecr_usage_assumptions,
-        }
-    )
+    payload = {
+        "version": 9 if ecs_express_usage_assumptions is None else 10,
+        "region": region,
+        "currency": currency,
+        "monthly_budget_minor": monthly_budget_minor,
+        "persisted_context_sha256": persisted_context_sha256,
+        "usage_assumptions": usage_assumptions,
+        "sqs_usage_assumptions": sqs_usage_assumptions,
+        "rds_usage_assumptions": rds_usage_assumptions,
+        "serverless_usage_assumptions": serverless_usage_assumptions,
+        "dynamodb_usage_assumptions": dynamodb_usage_assumptions,
+        "vpc_usage_assumptions": vpc_usage_assumptions,
+        "batch_usage_assumptions": batch_usage_assumptions,
+        "ecr_usage_assumptions": ecr_usage_assumptions,
+    }
+    if ecs_express_usage_assumptions is not None:
+        payload["ecs_express_usage_assumptions"] = ecs_express_usage_assumptions
+    return _canonical_digest(payload)

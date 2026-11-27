@@ -240,6 +240,12 @@ class NovaIntentProvider:
             raise ModelGatewayUnavailable(
                 "Nova response omitted required workload classification fields"
             )
+        prompt_text = prompt.lower()
+        model_capabilities = _safe_capabilities(proposal.capability_requirements)
+        explicit_prompt_capabilities = _capabilities_from_prompt(prompt_text)
+        capability_requirements = sorted(
+            set(model_capabilities) | set(explicit_prompt_capabilities)
+        )
         unknowns = _material_unknowns(proposal, source_repository)
         field_status = {
             field: "UNKNOWN" if field in unknowns else "MODEL_INFERRED" for field in MATERIAL_FIELDS
@@ -259,14 +265,16 @@ class NovaIntentProvider:
             integration_requirements=proposal.integration_requirements,
             runtime=proposal.runtime,
             containerized=proposal.containerized,
-            event_driven=proposal.event_driven,
-            stateful=proposal.stateful,
+            event_driven=proposal.event_driven
+            or bool(set(capability_requirements) & {"jobs", "events"}),
+            stateful=proposal.stateful
+            or bool(set(capability_requirements) & {"relational_data", "nosql_data"}),
             requires_private_connectivity=proposal.requires_private_connectivity,
             requires_kubernetes=proposal.requires_kubernetes,
             requires_gpu=proposal.requires_gpu,
-            multi_service=proposal.multi_service,
+            multi_service=proposal.multi_service or len(capability_requirements) > 1,
             execution_duration_minutes=proposal.execution_duration_minutes,
-            capability_requirements=_safe_capabilities(proposal.capability_requirements),
+            capability_requirements=capability_requirements,
             field_status=field_status,
             unknowns=unknowns,
             confidence=proposal.confidence,
@@ -277,6 +285,7 @@ class NovaIntentProvider:
                 "input_digest": request.input_digest,
                 "context_version": NOVA_INTENT_CONTEXT_VERSION,
                 "context_digest": context_digest,
+                "capability_resolution_version": "explicit-prompt-v1",
             },
         )
         return IntentInterpretation(
@@ -434,14 +443,33 @@ def _safe_capabilities(capabilities: list[str]) -> list[str]:
 
 
 def _capabilities_from_prompt(prompt: str) -> list[str]:
-    """Deterministic fallback when Bedrock is disabled in local/hosted policy."""
+    """Extract allow-listed capabilities explicitly requested in customer text."""
 
     vocabulary = {
         "identity": ("login", "sign in", "user account", "authentication", "users"),
         "relational_data": ("database", "postgres", "mysql", "transaction"),
         "nosql_data": ("dynamodb", "key-value", "key value"),
-        "file_storage": ("upload", "uploads", "file", "files", "asset", "assets"),
-        "jobs": ("background job", "background jobs", "scheduled", "schedule", "queue"),
+        "file_storage": (
+            "upload",
+            "uploads",
+            "file",
+            "files",
+            "asset",
+            "assets",
+            "object storage",
+            "object-store",
+            "bucket",
+        ),
+        "jobs": (
+            "background job",
+            "background jobs",
+            "scheduled",
+            "schedule",
+            "queue",
+            "asynchronous",
+            "async",
+            "worker",
+        ),
         "events": ("event-driven", "event driven", "webhook", "webhooks"),
         "realtime": ("real-time", "realtime", "websocket", "live updates", "chat"),
         "search": ("search", "indexing"),
@@ -454,11 +482,38 @@ def _capabilities_from_prompt(prompt: str) -> list[str]:
         "private_connectivity": ("private network", "private connectivity", "vpn", "hybrid"),
         "backup_recovery": ("backup", "recovery", "disaster recovery"),
     }
-    return sorted(
-        capability
-        for capability, terms in vocabulary.items()
-        if any(term in prompt for term in terms)
-    )
+    requested: list[str] = []
+    for capability, terms in vocabulary.items():
+        if any(_capability_mention_signals(prompt, term)[0] for term in terms):
+            requested.append(capability)
+    return sorted(requested)
+
+
+def _capability_mention_signals(prompt: str, term: str) -> tuple[bool, bool]:
+    """Identify positive and negative mentions without matching substrings."""
+    pattern = rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])"
+    positive = False
+    negative = False
+    for match in re.finditer(pattern, prompt):
+        prefix = prompt[max(0, match.start() - 80) : match.start()]
+        suffix = prompt[match.end() : match.end() + 60]
+        negative_prefix = re.search(
+            r"\b(?:no|without|avoid|exclude|excluding|don't|do not|doesn't|does not|"
+            r"must not|should not|not)\b(?:\s+[\w'-]+){0,6}\s*$",
+            prefix,
+        )
+        if negative_prefix and not re.search(r"\bnot\s+only\s*$", prefix):
+            negative = True
+            continue
+        if re.search(
+            r"\b(?:not\s+(?:required|needed|requested)|isn't\s+needed|"
+            r"is\s+unneeded|must\s+not\s+use|should\s+not\s+use)\b",
+            suffix,
+        ):
+            negative = True
+            continue
+        positive = True
+    return positive, negative
 
 
 def _material_question(field: str) -> MaterialQuestion:

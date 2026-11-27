@@ -171,6 +171,7 @@ from davdeploy.policy import PolicyClient
 from davdeploy.security import IdentityClaims, Principal
 from davdeploy.state import require_transition
 from davdeploy.terraform_generation import (
+    NOVA_TERRAFORM_PROMPT_VERSION,
     NovaTerraformGenerationFailed,
     NovaTerraformGenerator,
     generation_context_digest,
@@ -1423,6 +1424,14 @@ class ProductService:
             else:
                 workload["ecr_pricing_usage_assumptions"] = usage_assumptions
                 next_constraints["ecr_pricing_usage_assumptions"] = usage_assumptions
+        if "ecs_express_pricing_usage_assumptions" in constraints:
+            usage_assumptions = constraints["ecs_express_pricing_usage_assumptions"]
+            if usage_assumptions is None:
+                workload.pop("ecs_express_pricing_usage_assumptions", None)
+                next_constraints.pop("ecs_express_pricing_usage_assumptions", None)
+            else:
+                workload["ecs_express_pricing_usage_assumptions"] = usage_assumptions
+                next_constraints["ecs_express_pricing_usage_assumptions"] = usage_assumptions
         if constraints.get("region"):
             workload["region_constraints"] = [constraints["region"]]
             target["region"] = constraints["region"]
@@ -1498,6 +1507,10 @@ class ProductService:
             "ecr_pricing_usage_assumptions": (
                 before_spec.get("ecr_pricing_usage_assumptions"),
                 after_spec.get("ecr_pricing_usage_assumptions"),
+            ),
+            "ecs_express_pricing_usage_assumptions": (
+                before_spec.get("ecs_express_pricing_usage_assumptions"),
+                after_spec.get("ecs_express_pricing_usage_assumptions"),
             ),
             "region": (before_target.get("region"), after_target.get("region")),
             "environments": (before_spec.get("environments"), after_spec.get("environments")),
@@ -3713,6 +3726,7 @@ class ProductService:
         error_code: str,
         error_summary: str,
         action: str,
+        result_metadata: dict[str, Any] | None = None,
         codebuild_build_id: str | None = None,
         codebuild_build_arn: str | None = None,
         expected_runner_run_id: str | None = None,
@@ -3729,6 +3743,8 @@ class ProductService:
             "finished_at": now if state == "FAILED" else None,
             "updated_at": now,
         }
+        if result_metadata is not None:
+            values["result_metadata"] = result_metadata
         if state != "RECONCILIATION_REQUIRED":
             values["preparation_phase"] = None
         if codebuild_build_id and codebuild_build_id.startswith(f"{run.codebuild_project}:"):
@@ -4189,6 +4205,18 @@ class ProductService:
         except NovaTerraformGenerationFailed as error:
             self.db.rollback()
             generation_uncertain = error.outcome_uncertain
+            generation_diagnostics = {
+                "failure_code": error.failure_code,
+                "model": self.terraform_generator.model_id,
+                "prompt_version": NOVA_TERRAFORM_PROMPT_VERSION,
+                "attempt_count": error.attempt_count,
+                "retry_count": error.usage.retry_count,
+                "input_tokens": error.usage.input_tokens,
+                "output_tokens": error.usage.output_tokens,
+                "latency_ms": error.usage.latency_ms,
+                "estimated_cost_usd": error.usage.estimated_cost_usd,
+                "validation_feedback": list(error.validation_feedback),
+            }
             self._finish_generated_plan_run_claim(
                 run,
                 lease_token,
@@ -4209,13 +4237,14 @@ class ProductService:
                     if generation_uncertain
                     else "generated_plan_run.generation_failed"
                 ),
+                result_metadata={"generation_diagnostics": generation_diagnostics},
             )
             self._record_model_usage(
                 Principal("system-nova-plan-worker", run.organization_id, "operator"),
                 {
                     "provider": "bedrock",
                     "model": self.terraform_generator.model_id,
-                    "prompt_version": "terraform-nova2-contract-v4",
+                    "prompt_version": NOVA_TERRAFORM_PROMPT_VERSION,
                     "usage": error.usage.model_dump(mode="json"),
                     "attempt_count": error.attempt_count,
                     "retry_count": error.usage.retry_count,
@@ -4912,6 +4941,10 @@ class ProductService:
 
     @staticmethod
     def _generated_plan_run_payload(run: GeneratedPlanRun) -> dict[str, Any]:
+        result_metadata = run.result_metadata if isinstance(run.result_metadata, dict) else {}
+        generation_diagnostics = result_metadata.get("generation_diagnostics")
+        if not isinstance(generation_diagnostics, dict):
+            generation_diagnostics = None
         return {
             "id": run.id,
             "project_id": run.project_id,
@@ -4931,6 +4964,7 @@ class ProductService:
             "finished_at": run.finished_at.isoformat() if run.finished_at else None,
             "error_code": run.error_code,
             "error_summary": run.error_summary,
+            "generation_diagnostics": generation_diagnostics,
             "execution_boundary": (
                 "A CodeBuild start is not a verified Terraform plan. A completed build remains "
                 "unverified until its exact result and saved-plan artifact are validated. "
@@ -7949,7 +7983,7 @@ class ProductService:
                     "request_id": None,
                     "provider": "bedrock",
                     "model": self.terraform_generator.model_id,
-                    "prompt_version": "terraform-nova2-contract-v4",
+                    "prompt_version": NOVA_TERRAFORM_PROMPT_VERSION,
                     "usage": error.usage.model_dump(mode="json"),
                     "attempt_count": error.attempt_count,
                     "retry_count": error.usage.retry_count,
