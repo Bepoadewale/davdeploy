@@ -15,7 +15,7 @@ No customer AWS workload resources were created. The failed v18 run produced no 
 
 - Authenticated read-only `GET /api/v1/generated-plan-runs/9cd5f381-7300-431d-9b13-e3c0b337a67d`: `FAILED`, no artifact, prompt v18, two attempts/one repair, safe `string_pattern_mismatch` at `resources[*].resource_id`.
 - No raw proposal, identifier value, Terraform plan, or customer workload was retrieved or created.
-- Focused tests passed (60); full `make verify` passed 2,072 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose checks. Documentation conventions and PR CI remain pending.
+- Focused tests passed (60); full `make verify` passed 2,072 tests, Ruff, Actions configuration, OpenAPI snapshot, and Compose checks. Documentation conventions passed; CI run `46038096622` passed all seven checks on implementation head `89190e23ab41d6f136dce0e8f14a483eaa14c063`. Final evidence-updated head CI remains pending.
 
 ## Observed result
 
