@@ -12,6 +12,7 @@ from davdeploy.model_gateway import (
     NovaGatewayConfig,
     model_input_digest,
 )
+from davdeploy.nova_plan_access import SUPPORTED_PLAN_RESOURCE_TYPES
 from davdeploy.terraform_generation import (
     _GRAPH_VALIDATION_FEEDBACK,
     _HEALTH_PAYLOAD_SIZE_GUIDANCE,
@@ -19,6 +20,7 @@ from davdeploy.terraform_generation import (
     _ID_PATTERN_GUIDANCE,
     _LAMBDA_CONTAINER_READINESS_GUIDANCE,
     _LAMBDA_HEALTH_ASSERTION_EXAMPLES,
+    _PLAN_ACCESS_GUIDANCE,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
@@ -137,7 +139,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v26"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v27"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert _LAMBDA_HEALTH_ASSERTION_EXAMPLES in document["task"]
@@ -1337,7 +1339,7 @@ def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair
     task = repair_document["task"]
     assert "value_type must exactly equal that output's value_type" in task
     assert "outputs=[{name: queue_url, value_type: aws_queue_url}]" in task
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v26"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v27"
 
 
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
@@ -1401,6 +1403,83 @@ def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inpu
         "fixture-call-1",
         "fixture-call-2",
     ]
+
+
+def test_fixed_plan_access_profile_feedback_repairs_without_changing_trusted_inputs():
+    gateway = SequenceGateway([_valid_proposal, _valid_proposal])
+    approved_plan = {
+        "target": {"account_id": "123456789012", "region": "us-east-1"},
+        "required_behavior": "write records and process queued work",
+    }
+    validations = iter(["unsafe_resource_scope", None])
+
+    result = NovaTerraformGenerator(
+        gateway=gateway,
+        max_output_tokens=800,
+        timeout_seconds=30,
+        total_timeout_seconds=60,
+    ).generate(
+        approved_plan=approved_plan,
+        tenant=scope(),
+        source_revision="trusted-access-profile-revision",
+        proposal_validator=lambda _proposal: next(validations),
+    )
+
+    first_request, first_document, _ = gateway.calls[0]
+    second_request, second_document, _ = gateway.calls[1]
+    assert first_request.input_digest == model_input_digest(first_document)
+    assert second_request.input_digest == model_input_digest(second_document)
+    assert first_document["approved_plan"] == second_document["approved_plan"] == approved_plan
+    assert (
+        first_document["trusted_generation_context"]
+        == second_document["trusted_generation_context"]
+    )
+    assert second_document["validation_feedback"] == [
+        {
+            "code": "invalid",
+            "field": "resources",
+            "issue": "plan_access_profile_mismatch",
+            "guidance": _PLAN_ACCESS_GUIDANCE["unsafe_resource_scope"],
+        }
+    ]
+    assert "Runs the proposed application workload" not in str(second_document["validation_feedback"])
+    assert result.proposal.source_revision == "trusted-access-profile-revision"
+
+
+def test_plan_access_profile_repair_exhaustion_returns_only_fixed_feedback():
+    gateway = SequenceGateway([_valid_proposal, _valid_proposal])
+
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        NovaTerraformGenerator(
+            gateway=gateway,
+            max_output_tokens=800,
+            timeout_seconds=30,
+            max_semantic_attempts=2,
+            total_timeout_seconds=60,
+        ).generate(
+            approved_plan={"target": {"account_id": "123456789012", "region": "us-east-1"}},
+            tenant=scope(),
+            source_revision="trusted-access-profile-exhausted",
+            proposal_validator=lambda _proposal: "unsupported_resource_type",
+        )
+
+    assert failure.value.failure_code == "plan_access_profile_mismatch"
+    assert failure.value.attempt_count == 2
+    assert len(gateway.calls) == 2
+    assert failure.value.validation_feedback == (
+        {
+            "code": "invalid",
+            "field": "resources",
+            "issue": "plan_access_profile_mismatch",
+            "guidance": _PLAN_ACCESS_GUIDANCE["unsupported_resource_type"],
+        },
+    )
+    assert "customer-application" not in str(failure.value.validation_feedback)
+    assert "trusted-access-profile-exhausted" not in str(failure.value.validation_feedback)
+    assert all(
+        resource_type in _PLAN_ACCESS_GUIDANCE["unsupported_resource_type"]
+        for resource_type in SUPPORTED_PLAN_RESOURCE_TYPES
+    )
 
 
 def test_semantic_repair_gets_fixed_guidance_for_root_resource_wrapper():

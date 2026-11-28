@@ -153,6 +153,26 @@ class NovaPlanAccessError(ValueError):
     """A proposal cannot run under the fixed customer plan permission profile."""
 
 
+_PLAN_ACCESS_REPAIR_CODES = {
+    "proposal contains unsupported plan resource types": "unsupported_resource_type",
+    "resource name cannot be safely scoped": "unsafe_resource_scope",
+    "RDS subnet-group name cannot be safely scoped": "unsafe_resource_scope",
+    "RDS identifier cannot be safely scoped": "unsafe_resource_scope",
+    "IAM role path cannot be safely scoped": "unsafe_resource_scope",
+    "IAM role references must target a declared role": "unsafe_resource_reference",
+    "IAM attached policy cannot be safely scoped": "unsafe_resource_reference",
+    "IAM policy path cannot be safely scoped": "unsafe_resource_scope",
+    "proposal has no supported customer plan resources": "no_supported_resources",
+}
+
+
+def nova_plan_access_repair_code(error: NovaPlanAccessError) -> str | None:
+    """Classify only fixed, model-correctable access-profile failures."""
+    if not isinstance(error, NovaPlanAccessError):
+        return None
+    return _PLAN_ACCESS_REPAIR_CODES.get(str(error))
+
+
 @dataclass(frozen=True)
 class NovaPlanAccessPolicy:
     version: str
