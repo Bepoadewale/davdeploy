@@ -214,6 +214,18 @@ _LAMBDA_EVENT_BINDING_GUIDANCE = (
     "source. If either declared resource or its ARN output is absent, report the limitation "
     "instead of inventing a resource, changing the assertion, or weakening the requirement."
 )
+_TYPED_REFERENCE_REPAIR_GUIDANCE = (
+    "Resolve each resource_reference by its resource_id, then find that target's declared output "
+    "whose name exactly matches output_name. If that output is absent, do not guess a path; use "
+    "an existing provider-schema-valid output or report the limitation. If the output exists, "
+    "copy its value_type exactly into the reference so the reference's value_type must exactly "
+    "equal that output's value_type; leave resource_id and output_name alone. "
+    "Known pairs: SQS queue output arn/aws_arn -> event_source_arn reference/aws_arn; Lambda "
+    "output arn/aws_arn -> function_name reference/aws_arn; SQS output queue_url/aws_queue_url "
+    "-> QUEUE_URL reference/aws_queue_url; RDS output "
+    "master_user_secret[0].secret_arn/secret_reference -> Lambda "
+    "<NAME>_SECRET_ARN reference/secret_reference. Never infer a type from the consuming field."
+)
 _HEALTH_TARGET_PAIR_GUIDANCE = {
     ("container_readiness", "aws_lambda_function"): _LAMBDA_CONTAINER_READINESS_GUIDANCE,
     ("http_response", "aws_lambda_function"): _LAMBDA_HTTP_RESPONSE_GUIDANCE,
@@ -280,13 +292,10 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "not add a Lambda solely to pass validation; do not remove or weaken a customer requirement. "
     "If no supported location preserves that architecture and requirement, report the limitation "
     "instead of inventing a resource. "
-    "Before returning the complete proposal, check every resource_reference against its target's "
-    "outputs: resource_id must identify the target, output_name must equal one declared output "
-    "name, and value_type must exactly equal that output's value_type. For example, declare "
-    "outputs=[{name: queue_url, value_type: aws_queue_url}] and use "
-    "{kind: resource_reference, resource_id: <target ID>, output_name: queue_url, value_type: aws_queue_url}. "
-    "Never guess an output path, invent a type, or infer the output type from the consuming "
-    "attribute. "
+    "Before returning the complete proposal, reconcile every resource_reference with its target's "
+    "declared outputs. "
+    + _TYPED_REFERENCE_REPAIR_GUIDANCE
+    + " "
     "Correct the stated graph, reference, health, event-binding, or cost-target issue without "
     "weakening customer requirements or inventing resource IDs. Correct those issues using the "
     "original approved_plan and trusted generation "
@@ -295,7 +304,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "within the fixed plan-access profile; preserve every trusted application requirement, and "
     "report a limitation if no supported shape satisfies it."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v30"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v31"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -456,17 +465,17 @@ _GRAPH_VALIDATION_FEEDBACK = {
         "unknown_resource_reference",
         "Every typed resource_reference must target a declared resource_id and a declared output.",
     ),
+    "references must name a declared output": (
+        "unknown_reference_output",
+        (
+            "The target resource exists but this output_name is not declared. Use only an existing, "
+            "provider-schema-valid output name. Do not invent output paths or change the selected "
+            "architecture; report the limitation if no supported output satisfies the requirement."
+        ),
+    ),
     "reference must match a declared output type": (
         "reference_type_mismatch",
-        (
-            "For each typed reference, find the target resource's declared outputs entry whose "
-            "name exactly equals output_name, then copy that entry's value_type exactly. For "
-            "example, output {name: queue_url, value_type: aws_queue_url} pairs only with a reference "
-            "{kind: resource_reference, resource_id: <target ID>, output_name: queue_url, "
-            "value_type: aws_queue_url}. Do not infer a type from the destination field or guess an output "
-            "path; if no declared, provider-schema-valid output exists, preserve the architecture "
-            "and report the limitation."
-        ),
+        _TYPED_REFERENCE_REPAIR_GUIDANCE,
     ),
     "health assertions must target declared resources": (
         "unknown_health_target",

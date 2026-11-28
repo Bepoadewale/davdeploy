@@ -44,19 +44,25 @@ requirements.
 
 ## Acceptance criteria
 
-- [ ] Fixed feedback causes a reference to copy its declared output name and
+- [x] Fixed feedback causes a reference to copy its declared output name and
       type exactly, without exposing raw generated values.
-- [ ] A valid composed reference proposal repairs; mismatched/unknown references
-      still fail closed after bounded attempts.
-- [ ] Focused tests, full verification, docs checks, and required CI pass; satisfy
-      any reviewer-required clean-room gate.
+- [x] A valid typed reference repairs; mismatched types and undeclared output
+      names still fail closed after bounded attempts.
+- [x] Focused tests (215 passed), full verification (2,110 passed plus lint,
+      Actions configuration, OpenAPI, and Compose syntax), documentation
+      conventions, and diff checks pass locally.
+- [ ] Required GitHub CI passes; satisfy any reviewer-required clean-room gate.
 - [ ] One fresh post-deployment hosted plan-only result is recorded while the
       customer revision remains unapproved and no workload is applied/destroyed.
 
 ## Acceptance status
 
-Implementation has not started. The hosted v30 failure is the baseline; no
-Terraform plan or workload mutation occurred.
+Prompt v31 now gives explicit SQS, Lambda, queue URL, and RDS secret output/type
+pairs. The validator reports an undeclared output separately from a declared
+output's type mismatch; both remain invalid. Regressions cover successful
+bounded repair and fail-closed invalid responses without changing trusted
+inputs. Focused/full local validation passes. CI, review, protected deployment,
+and the post-deployment hosted v31 run remain pending.
 
 ## Tests / validation performed
 
@@ -64,6 +70,12 @@ Terraform plan or workload mutation occurred.
   Terraform planning. Two attempts, one repair; no plan artifact.
 - Pre-request state: AWS account `654654474502`; no active local or hosted
   Terraform operations; source review remained unapproved.
+- Implementation: fixed graph feedback and bounded semantic repair preserve
+  output, resource, and type constraints; no reference is coerced or trusted
+  without a matching declared output.
+- Focused suites passed 215 tests. Full `make verify` passed 2,110 tests plus
+  Ruff, Actions configuration, OpenAPI, and Compose syntax. Docs conventions
+  and `git diff --check` passed.
 
 ## Evidence files produced
 

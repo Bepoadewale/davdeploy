@@ -431,7 +431,9 @@ class GeneratedDeploymentProposal(StrictContract):
                 if target is None:
                     raise ValueError("references must target a declared resource")
                 declared = {item.name: item.value_type for item in target.outputs}
-                if declared.get(ref.output_name) != ref.value_type:
+                if ref.output_name not in declared:
+                    raise ValueError("references must name a declared output")
+                if declared[ref.output_name] != ref.value_type:
                     raise ValueError("reference must match a declared output type")
                 graph[resource.resource_id].add(ref.resource_id)
         visiting: set[str] = set()
