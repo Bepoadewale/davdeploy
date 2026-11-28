@@ -1,5 +1,19 @@
 # Implementation Status
 
+## 28 November 2026 — deployed v30 result
+
+PR #569 is deployed from merge `8890fa56d92a2cf7aee9023528d91833aa6b0052`;
+protected saved-plan apply run `46162527461` completed with 0 adds, 8 changes,
+and 0 destroys. Migrations completed, all six Lambda package hashes matched
+the exact release artifact, API health returned HTTP 200, and authenticated
+CLI administrator access was verified. The fresh unapproved hosted v30
+plan-only run `56edfde0-63fe-4969-9314-ac3e5e510eab` failed before Terraform
+planning with safe `reference_type_mismatch` feedback; no workload was
+applied. Draft PR #570 adds explicit reference/type examples and distinguishes
+undeclared outputs from type mismatches while retaining fail-closed validation.
+Its CI, review, deployment, and v31 hosted rerun remain pending. No Nova
+customer workload has been applied, operated, or certified.
+
 ## 28 November 2026 — Nova hosted-plan repair progress
 
 Backend `main` is `53ec7c71c6738ff3e46ffbe1a1d5a81e7cf1a7d1` (PR #568).

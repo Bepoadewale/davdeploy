@@ -198,7 +198,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v30"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v31"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert _LAMBDA_HEALTH_ASSERTION_EXAMPLES in document["task"]
@@ -213,6 +213,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "do not embed a username/password in `DATABASE_URL`" in document["task"]
     assert "report the limitation instead of inventing a value" in document["task"]
     assert "secret_reference_location" in document["task"]
+    assert "SQS queue output arn/aws_arn" in document["task"]
+    assert "RDS output master_user_secret[0].secret_arn/secret_reference" in document["task"]
     assert "report the limitation instead of inventing a resource" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
         {
@@ -1159,6 +1161,7 @@ def test_resource_graph_feedback_uses_fixed_guidance_for_unknown_dependency():
         ("resource IDs must be unique", "duplicate_resource_id"),
         ("Terraform resource addresses must be unique", "duplicate_terraform_address"),
         ("references must target a declared resource", "unknown_resource_reference"),
+        ("references must name a declared output", "unknown_reference_output"),
         ("reference must match a declared output type", "reference_type_mismatch"),
         ("health assertions must target declared resources", "unknown_health_target"),
         ("proposal assumptions and limitations must be bounded text", "invalid_assumption_text"),
@@ -1753,8 +1756,48 @@ def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair
     assert "resource_name" not in str(feedback)
     task = repair_document["task"]
     assert "value_type must exactly equal that output's value_type" in task
-    assert "outputs=[{name: queue_url, value_type: aws_queue_url}]" in task
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v30"
+    assert "SQS output queue_url/aws_queue_url" in task
+    assert "Lambda output arn/aws_arn" in task
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v31"
+
+    rejecting_gateway = SequenceGateway([invalid, invalid])
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        NovaTerraformGenerator(
+            gateway=rejecting_gateway, max_output_tokens=800, timeout_seconds=30
+        ).generate(
+            approved_plan={"target": {"region": "us-east-1"}},
+            tenant=scope(),
+            source_revision="mismatched-reference-2",
+        )
+    assert failure.value.failure_code == "proposal_invalid"
+    assert failure.value.validation_feedback[0]["issue"] == "reference_type_mismatch"
+
+
+def test_unknown_reference_output_gets_specific_safe_feedback_and_stays_fail_closed():
+    def unknown_output(request, document):
+        result = _typed_reference_proposal(request, document, "aws_queue_url")
+        result["resources"][1]["arguments"]["environment"][0]["variables"]["QUEUE_URL"][
+            "output_name"
+        ] = "missing_output"
+        return result
+
+    gateway = SequenceGateway([unknown_output, unknown_output])
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        NovaTerraformGenerator(
+            gateway=gateway, max_output_tokens=800, timeout_seconds=30
+        ).generate(
+            approved_plan={"target": {"region": "us-east-1"}},
+            tenant=scope(),
+            source_revision="unknown-output-reference-1",
+        )
+
+    feedback = failure.value.validation_feedback
+    assert failure.value.failure_code == "proposal_invalid"
+    assert feedback[0]["issue"] == "unknown_reference_output"
+    assert "provider-schema-valid output name" in feedback[0]["guidance"]
+    assert "missing_output" not in str(feedback)
+    assert "jobs-queue" not in str(feedback)
+    assert "missing_output" not in str(gateway.calls[1][1])
 
 
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
