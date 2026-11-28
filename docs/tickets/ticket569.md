@@ -33,27 +33,35 @@ policy, and customer requirements unchanged.
 
 ## Work planned for the PR
 
-- Make the safe `credential_value` correction more direct and unambiguous for
-  the exact offending field while preserving the managed-secret contract.
+- Make the safe `credential_value` correction more direct: scan all resource
+  arguments, remove literal or embedded credentials, use an AWS-managed RDS
+  master secret, and pass only a typed ARN reference to Lambda. State explicitly
+  that `DATABASE_URL` must not embed credentials.
 - Add regression coverage for the feedback and bounded repair behavior,
   including fail-closed behavior when the proposal still contains credentials.
 - Bump the Nova prompt version.
 
 ## Acceptance criteria
 
-- [ ] Feedback names the allowed AWS-managed secret output and exact typed
+- [x] Feedback names the allowed AWS-managed secret output and exact typed
       Lambda reference location without exposing any generated secret value.
-- [ ] Valid managed-secret proposals repair and pass without changing trusted
+- [x] Valid managed-secret proposals repair and pass without changing trusted
       inputs; invalid credential values still fail closed.
-- [ ] Focused tests, full verification, docs checks, required CI, and any
-      reviewer-required clean-room gate pass.
+- [x] Focused tests (155 passed), full verification (2,108 passed plus lint,
+      Actions configuration, OpenAPI, and Compose syntax), documentation
+      conventions, and diff checks pass locally.
+- [ ] Required GitHub CI and any reviewer-required clean-room gate pass.
 - [ ] One fresh post-deployment hosted plan-only result is recorded while the
       customer revision remains unapproved and no workload is applied/destroyed.
 
 ## Acceptance status
 
-Implementation has not started. The hosted v29 failure is the baseline; no
-Terraform plan or workload mutation occurred.
+Prompt v30 feedback now names the managed RDS secret output, forbids password
+arguments and credential-bearing `DATABASE_URL`, and asks Nova to report a
+limitation when safe consumption is not possible. A synthetic repair regression
+asserts that the credential value stays out of repair context and result.
+Focused and full local verification pass. Final diff review, CI, automated
+review, deployment, and the post-deployment hosted rerun remain pending.
 
 ## Tests / validation performed
 
@@ -61,6 +69,14 @@ Terraform plan or workload mutation occurred.
   safely before Terraform planning. Two attempts, one repair; no plan artifact.
 - Local preconditions before the request: AWS account `654654474502`; zero
   active local or GitHub Terraform operations.
+- Synthetic regression uses a deliberately fake credential string and confirms
+  the feedback and accepted result do not contain it.
+- Focused tests: `tests/test_terraform_generation.py
+  tests/test_nova_plan_runs.py tests/test_customer_plan_review.py` — 155 passed.
+- Full `GITHUB_PR_NUMBER=569 make verify PYTHON=... VENV=...` — 2,108 passed;
+  Ruff, Actions configuration, OpenAPI, and Compose syntax passed.
+- `GITHUB_PR_NUMBER=569 python3 scripts/check_doc_conventions.py` and
+  `git diff --check` — passed.
 
 ## Evidence files produced
 

@@ -51,7 +51,18 @@ from davdeploy.nova_contract_generation import (
 )
 
 _RESOURCE_CREDENTIAL_EXAMPLE = (
-    "Supported database-secret shape (example only; include full required provider fields): "
+    "For `credential_value`, inspect every resource argument and remove each literal password, "
+    "secret, token, credential, credential-bearing connection string, or ARN string; never copy "
+    "a generated credential into another field. Preserve the selected architecture and required "
+    "application behavior. When an RDS database needs credentials, use the AWS-managed master "
+    "secret on either `aws_db_instance` or `aws_rds_cluster`: set "
+    '`"manage_master_user_password":true`, declare the sensitive '
+    '`"master_user_secret[0].secret_arn"` output with type `secret_reference`, and do not include '
+    "`password` or `master_password` arguments. A Lambda may receive only the secret ARN through "
+    "an environment variable ending in `_SECRET_ARN`; do not embed a username/password in "
+    "`DATABASE_URL`. If the required application cannot consume this safe reference, report the "
+    "limitation instead of inventing a value or changing requirements. Exact reference shape "
+    "(example only; include the provider's full required fields): "
     'declare an aws_rds_cluster resource with '
     '"arguments":{"manage_master_user_password":true} and '
     '"outputs":[{"name":"master_user_secret[0].secret_arn",'
@@ -284,7 +295,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "within the fixed plan-access profile; preserve every trusted application requirement, and "
     "report a limitation if no supported shape satisfies it."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v29"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v30"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(

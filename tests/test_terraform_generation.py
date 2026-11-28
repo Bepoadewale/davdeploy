@@ -198,7 +198,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v29"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v30"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert _LAMBDA_HEALTH_ASSERTION_EXAMPLES in document["task"]
@@ -209,6 +209,9 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
     assert _LAMBDA_CONTAINER_READINESS_GUIDANCE in document["task"]
+    assert "credential-bearing connection string" in document["task"]
+    assert "do not embed a username/password in `DATABASE_URL`" in document["task"]
+    assert "report the limitation instead of inventing a value" in document["task"]
     assert "secret_reference_location" in document["task"]
     assert "report the limitation instead of inventing a resource" in document["task"]
     assert document["trusted_generation_context"]["context_digest"] == generation_context_digest(
@@ -1373,6 +1376,87 @@ def test_nova_repairs_lambda_secret_variable_name_with_bounded_feedback():
     }
 
 
+def test_nova_repairs_literal_credential_with_managed_database_secret_reference():
+    secret_value = "never-print-this-test-value"
+
+    def invalid(request, document):
+        result = _valid_proposal(request, document)
+        result["resources"][0]["arguments"]["db_secret"] = secret_value
+        return result
+
+    def repaired(request, document):
+        result = _valid_proposal(request, document)
+        result["resources"] = [
+            {
+                "resource_id": "database",
+                "resource_type": "aws_rds_cluster",
+                "name": "database",
+                "arguments": {"manage_master_user_password": True},
+                "outputs": [
+                    {
+                        "name": "master_user_secret[0].secret_arn",
+                        "value_type": "secret_reference",
+                        "sensitive": True,
+                    }
+                ],
+                "rationale": "Uses the AWS-managed database master secret.",
+            },
+            {
+                "resource_id": "api",
+                "resource_type": "aws_lambda_function",
+                "name": "api",
+                "arguments": {
+                    "environment": [
+                        {
+                            "variables": {
+                                "DATABASE_SECRET_ARN": {
+                                    "kind": "resource_reference",
+                                    "resource_id": "database",
+                                    "output_name": "master_user_secret[0].secret_arn",
+                                    "value_type": "secret_reference",
+                                }
+                            }
+                        }
+                    ]
+                },
+                "rationale": "Reads the managed database secret by reference.",
+            },
+        ]
+        return result
+
+    gateway = SequenceGateway([invalid, repaired])
+    result = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    ).generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="managed-secret-repair-1",
+    )
+
+    feedback = gateway.calls[1][1]["validation_feedback"]
+    assert feedback[0]["issue"] == "credential_value"
+    assert "aws_db_instance` or `aws_rds_cluster" in feedback[0]["guidance"]
+    assert "DATABASE_URL" in feedback[0]["guidance"]
+    assert secret_value not in str(gateway.calls[1][1])
+    assert secret_value not in str(result.proposal)
+    assert result.proposal.resources[1].arguments["environment"][0]["variables"][
+        "DATABASE_SECRET_ARN"
+    ]["value_type"] == "secret_reference"
+
+    rejecting_gateway = SequenceGateway([invalid, invalid])
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        NovaTerraformGenerator(
+            gateway=rejecting_gateway, max_output_tokens=800, timeout_seconds=30
+        ).generate(
+            approved_plan={"target": {"region": "us-east-1"}},
+            tenant=scope(),
+            source_revision="managed-secret-repair-2",
+        )
+    assert failure.value.failure_code == "proposal_invalid"
+    assert failure.value.validation_feedback[0]["issue"] == "credential_value"
+    assert secret_value not in str(failure.value)
+
+
 def test_unrecognized_proposal_validator_message_is_never_returned():
     private_cause = ValueError("untrusted secret-like value must-not-escape")
 
@@ -1670,7 +1754,7 @@ def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair
     task = repair_document["task"]
     assert "value_type must exactly equal that output's value_type" in task
     assert "outputs=[{name: queue_url, value_type: aws_queue_url}]" in task
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v29"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v30"
 
 
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
