@@ -37,35 +37,61 @@ Run the fixed customer plan permission-profile validator inside Nova's existing 
 - [x] Uncorrectable/unsupported requirements fail with a bounded safe result before staging input or starting CodeBuild.
 - [x] CodeBuild continues enforcing the exact fixed access profile before customer credentials are assumed.
 - [x] Focused tests, full `make verify`, docs conventions, and required GitHub CI pass.
-- [ ] Required local clean-room cycle passes and its generated artifacts are cleaned.
+- [x] Required local clean-room cycle passes and its generated artifacts are cleaned.
 - [ ] Post-deployment v27 outcome is recorded as plan-only evidence; no approval, apply, or customer-workload certification is claimed.
 
 ## Acceptance status
 
-Implementation is complete. Focused and full local verification, docs
-conventions, and seven required CI checks pass. The automated review requires a
-local clean-room cycle before merge; protected deployment and post-deployment
-v27 hosted evidence remain.
+Implementation and required local validation are complete. Focused and full
+verification, the clean-room cycle, docs conventions, and seven required CI
+checks pass. Protected deployment and post-deployment v27 hosted evidence
+remain.
 
 ## Tests / validation performed
 
 Focused generation, access-profile, run, and customer-review suites: 181 passed.
 `make verify`: 2,103 passed plus Ruff, Actions configuration, OpenAPI snapshot,
-and Compose configuration checks. Docs conventions and `git diff --check` pass.
-No local application containers were started. GitHub CI run `46132450063`
-passed all seven checks. Automated review found one P1 item requiring the full
-local clean-room cycle. That cycle would start isolated Compose services and
-remove only this worktree's generated `.venv` and `.local` plus the dedicated
-Compose Postgres volume; it has not run. Protected deployment and one fresh
-hosted v27 plan-only run remain pending.
+and Compose configuration checks. The focused and full verification commands
+ran in the implementation worktree. For the required clean-room gate, detached
+worktree `/private/tmp/davdeploy-nova-plan-permission-feedback-566-clean` was
+checked out at exact PR head `36d96aed4d2a048a9a33f1e20bde4962ea285acb` and
+started clean with no `.venv` or `.local`.
+
+Clean-room commands (all with
+`COMPOSE_PROJECT_NAME=davdeploy-nova-pr566-clean`):
+
+1. `make clean-local VENV=.venv` — passed; confirmed clean start.
+2. `make bootstrap-local PYTHON=python3.12 VENV=.venv` — passed.
+3. `make smoke demo-simple demo-complex demo-degraded demo-day2 demo-failure demo-readiness-failure api-contract customer-plan-e2e seed-demo-data trace-check PYTHON=python3.12 VENV=.venv` — all targets passed.
+4. `make verify PYTHON=python3.12 VENV=.venv` — 2,103 tests passed; Ruff,
+   Actions configuration, OpenAPI snapshot, and Compose configuration checks
+   passed.
+5. `make clean-local VENV=.venv` — passed. Removed only this clean-room
+   project's Compose containers/network/volume
+   `davdeploy-nova-pr566-clean_davdeploy-postgres` and the clean-room
+   worktree's generated `.venv` and `.local` directories.
+
+Post-clean verification found no matching Docker containers or volume, and no
+`.venv` or `.local` in the clean-room worktree. The existing implementation
+worktree's `.local` was confirmed present and preserved. The seed target
+reported fixture-only behavior; it did not create AWS resources or run an
+authenticated Terraform plan/apply, Kubernetes, or GitOps execution. Docs
+conventions and `git diff --check` pass. Final-head GitHub CI run `46132911496`
+passed all seven checks. Protected deployment and one fresh hosted v27
+plan-only run remain pending.
 
 ## Evidence files produced
 
 - `docs/test/test566.md` — pre-PR v26 failure diagnosis and follow-up v27 verification record.
+- Detached clean-room verification was performed against the exact current PR
+  head; see the commands and cleanup results above.
 
 ## Boundaries
 
-No IAM action is added, no AWS workload is created, and no customer plan is approved, applied, or destroyed. Actual Terraform plan policy, application behavior, lifecycle, cost coverage, and full capability-matrix acceptance remain open.
+No IAM action is added, no AWS workload is created, and no customer plan is
+approved, applied, or destroyed. The clean-room cycle used local Compose
+services only. Actual Terraform plan policy, application behavior, lifecycle,
+cost coverage, and full capability-matrix acceptance remain open.
 
 ## Follow-up work
 

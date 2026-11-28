@@ -81,9 +81,32 @@ trusted architecture digest and request one plan-only run. Inspect only the
 sanitized status/diagnostics and value-free saved-plan summary. Do not approve,
 apply, or destroy the synthetic customer workload as part of this evidence.
 
-PR #566's final-head CI run `46132450063` passed all seven checks. Automated
-review requires the full local clean-room cycle (`make local-proof` followed by
-`make clean-local`) before merge. It has not run. In an isolated Compose project
-`davdeploy-nova-pr566`, cleanup would remove the generated PR-worktree paths
-`.venv` and `.local` and the dedicated volume
-`davdeploy-nova-pr566-davdeploy-postgres`. No containers are currently running.
+## Required local clean-room cycle
+
+The automated review requested the full clean-room cycle because this change
+affects proposal validation in the Terraform planning lifecycle. It completed
+in detached worktree
+`/private/tmp/davdeploy-nova-plan-permission-feedback-566-clean` at exact PR
+head `36d96aed4d2a048a9a33f1e20bde4962ea285acb`, with project name
+`davdeploy-nova-pr566-clean`.
+
+1. `make clean-local VENV=.venv` — passed.
+2. `make bootstrap-local PYTHON=python3.12 VENV=.venv` — passed.
+3. `make smoke demo-simple demo-complex demo-degraded demo-day2 demo-failure demo-readiness-failure api-contract customer-plan-e2e seed-demo-data trace-check PYTHON=python3.12 VENV=.venv` — all targets passed.
+4. `make verify PYTHON=python3.12 VENV=.venv` — 2,103 tests passed; Ruff,
+   Actions configuration, OpenAPI snapshot, and Compose configuration checks
+   passed.
+5. `make clean-local VENV=.venv` — passed.
+
+The final clean removed only containers/network and dedicated volume
+`davdeploy-nova-pr566-clean_davdeploy-postgres` for this isolated Compose
+project, plus the `.venv` and `.local` generated in the clean-room worktree.
+Read-only verification found no matching containers/volume and confirmed both
+generated directories absent. The pre-existing `.local` in the implementation
+worktree was confirmed present and preserved. The fixture seed explicitly
+reported that it did not create AWS resources or perform authenticated
+Terraform, Kubernetes, or GitOps execution.
+
+The exact PR head's final CI run `46132911496` passed all seven checks. The
+required local clean-room finding is addressed; protected deployment and one
+fresh hosted v27 plan-only verification remain pending.
