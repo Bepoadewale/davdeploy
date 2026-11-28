@@ -1,5 +1,20 @@
 # Implementation Status
 
+## 28 November 2026 — Nova hosted-plan repair progress
+
+Backend `main` is `53ec7c71c6738ff3e46ffbe1a1d5a81e7cf1a7d1` (PR #568).
+PR #568's protected saved-plan release completed with migrations, all six
+control-plane Lambda packages matching the exact release artifact, and API
+health HTTP 200. The workspace administrator and same-account plan-only
+connection are verified. Hosted plan-only repairs have corrected the Lambda
+health target (PR #567) and typed SQS-to-Lambda event binding (PR #568). The
+v29 run `4685348a-b260-4ce5-8fd6-3b38f09397a5` failed before Terraform
+planning with sanitized `credential_value` feedback; no workload was applied.
+Draft PR #569 sharpens the AWS-managed database secret correction and adds a
+synthetic bounded-repair regression. Its CI, review, deployment, and v30 hosted
+rerun remain pending. No Nova customer workload has been applied, operated, or
+certified.
+
 Status snapshot: 2026-11-27. Backend `main` is
 `fe02d62f123e27712fee686db05029de8b7a33af` (merged PR #559). Protected plan
 `46069601185` and exact saved-plan apply `46070230500` deployed this source;
