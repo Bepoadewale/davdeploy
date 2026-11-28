@@ -18,6 +18,7 @@ from davdeploy.terraform_generation import (
     _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
     _ID_PATTERN_GUIDANCE,
     _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+    _LAMBDA_HEALTH_ASSERTION_EXAMPLES,
     _RESOURCE_CREDENTIAL_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
@@ -136,9 +137,10 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v25"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v26"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
+    assert _LAMBDA_HEALTH_ASSERTION_EXAMPLES in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
     assert _LAMBDA_CONTAINER_READINESS_GUIDANCE in document["task"]
@@ -1335,7 +1337,7 @@ def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair
     task = repair_document["task"]
     assert "value_type must exactly equal that output's value_type" in task
     assert "outputs=[{name: queue_url, value_type: aws_queue_url}]" in task
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v25"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v26"
 
 
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
