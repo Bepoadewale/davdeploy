@@ -94,7 +94,7 @@ and trusted usage bounds.
   variable-bound region values only when the exact same-plan resource
   references and the trusted `var.region` value are present; unrelated or
   mixed references and missing bindings remain incomplete.
-- [ ] Focused and full relevant tests, lint, docs conventions, and final-head CI
+- [x] Focused and full relevant tests, lint, docs conventions, and final-head CI
   pass. A full clean-room run is not applicable to this pricing-only change.
 - [x] No AWS workload or hosted control-plane resource is changed, and no
   remote Terraform state or lock is accessed. The retained isolated local
@@ -104,9 +104,11 @@ and trusted usage bounds.
 ## Acceptance status
 
 The current revision prices the high and low alarms for the pilot's one
-target-tracking scaling policy. The full local verification after this
-correction is running; final-head CI is pending. PR #520 has merged, and this
-draft now targets `main`.
+target-tracking scaling policy. Focused tests, repository CI, and documentation
+checks pass. The fresh regional-price evaluation is complete for the tested
+plan and usage assumptions, but its synthetic trusted-context digest and
+unset customer budget make it unsuitable as a customer approval artifact. PR
+#520 has merged, and this draft targets `main`.
 
 ## Tests / validation performed
 
@@ -129,16 +131,22 @@ draft now targets `main`.
 - Initial final-head CI run `45893810916` exposed an OpenAPI snapshot mismatch;
   after regenerating the contract snapshot, CI run `45894761342` passed all
   seven checks.
+- Final-head CI run `45900573713` on head
+  `a04c5909075bfe975ba1628aeef9851a7b317784` passed all seven checks.
 - Focused pricing tests cover accepted and rejected computed-ID bindings,
   including references placed in an unrelated field or mixed with an
   untrusted reference in the same field.
 - Fresh evaluation of the retained provider-generated create plan with live
-  regional AWS Price List data returned `COMPLETE`, approval-eligible, 12 cost
-  lines, and 127 to 41,581 USD cents per month under the documented synthetic
-  usage bounds. The two target-tracking alarms are each priced at USD 0.10 per
-  alarm-month (SKU `EVETVUGEN3MUTMXM`, published `2026-11-25T15:02:40Z`). These
-  are planning bounds, not measured customer spend or a billing cap. No
-  workload/control-plane mutation or remote state/lock access occurred.
+  `us-east-1` AWS Price List data at `2026-11-26T21:55:12Z` returned `COMPLETE`
+  with 12 lines and a modeled monthly range of USD 1.27 to USD 415.81 under
+  the documented synthetic usage assumptions. The source saved plan has
+  SHA-256 `73e9596b651cdeb9095ae39bb1d182ea286dd4362a0495d2782e9011ff6e804e`.
+  Both target-tracking alarms are priced at USD 0.10 per alarm-month (SKU
+  `EVETVUGEN3MUTMXM`, published `2026-11-25T15:02:40Z`). The evaluator used a
+  synthetic persisted-context digest and no customer budget, so this is not a
+  customer approval artifact. The estimates are not measured spend or a hard
+  billing cap. No workload/control-plane mutation or remote Terraform
+  state/lock access occurred.
 
 ## Evidence files produced
 
