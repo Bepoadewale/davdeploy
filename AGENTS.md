@@ -51,13 +51,10 @@ Build and maintain **davdeploy**, the private commercial product. Use plain Engl
 
 - Run focused local tests for every runnable change and record the exact commands and results.
 - Required GitHub CI is the merge gate for every PR and performs the clean integration proof on a
-  fresh runner.
-- Run and record one full local clean-room cycle for releases and changes that affect database
-  migrations, dependency/bootstrap behavior, worker concurrency or recovery, execution lifecycle,
-  authentication/authorization, provider deployment, or Terraform behavior.
-- A reviewer may require the clean-room gate for another high-risk change. Documentation-only,
-  static policy, and narrowly scoped UI changes do not require it unless they affect executable
-  behavior.
-- The full local cycle remains:
-  `clean -> bootstrap -> smoke -> simple demo -> complex demo -> degraded/Day-2 demos -> policy failure -> readiness failure -> trace check -> verify -> clean`.
-- Never infer reproducibility from an existing environment when the clean-room gate applies.
+  fresh GitHub-hosted runner. The `local-e2e` job owns its Compose stack and cleanup.
+- Do not start a separate local Compose stack or run `make local-proof` to satisfy a PR integration
+  gate. Those targets remain optional developer tools for local troubleshooting.
+- If a change needs integration coverage beyond the existing `local-e2e` job, add or extend a
+  GitHub Actions job on a fresh runner and make its result part of the PR checks. Satisfy reviewer
+  requests for additional integration evidence through GitHub Actions or the relevant hosted
+  environment, not by starting a clean-room stack on the developer's machine.

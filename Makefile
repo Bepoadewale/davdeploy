@@ -12,7 +12,7 @@ help:
 	@echo "  make bootstrap-local         Build/start local API, worker, Postgres, OPA, Prometheus, Grafana, Tempo"
 	@echo "  make smoke                   Check local service readiness"
 	@echo "  make seed-demo-data          Seed realistic local developer/admin demo records"
-	@echo "  make local-proof             Bootstrap, then run API contract, customer-plan E2E, seed data, trace check, verify"
+	@echo "  make local-proof             Optional local integration proof for troubleshooting (PR gate runs in GitHub Actions)"
 	@echo "  make customer-plan-e2e       Prove developer submit, admin decision, self-approval, dry-run, destroy"
 	@echo "  make config-check            Validate GitHub Actions variable/secret classification"
 	@echo "  make verify                  Run lint, tests, and Compose config validation"

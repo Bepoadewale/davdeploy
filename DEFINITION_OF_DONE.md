@@ -7,7 +7,9 @@ A change is done only when it is useful, testable, documented in plain English a
 - [ ] No privileged action comes from raw LLM output.
 - [ ] Status is observed independently, not assumed from a command response.
 - [ ] Failure and destroy paths are designed and tested where relevant.
-- [ ] Tests, lint and applicable local smoke checks pass.
+- [ ] Tests, lint and applicable smoke checks pass in GitHub Actions or the relevant hosted
+      environment.
 - [ ] Documentation distinguishes executed, simulated and planned behavior.
 - [ ] No secrets or customer data are committed.
-- [ ] The clean-room gate is completed for runnable milestones.
+- [ ] Required GitHub Actions checks, including fresh-runner `local-e2e` for runnable milestones,
+      pass.

@@ -40,8 +40,9 @@ inference platform at every stage.
 5. **Optional edge extension** — connect fleet-approved artifacts and local/cloud
    routing through a defined adapter, not a mandatory dependency.
 
-Each slice must remain local-first, clean-room reproducible and independently
-demonstrable before another is added.
+Each slice must remain reproducible on a fresh GitHub Actions runner and
+independently demonstrable before another is added. The PR's CI result is the
+integration proof; a separate local Compose clean-room run is not required.
 
 ## Flagship demonstration
 
