@@ -91,6 +91,7 @@ approvable.
 - `PYTHONPATH=apps/api/src /Users/adewale/Projects/davdeploy/.venv/bin/python -m pytest tests/test_nova_plan_codebuild.py -q` — 28 passed.
 - `PYTHONPATH=apps/api/src make verify PY=/Users/adewale/Projects/davdeploy/.venv/bin/python` — 2,100 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose checks passed. One existing Starlette/httpx deprecation warning remains.
 - `GITHUB_PR_NUMBER=565 python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- PR CI run `46127658182` passed all seven checks on implementation head `d194560c25785ce7e8863c161085bb559b4818b6`; final evidence-head CI is pending.
 
 ## Evidence files produced
 
