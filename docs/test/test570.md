@@ -48,8 +48,9 @@ AWS region: `us-east-1`
   rejection, and missing-output rejection without exposing generated IDs.
 - Focused tests passed 215 tests. Full `make verify` passed 2,110 tests plus
   Ruff, Actions configuration, OpenAPI, and Compose syntax; docs conventions
-  and diff checks passed. CI, review, protected deployment, and one fresh hosted
-  plan-only v31 run remain pending.
+  and diff checks passed. CI runs `46164416449` and `46165063005` each passed all
+  seven checks; automated review found no issues. Protected deployment and one
+  fresh hosted plan-only v31 run remain pending.
 - Required clean-room cycle passed in detached worktree
   `/private/tmp/davdeploy-nova-reference-type-feedback-570-clean` at commit
   `4a767d64`: fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos,
