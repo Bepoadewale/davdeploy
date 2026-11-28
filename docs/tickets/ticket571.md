@@ -48,7 +48,7 @@ credential check strict.
       model repair context, errors, or tests' observable result.
 - [x] A valid managed-secret proposal repairs; repeated literal credential
       values still fail closed within the attempt bound.
-- [ ] Focused tests, full verification, docs checks, and required CI pass; satisfy
+- [x] Focused tests, full verification, docs checks, and required CI pass; satisfy
       any reviewer-required clean-room gate.
 - [ ] One fresh post-deployment hosted plan-only result is recorded while the
       customer revision remains unapproved and no workload is applied/destroyed.
@@ -70,6 +70,15 @@ hosted v31 failure remains the baseline; v32 has not yet been deployed or run.
   hosted v32 result remain pending.
 - Full `make verify`: 2,115 tests passed; Ruff, Actions configuration,
   OpenAPI, Compose syntax, documentation conventions, and diff checks passed.
+- GitHub CI run `46169223515` passed all seven checks. Automated review of
+  `cd9e3fc4` completed with no findings.
+- Required isolated clean-room cycle passed at `cd9e3fc4`: fresh bootstrap,
+  smoke, simple/complex/degraded/Day-2 demos, policy denial, readiness failure,
+  API contract, customer-plan E2E, fixture seed, trace check, and full verify.
+  The fixture reported no AWS resources or authenticated Terraform execution.
+  Only the `davdeploy-nova-pr571-clean` containers, network, Postgres volume,
+  and generated `.venv`/`.local` were removed; absence checks passed. Protected
+  root artifacts remain present.
 
 ## Evidence files produced
 

@@ -42,8 +42,11 @@ AWS region: `us-east-1`
   diagnostics and model context.
 - Focused suites passed 220 tests. Full `make verify` passed 2,115 tests plus
   Ruff, Actions configuration, OpenAPI, and Compose syntax. Documentation
-  conventions and diff checks passed. CI, clean-room review requirements,
-  deployment, and the post-deployment v32 hosted request remain pending.
+  conventions and diff checks passed. GitHub CI run `46169223515` passed all
+  seven checks; automated review had no findings.
+- Required clean-room cycle passed at `cd9e3fc4`: bootstrap, smoke, all six
+  demos, API contract, customer-plan E2E, seed data, trace checks, and full
+  verification. No AWS resources or authenticated Terraform execution occurred.
 
 ## Resources created
 
@@ -66,12 +69,15 @@ or value; its full local and hosted gates are pending.
 
 ## Teardown
 
-No AWS resources or local containers were created by these tests. No teardown
-was needed. Existing control-plane infrastructure and audit evidence were
-preserved.
+No AWS resources were created. The required isolated clean-room stack was
+removed after successful validation: its containers, network, Postgres volume,
+and generated `.venv`/`.local` were absent on verification. Existing unrelated
+containers/volumes and the protected root file/venv were preserved.
 
 ## Final boundary
 
+PR #571 is locally verified, clean-room verified, CI green, and review-clean;
+protected deployment and the fresh v32 hosted plan-only attempt remain pending.
 No customer workload has been applied, operated, destroyed, or certified. A
 future valid plan remains unapproved plan-only evidence and does not establish
 application behavior or lifecycle support.

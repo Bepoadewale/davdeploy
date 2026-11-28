@@ -13,10 +13,11 @@ Draft PR #571 adds fixed, allowlisted credential categories and safe
 category-specific repair guidance without exposing generated field names or
 values. The focused suites pass 220 tests; full `make verify` passes 2,115 tests
 plus Ruff, Actions configuration, OpenAPI, and Compose syntax, and docs/diff
-checks pass. Review/CI, the required clean-room cycle, protected deployment,
-and one fresh v32 plan-only attempt remain pending. Customer approval/apply
-remain closed. No Nova customer workload has been applied, operated, or
-certified.
+checks pass. PR CI run `46169223515` passed all seven checks, automated review
+found no issues, and the isolated clean-room cycle passed all demo, API,
+customer-plan E2E, trace, and verification gates. Protected deployment and one
+fresh v32 plan-only attempt remain pending. Customer approval/apply remain
+closed. No Nova customer workload has been applied, operated, or certified.
 
 ## 28 November 2026 — deployed v30 result
 
