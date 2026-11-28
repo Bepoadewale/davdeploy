@@ -761,7 +761,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v27",
+        "prompt_version": "terraform-nova2-contract-v28",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,

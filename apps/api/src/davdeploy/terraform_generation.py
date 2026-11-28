@@ -130,7 +130,10 @@ _LAMBDA_HEALTH_ASSERTION_EXAMPLES = (
     '"description":"The queue message is processed"}`. If neither declared '
     "relationship preserves the original requirement, report that limitation. "
     "Do not invent or remove resources, substitute a different assertion, or "
-    "weaken a customer health requirement."
+    "weaken a customer health requirement. Before returning the proposal, verify that every "
+    "`http_response` target is an `aws_apigatewayv2_stage` (or another allowed HTTP target), never "
+    "an `aws_lambda_function`; for an API Gateway path, confirm the declared API, integration, "
+    "and route connect the stage to the Lambda."
 )
 _HEALTH_PAYLOAD_SIZE_GUIDANCE = (
     "Set payload_size_bytes only on storage_roundtrip or queue_roundtrip, as an integer from 1 to "
@@ -166,8 +169,19 @@ _LAMBDA_CONTAINER_READINESS_GUIDANCE = (
     "generation task only when its required same-plan relationship is already declared. Otherwise "
     "report that limitation; do not invent resources or weaken the health requirement."
 )
+_LAMBDA_HTTP_RESPONSE_GUIDANCE = (
+    "`http_response` cannot target an `aws_lambda_function` directly. Keep the HTTP assertion and "
+    "the declared Lambda. For the selected API Gateway architecture, target the declared "
+    "`aws_apigatewayv2_stage` that exposes the API and ensure its declared API, integration, and "
+    "route connect to that Lambda. If this selected architecture's required API Gateway graph is "
+    "incomplete, generate only the minimum graph needed to implement that already-selected API; "
+    "do not add an unselected component, invent an arbitrary route or URL, change the assertion "
+    "kind, remove the assertion, or weaken the customer requirement. If the approved architecture "
+    "does not include a compatible HTTP path, report that limitation."
+)
 _HEALTH_TARGET_PAIR_GUIDANCE = {
     ("container_readiness", "aws_lambda_function"): _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+    ("http_response", "aws_lambda_function"): _LAMBDA_HTTP_RESPONSE_GUIDANCE,
 }
 _HEALTH_TARGET_COMPATIBILITY_GUIDANCE = (
     "Use a declared target resource type compatible with the assertion kind. Allowed types: "
@@ -246,7 +260,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "within the fixed plan-access profile; preserve every trusted application requirement, and "
     "report a limitation if no supported shape satisfies it."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v27"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v28"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -574,6 +588,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _UNKNOWN_REQUIREMENTS_FIELD_GUIDANCE,
         _UNKNOWN_CONTRACT_FIELD_GUIDANCE,
         _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+        _LAMBDA_HTTP_RESPONSE_GUIDANCE,
         *(guidance for _, guidance in _GRAPH_VALIDATION_FEEDBACK.values()),
         *_PLAN_ACCESS_GUIDANCE.values(),
     }

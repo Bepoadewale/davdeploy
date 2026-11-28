@@ -68,6 +68,15 @@ Active/Successful and their package hash matches the versioned exact-commit
 release ZIP. `https://api.davdeploy.tech/healthz` returned HTTP 200. The
 authenticated CLI verified workspace role `administrator`.
 
+## Local implementation verification
+
+- Focused generation, customer-review, and generated-plan-run suites:
+  152 passed.
+- Full `make verify`: 2,105 passed; Ruff, Actions configuration, OpenAPI
+  snapshot, and `docker compose config --quiet` passed. The Compose command
+  parsed configuration only; it did not start containers.
+- Documentation conventions and `git diff --check` passed.
+
 ## Teardown
 
 No workload resources were created; no workload teardown was needed. The

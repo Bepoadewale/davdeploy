@@ -15,7 +15,8 @@ health requirements, inventing resources, changing policy, or widening IAM.
 
 ## Current repo state
 
-- Backend `main` is PR #566 merge `5f37cc964d0a8da64bd474629a872bde9943f701`.
+- Backend `main` is PR #566 merge `5f37cc964d0a8da64bd474629a872bde9943f701`;
+  this PR branch adds the prompt/feedback correction and tests.
 - Prompt version `terraform-nova2-contract-v27` is deployed in AWS account
   `654654474502`, region `us-east-1`.
 - Fresh revision `4fd24a64-2bca-4ecc-a217-5d0e5d13e02e` retained the established
@@ -57,26 +58,29 @@ health requirements, inventing resources, changing policy, or widening IAM.
 
 ## Acceptance criteria
 
-- [ ] HTTP response feedback for a Lambda target gives exact fixed stage-target
+- [x] HTTP response feedback for a Lambda target gives exact fixed stage-target
       and existing-integration guidance.
-- [ ] A valid declared API Gateway stage can repair the target without changing
+- [x] A valid declared API Gateway stage can repair the target without changing
       trusted context or customer requirements.
-- [ ] Missing/incompatible API Gateway relationships fail safely without
+- [x] Missing/incompatible API Gateway relationships fail safely without
       invented resources, weakened checks, or broader policy.
-- [ ] Focused tests, full verification, docs conventions, clean-room gate, and
-      all required CI checks pass.
+- [ ] Focused tests, full verification, docs conventions, required clean-room
+      gate, and all required CI checks pass.
 - [ ] One fresh post-deployment v28 plan-only result is recorded with no
       customer workload approval, apply, or destroy.
 
 ## Acceptance status
 
-Planning only; implementation has not started.
+Implementation and focused/full local verification are complete. Clean-room
+and hosted v28 checks remain.
 
 ## Tests / validation performed
 
-- Read-only hosted v27 result inspection and source-architecture component
-  check are recorded in `docs/test/test567.md`.
-- Implementation tests, clean-room verification, and CI are pending.
+- `PYTHONPATH=apps/api/src /Users/adewale/Projects/davdeploy/.venv-pr399/bin/python -m pytest -q tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_nova_plan_runs.py` — 152 passed.
+- `GITHUB_PR_NUMBER=567 make verify PYTHON=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` — 2,105 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose syntax passed. Compose was parsed only; no containers were started by this command.
+- `GITHUB_PR_NUMBER=567 python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
+- Read-only hosted v27 result inspection and source-architecture component check are recorded in `docs/test/test567.md`.
+- Isolated clean-room verification and GitHub CI are pending.
 
 ## Evidence files produced
 
