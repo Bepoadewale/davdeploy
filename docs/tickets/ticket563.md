@@ -1,6 +1,6 @@
 # ticket563 — make typed reference repair feedback actionable
 
-PR: draft (number pending)
+PR: [#563](https://github.com/Bepoadewale/davdeploy/pull/563) (draft)
 
 Branch: `fix/nova-reference-type-feedback-563`
 
@@ -42,17 +42,26 @@ proposal values.
 
 ## Acceptance criteria
 
-- [ ] Guidance clearly explains declared output/reference pair equality.
-- [ ] Graph validation remains strict and unchanged.
-- [ ] Feedback remains sanitized and repair remains bounded.
-- [ ] Focused and full verification pass; required clean-room proof is recorded.
-- [ ] All current-head CI/review checks pass and PR is merged.
+- [x] Guidance clearly explains declared output/reference pair equality.
+- [x] Graph validation remains strict and unchanged; no validator code changed.
+- [x] Feedback remains fixed/sanitized and the repair test confirms the bounded second attempt.
+- [ ] Focused generation/review/run suite passes (148 tests); full verification passes (2,096 tests). Isolated clean-room proof remains pending.
+- [ ] Current-head CI/review checks pass and PR is merged.
 - [ ] Fresh hosted review-only run reaches a plan or a more precise blocker;
       no customer workload is approved or applied.
 
+## Acceptance status
+
+In progress. The prompt and fixed repair guidance are implemented; 148 focused
+tests pass. Full verification passes; isolated clean-room proof, CI/review, protected
+release, and a fresh hosted v25 result remain pending.
+
 ## Tests / validation performed
 
-None yet; ticket-first bootstrap only.
+- Focused generation/review/run suite: 148 passed.
+- `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`: 2,096 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose config passed.
+- Documentation convention and `git diff --check` passed.
+- Isolated clean-room proof remains pending.
 
 ## Evidence files produced
 
