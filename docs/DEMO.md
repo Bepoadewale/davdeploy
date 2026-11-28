@@ -23,9 +23,12 @@ make seed-demo-data
 
 It creates a demo AWS fixture connection plus draft, submitted, approved, rejected, administrator self-approved, fixture PR/check-state, App Runner Terraform render, ready preflight, Terraform plan-only review and locally dry-run plan records. It uses only the local API and fixture executor.
 
-## Deterministic proof
+## Optional local deterministic proof
 
-The same two-session workflow is exercised without manual browser state by one self-contained local command:
+GitHub Actions exercises the two-session workflow on a fresh runner as part of
+the required `local-e2e` PR check. A separate local Compose stack is not needed
+for PR validation. For optional local troubleshooting, the workflow can be
+run manually with:
 
 ```bash
 make local-proof

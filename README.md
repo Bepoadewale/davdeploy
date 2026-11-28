@@ -31,15 +31,21 @@ Developers and AI clients can use the same governed product surface through the 
 
 The local administrator experience includes filtered queues for pending, approved, rejected and self-approved plan revisions, a richer review detail with requester/repository/AWS target/digest/policy/monitoring/cost/risk evidence, an explicit **approved, not deployed** boundary, and a human-readable audit timeline.
 
-## Run it locally
+## Local development (optional)
 
 ```bash
 make help
-make local-proof
-make clean-local
+make install
 ```
 
-`make local-proof` bootstraps the local stack, then runs service readiness, the API/CORS contract, customer-plan E2E, demo-data seeding, Tempo trace verification and `make verify`. Individual setup and demo targets remain available for narrower checks: `make install`, `make bootstrap-local`, `make demo-simple`, `make demo-complex`, `make demo-day2`, `make demo-degraded`, `make demo-failure`, `make demo-readiness-failure`, `make customer-plan-persistence`.
+Pull request integration proof runs in GitHub Actions on its fresh-runner
+`local-e2e` job, which starts and cleans up its own Compose stack. You do not
+need to start the stack locally for PR validation. For optional local
+troubleshooting, `make bootstrap-local` starts the services and `make
+local-proof` runs the complete local proof; the individual targets are also
+available for narrower checks: `make demo-simple`, `make demo-complex`,
+`make demo-day2`, `make demo-degraded`, `make demo-failure`,
+`make demo-readiness-failure`, and `make customer-plan-persistence`.
 
 The API is at http://localhost:8080, Grafana at http://localhost:3000 and
 Prometheus at http://localhost:9090. Run the frontend repository separately at
