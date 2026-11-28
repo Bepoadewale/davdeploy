@@ -36,23 +36,28 @@ Run the fixed customer plan permission-profile validator inside Nova's existing 
 - [x] Feedback never includes model-provided resource names, arbitrary exception text, credentials, or proposal values.
 - [x] Uncorrectable/unsupported requirements fail with a bounded safe result before staging input or starting CodeBuild.
 - [x] CodeBuild continues enforcing the exact fixed access profile before customer credentials are assumed.
-- [x] Focused tests, full `make verify`, and docs conventions pass.
-- [ ] Required GitHub CI passes.
+- [x] Focused tests, full `make verify`, docs conventions, and required GitHub CI pass.
+- [ ] Required local clean-room cycle passes and its generated artifacts are cleaned.
 - [ ] Post-deployment v27 outcome is recorded as plan-only evidence; no approval, apply, or customer-workload certification is claimed.
 
 ## Acceptance status
 
-Implementation is complete. Focused and full local verification plus docs
-conventions pass. Required CI, protected deployment, and post-deployment v27
-hosted evidence remain.
+Implementation is complete. Focused and full local verification, docs
+conventions, and seven required CI checks pass. The automated review requires a
+local clean-room cycle before merge; protected deployment and post-deployment
+v27 hosted evidence remain.
 
 ## Tests / validation performed
 
 Focused generation, access-profile, run, and customer-review suites: 181 passed.
 `make verify`: 2,103 passed plus Ruff, Actions configuration, OpenAPI snapshot,
 and Compose configuration checks. Docs conventions and `git diff --check` pass.
-No local application containers were started. Required CI, PR review, protected
-deployment, and one fresh hosted v27 plan-only run remain pending.
+No local application containers were started. GitHub CI run `46132450063`
+passed all seven checks. Automated review found one P1 item requiring the full
+local clean-room cycle. That cycle would start isolated Compose services and
+remove only this worktree's generated `.venv` and `.local` plus the dedicated
+Compose Postgres volume; it has not run. Protected deployment and one fresh
+hosted v27 plan-only run remain pending.
 
 ## Evidence files produced
 

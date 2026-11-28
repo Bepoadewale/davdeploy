@@ -51,7 +51,8 @@ same policy check before it assumes the customer plan role.
   snapshot, and `docker compose config --quiet` passed. This only validated the
   Compose file; no local application containers were started.
 - Documentation conventions and `git diff --check` passed.
-- Final-head CI and post-deployment v27 hosted plan-only verification: pending.
+- Final-head CI passed all seven checks; post-deployment v27 hosted plan-only
+  verification remains pending.
 
 ## Teardown
 
@@ -79,3 +80,10 @@ saved-plan release, create a fresh unapproved review-only revision with the same
 trusted architecture digest and request one plan-only run. Inspect only the
 sanitized status/diagnostics and value-free saved-plan summary. Do not approve,
 apply, or destroy the synthetic customer workload as part of this evidence.
+
+PR #566's final-head CI run `46132450063` passed all seven checks. Automated
+review requires the full local clean-room cycle (`make local-proof` followed by
+`make clean-local`) before merge. It has not run. In an isolated Compose project
+`davdeploy-nova-pr566`, cleanup would remove the generated PR-worktree paths
+`.venv` and `.local` and the dedicated volume
+`davdeploy-nova-pr566-davdeploy-postgres`. No containers are currently running.
