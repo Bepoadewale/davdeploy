@@ -112,6 +112,25 @@ _UNKNOWN_HEALTH_FIELD_GUIDANCE = (
     "Use only supported fields and reference declared resource IDs. A proposed assertion is not "
     "evidence that a health check ran."
 )
+_LAMBDA_HEALTH_ASSERTION_EXAMPLES = (
+    "Choose health assertions by the behavior and resource being observed. "
+    "`container_readiness` is only for App Runner or ECS; never target an "
+    "`aws_lambda_function` with it. For HTTP behavior served by Lambda, use "
+    "`http_response` targeting the declared API Gateway stage only when the "
+    "declared API integration graph routes to that Lambda. Valid assertion: "
+    '`{"kind":"http_response","target_resource_id":"api-stage",'
+    '"path":"/health","method":"GET","expected_status_code":200,'
+    '"description":"HTTP health endpoint responds"}`. For queued work, use '
+    "`event_processing` targeting the declared Lambda and set "
+    "`source_resource_id` to its declared SQS queue only when a declared "
+    "`aws_lambda_event_source_mapping` references both. Valid assertion: "
+    '`{"kind":"event_processing","target_resource_id":"worker",'
+    '"source_resource_id":"queue",'
+    '"description":"The queue message is processed"}`. If neither declared '
+    "relationship preserves the original requirement, report that limitation. "
+    "Do not invent or remove resources, substitute a different assertion, or "
+    "weaken a customer health requirement."
+)
 _HEALTH_PAYLOAD_SIZE_GUIDANCE = (
     "Set payload_size_bytes only on storage_roundtrip or queue_roundtrip, as an integer from 1 to "
     "4096 inclusive. Omit it for every other assertion kind. For http_response use max_response_bytes; "
@@ -141,14 +160,10 @@ _UNKNOWN_CONTRACT_FIELD_GUIDANCE = (
     "the complete proposal while preserving all trusted context exactly."
 )
 _LAMBDA_CONTAINER_READINESS_GUIDANCE = (
-    "`container_readiness` measures a container service and cannot target Lambda. Preserve the "
-    "declared Lambda and the original application-health requirement. If the declared resource "
-    "graph includes an API Gateway stage whose declared API integration is wired to this Lambda, "
-    "use `http_response` targeting that stage to check the same HTTP behavior. If the requirement "
-    "is processing queued work, use `event_processing` targeting the Lambda and the declared SQS "
-    "source only when the graph already contains the matching SQS-to-Lambda event binding. Do "
-    "not invent or add a service, remove or weaken an assertion, or label Lambda as a container. "
-    "If no declared compatible path preserves the requirement, report that limitation."
+    "`container_readiness` is for App Runner or ECS and cannot target Lambda. Keep the declared "
+    "Lambda and original requirement. Follow the matching Lambda health assertion example in the "
+    "generation task only when its required same-plan relationship is already declared. Otherwise "
+    "report that limitation; do not invent resources or weaken the health requirement."
 )
 _HEALTH_TARGET_PAIR_GUIDANCE = {
     ("container_readiness", "aws_lambda_function"): _LAMBDA_CONTAINER_READINESS_GUIDANCE,
@@ -198,6 +213,8 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "their bounded schema fields. Use payload_size_bytes only for storage_roundtrip or "
     "queue_roundtrip, as an integer from 1 to 4096 inclusive; omit it for every other kind. "
     "For http_response use max_response_bytes; for inference_response use minimum_response_bytes. "
+    + _LAMBDA_HEALTH_ASSERTION_EXAMPLES
+    + " "
     + _HEALTH_TARGET_COMPATIBILITY_GUIDANCE
     + " "
     "Use only the fixed fixture IDs allowed by the schema; "
@@ -225,7 +242,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v25"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v26"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(

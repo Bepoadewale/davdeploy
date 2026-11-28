@@ -62,9 +62,24 @@ AWS region: `us-east-1`
 
 - One bounded repair attempt did not fix the Lambda health assertion mismatch.
   Generation failed before CodeBuild, with no provider plan or saved-plan
-  artifact. Prompt v25 needs a positive valid shape/example and fresh hosted
-  verification. The PR's local tests, CI, deployment, and v26 run remain
-  pending.
+  artifact. Prompt v25 needs fresh hosted verification; no other health target
+  or requirement may be inferred from the failure.
+
+The v26 implementation is locally verified:
+
+- `uv sync --project . --extra dev` — installed the repository's development
+  test tools in the PR worktree environment.
+- `uv run --project . --extra dev python -m pytest tests/test_terraform_generation.py tests/test_customer_plan_review.py tests/test_nova_plan_runs.py -q`
+  — 148 passed.
+- `make verify` — 2,096 passed; Ruff, Actions configuration, OpenAPI snapshot,
+  and Compose configuration checks passed. One existing Starlette/httpx
+  deprecation warning remains.
+- `GITHUB_PR_NUMBER=564 python3 scripts/check_doc_conventions.py` — passed.
+- `git diff --check` — passed.
+
+Final-head CI, protected deployment, and the post-deployment v26 hosted result
+are pending. A v26 hosted failure must be recorded as a failure and used to
+select the next bounded fix; it must not be relabeled as success.
 
 ## Teardown
 

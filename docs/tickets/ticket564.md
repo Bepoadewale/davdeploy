@@ -58,14 +58,14 @@ valid assertion mapping clearly while preserving the fail-closed contract.
 
 ## Acceptance criteria
 
-- [ ] Nova's task gives an exact valid `http_response` shape for a declared
+- [x] Nova's task gives an exact valid `http_response` shape for a declared
   API Gateway stage wired to a Lambda, and an `event_processing` mapping only
   for a declared SQS-to-Lambda binding.
-- [ ] `container_readiness` remains invalid for Lambda and incompatible
+- [x] `container_readiness` remains invalid for Lambda and incompatible
   proposals still receive bounded, safe feedback.
-- [ ] Tests prove valid repair preserves declared application requirements
+- [x] Tests prove valid repair preserves declared application requirements
   and fails closed when the graph has no compatible declared health target.
-- [ ] No raw model proposal, credentials, or plan/state values are added to
+- [x] No raw model proposal, credentials, or plan/state values are added to
   logs or evidence.
 - [ ] Focused tests, full required verification, documentation checks, and
   final-head CI pass.
@@ -76,23 +76,24 @@ valid assertion mapping clearly while preserving the fail-closed contract.
 
 ## Acceptance status
 
-The hosted v25 failure provides a concrete repair target. Implementation and
-verification are pending. No validator change, AWS mutation, approval, apply,
-destroy, or customer workload certification is part of this PR.
+The prompt examples and v26 version bump are implemented. Focused and full
+local verification pass. Final-head CI, protected deployment, and one fresh
+hosted v26 plan-only run remain open. No validator change, AWS mutation,
+approval, apply, destroy, or customer workload certification is part of this
+PR.
 
 ## Tests / validation performed
 
 See `docs/test/test564.md`. The v25 baseline failed before CodeBuild with no
-artifact; it is not evidence that this PR's prompt repair works. Initial
-documentation convention validation identified missing required section
-markers; the ticket headings were corrected before implementation. Record the
-focused/full local results and one post-deployment v26 hosted run before
-marking the remaining criteria complete.
+artifact; it is not evidence that this PR's prompt repair works. Focused tests,
+full `make verify`, documentation conventions, and whitespace checks pass.
+Record final-head CI and one post-deployment v26 hosted run before marking the
+remaining criteria complete.
 
 ## Evidence files produced
 
-- `docs/test/test564.md` records the hosted v25 failure baseline and will be
-  updated with local verification and the post-deployment v26 outcome.
+- `docs/test/test564.md` records the hosted v25 failure baseline, local
+  verification, and pending post-deployment v26 outcome.
 
 ## Boundaries
 
