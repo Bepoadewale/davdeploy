@@ -64,8 +64,79 @@ MAX_RESULT_BYTES = 1_000_000
 MAX_PLAN_BYTES = 128 * 1024 * 1024
 
 
+_SAFE_FAILURE_MESSAGE_CODES = {
+    "durable run ID does not match CodeBuild environment": "RUN_BINDING_INVALID",
+    "CodeBuild build ID does not match the fixed project": "RUN_BINDING_INVALID",
+    "CodeBuild build ID is invalid": "RUN_BINDING_INVALID",
+    "CodeBuild project name is invalid": "RUN_BINDING_INVALID",
+    "CodeBuild build ARN does not match its fixed project and ID": "RUN_BINDING_INVALID",
+    "durable Nova run ID is invalid": "RUN_BINDING_INVALID",
+    "durable control-plane request ID is invalid": "RUN_BINDING_INVALID",
+    "durable plan request binding is invalid": "RUN_BINDING_INVALID",
+    "durable revision or ownership data is missing": "RUN_BINDING_INVALID",
+    "proposal or immutable customer revision binding is invalid": "RUN_BINDING_INVALID",
+    "customer account or region does not match the revision": "RUN_BINDING_INVALID",
+    "customer plan role ARN binding is invalid": "RUN_BINDING_INVALID",
+    "trusted ownership scope does not match this tenant and revision": "RUN_BINDING_INVALID",
+    "proposal exceeds the fixed customer plan permission profile": "PLAN_PERMISSION_PROFILE_DENIED",
+    "credential broker response did not match the trusted plan": "PLAN_ROLE_UNVERIFIED",
+    "the exact customer plan role could not be verified": "PLAN_ROLE_UNVERIFIED",
+    "customer plan role account does not match the durable request": "PLAN_ROLE_UNVERIFIED",
+    "the verified customer plan role is missing": "PLAN_ROLE_UNVERIFIED",
+    "Terraform state feature configuration is invalid": "STATE_BOOTSTRAP_FAILED",
+    "trusted Terraform state service is not configured": "STATE_BOOTSTRAP_FAILED",
+    "trusted Terraform state bootstrap failed": "STATE_BOOTSTRAP_FAILED",
+    "trusted Terraform state bootstrap returned an invalid contract": "STATE_BOOTSTRAP_FAILED",
+    "trusted plan request has no stable state scope": "STATE_BOOTSTRAP_FAILED",
+    "trusted state bootstrap returned the wrong tenant scope": "STATE_BOOTSTRAP_FAILED",
+    "the fixed Terraform plan pipeline rejected this request": "TERRAFORM_PLAN_REJECTED",
+    "the strict Terraform plan policy denied this request": "PLAN_POLICY_DENIED",
+    "Terraform plan output did not match the durable request": "PLAN_BINDING_MISMATCH",
+    "the immutable proposal failed schema validation": "PROPOSAL_INVALID",
+    "trusted customer pricing context is invalid": "PRICING_CONTEXT_INVALID",
+    "trusted customer pricing region does not match the request": "PRICING_CONTEXT_INVALID",
+    "plan artifact bucket configuration is invalid": "RUNNER_CONFIGURATION_INVALID",
+    "plan artifact KMS key configuration is invalid": "RUNNER_CONFIGURATION_INVALID",
+    "plan artifact bucket owner configuration is invalid": "RUNNER_CONFIGURATION_INVALID",
+    "trusted CodeBuild region is invalid": "RUNNER_CONFIGURATION_INVALID",
+    "the exact staged input could not be inspected": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input did not become available": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input has no immutable object version": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input body is unavailable": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input could not be read": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input exceeds its size limit": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input is not immutably versioned": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input is malformed": "STAGED_INPUT_UNAVAILABLE",
+    "the exact staged input failed its immutable digest check": "STAGED_INPUT_UNAVAILABLE",
+    "CodeBuild artifact object name is invalid": "STAGED_INPUT_UNAVAILABLE",
+    "bounded build-input polling configuration is invalid": "STAGED_INPUT_UNAVAILABLE",
+    "saved plan output is unavailable": "SAVED_PLAN_ARTIFACT_UNAVAILABLE",
+    "saved plan output is outside its size limit": "SAVED_PLAN_ARTIFACT_UNAVAILABLE",
+    "saved plan output failed integrity verification": "SAVED_PLAN_ARTIFACT_UNAVAILABLE",
+    "saved plan artifact could not be stored safely": "SAVED_PLAN_ARTIFACT_UNAVAILABLE",
+    "saved plan artifact is not a bucket-key version": "SAVED_PLAN_ARTIFACT_UNAVAILABLE",
+    "Terraform execution workspace bundle is unavailable": "WORKSPACE_ARTIFACT_UNAVAILABLE",
+    "Terraform execution workspace bundle exceeds its size limit": "WORKSPACE_ARTIFACT_UNAVAILABLE",
+    "Terraform execution workspace bundle failed integrity verification": "WORKSPACE_ARTIFACT_UNAVAILABLE",
+    "Terraform execution workspace could not be stored safely": "WORKSPACE_ARTIFACT_UNAVAILABLE",
+    "Terraform workspace is not a bucket-key version": "WORKSPACE_ARTIFACT_UNAVAILABLE",
+    "the verified plan result exceeds its size limit": "RESULT_ARTIFACT_UNAVAILABLE",
+    "the verified plan result contains temporary credential material": "RESULT_REDACTION_FAILED",
+    "the plan result could not be stored safely": "RESULT_ARTIFACT_UNAVAILABLE",
+    "the plan result was not stored as a bucket-key version": "RESULT_ARTIFACT_UNAVAILABLE",
+    "plan result could not be encoded safely": "RESULT_ARTIFACT_UNAVAILABLE",
+}
+
+
 class NovaPlanBuildError(RuntimeError):
     """A CodeBuild plan request failed closed without exposing its input."""
+
+
+def _safe_runner_failure_code(error: Exception) -> str:
+    """Return a fixed diagnostic code without exposing exception text."""
+    if isinstance(error, NovaPlanBuildError):
+        return _SAFE_FAILURE_MESSAGE_CODES.get(str(error), "RUNNER_VALIDATION_FAILED")
+    return "RUNNER_UNEXPECTED_FAILURE"
 
 
 def run_nova_plan_build(
@@ -839,8 +910,14 @@ def main() -> int:
     run_id = os.getenv(RUN_ID_ENV, "")
     try:
         run_nova_plan_build(run_id)
+    except NovaPlanBuildError as error:
+        print(
+            "Nova plan runner failed closed; "
+            f"failure_code={_safe_runner_failure_code(error)}."
+        )
+        return 1
     except Exception:  # noqa: BLE001 - never print request data or credentials
-        print("Nova plan runner failed closed; no result was confirmed.")
+        print("Nova plan runner failed closed; failure_code=RUNNER_UNEXPECTED_FAILURE.")
         return 1
     print("Nova initial plan result was stored for authenticated reconciliation.")
     return 0
