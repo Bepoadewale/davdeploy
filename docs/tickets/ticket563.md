@@ -46,7 +46,7 @@ proposal values.
 - [x] Graph validation remains strict and unchanged; no validator code changed.
 - [x] Feedback remains fixed/sanitized and the repair test confirms the bounded second attempt.
 - [x] Focused generation/review/run suite passes (148 tests); full verification and isolated `local-proof` pass (2,096 tests).
-- [x] PR implementation/evidence head `d3d086c94f3299ceeeddbbcfd141375a399a9302` passed all seven required checks in run `46087466351`; no review comments or requested changes are present. Final ticket-refresh head checks remain pending.
+- [x] All seven required checks passed on final ticket-refresh head `aa697a57` in run `46087979770`; no review comments or requested changes are present.
 - [ ] PR is merged.
 - [ ] Fresh hosted review-only run reaches a plan or a more precise blocker;
       no customer workload is approved or applied.
@@ -66,7 +66,7 @@ clean-room worktree, venv, and volume are retained; its project containers are s
 - Documentation convention and `git diff --check` passed.
 - `COMPOSE_PROJECT_NAME=davdeploy-nova-ref563-proof` isolated `make VENV=/private/tmp/davdeploy-nova-reference-cleanroom-563-venv local-proof`: all smoke, API contract, customer-plan E2E, seed/trace, 2,096 tests, Ruff, Actions, OpenAPI, and Compose checks passed.
 - Project containers were stopped after proof. The clean-room worktree, venv, and database volume are retained; no local files or volumes were deleted.
-- Implementation/evidence commit `d3d086c94f3299ceeeddbbcfd141375a399a9302` passed all seven required CI checks in run `46087466351`. The current ticket-refresh commit still needs its own final-head checks.
+- Final ticket-refresh commit `aa697a57` passed all seven required CI checks in run `46087979770`. The PR is still a draft and unmerged.
 
 ## Evidence files produced
 
