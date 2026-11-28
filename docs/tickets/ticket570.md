@@ -50,7 +50,7 @@ requirements.
       names still fail closed after bounded attempts.
 - [x] Focused tests (215 passed), full verification (2,110 passed plus lint,
       Actions configuration, OpenAPI, and Compose syntax), documentation
-      conventions, and diff checks pass locally.
+      conventions, diff checks, and the required clean-room cycle pass locally.
 - [ ] Required GitHub CI passes; satisfy any reviewer-required clean-room gate.
 - [ ] One fresh post-deployment hosted plan-only result is recorded while the
       customer revision remains unapproved and no workload is applied/destroyed.
@@ -61,8 +61,9 @@ Prompt v31 now gives explicit SQS, Lambda, queue URL, and RDS secret output/type
 pairs. The validator reports an undeclared output separately from a declared
 output's type mismatch; both remain invalid. Regressions cover successful
 bounded repair and fail-closed invalid responses without changing trusted
-inputs. Focused/full local validation passes. CI, review, protected deployment,
-and the post-deployment hosted v31 run remain pending.
+inputs. Focused/full local validation and the required isolated clean-room
+cycle pass. Automated review has no findings; final-head CI, protected
+deployment, and the post-deployment hosted v31 run remain pending.
 
 ## Tests / validation performed
 
@@ -76,6 +77,14 @@ and the post-deployment hosted v31 run remain pending.
 - Focused suites passed 215 tests. Full `make verify` passed 2,110 tests plus
   Ruff, Actions configuration, OpenAPI, and Compose syntax. Docs conventions
   and `git diff --check` passed.
+- Clean-room cycle passed in detached worktree
+  `/private/tmp/davdeploy-nova-reference-type-feedback-570-clean` at
+  `4a767d64`: clean, fresh bootstrap, smoke, simple/complex/degraded/Day-2
+  demos, policy denial, readiness failure, API contract, customer-plan E2E,
+  fixture seed, trace check, and full verify. Fixture output confirms no AWS
+  resource creation or authenticated Terraform execution. Clean-local removed
+  only this project's containers/network/Postgres volume and generated
+  `.venv`/`.local`; absence checks passed. Protected root file and venv remain.
 
 ## Evidence files produced
 

@@ -50,6 +50,14 @@ AWS region: `us-east-1`
   Ruff, Actions configuration, OpenAPI, and Compose syntax; docs conventions
   and diff checks passed. CI, review, protected deployment, and one fresh hosted
   plan-only v31 run remain pending.
+- Required clean-room cycle passed in detached worktree
+  `/private/tmp/davdeploy-nova-reference-type-feedback-570-clean` at commit
+  `4a767d64`: fresh bootstrap, smoke, simple/complex/degraded/Day-2 demos,
+  policy denial, readiness failure, API contract, customer-plan E2E, fixture
+  seed, trace check, and full verify. Fixture output confirms no AWS resources
+  or authenticated Terraform execution. Only the isolated Compose project's
+  containers, network, Postgres volume, and generated `.venv`/`.local` were
+  removed; absence checks passed. Protected root artifacts were preserved.
 
 ## Resources created
 
@@ -74,8 +82,11 @@ The hosted request returned HTTP 202, then failed as
 
 ## Teardown
 
-No AWS resources or local containers were created by this hosted run; no
-teardown was needed. Control-plane infrastructure and audit evidence were
+No AWS resources were created by the hosted run. The clean-room cycle created
+only the isolated local Compose project and removed that project's containers,
+network, Postgres volume, and generated directories. Read-only checks confirmed
+those targets absent, unrelated containers/volumes preserved, and protected
+root artifacts present. Control-plane infrastructure and audit evidence were
 preserved.
 
 ## Final boundary
