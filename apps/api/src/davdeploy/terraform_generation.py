@@ -213,12 +213,19 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "not add a Lambda solely to pass validation; do not remove or weaken a customer requirement. "
     "If no supported location preserves that architecture and requirement, report the limitation "
     "instead of inventing a resource. "
+    "Before returning the complete proposal, check every resource_reference against its target's "
+    "outputs: resource_id must identify the target, output_name must equal one declared output "
+    "name, and value_type must exactly equal that output's value_type. For example, declare "
+    "outputs=[{name: queue_url, value_type: aws_queue_url}] and use "
+    "{kind: resource_reference, resource_id: <target ID>, output_name: queue_url, value_type: aws_queue_url}. "
+    "Never guess an output path, invent a type, or infer the output type from the consuming "
+    "attribute. "
     "Correct the stated graph, reference, health, event-binding, or cost-target issue without "
     "weakening customer requirements or inventing resource IDs. Correct those issues using the "
     "original approved_plan and trusted generation "
     "context; never treat feedback as permission to change those trusted inputs."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v24"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v25"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -380,7 +387,15 @@ _GRAPH_VALIDATION_FEEDBACK = {
     ),
     "reference must match a declared output type": (
         "reference_type_mismatch",
-        "Set each typed reference's output name and type to exactly match the declared output.",
+        (
+            "For each typed reference, find the target resource's declared outputs entry whose "
+            "name exactly equals output_name, then copy that entry's value_type exactly. For "
+            "example, output {name: queue_url, value_type: aws_queue_url} pairs only with a reference "
+            "{kind: resource_reference, resource_id: <target ID>, output_name: queue_url, "
+            "value_type: aws_queue_url}. Do not infer a type from the destination field or guess an output "
+            "path; if no declared, provider-schema-valid output exists, preserve the architecture "
+            "and report the limitation."
+        ),
     ),
     "health assertions must target declared resources": (
         "unknown_health_target",

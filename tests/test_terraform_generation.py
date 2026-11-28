@@ -136,7 +136,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v24"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v25"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
@@ -1258,6 +1258,84 @@ def _invalid_with_resource_wrapper(request, document):
         "value": "do-not-echo-resource-wrapper"
     }
     return result
+
+
+def _typed_reference_proposal(request, document, value_type):
+    result = _valid_proposal(request, document)
+    result["resources"] = [
+        {
+            "resource_id": "jobs-queue",
+            "resource_type": "aws_sqs_queue",
+            "name": "jobs_queue",
+            "arguments": {},
+            "outputs": [{"name": "queue_url", "value_type": "aws_queue_url", "sensitive": False}],
+            "rationale": "Provides asynchronous work.",
+        },
+        {
+            "resource_id": "jobs-worker",
+            "resource_type": "aws_lambda_function",
+            "name": "jobs_worker",
+            "arguments": {
+                "environment": [
+                    {
+                        "variables": {
+                            "QUEUE_URL": {
+                                "kind": "resource_reference",
+                                "resource_id": "jobs-queue",
+                                "output_name": "queue_url",
+                                "value_type": value_type,
+                            }
+                        }
+                    }
+                ]
+            },
+            "rationale": "Processes queued work.",
+        },
+    ]
+    return result
+
+
+def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair():
+    invalid = lambda request, document: _typed_reference_proposal(
+        request, document, "resource_name"
+    )
+    repaired = lambda request, document: _typed_reference_proposal(
+        request, document, "aws_queue_url"
+    )
+    gateway = SequenceGateway([invalid, repaired])
+
+    result = NovaTerraformGenerator(
+        gateway=gateway,
+        max_output_tokens=800,
+        timeout_seconds=30,
+        total_timeout_seconds=60,
+    ).generate(
+        approved_plan={"target": {"region": "us-east-1"}},
+        tenant=scope(),
+        source_revision="trusted-reference-type-1",
+    )
+
+    assert result.proposal.resources[1].arguments["environment"][0]["variables"]["QUEUE_URL"][
+        "value_type"
+    ] == "aws_queue_url"
+    repair_document = gateway.calls[1][1]
+    feedback = repair_document["validation_feedback"]
+    assert feedback == [
+        {
+            "code": "value_error",
+            "field": "proposal",
+            "issue": "reference_type_mismatch",
+            "guidance": _GRAPH_VALIDATION_FEEDBACK[
+                "reference must match a declared output type"
+            ][1],
+        }
+    ]
+    assert "jobs-queue" not in str(feedback)
+    assert "resource_name" not in str(feedback)
+    task = repair_document["task"]
+    assert "value_type must exactly equal that output's value_type" in task
+    assert "outputs=[{name: queue_url, value_type: aws_queue_url}]" in task
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v25"
 
 
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
