@@ -45,17 +45,19 @@ proposal values.
 - [x] Guidance clearly explains declared output/reference pair equality.
 - [x] Graph validation remains strict and unchanged; no validator code changed.
 - [x] Feedback remains fixed/sanitized and the repair test confirms the bounded second attempt.
-- [ ] Focused generation/review/run suite passes (148 tests); full verification passes (2,096 tests). Isolated clean-room proof remains pending.
-- [ ] Current-head CI/review checks pass and PR is merged.
+- [x] Focused generation/review/run suite passes (148 tests); full verification and isolated `local-proof` pass (2,096 tests).
+- [x] PR implementation/evidence head `d3d086c94f3299ceeeddbbcfd141375a399a9302` passed all seven required checks in run `46087466351`; no review comments or requested changes are present. Final ticket-refresh head checks remain pending.
+- [ ] PR is merged.
 - [ ] Fresh hosted review-only run reaches a plan or a more precise blocker;
       no customer workload is approved or applied.
 
 ## Acceptance status
 
-In progress. The prompt and fixed repair guidance are implemented; 148 focused
-tests pass. Focused/full verification and isolated `local-proof` pass. Its dedicated worktree,
-venv, and volume remain retained under the no-delete rule; project containers are
-stopped. CI/review, protected release, and a fresh hosted v25 result remain pending.
+In progress. The prompt and fixed repair guidance are implemented. Focused (148)
+and full (2,096) tests plus isolated `local-proof` pass. The implementation/evidence
+head passed all seven required checks in run `46087466351`; the final ticket-refresh
+head, merge, protected release, and a fresh hosted v25 result remain pending. The
+clean-room worktree, venv, and volume are retained; its project containers are stopped.
 
 ## Tests / validation performed
 
@@ -64,11 +66,12 @@ stopped. CI/review, protected release, and a fresh hosted v25 result remain pend
 - Documentation convention and `git diff --check` passed.
 - `COMPOSE_PROJECT_NAME=davdeploy-nova-ref563-proof` isolated `make VENV=/private/tmp/davdeploy-nova-reference-cleanroom-563-venv local-proof`: all smoke, API contract, customer-plan E2E, seed/trace, 2,096 tests, Ruff, Actions, OpenAPI, and Compose checks passed.
 - Project containers were stopped after proof. The clean-room worktree, venv, and database volume are retained; no local files or volumes were deleted.
+- Implementation/evidence commit `d3d086c94f3299ceeeddbbcfd141375a399a9302` passed all seven required CI checks in run `46087466351`. The current ticket-refresh commit still needs its own final-head checks.
 
 ## Evidence files produced
 
 - `docs/tickets/ticket563.md`
-- `docs/test/test563.md` (to be added)
+- `docs/test/test563.md`
 
 ## Follow-up work
 

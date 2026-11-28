@@ -47,8 +47,10 @@ will use the protected saved-plan workflow and will be recorded here separately.
   to avoid the existing `davdeploy-nova-lambda-health-feedback-560` stack.
 - The isolated project containers are stopped. Its worktree, dedicated venv,
   and PostgreSQL volume remain retained; no files or volumes were deleted.
-- No hosted v25 run has been requested yet; PR CI/review, release, and fresh
-  hosted result remain pending.
+- Implementation/evidence commit `d3d086c94f3299ceeeddbbcfd141375a399a9302`
+  passed all seven required CI checks in run `46087466351`; no review comments
+  or requested changes were returned. A final ticket-refresh commit and a fresh
+  hosted v25 run remain pending.
 
 ## Teardown
 
