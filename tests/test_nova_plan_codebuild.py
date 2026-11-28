@@ -1034,3 +1034,58 @@ def test_fixed_build_runner_has_no_resource_mutation_calls():
     assert mutation_calls == []
     assert not hasattr(codebuild_runner.GeneratedTerraformPlanRunner, "apply")
     assert not hasattr(codebuild_runner.GeneratedTerraformPlanRunner, "destroy")
+
+
+def test_main_logs_only_allowlisted_code_for_known_runner_failure(monkeypatch, capsys):
+    message = "the exact customer plan role could not be verified"
+
+    def fail(_run_id):
+        raise codebuild_runner.NovaPlanBuildError(message)
+
+    monkeypatch.setattr(codebuild_runner, "run_nova_plan_build", fail)
+
+    assert codebuild_runner.main() == 1
+    output = capsys.readouterr().out
+    assert output == (
+        "Nova plan runner failed closed; failure_code=PLAN_ROLE_UNVERIFIED.\n"
+    )
+    assert message not in output
+
+
+def test_main_logs_generic_code_without_unexpected_exception_text(monkeypatch, capsys):
+    secret_like_detail = "proposal-value-must-not-appear"
+
+    def fail(_run_id):
+        raise RuntimeError(secret_like_detail)
+
+    monkeypatch.setattr(codebuild_runner, "run_nova_plan_build", fail)
+
+    assert codebuild_runner.main() == 1
+    output = capsys.readouterr().out
+    assert output == (
+        "Nova plan runner failed closed; "
+        "failure_code=RUNNER_UNEXPECTED_FAILURE.\n"
+    )
+    assert secret_like_detail not in output
+
+
+def test_unknown_nova_plan_error_text_uses_generic_validation_code():
+    error = codebuild_runner.NovaPlanBuildError("caller controlled error text")
+
+    assert codebuild_runner._safe_runner_failure_code(error) == "RUNNER_VALIDATION_FAILED"
+
+
+def test_every_fixed_runner_error_has_an_allowlisted_diagnostic_code():
+    module = ast.parse(Path(codebuild_runner.__file__).read_text())
+    fixed_messages = {
+        node.args[0].value
+        for node in ast.walk(module)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "NovaPlanBuildError"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and isinstance(node.args[0].value, str)
+    }
+
+    assert fixed_messages <= set(codebuild_runner._SAFE_FAILURE_MESSAGE_CODES)

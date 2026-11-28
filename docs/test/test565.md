@@ -1,8 +1,13 @@
 # test565 — Nova plan-runner failure-code baseline
 
-## Test type
+Date: 2026-11-28
 
-Real hosted AWS **plan-only** run; no workload apply was attempted.
+Execution type: Real hosted AWS plan-only run; no workload apply was attempted.
+
+Customer repository: Synthetic Nova validation repository (source reference
+remains in the authenticated workspace record).
+
+Commit: `a5d38166bbc30942ac4ea82622712221446e1343`
 
 ## Environment
 
@@ -15,7 +20,17 @@ Real hosted AWS **plan-only** run; no workload apply was attempted.
 - Generated plan run: `5a917d8b-93ba-4a85-8d7e-258e0b753ebe`
 - CodeBuild build: `davdeploy-nova-plan-only:68cd98fd-633a-4e8d-9bda-750a6ab6dd7f`
 
-## Commands and observations
+AWS account: `654654474502`
+
+AWS region: `us-east-1`
+
+## Resources created
+
+- No customer workload resources or saved-plan artifact were created.
+- One fixed plan-only CodeBuild build ran and failed during its build command.
+- The source architecture plan remains unapproved.
+
+## Commands executed
 
 - Protected Terraform plan `46124569024` for the exact merge commit succeeded;
   exact saved-plan apply `46125147226` succeeded and migrations completed.
@@ -35,12 +50,16 @@ Real hosted AWS **plan-only** run; no workload apply was attempted.
   and the generic fixed error summary. No raw model proposal or plan was
   retrieved.
 
-## Result and resource boundary
+## Observed result
 
-No saved-plan artifact was recorded, and the plan-only run cannot apply or
-destroy resources. No workload resource creation was observed; no teardown was
-needed. The architecture plan remains unapproved. Preserve the failed run as
-audit evidence and do not retry it.
+No workload resources were created, so no teardown was needed. Preserve the
+failed run as audit evidence and do not retry it.
+
+## Teardown
+
+No workload resources were created; no teardown command was needed.
+
+## Final boundary
 
 This baseline does not prove that the v26 proposal was plan-valid, that a
 customer workload was deployed, or that any create/invoke/update/recovery/
