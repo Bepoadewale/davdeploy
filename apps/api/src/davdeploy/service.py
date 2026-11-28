@@ -164,6 +164,7 @@ from davdeploy.nova_apply_dispatch import NovaApplyDispatchError, NovaExactPlanA
 from davdeploy.nova_plan_access import (
     NovaPlanAccessError,
     build_nova_plan_access_policy,
+    nova_plan_access_repair_code,
 )
 from davdeploy.nova_plan_dispatch import NovaPlanDispatchError, NovaPlanOnlyDispatcher
 from davdeploy.planner import AwsV1Planner
@@ -222,6 +223,20 @@ def _model_evidence_summary(evidence: EvidenceRef) -> dict[str, Any]:
         "content_digest": evidence.content_digest,
         "location": evidence.location,
     }
+
+
+def _nova_plan_access_repair_code(
+    proposal: GeneratedDeploymentProposal, *, account_id: str, region: str
+) -> str | None:
+    """Classify model-correctable profile failures without retaining raw details."""
+    try:
+        build_nova_plan_access_policy(proposal, account_id=account_id, region=region)
+    except NovaPlanAccessError as error:
+        code = nova_plan_access_repair_code(error)
+        if code is None:
+            raise ValueError("trusted plan access validation failed") from None
+        return code
+    return None
 
 
 class ProductService:
@@ -4021,6 +4036,11 @@ class ProductService:
                         actor_id=principal.subject,
                     ),
                     source_revision=revision.id,
+                    proposal_validator=lambda proposal: _nova_plan_access_repair_code(
+                        proposal,
+                        account_id=str(target.get("account_id") or ""),
+                        region=str(target.get("region") or ""),
+                    ),
                 )
                 proposal = generated.proposal
                 if (

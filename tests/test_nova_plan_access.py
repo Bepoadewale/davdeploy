@@ -15,6 +15,7 @@ from davdeploy.nova_plan_access import (
     PLAN_SCOPED_READ_ACTIONS,
     NovaPlanAccessError,
     build_nova_plan_access_policy,
+    nova_plan_access_repair_code,
 )
 
 ACCOUNT_ID = "123456789012"
@@ -603,6 +604,30 @@ def test_name_prefix_without_exact_resource_name_fails_closed():
         build_nova_plan_access_policy(
             proposal(resource_with_prefix), account_id=ACCOUNT_ID, region=REGION
         )
+
+
+def test_plan_access_repair_codes_are_fixed_and_do_not_include_proposal_values():
+    assert (
+        nova_plan_access_repair_code(
+            NovaPlanAccessError("proposal contains unsupported plan resource types")
+        )
+        == "unsupported_resource_type"
+    )
+    assert (
+        nova_plan_access_repair_code(
+            NovaPlanAccessError("resource name cannot be safely scoped")
+        )
+        == "unsafe_resource_scope"
+    )
+    assert (
+        nova_plan_access_repair_code(
+            NovaPlanAccessError("IAM role references must target a declared role")
+        )
+        == "unsafe_resource_reference"
+    )
+    assert nova_plan_access_repair_code(
+        NovaPlanAccessError("customer-private-resource-name could not be scoped")
+    ) is None
 
 
 def test_policy_rejects_wrong_trusted_region():

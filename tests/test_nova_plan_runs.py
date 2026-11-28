@@ -59,7 +59,7 @@ class StaticGenerator:
     def __init__(self):
         self.calls = 0
 
-    def generate(self, *, approved_plan, tenant, source_revision):
+    def generate(self, *, approved_plan, tenant, source_revision, proposal_validator=None):
         del tenant
         self.calls += 1
         proposal = GeneratedDeploymentProposal(
@@ -71,12 +71,14 @@ class StaticGenerator:
                     resource_id="app-storage",
                     resource_type="aws_s3_bucket",
                     name="app_data",
-                    arguments={"bucket_prefix": "davdeploy-plan-test"},
+                    arguments={"bucket": "davdeploy-plan-test-bucket"},
                     rationale="Private application storage.",
                 ),
             ),
             requirements=WorkloadRequirements(region=approved_plan["target"]["region"]),
         )
+        if proposal_validator is not None:
+            assert proposal_validator(proposal) is None
         return SimpleNamespace(
             proposal=proposal,
             response=SimpleNamespace(
@@ -759,7 +761,7 @@ def test_schema_generation_failure_exposes_only_bounded_diagnostics():
     assert failed["generation_diagnostics"] == {
         "failure_code": "proposal_invalid",
         "model": "fixture-nova-model",
-        "prompt_version": "terraform-nova2-contract-v26",
+        "prompt_version": "terraform-nova2-contract-v27",
         "attempt_count": 2,
         "retry_count": 1,
         "input_tokens": 40,

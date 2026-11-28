@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -240,9 +241,12 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "Correct the stated graph, reference, health, event-binding, or cost-target issue without "
     "weakening customer requirements or inventing resource IDs. Correct those issues using the "
     "original approved_plan and trusted generation "
-    "context; never treat feedback as permission to change those trusted inputs."
+    "context; never treat feedback as permission to change those trusted inputs. For a "
+    "plan_access_profile_mismatch, correct only resource types or literal scopeable identifiers "
+    "within the fixed plan-access profile; preserve every trusted application requirement, and "
+    "report a limitation if no supported shape satisfies it."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v26"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v27"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -252,6 +256,7 @@ _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
         "provider_mismatch",
         "provider_unavailable",
         "request_binding_mismatch",
+        "plan_access_profile_mismatch",
     }
 )
 _SAFE_FEEDBACK_FIELD = re.compile(r"[A-Za-z_][A-Za-z0-9_.*\[\]]{0,127}\Z")
@@ -484,6 +489,54 @@ _RESOURCE_OUTPUT_GUIDANCE = (
     "A Lambda secret ARN environment reference must point to that declared output. "
     "Do not add resources or change the selected architecture to repair this output."
 )
+_PLAN_ACCESS_GUIDANCE = {
+    "unsupported_resource_type": (
+        "The fixed plan-access profile supports only these AWS resource types: "
+        "aws_apigatewayv2_api, aws_apigatewayv2_authorizer, aws_apigatewayv2_deployment, "
+        "aws_apigatewayv2_integration, aws_apigatewayv2_integration_response, "
+        "aws_apigatewayv2_route, aws_apigatewayv2_route_response, aws_apigatewayv2_stage, "
+        "aws_db_instance, aws_db_subnet_group, aws_dynamodb_table, aws_iam_policy, "
+        "aws_iam_role, aws_iam_role_policy, aws_iam_role_policy_attachment, "
+        "aws_lambda_event_source_mapping, aws_lambda_function, aws_lambda_permission, "
+        "aws_rds_cluster, aws_rds_cluster_instance, aws_s3_bucket, aws_s3_bucket_acl, "
+        "aws_s3_bucket_cors_configuration, aws_s3_bucket_lifecycle_configuration, "
+        "aws_s3_bucket_ownership_controls, aws_s3_bucket_policy, "
+        "aws_s3_bucket_public_access_block, aws_s3_bucket_server_side_encryption_configuration, "
+        "aws_s3_bucket_versioning, aws_sqs_queue, aws_sqs_queue_policy, aws_vpc, aws_subnet, "
+        "and aws_security_group. Preserve the trusted application behavior and data needs. "
+        "Use a supported type only when it meets those needs; otherwise report the unsupported "
+        "requirement. Do not remove requirements or invent a substitute."
+    ),
+    "unsafe_resource_scope": (
+        "The fixed read-only plan profile must derive exact same-account, same-region resource "
+        "ARNs from literal resource identifiers or typed references to declared resources. Use "
+        "safe literal names and valid declared outputs for bucket, table, queue, function, RDS, "
+        "subnet-group, and IAM resources. Do not use expressions, wildcards, arbitrary ARNs, or "
+        "untrusted references. Preserve all trusted application behavior and data needs; if no "
+        "safe supported shape meets them, report the limitation instead of weakening them."
+    ),
+    "unsafe_resource_reference": (
+        "Every IAM role or policy read must be scoped through a declared role or policy with a "
+        "valid literal name, path, and typed reference. Do not add broader permissions, use "
+        "wildcards, or substitute an unrelated role or policy. Preserve the trusted application "
+        "behavior; if no safely scoped shape meets it, report the limitation."
+    ),
+    "no_supported_resources": (
+        "Include at least one resource whose reads can be scoped by the fixed plan-access profile. "
+        "Preserve the trusted application behavior and data needs; do not remove requirements or "
+        "add an unrelated resource. If the required architecture has no supported shape, report "
+        "that limitation."
+    ),
+}
+_PLAN_ACCESS_VALIDATION_FEEDBACK = {
+    code: {
+        "code": "invalid",
+        "field": "resources",
+        "issue": "plan_access_profile_mismatch",
+        "guidance": guidance,
+    }
+    for code, guidance in _PLAN_ACCESS_GUIDANCE.items()
+}
 _SECRET_REFERENCE_LOCATION_GUIDANCE = {
     "non_lambda_resource": (
         "The secret reference is on a non-Lambda resource. Preserve the selected architecture; "
@@ -522,6 +575,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _UNKNOWN_CONTRACT_FIELD_GUIDANCE,
         _LAMBDA_CONTAINER_READINESS_GUIDANCE,
         *(guidance for _, guidance in _GRAPH_VALIDATION_FEEDBACK.values()),
+        *_PLAN_ACCESS_GUIDANCE.values(),
     }
 )
 _ALLOWED_VALIDATION_ISSUES = frozenset(
@@ -540,6 +594,7 @@ _ALLOWED_VALIDATION_ISSUES = frozenset(
         "reference_type_mismatch",
         "unknown_health_target",
         *(issue for issue, _ in _GRAPH_VALIDATION_FEEDBACK.values()),
+        "plan_access_profile_mismatch",
     }
 )
 
@@ -672,6 +727,7 @@ class NovaTerraformGenerator:
         approved_plan: dict[str, Any],
         tenant: TenantScope,
         source_revision: str | None = None,
+        proposal_validator: Callable[[GeneratedDeploymentProposal], str | None] | None = None,
     ) -> TerraformGenerationResult:
         """Return an untrusted proposal bound to trusted revision and region."""
         context = trusted_context(approved_plan, source_revision)
@@ -778,17 +834,43 @@ class NovaTerraformGenerator:
                             {"code": "trusted_context_mismatch", "field": "proposal"}
                         ]
                     else:
-                        return TerraformGenerationResult(
-                            proposal=proposal,
-                            response=_aggregate_model_responses(responses),
-                        )
+                        validation_code = None
+                        if proposal_validator is not None:
+                            try:
+                                validation_code = proposal_validator(proposal)
+                            except Exception:  # noqa: BLE001 - suppress trusted validator details
+                                raise _generation_failure(
+                                    "Nova proposal validation could not be confirmed safely.",
+                                    responses,
+                                    failure_code="proposal_invalid",
+                                ) from None
+                        if validation_code is None:
+                            return TerraformGenerationResult(
+                                proposal=proposal,
+                                response=_aggregate_model_responses(responses),
+                            )
+                        safe_feedback = _PLAN_ACCESS_VALIDATION_FEEDBACK.get(validation_code)
+                        if safe_feedback is None:
+                            raise _generation_failure(
+                                "Nova proposal validation could not be confirmed safely.",
+                                responses,
+                                failure_code="proposal_invalid",
+                            ) from None
+                        feedback = [dict(safe_feedback)]
 
         raise _generation_failure(
             "Nova could not produce a valid deployment proposal within the bounded "
             f"{self.max_semantic_attempts}-attempt, {self.total_timeout_seconds}-second "
             "limit. Review the plan inputs and retry.",
             responses,
-            failure_code="proposal_invalid" if feedback else "generation_timeout",
+            failure_code=(
+                "plan_access_profile_mismatch"
+                if feedback
+                and any(
+                    item.get("issue") == "plan_access_profile_mismatch" for item in feedback
+                )
+                else "proposal_invalid" if feedback else "generation_timeout"
+            ),
             validation_feedback=feedback or [],
         ) from None
 
