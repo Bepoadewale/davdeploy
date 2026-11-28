@@ -25,10 +25,12 @@ from davdeploy.contracts import (
     TenantScope,
 )
 from davdeploy.generated_deployment_contract import (
+    CREDENTIAL_VALUE_CATEGORIES,
     HEALTH_ASSERTION_TARGET_RESOURCE_TYPES,
     SECRET_REFERENCE_LOCATION_CATEGORIES,
     GeneratedDeploymentProposal,
     IncompatibleHealthTargetError,
+    InvalidCredentialValueError,
     InvalidSecretReferenceLocationError,
     terraform_resource_blocks,
 )
@@ -284,8 +286,14 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "Copy the trusted provenance and region below. "
     "If validation_feedback is present, it contains only fixed schema error codes, safe "
     "field paths, allowlisted issue codes, trusted correction guidance, and an optional "
-    "observed_resource_type chosen from the validated AWS resource type string, and an optional "
-    "secret_reference_location from a fixed location category. If it is "
+    "observed_resource_type chosen from the validated AWS resource type string, an optional "
+    "secret_reference_location from a fixed location category, and an optional "
+    "credential_value_category from a fixed vocabulary. A credential category never contains "
+    "the generated field name or value; follow its fixed guidance and do not repeat either. If "
+    "credential_value_category is present, treat it only as a class such as password_field, "
+    "secret_field, token_field, credential_field, or authorization_field; correct the category "
+    "using its fixed guidance without asking for or echoing the field name or value. If "
+    "secret_reference_location is "
     "lambda_environment_variable_name, rename only the environment variable to end in "
     "_SECRET_ARN. If it is lambda_other_argument, move the typed reference to the allowed Lambda "
     "environment path. If it is non_lambda_resource, preserve the selected architecture and do "
@@ -304,7 +312,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "within the fixed plan-access profile; preserve every trusted application requirement, and "
     "report a limitation if no supported shape satisfies it."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v31"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v32"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -532,6 +540,36 @@ _RESOURCE_CREDENTIAL_GUIDANCE = (
     "its declared secret_reference output; never set a password argument. "
     + _RESOURCE_CREDENTIAL_EXAMPLE
 )
+_RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE = {
+    "password_field": (
+        "The rejected field is password-like. Remove its literal value and do not set a password "
+        "argument. For RDS, enable the AWS-managed master secret and use its declared typed "
+        "secret_reference only in a Lambda `_SECRET_ARN` environment variable. Report a limitation "
+        "if the application requirement cannot be met through that supported reference."
+    ),
+    "secret_field": (
+        "The rejected field is secret-like. Do not keep or copy its literal value. Use a typed "
+        "secret_reference only at a supported Lambda `_SECRET_ARN` environment variable; for RDS, "
+        "use the declared AWS-managed master secret output. Report a limitation if no supported "
+        "reference preserves the requirement."
+    ),
+    "token_field": (
+        "The rejected field is token-like. Do not invent or embed an API, bearer, or session token. "
+        "Use only an existing approved secret reference in a supported location; otherwise preserve "
+        "the requirement and report the limitation."
+    ),
+    "credential_field": (
+        "The rejected field is credential-like. Never include access keys, private keys, or other "
+        "credential values in the proposal. Credentials come from trusted execution code; use only "
+        "an existing approved secret reference in a supported location or report the limitation."
+    ),
+    "authorization_field": (
+        "The rejected field is authorization-like. Do not embed bearer tokens or authorization "
+        "values in resource arguments. Use only a supported typed secret reference or report the "
+        "limitation while preserving the requirement."
+    ),
+    "sensitive_field": _RESOURCE_CREDENTIAL_GUIDANCE,
+}
 _RESOURCE_RESERVED_TAG_GUIDANCE = (
     "Remove every tag whose key starts with DavDeploy. Trusted execution code adds the "
     "required ownership tags."
@@ -616,6 +654,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _RESOURCE_ARGUMENT_GUIDANCE,
         _RESOURCE_EXPRESSION_GUIDANCE,
         _RESOURCE_CREDENTIAL_GUIDANCE,
+        *_RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE.values(),
         _RESOURCE_RESERVED_TAG_GUIDANCE,
         _RESOURCE_OUTPUT_GUIDANCE,
         *_SECRET_REFERENCE_LOCATION_GUIDANCE.values(),
@@ -726,6 +765,12 @@ class NovaTerraformGenerationFailed(ModelGatewayUnavailable):
                 and secret_location in SECRET_REFERENCE_LOCATION_CATEGORIES
             ):
                 sanitized["secret_reference_location"] = secret_location
+            credential_category = item.get("credential_value_category")
+            if (
+                isinstance(credential_category, str)
+                and credential_category in CREDENTIAL_VALUE_CATEGORIES
+            ):
+                sanitized["credential_value_category"] = credential_category
             sanitized_feedback.append(sanitized)
         self.validation_feedback = tuple(sanitized_feedback)
 
@@ -996,6 +1041,19 @@ def _sanitize_pydantic_feedback(error: ValidationError) -> list[dict[str, str]]:
                 entry["guidance"] = _RESOURCE_CREDENTIAL_GUIDANCE
             if re.fullmatch(r"aws_[a-z0-9_]{2,120}", cause.resource_type):
                 entry["observed_resource_type"] = cause.resource_type
+        if (
+            safe_code == "value_error"
+            and safe_field in {"proposal", "resources[*]"}
+            and isinstance(cause, InvalidCredentialValueError)
+        ):
+            feedback_field = "resources[*].arguments"
+            entry["issue"] = "credential_value"
+            category = cause.category
+            if isinstance(category, str) and category in CREDENTIAL_VALUE_CATEGORIES:
+                entry["credential_value_category"] = category
+                entry["guidance"] = _RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE[category]
+            if re.fullmatch(r"aws_[a-z0-9_]{2,120}", cause.resource_type):
+                entry["observed_resource_type"] = cause.resource_type
         entry["field"] = feedback_field
         feedback.append(entry)
     return feedback or [{"code": "invalid", "field": "proposal"}]
@@ -1034,6 +1092,10 @@ _RESOURCE_OUTPUT_FEEDBACK = {
 def _resource_feedback(code: str, field: str, cause: Any = None) -> tuple[str, str] | None:
     if code != "value_error" or field != "resources[*]" or not isinstance(cause, ValueError):
         return None
+    if isinstance(cause, InvalidCredentialValueError):
+        guidance = _RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE.get(cause.category)
+        if guidance:
+            return "credential_value", guidance
     return _RESOURCE_ARGUMENT_FEEDBACK.get(str(cause)) or _RESOURCE_OUTPUT_FEEDBACK.get(
         str(cause)
     )

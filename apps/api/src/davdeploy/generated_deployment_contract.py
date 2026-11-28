@@ -34,6 +34,25 @@ SECRET_REFERENCE_LOCATION_CATEGORIES = frozenset(
         "lambda_other_argument",
     }
 )
+CREDENTIAL_VALUE_CATEGORIES = frozenset(
+    {
+        "password_field",
+        "secret_field",
+        "token_field",
+        "credential_field",
+        "authorization_field",
+        "sensitive_field",
+    }
+)
+
+
+class InvalidCredentialValueError(ValueError):
+    """Fixed metadata for a rejected credential-like field; never stores its name or value."""
+
+    def __init__(self, resource_type: str, category: str) -> None:
+        super().__init__("credential and secret fields must use a typed secret_reference")
+        self.resource_type = resource_type
+        self.category = category
 
 
 class InvalidSecretReferenceLocationError(ValueError):
@@ -160,6 +179,20 @@ class GeneratedResource(StrictContract):
             reference = ResourceReference.model_validate(value)
             return reference.value_type == "secret_reference"
 
+        def credential_value_category(key: str) -> str:
+            normalized = "".join(character for character in key.casefold() if character.isalnum())
+            if "password" in normalized or "passwd" in normalized:
+                return "password_field"
+            if "secret" in normalized:
+                return "secret_field"
+            if any(marker in normalized for marker in ("token", "apikey")):
+                return "token_field"
+            if any(marker in normalized for marker in ("credential", "accesskey", "privatekey")):
+                return "credential_field"
+            if normalized in {"authorization", "proxyauthorization", "httpauthorization"}:
+                return "authorization_field"
+            return "sensitive_field"
+
         def visit(value: Any, *, parent_key: str | None = None) -> None:
             if isinstance(value, str) and any(
                 marker in value.lower()
@@ -171,8 +204,8 @@ class GeneratedResource(StrictContract):
                     if not isinstance(key, str) or key.casefold() in forbidden:
                         raise ValueError("generated arguments contain a forbidden field")
                     if is_secret_value_field(key, child, parent_key=parent_key) and not is_secret_reference(child):
-                        raise ValueError(
-                            "credential and secret fields must use a typed secret_reference"
+                        raise InvalidCredentialValueError(
+                            self.resource_type, credential_value_category(key)
                         )
                     if isinstance(child, dict) and child.get("kind") == "resource_reference":
                         ResourceReference.model_validate(child)
@@ -190,8 +223,8 @@ class GeneratedResource(StrictContract):
                     )
                     and not is_secret_reference(value["value"])
                 ):
-                    raise ValueError(
-                        "credential and secret fields must use a typed secret_reference"
+                    raise InvalidCredentialValueError(
+                        self.resource_type, credential_value_category(variable_name)
                     )
             elif isinstance(value, (list, tuple)):
                 for child in value:
