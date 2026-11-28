@@ -5,7 +5,7 @@
 - [ ] Tests/lint pass.
 - [ ] Claims are labelled executed, simulated or planned.
 - [ ] No secret, customer or private strategy data was added.
-- [ ] Focused local validation is recorded; high-risk/release changes also include one clean-room cycle.
+- [ ] Focused validation is recorded; GitHub Actions provides the fresh-runner integration proof.
 
 ## Cloud evidence (only if a cloud pilot was authorised)
 
