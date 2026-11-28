@@ -1,0 +1,73 @@
+# ticket563 — make typed reference repair feedback actionable
+
+PR: draft (number pending)
+
+Branch: `fix/nova-reference-type-feedback-563`
+
+## Problem / goal
+
+The fresh hosted v24 plan-only generation failed before CodeBuild with the
+allowlisted `reference_type_mismatch` issue. The current repair guidance says
+to match a typed reference to its declared output but provides no paired schema
+example or explicit self-check. Improve the model-facing contract guidance and
+bounded repair feedback without relaxing graph validation or exposing raw
+proposal values.
+
+## Current repo state
+
+- Backend `main`: `bb4c5dd751c1d4a40cafc889163a5ee30272a4c7` (PR #562 merged).
+- PR #562's protected release plan/apply and post-deployment checks passed.
+- Fresh hosted v24 run `32b172f4-4ef7-4bbe-a5dc-f163df217b40` failed before
+  CodeBuild with `reference_type_mismatch`; no artifact or customer workload
+  was created. The review-only revision remains unapproved.
+
+## Research / references used
+
+- `apps/api/src/davdeploy/generated_deployment_contract.py` enforces exact
+  output-name and value-type equality for every typed reference.
+- `apps/api/src/davdeploy/terraform_generation.py` supplies versioned Nova
+  generation instructions and fixed, sanitized repair feedback.
+- `docs/test/test562.md` records the prior hosted baseline and release evidence.
+
+## Work planned for the PR
+
+1. Explain the paired declared-output/reference contract with a schema-shaped,
+   non-sensitive example and a self-check for each edge.
+2. Make `reference_type_mismatch` feedback explicitly distinguish matching the
+   exact declared output name and type from inventing or changing architecture.
+3. Keep strict validators unchanged; do not normalize semantic type mismatches.
+4. Add tests proving feedback reaches the bounded repair attempt and arbitrary
+   IDs, output names, values, and unknown text stay redacted.
+5. Update prompt version, test evidence, and private local goal ledger.
+
+## Acceptance criteria
+
+- [ ] Guidance clearly explains declared output/reference pair equality.
+- [ ] Graph validation remains strict and unchanged.
+- [ ] Feedback remains sanitized and repair remains bounded.
+- [ ] Focused and full verification pass; required clean-room proof is recorded.
+- [ ] All current-head CI/review checks pass and PR is merged.
+- [ ] Fresh hosted review-only run reaches a plan or a more precise blocker;
+      no customer workload is approved or applied.
+
+## Tests / validation performed
+
+None yet; ticket-first bootstrap only.
+
+## Evidence files produced
+
+- `docs/tickets/ticket563.md`
+- `docs/test/test563.md` (to be added)
+
+## Follow-up work
+
+Use the next hosted outcome to advance the actual planning gate. A generated
+proposal alone is not acceptance: require supported composed resources, real
+pricing, saved-plan policy, and later hosted lifecycle evidence.
+
+## Boundaries
+
+Do not expose raw proposal, resource IDs, output names, secrets, plans, or state
+in public diagnostics. Do not weaken authorization, validation, policy, or
+customer workload approval requirements. Do not claim a Nova workload was
+applied or certified.
