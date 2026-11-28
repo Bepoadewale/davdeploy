@@ -50,7 +50,8 @@ policy, and customer requirements unchanged.
 - [x] Focused tests (155 passed), full verification (2,108 passed plus lint,
       Actions configuration, OpenAPI, and Compose syntax), documentation
       conventions, and diff checks pass locally.
-- [ ] Required GitHub CI and any reviewer-required clean-room gate pass.
+- [x] Required GitHub CI run `46160686728` passes all seven checks; automated
+      review completed without findings. No clean-room gate was requested.
 - [ ] One fresh post-deployment hosted plan-only result is recorded while the
       customer revision remains unapproved and no workload is applied/destroyed.
 
@@ -60,8 +61,8 @@ Prompt v30 feedback now names the managed RDS secret output, forbids password
 arguments and credential-bearing `DATABASE_URL`, and asks Nova to report a
 limitation when safe consumption is not possible. A synthetic repair regression
 asserts that the credential value stays out of repair context and result.
-Focused and full local verification pass. Final diff review, CI, automated
-review, deployment, and the post-deployment hosted rerun remain pending.
+Focused and full local verification pass. Final-head CI and automated review
+pass. Protected deployment and the post-deployment hosted rerun remain pending.
 
 ## Tests / validation performed
 
@@ -77,6 +78,8 @@ review, deployment, and the post-deployment hosted rerun remain pending.
   Ruff, Actions configuration, OpenAPI, and Compose syntax passed.
 - `GITHUB_PR_NUMBER=569 python3 scripts/check_doc_conventions.py` and
   `git diff --check` — passed.
+- PR CI run `46160686728` passed all seven checks on implementation commit
+  `a39c70bb605121383f51d1e08d1459244309f7b3`; automated review found no issues.
 
 ## Evidence files produced
 

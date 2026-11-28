@@ -50,8 +50,9 @@ AWS region: `us-east-1`
   is absent from repair feedback and the accepted managed-secret proposal.
 - Focused suites passed (155 tests). Full `make verify` passed (2,108 tests),
   Ruff, Actions configuration, OpenAPI, and Compose syntax; documentation
-  conventions and diff checks passed. CI, review, protected deployment, and one
-  fresh hosted plan-only v30 result remain pending.
+  conventions and diff checks passed. PR CI run `46160686728` passed all seven
+  checks; automated review found no issues. Protected deployment and one fresh
+  hosted plan-only v30 result remain pending.
 
 ## Resources created
 
