@@ -54,16 +54,17 @@ existing contract. Keep validation and policy strict.
       without changing trusted context or the original queued-work requirement.
 - [x] Missing or incompatible resources fail safely after the bounded attempt
       limit; no validator, policy, or health requirement is weakened.
-- [ ] Focused tests, full verification, docs conventions, required clean-room
-      cycle, and all seven required CI checks pass.
+- [x] Focused tests, full verification, docs conventions, required clean-room
+      cycle, and all seven required CI checks pass on implementation commit
+      `8a38f3e8`.
 - [ ] One fresh post-deployment v29 plan-only result is recorded while the
       customer revision remains unapproved and no workload is applied/destroyed.
 
 ## Acceptance status
 
-Implementation, focused tests, and full verification pass. Required clean-room
-cycle, final-head CI/review, deployment, and the hosted v29 plan-only check
-remain pending.
+Implementation, focused tests, full verification, clean-room cycle, docs
+conventions, and seven CI checks pass. Final evidence-head CI/review, protected
+deployment, and the hosted v29 plan-only check remain pending.
 
 ## Tests / validation performed
 
@@ -73,9 +74,18 @@ remain pending.
   tests/test_customer_plan_review.py tests/test_nova_plan_runs.py` — 154 passed.
 - Full `GITHUB_PR_NUMBER=568 make verify PYTHON=... VENV=...` — 2,107 passed;
   Ruff, Actions configuration, OpenAPI, and Compose syntax passed.
+- Required isolated clean-room cycle passed at implementation commit
+  `8a38f3e8`: clean-local, bootstrap, smoke, simple/complex/degraded/Day-2
+  demos, policy denial, readiness failure, API contract, customer-plan E2E,
+  fixture seed, trace, full verify (2,107 tests), and clean-local. No AWS
+  resources were created. The isolated containers, network, Postgres volume,
+  `.venv`, and `.local` were verified absent afterward; protected root files
+  and other worktrees were preserved.
 - `GITHUB_PR_NUMBER=568 python3 scripts/check_doc_conventions.py` and
   `git diff --check` — passed.
-- Required clean-room cycle, CI, and hosted v29 verification remain pending.
+- PR CI run `46157074424` passed all seven checks on `8a38f3e8`. The evidence
+  update will trigger the final-head CI run.
+- Hosted v29 verification remains pending.
 
 ## Evidence files produced
 

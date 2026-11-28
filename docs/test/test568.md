@@ -14,6 +14,8 @@ Deployed baseline: PR #567 merge `909aba72f49eb5840752380b1dab6414f37b53ef`.
 
 Commit: deployed baseline `909aba72f49eb5840752380b1dab6414f37b53ef`.
 
+PR implementation commit: `8a38f3e8`.
+
 AWS account: `654654474502`
 
 AWS region: `us-east-1`
@@ -73,8 +75,19 @@ ended during generation before Terraform planning.
   assertion while preserving trusted context. A second confirms the missing
   binding still fails after two bounded attempts with only fixed feedback.
 - Documentation conventions and `git diff --check` passed.
-- Clean-room cycle, required CI, protected deployment, and hosted v29 plan-only
-  check remain pending.
+- Required clean-room cycle passed in detached worktree
+  `/private/tmp/davdeploy-nova-event-binding-568-clean` at `8a38f3e8`, using
+  Compose project `davdeploy-nova-pr568-clean`: clean-local, bootstrap-local,
+  smoke, simple/complex/degraded/Day-2 demos, policy failure, readiness failure,
+  API contract, customer-plan E2E, fixture seed, trace check, full verify
+  (2,107 tests), and clean-local. Fixture seed explicitly reported no AWS,
+  authenticated Terraform, Kubernetes, or GitOps execution.
+- Cleanup verification confirmed no matching containers or Postgres volume,
+  and no clean-room `.venv` or `.local`. Root protected `--only-show-errors`
+  and `.venv-pr399/` remained present.
+- PR CI run `46157074424` passed all seven checks on implementation commit
+  `8a38f3e8`; the evidence update requires a fresh final-head run.
+- Protected deployment and one hosted v29 plan-only check remain pending.
 
 ## Follow-up result
 
