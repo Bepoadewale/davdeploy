@@ -77,6 +77,30 @@ authenticated CLI verified workspace role `administrator`.
   parsed configuration only; it did not start containers.
 - Documentation conventions and `git diff --check` passed.
 
+### Required isolated clean-room cycle
+
+- Worktree: `/private/tmp/davdeploy-nova-http-health-567-clean`, detached at
+  implementation commit `edab40b42be24ba217718ed2b3884345bf9e96e2`.
+- Compose project: `davdeploy-nova-pr567-clean`.
+- `COMPOSE_PROJECT_NAME=davdeploy-nova-pr567-clean make clean-local VENV=.venv`
+  completed before bootstrap.
+- `COMPOSE_PROJECT_NAME=davdeploy-nova-pr567-clean make bootstrap-local PYTHON=python3.12 VENV=.venv`
+  completed; all isolated services became ready.
+- `COMPOSE_PROJECT_NAME=davdeploy-nova-pr567-clean make smoke demo-simple demo-complex demo-degraded demo-day2 demo-failure demo-readiness-failure api-contract customer-plan-e2e seed-demo-data trace-check PYTHON=python3.12 VENV=.venv`
+  passed. Simple, complex, degraded, and Day-2 demos passed; budget policy
+  denial and readiness failure were observed; API contract and customer-plan
+  E2E passed; Tempo received DavDeploy traces. The seeded execution was local
+  fixture-only and created no AWS resources.
+- `COMPOSE_PROJECT_NAME=davdeploy-nova-pr567-clean make verify PYTHON=python3.12 VENV=.venv`
+  passed: 2,105 tests, Ruff, Actions configuration, OpenAPI snapshot, and
+  Compose syntax.
+- `COMPOSE_PROJECT_NAME=davdeploy-nova-pr567-clean make clean-local VENV=.venv`
+  completed. The project's containers, network, and Postgres volume were
+  removed; its generated `.venv` and `.local` are absent. Other worktrees and
+  the protected root checkout artifacts were left untouched.
+- PR #567 CI run `46152900286` passed all seven checks at
+  `edab40b42be24ba217718ed2b3884345bf9e96e2`.
+
 ## Teardown
 
 No workload resources were created; no workload teardown was needed. The
@@ -95,7 +119,7 @@ After PR #567 merges and its exact control-plane release is deployed, use a
 fresh submitted revision with the same digest and one v28 plan-only request.
 Keep the revision unapproved. Inspect only allowlisted diagnostics or a
 value-free saved-plan summary. Do not approve, apply, destroy, or certify a
-customer workload.
+customer workload. No v28 hosted result exists yet.
 
 ## Limits
 

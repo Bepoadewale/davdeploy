@@ -64,15 +64,15 @@ health requirements, inventing resources, changing policy, or widening IAM.
       trusted context or customer requirements.
 - [x] Missing/incompatible API Gateway relationships fail safely without
       invented resources, weakened checks, or broader policy.
-- [ ] Focused tests, full verification, docs conventions, required clean-room
-      gate, and all required CI checks pass.
+- [x] Focused tests, full verification, docs conventions, required clean-room
+      gate, and all seven required CI checks pass.
 - [ ] One fresh post-deployment v28 plan-only result is recorded with no
       customer workload approval, apply, or destroy.
 
 ## Acceptance status
 
-Implementation and focused/full local verification are complete. Clean-room
-and hosted v28 checks remain.
+Implementation, focused/full verification, clean-room cycle, and CI are
+complete. The post-deployment hosted v28 plan-only check remains.
 
 ## Tests / validation performed
 
@@ -80,12 +80,13 @@ and hosted v28 checks remain.
 - `GITHUB_PR_NUMBER=567 make verify PYTHON=/Users/adewale/Projects/davdeploy/.venv-pr399/bin/python VENV=/Users/adewale/Projects/davdeploy/.venv-pr399` — 2,105 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose syntax passed. Compose was parsed only; no containers were started by this command.
 - `GITHUB_PR_NUMBER=567 python3 scripts/check_doc_conventions.py` and `git diff --check` — passed.
 - Read-only hosted v27 result inspection and source-architecture component check are recorded in `docs/test/test567.md`.
-- Isolated clean-room verification and GitHub CI are pending.
+- Isolated clean-room full cycle passed: bootstrap, smoke, simple/complex/degraded/Day-2 demos, policy and readiness failures, API contract, customer-plan E2E, fixture seed, trace check, full verify (2,105 tests), and scoped cleanup. Exact commands and cleanup verification are recorded in `docs/test/test567.md`.
+- PR #567 CI run `46152900286` passed all seven checks at `edab40b42be24ba217718ed2b3884345bf9e96e2`.
 
 ## Evidence files produced
 
-- `docs/test/test567.md` — deployed v27 failure baseline and the later v28
-  plan-only outcome.
+- `docs/test/test567.md` — deployed v27 failure baseline and clean-room
+  verification; hosted v28 result remains pending.
 
 ## Boundaries
 
