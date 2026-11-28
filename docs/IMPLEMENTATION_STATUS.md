@@ -1,5 +1,23 @@
 # Implementation Status
 
+## 28 November 2026 — deployed v31 and v32 credential-feedback work
+
+PR #570 (`df861459eae1bf642227c3c897adb4b3bb078607`) is merged and deployed
+through the protected control-plane workflow. The exact saved-plan release
+updated six Lambda packages in place, migrations passed, all six package hashes
+matched the release artifact, and API health and authenticated CLI administrator
+checks passed. The fresh unapproved v31 plan-only run
+`9eec3f56-5f07-4ba3-8159-9a9c899590bc` failed safely before Terraform planning
+with `credential_value`; no workload resources or plan artifact were produced.
+Draft PR #571 adds fixed, allowlisted credential categories and safe
+category-specific repair guidance without exposing generated field names or
+values. The focused suites pass 220 tests; full `make verify` passes 2,115 tests
+plus Ruff, Actions configuration, OpenAPI, and Compose syntax, and docs/diff
+checks pass. Review/CI, the required clean-room cycle, protected deployment,
+and one fresh v32 plan-only attempt remain pending. Customer approval/apply
+remain closed. No Nova customer workload has been applied, operated, or
+certified.
+
 ## 28 November 2026 — deployed v30 result
 
 PR #569 is deployed from merge `8890fa56d92a2cf7aee9023528d91833aa6b0052`;

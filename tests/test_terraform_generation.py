@@ -23,7 +23,7 @@ from davdeploy.terraform_generation import (
     _LAMBDA_HEALTH_ASSERTION_EXAMPLES,
     _LAMBDA_HTTP_RESPONSE_GUIDANCE,
     _PLAN_ACCESS_GUIDANCE,
-    _RESOURCE_CREDENTIAL_GUIDANCE,
+    _RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE,
     _RESOURCE_GRAPH_GUIDANCE,
     _RESOURCE_NAME_GUIDANCE,
     _RESOURCE_OBJECT_SHAPE_GUIDANCE,
@@ -198,7 +198,7 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v31"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v32"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert _LAMBDA_HEALTH_ASSERTION_EXAMPLES in document["task"]
@@ -213,6 +213,8 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "do not embed a username/password in `DATABASE_URL`" in document["task"]
     assert "report the limitation instead of inventing a value" in document["task"]
     assert "secret_reference_location" in document["task"]
+    assert "credential_value_category" in document["task"]
+    assert "do not repeat either" in document["task"]
     assert "SQS queue output arn/aws_arn" in document["task"]
     assert "RDS output master_user_secret[0].secret_arn/secret_reference" in document["task"]
     assert "report the limitation instead of inventing a resource" in document["task"]
@@ -1438,8 +1440,9 @@ def test_nova_repairs_literal_credential_with_managed_database_secret_reference(
 
     feedback = gateway.calls[1][1]["validation_feedback"]
     assert feedback[0]["issue"] == "credential_value"
-    assert "aws_db_instance` or `aws_rds_cluster" in feedback[0]["guidance"]
-    assert "DATABASE_URL" in feedback[0]["guidance"]
+    assert feedback[0]["credential_value_category"] == "secret_field"
+    assert "secret_reference" in feedback[0]["guidance"]
+    assert "db_secret" not in str(feedback)
     assert secret_value not in str(gateway.calls[1][1])
     assert secret_value not in str(result.proposal)
     assert result.proposal.resources[1].arguments["environment"][0]["variables"][
@@ -1457,6 +1460,7 @@ def test_nova_repairs_literal_credential_with_managed_database_secret_reference(
         )
     assert failure.value.failure_code == "proposal_invalid"
     assert failure.value.validation_feedback[0]["issue"] == "credential_value"
+    assert failure.value.validation_feedback[0]["credential_value_category"] == "secret_field"
     assert secret_value not in str(failure.value)
 
 
@@ -1493,7 +1497,7 @@ def test_unrecognized_proposal_validator_message_is_never_returned():
         (
             {"arguments": {"db_secret": "private-value"}},
             "credential_value",
-            _RESOURCE_CREDENTIAL_GUIDANCE,
+            _RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE["secret_field"],
         ),
         (
             {"arguments": {"tags": {"DavDeployOwner": "model-value"}}},
@@ -1554,12 +1558,95 @@ def test_resource_level_value_errors_receive_fixed_safe_guidance(resource_update
         GeneratedDeploymentProposal.model_validate(invalid)
 
     feedback = _sanitize_pydantic_feedback(error.value)
-    assert feedback[0] == {
+    if issue == "credential_value":
+        assert feedback[0] == {
+            "code": "value_error",
+            "field": "resources[*].arguments",
+            "issue": issue,
+            "guidance": guidance,
+            "observed_resource_type": "aws_s3_bucket",
+            "credential_value_category": "secret_field",
+        }
+        assert "db_secret" not in str(feedback)
+        assert "private-value" not in str(feedback)
+    else:
+        assert feedback[0] == {
+            "code": "value_error",
+            "field": "resources[*]",
+            "issue": issue,
+            "guidance": guidance,
+        }
+
+
+@pytest.mark.parametrize(
+    ("field_name", "category"),
+    [
+        ("db_password", "password_field"),
+        ("db_secret", "secret_field"),
+        ("api_token", "token_field"),
+        ("db_credential", "credential_field"),
+        ("authorization", "authorization_field"),
+    ],
+)
+def test_credential_feedback_uses_fixed_category_and_redacts_field_and_value(field_name, category):
+    raw_value = "private-synthetic-value"
+    invalid = proposal(
+        None,
+        {
+            "trusted_generation_context": {
+                "context_digest": "a" * 64,
+                "region": "us-east-1",
+            }
+        },
+        arguments={field_name: raw_value},
+    )
+    with pytest.raises(ValidationError) as error:
+        GeneratedDeploymentProposal.model_validate(invalid)
+
+    feedback = _sanitize_pydantic_feedback(error.value)
+    credential_feedback = next(item for item in feedback if item.get("issue") == "credential_value")
+    assert credential_feedback == {
         "code": "value_error",
-        "field": "resources[*]",
-        "issue": issue,
-        "guidance": guidance,
+        "field": "resources[*].arguments",
+        "issue": "credential_value",
+        "guidance": _RESOURCE_CREDENTIAL_CATEGORY_GUIDANCE[category],
+        "observed_resource_type": "aws_ecs_cluster",
+        "credential_value_category": category,
     }
+    assert f"'{field_name}':" not in repr(feedback)
+    assert raw_value not in str(feedback)
+
+    failure = NovaTerraformGenerationFailed(
+        "safe failure",
+        attempt_count=1,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=(credential_feedback,),
+    )
+    assert failure.validation_feedback == (credential_feedback,)
+    hostile = NovaTerraformGenerationFailed(
+        "safe failure",
+        attempt_count=1,
+        usage=ModelUsage(),
+        evidence=(),
+        validation_feedback=(
+            {
+                **credential_feedback,
+                "credential_value_category": "untrusted-category",
+                "observed_resource_type": field_name,
+                "field_name": field_name,
+                "value": raw_value,
+            },
+        ),
+    )
+    assert hostile.validation_feedback == (
+        {
+            key: credential_feedback[key]
+            for key in ("code", "field", "issue", "guidance")
+        },
+    )
+    assert f"'{field_name}':" not in repr(hostile.validation_feedback)
+    assert raw_value not in str(hostile.validation_feedback)
 
 
 @pytest.mark.parametrize(
@@ -1758,7 +1845,7 @@ def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair
     assert "value_type must exactly equal that output's value_type" in task
     assert "SQS output queue_url/aws_queue_url" in task
     assert "Lambda output arn/aws_arn" in task
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v31"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v32"
 
     rejecting_gateway = SequenceGateway([invalid, invalid])
     with pytest.raises(NovaTerraformGenerationFailed) as failure:

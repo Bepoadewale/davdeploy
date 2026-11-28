@@ -43,10 +43,10 @@ credential check strict.
 
 ## Acceptance criteria
 
-- [ ] Credential feedback identifies only allowlisted category/resource-type
+- [x] Credential feedback identifies only allowlisted category/resource-type
       metadata; generated field names and values never appear in API diagnostics,
       model repair context, errors, or tests' observable result.
-- [ ] A valid managed-secret proposal repairs; repeated literal credential
+- [x] A valid managed-secret proposal repairs; repeated literal credential
       values still fail closed within the attempt bound.
 - [ ] Focused tests, full verification, docs checks, and required CI pass; satisfy
       any reviewer-required clean-room gate.
@@ -55,8 +55,9 @@ credential check strict.
 
 ## Acceptance status
 
-Implementation has not started. The hosted v31 failure is the baseline; no
-Terraform plan or workload mutation occurred.
+Implementation adds allowlisted credential categories and category-specific
+fixed guidance without exposing model-generated field names or values. The
+hosted v31 failure remains the baseline; v32 has not yet been deployed or run.
 
 ## Tests / validation performed
 
@@ -64,6 +65,11 @@ Terraform plan or workload mutation occurred.
   Terraform planning. Two attempts, one repair; no plan artifact.
 - Pre-request state: AWS account `654654474502`; no active local or hosted
   Terraform operations; source review remained unapproved.
+- Focused credential/generation/review/run suites: 220 passed. Full verification,
+  documentation checks, final CI, clean-room review gate, deployment, and
+  hosted v32 result remain pending.
+- Full `make verify`: 2,115 tests passed; Ruff, Actions configuration,
+  OpenAPI, Compose syntax, documentation conventions, and diff checks passed.
 
 ## Evidence files produced
 
