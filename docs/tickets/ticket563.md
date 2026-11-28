@@ -53,15 +53,17 @@ proposal values.
 ## Acceptance status
 
 In progress. The prompt and fixed repair guidance are implemented; 148 focused
-tests pass. Full verification passes; isolated clean-room proof, CI/review, protected
-release, and a fresh hosted v25 result remain pending.
+tests pass. Focused/full verification and isolated `local-proof` pass. Its dedicated worktree,
+venv, and volume remain retained under the no-delete rule; project containers are
+stopped. CI/review, protected release, and a fresh hosted v25 result remain pending.
 
 ## Tests / validation performed
 
 - Focused generation/review/run suite: 148 passed.
 - `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`: 2,096 passed; Ruff, Actions configuration, OpenAPI snapshot, and Compose config passed.
 - Documentation convention and `git diff --check` passed.
-- Isolated clean-room proof remains pending.
+- `COMPOSE_PROJECT_NAME=davdeploy-nova-ref563-proof` isolated `make VENV=/private/tmp/davdeploy-nova-reference-cleanroom-563-venv local-proof`: all smoke, API contract, customer-plan E2E, seed/trace, 2,096 tests, Ruff, Actions, OpenAPI, and Compose checks passed.
+- Project containers were stopped after proof. The clean-room worktree, venv, and database volume are retained; no local files or volumes were deleted.
 
 ## Evidence files produced
 

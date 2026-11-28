@@ -40,8 +40,15 @@ will use the protected saved-plan workflow and will be recorded here separately.
 - Full `make VENV=/Users/adewale/Projects/davdeploy/.venv-pr399 verify`
   passed 2,096 tests; Ruff, Actions configuration, OpenAPI snapshot, and Compose
   config passed. Documentation conventions and diff checks passed.
-- The contract validator is unchanged. No hosted v25 run has been requested
-  yet; clean-room proof, PR CI, release, and fresh hosted result remain pending.
+- The contract validator is unchanged. Isolated `make local-proof` at commit
+  `8881b1b2` passed smoke, API contract, customer-plan E2E, seed/trace,
+  2,096 tests, Ruff, Actions, OpenAPI, and Compose checks. It used project
+  `davdeploy-nova-ref563-proof` and ports 18080/18090/19090/13200/13000/18181
+  to avoid the existing `davdeploy-nova-lambda-health-feedback-560` stack.
+- The isolated project containers are stopped. Its worktree, dedicated venv,
+  and PostgreSQL volume remain retained; no files or volumes were deleted.
+- No hosted v25 run has been requested yet; PR CI/review, release, and fresh
+  hosted result remain pending.
 
 ## Teardown
 
