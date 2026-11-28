@@ -124,7 +124,16 @@ _LAMBDA_HEALTH_ASSERTION_EXAMPLES = (
     '"description":"HTTP health endpoint responds"}`. For queued work, use '
     "`event_processing` targeting the declared Lambda and set "
     "`source_resource_id` to its declared SQS queue only when a declared "
-    "`aws_lambda_event_source_mapping` references both. Valid assertion: "
+    "`aws_lambda_event_source_mapping` references both. The mapping must use "
+    "`arguments.event_source_arn` for a typed reference to the declared queue's "
+    "`arn` output and `arguments.function_name` for a typed reference to the "
+    "declared Lambda's `arn` output, both with `value_type` `aws_arn`. Example "
+    "mapping arguments: "
+    '`{"event_source_arn":{"kind":"resource_reference","resource_id":"queue",'
+    '"output_name":"arn","value_type":"aws_arn"},"function_name":'
+    '{"kind":"resource_reference","resource_id":"worker","output_name":"arn",'
+    '"value_type":"aws_arn"},"enabled":true,"batch_size":1}`. '
+    "Use the actual IDs and output names declared by the proposal. Valid assertion: "
     '`{"kind":"event_processing","target_resource_id":"worker",'
     '"source_resource_id":"queue",'
     '"description":"The queue message is processed"}`. If neither declared '
@@ -178,6 +187,21 @@ _LAMBDA_HTTP_RESPONSE_GUIDANCE = (
     "do not add an unselected component, invent an arbitrary route or URL, change the assertion "
     "kind, remove the assertion, or weaken the customer requirement. If the approved architecture "
     "does not include a compatible HTTP path, report that limitation."
+)
+_LAMBDA_EVENT_BINDING_GUIDANCE = (
+    "Add an `aws_lambda_event_source_mapping` to the declared resources. Set "
+    "`arguments.event_source_arn` to a typed `resource_reference` to the declared SQS "
+    "queue's `arn` output and `arguments.function_name` to a typed `resource_reference` "
+    "to the declared Lambda's `arn` output; both references use `value_type: aws_arn`. "
+    "Example arguments: "
+    '`{"event_source_arn":{"kind":"resource_reference","resource_id":"queue",'
+    '"output_name":"arn","value_type":"aws_arn"},"function_name":'
+    '{"kind":"resource_reference","resource_id":"worker","output_name":"arn",'
+    '"value_type":"aws_arn"},"enabled":true,"batch_size":1}`. Replace `queue` and '
+    "`worker` only with the existing SQS and Lambda resource IDs and use their exact "
+    "declared `arn` outputs. Keep the `event_processing` health assertion and its queue "
+    "source. If either declared resource or its ARN output is absent, report the limitation "
+    "instead of inventing a resource, changing the assertion, or weakening the requirement."
 )
 _HEALTH_TARGET_PAIR_GUIDANCE = {
     ("container_readiness", "aws_lambda_function"): _LAMBDA_CONTAINER_READINESS_GUIDANCE,
@@ -260,7 +284,7 @@ NOVA_TERRAFORM_GENERATION_TASK = (
     "within the fixed plan-access profile; preserve every trusted application requirement, and "
     "report a limitation if no supported shape satisfies it."
 )
-NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v28"
+NOVA_TERRAFORM_PROMPT_VERSION = "terraform-nova2-contract-v29"
 
 _MAX_VALIDATION_FEEDBACK = 12
 _ALLOWED_GENERATION_FAILURE_CODES = frozenset(
@@ -465,10 +489,7 @@ _GRAPH_VALIDATION_FEEDBACK = {
     ),
     "event probes require a declared SQS-to-Lambda event binding": (
         "missing_event_binding",
-        (
-            "Declare an aws_lambda_event_source_mapping that references both the source SQS queue "
-            "and the target Lambda function."
-        ),
+        _LAMBDA_EVENT_BINDING_GUIDANCE,
     ),
     "cost assumptions must target declared resources": (
         "unknown_cost_resource",
@@ -589,6 +610,7 @@ _ALLOWED_FEEDBACK_GUIDANCE = frozenset(
         _UNKNOWN_CONTRACT_FIELD_GUIDANCE,
         _LAMBDA_CONTAINER_READINESS_GUIDANCE,
         _LAMBDA_HTTP_RESPONSE_GUIDANCE,
+        _LAMBDA_EVENT_BINDING_GUIDANCE,
         *(guidance for _, guidance in _GRAPH_VALIDATION_FEEDBACK.values()),
         *_PLAN_ACCESS_GUIDANCE.values(),
     }

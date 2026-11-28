@@ -19,6 +19,7 @@ from davdeploy.terraform_generation import (
     _HEALTH_TARGET_COMPATIBILITY_GUIDANCE,
     _ID_PATTERN_GUIDANCE,
     _LAMBDA_CONTAINER_READINESS_GUIDANCE,
+    _LAMBDA_EVENT_BINDING_GUIDANCE,
     _LAMBDA_HEALTH_ASSERTION_EXAMPLES,
     _LAMBDA_HTTP_RESPONSE_GUIDANCE,
     _PLAN_ACCESS_GUIDANCE,
@@ -97,6 +98,63 @@ def proposal(request, document, *, arguments=None, source_revision="revision-123
     }
 
 
+def queue_lambda_event_proposal(_request, document, *, include_binding):
+    output = proposal(None, document)
+    resources = [
+        {
+            "resource_id": "work-queue",
+            "resource_type": "aws_sqs_queue",
+            "name": "work_queue",
+            "arguments": {},
+            "outputs": [{"name": "arn", "value_type": "aws_arn"}],
+            "rationale": "Receives asynchronous application work.",
+        },
+        {
+            "resource_id": "work-handler",
+            "resource_type": "aws_lambda_function",
+            "name": "work_processor",
+            "arguments": {},
+            "outputs": [{"name": "arn", "value_type": "aws_arn"}],
+            "rationale": "Processes asynchronous application work.",
+        },
+    ]
+    if include_binding:
+        resources.append(
+            {
+                "resource_id": "queue-binding",
+                "resource_type": "aws_lambda_event_source_mapping",
+                "name": "queue_binding",
+                "arguments": {
+                    "event_source_arn": {
+                        "kind": "resource_reference",
+                        "resource_id": "work-queue",
+                        "output_name": "arn",
+                        "value_type": "aws_arn",
+                    },
+                    "function_name": {
+                        "kind": "resource_reference",
+                        "resource_id": "work-handler",
+                        "output_name": "arn",
+                        "value_type": "aws_arn",
+                    },
+                    "enabled": True,
+                    "batch_size": 1,
+                },
+                "rationale": "Connects the declared work queue to its Lambda processor.",
+            }
+        )
+    output["resources"] = resources
+    output["health_assertions"] = [
+        {
+            "kind": "event_processing",
+            "target_resource_id": "work-handler",
+            "source_resource_id": "work-queue",
+            "description": "A queued message is processed by the worker.",
+        }
+    ]
+    return output
+
+
 def generator(output):
     return NovaTerraformGenerator(
         gateway=RecordingGateway(output), max_output_tokens=800, timeout_seconds=30
@@ -140,10 +198,13 @@ def test_nova_generation_uses_typed_contract_and_stays_plan_only():
     assert "append a numeric suffix such as -2 or -3" in document["task"]
     assert "stay within 24 characters" in document["task"]
     assert "without weakening customer requirements or inventing resource IDs" in document["task"]
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v28"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v29"
     assert "master_user_secret[0].secret_arn" in document["task"]
     assert _HEALTH_TARGET_COMPATIBILITY_GUIDANCE in document["task"]
     assert _LAMBDA_HEALTH_ASSERTION_EXAMPLES in document["task"]
+    assert "arguments.event_source_arn" in document["task"]
+    assert "arguments.function_name" in document["task"]
+    assert '"value_type":"aws_arn"' in document["task"]
     assert "every `http_response` target is an `aws_apigatewayv2_stage`" in document["task"]
     assert "database_roundtrip: aws_db_instance, aws_dynamodb_table, aws_rds_cluster" in document["task"]
     assert "target the declared aws_db_instance or aws_rds_cluster resource itself" in document["task"]
@@ -612,6 +673,100 @@ def test_lambda_http_response_without_declared_api_stage_fails_with_actionable_f
             "guidance": _LAMBDA_HTTP_RESPONSE_GUIDANCE,
             "assertion_kind": "http_response",
             "observed_resource_type": "aws_lambda_function",
+        },
+    )
+    assert len(gateway.calls) == 2
+
+
+def test_missing_event_binding_feedback_repairs_with_typed_queue_and_lambda_references():
+    gateway = RecordingGateway(None)
+
+    def missing_then_correct(request, document):
+        return queue_lambda_event_proposal(
+            request, document, include_binding=len(gateway.calls) > 1
+        )
+
+    gateway.output = missing_then_correct
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+    approved_plan = {
+        "summary": {"selected_profile": "aws-lambda-api"},
+        "target": {"region": "us-east-1"},
+    }
+    result = instance.generate(
+        approved_plan=approved_plan,
+        tenant=scope(),
+        source_revision="revision-123",
+    )
+
+    repair_feedback = gateway.calls[1][1]["validation_feedback"]
+    assert repair_feedback == [
+        {
+            "code": "value_error",
+            "field": "proposal",
+            "issue": "missing_event_binding",
+            "guidance": _LAMBDA_EVENT_BINDING_GUIDANCE,
+        }
+    ]
+    assert not any(
+        value in str(repair_feedback)
+        for value in ("work-queue", "work-handler", "queue-binding")
+    )
+    assert gateway.calls[0][1]["trusted_generation_context"] == gateway.calls[1][1][
+        "trusted_generation_context"
+    ]
+    assertion = result.proposal.health_assertions[0]
+    assert assertion.kind == "event_processing"
+    assert assertion.target_resource_id == "work-handler"
+    assert assertion.source_resource_id == "work-queue"
+    mapping = next(
+        item
+        for item in result.proposal.resources
+        if item.resource_type == "aws_lambda_event_source_mapping"
+    )
+    assert mapping.arguments["event_source_arn"] == {
+        "kind": "resource_reference",
+        "resource_id": "work-queue",
+        "output_name": "arn",
+        "value_type": "aws_arn",
+    }
+    assert mapping.arguments["function_name"] == {
+        "kind": "resource_reference",
+        "resource_id": "work-handler",
+        "output_name": "arn",
+        "value_type": "aws_arn",
+    }
+    assert len(gateway.calls) == 2
+
+
+def test_missing_event_binding_without_valid_declared_resources_fails_closed():
+    gateway = RecordingGateway(
+        lambda request, document: queue_lambda_event_proposal(
+            request, document, include_binding=False
+        )
+    )
+    instance = NovaTerraformGenerator(
+        gateway=gateway, max_output_tokens=800, timeout_seconds=30
+    )
+
+    with pytest.raises(NovaTerraformGenerationFailed) as failure:
+        instance.generate(
+            approved_plan={
+                "summary": {"selected_profile": "aws-lambda-api"},
+                "target": {"region": "us-east-1"},
+            },
+            tenant=scope(),
+            source_revision="revision-123",
+        )
+
+    assert failure.value.attempt_count == 2
+    assert failure.value.validation_feedback == (
+        {
+            "code": "value_error",
+            "field": "proposal",
+            "issue": "missing_event_binding",
+            "guidance": _LAMBDA_EVENT_BINDING_GUIDANCE,
         },
     )
     assert len(gateway.calls) == 2
@@ -1515,7 +1670,7 @@ def test_reference_type_mismatch_stays_strict_and_gets_actionable_bounded_repair
     task = repair_document["task"]
     assert "value_type must exactly equal that output's value_type" in task
     assert "outputs=[{name: queue_url, value_type: aws_queue_url}]" in task
-    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v28"
+    assert NOVA_TERRAFORM_PROMPT_VERSION == "terraform-nova2-contract-v29"
 
 
 def test_semantic_repair_uses_only_sanitized_feedback_and_preserves_trusted_inputs():
