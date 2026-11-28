@@ -48,11 +48,11 @@ existing contract. Keep validation and policy strict.
 
 ## Acceptance criteria
 
-- [ ] The fixed prompt/guidance shows a schema-compatible typed SQS-to-Lambda
+- [x] The fixed prompt/guidance shows a schema-compatible typed SQS-to-Lambda
       mapping with references in the correct provider argument fields.
-- [ ] A proposal with the required declared resources can repair and validate
+- [x] A proposal with the required declared resources can repair and validate
       without changing trusted context or the original queued-work requirement.
-- [ ] Missing or incompatible resources fail safely after the bounded attempt
+- [x] Missing or incompatible resources fail safely after the bounded attempt
       limit; no validator, policy, or health requirement is weakened.
 - [ ] Focused tests, full verification, docs conventions, required clean-room
       cycle, and all seven required CI checks pass.
@@ -61,13 +61,21 @@ existing contract. Keep validation and policy strict.
 
 ## Acceptance status
 
-Bootstrap evidence only; implementation and verification are pending.
+Implementation, focused tests, and full verification pass. Required clean-room
+cycle, final-head CI/review, deployment, and the hosted v29 plan-only check
+remain pending.
 
 ## Tests / validation performed
 
 - Hosted v28 baseline and sanitized feedback are recorded in
   `docs/test/test568.md`.
-- Implementation tests, clean-room verification, and CI are pending.
+- Focused tests: `tests/test_terraform_generation.py
+  tests/test_customer_plan_review.py tests/test_nova_plan_runs.py` — 154 passed.
+- Full `GITHUB_PR_NUMBER=568 make verify PYTHON=... VENV=...` — 2,107 passed;
+  Ruff, Actions configuration, OpenAPI, and Compose syntax passed.
+- `GITHUB_PR_NUMBER=568 python3 scripts/check_doc_conventions.py` and
+  `git diff --check` — passed.
+- Required clean-room cycle, CI, and hosted v29 verification remain pending.
 
 ## Evidence files produced
 

@@ -60,8 +60,25 @@ ended during generation before Terraform planning.
 
 ## Follow-up result
 
-Implementation, local verification, clean-room proof, CI, protected deployment,
-and a fresh v29 plan-only run are pending.
+## Local implementation verification
+
+- Prompt version changed to `terraform-nova2-contract-v29`; the validator and
+  policy were not changed.
+- Focused generation, customer-review, and generated-plan-run tests:
+  154 passed.
+- Full `make verify`: 2,107 passed; Ruff, Actions configuration, OpenAPI
+  snapshot, and `docker compose config --quiet` passed.
+- One regression confirms the exact typed references for
+  `event_source_arn` and `function_name` repair the existing queued-work
+  assertion while preserving trusted context. A second confirms the missing
+  binding still fails after two bounded attempts with only fixed feedback.
+- Documentation conventions and `git diff --check` passed.
+- Clean-room cycle, required CI, protected deployment, and hosted v29 plan-only
+  check remain pending.
+
+## Follow-up result
+
+No v29 hosted result exists yet.
 
 ## Teardown
 
